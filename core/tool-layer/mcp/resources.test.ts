@@ -55,6 +55,21 @@ describe('uriToWorkspaceRelative', () => {
   });
 });
 
+describe('resource template URI matching', () => {
+  it('matches nested paths via reserved-expansion {+path}', () => {
+    const template = buildWorkspaceResourceTemplate(ctx);
+    expect(template.uriTemplate.match('factory://src/index.ts')).toEqual({ path: 'src/index.ts' });
+    expect(template.uriTemplate.match('factory://src/nested/dir/file.ts')).toEqual({
+      path: 'src/nested/dir/file.ts',
+    });
+  });
+
+  it('matches root-level paths too', () => {
+    const template = buildWorkspaceResourceTemplate(ctx);
+    expect(template.uriTemplate.match('factory://README.md')).toEqual({ path: 'README.md' });
+  });
+});
+
 describe('resources/list', () => {
   it('returns workspace files as factory:// URIs', async () => {
     const template = buildWorkspaceResourceTemplate(ctx);

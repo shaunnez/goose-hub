@@ -63,7 +63,7 @@ vi.mock('../tool-layer/sandbox.js', () => ({
 }));
 // Stub the cost recorder so it doesn't pull `core/db/db.ts` (which would need
 // node:fs / node:os to be fully mocked).
-vi.mock('../cost/repository.js', () => ({ recordCost: vi.fn() }));
+vi.mock('../cost/repository.js', () => ({ recordCost: vi.fn(), recordToolStatsForRun: vi.fn() }));
 
 // ─── interface types ──────────────────────────────────────────────────────────
 

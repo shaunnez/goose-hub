@@ -56,8 +56,13 @@ describe('wave2-risk-analyst skill', () => {
   it('contextSchema accepts the canonical wave2 context shape', () => {
     const result = Wave2RiskAnalystContextSchema.safeParse({
       workItem: { title: 't', body: 'b', number: 1 },
-      scoutReports: '[]',
-      worktreePath: '/tmp/x',
+      scoutDigest: {
+        reports: [],
+        artifactKeys: [],
+        rawBytes: 0,
+        digestBytes: 0,
+        bytesSaved: 0,
+      },
     });
     expect(result.success).toBe(true);
   });

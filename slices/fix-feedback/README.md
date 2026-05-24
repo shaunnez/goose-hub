@@ -8,8 +8,9 @@ Handles the QA retry loop: when QA fails and `factory:qa-failed` is applied, the
 2. Extracts QA findings from the most recent `qa.completed` event.
 3. Transitions `factory:needs-fix` → `factory:in-progress`.
 4. Re-runs the `implement` skill in the existing worktree with QA findings injected as `advisorFeedback` and `revisionPass: 1`.
-5. Pushes the fix to the existing branch (no new PR is opened).
-6. Transitions `factory:in-progress` → `factory:needs-qa` to re-trigger QA.
+5. Commits all repair changes through the orchestrator, then pushes the fix to the existing branch (no new PR is opened).
+6. Emits `agent.fix-feedback-complete` with the repair commit SHA, branch, and observed changed files.
+7. Transitions `factory:in-progress` → `factory:needs-qa` to re-trigger QA.
 
 ## Key differences from fix-issue
 

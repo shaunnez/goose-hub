@@ -50,6 +50,8 @@ import {
   AgentBudgetExceededEvent,
   AgentDisclosureEvent,
   AgentModelSelectedEvent,
+  BugEnhanceLazyEvent,
+  CompactOperationalEvent,
   ContractDriftEvent,
   DiscoveryBudgetExceededEvent,
   FallbackEvent,
@@ -58,6 +60,7 @@ import {
   InvestigationSeedBuiltEvent,
   ManualActionEvent,
   MilestoneActivatedEvent,
+  RedundantReadEvent,
   RelatedSurfaceManifestEvent,
   StateTransitionedEvent,
   SystemNoteEvent,
@@ -223,6 +226,34 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentBudgetExceededEvent key={event.id} event={event} />;
     case 'agent.investigation-seed-built':
       return <InvestigationSeedBuiltEvent key={event.id} event={event} />;
+    case 'agent.bug-enhance-lazy':
+      return <BugEnhanceLazyEvent key={event.id} event={event} />;
+    case 'agent.redundant-read':
+      return <RedundantReadEvent key={event.id} event={event} />;
+    case 'agent.fallback-triggered':
+    case 'agent.repo-override':
+    case 'merge.conflict':
+    case 'merge.conflict-resolved':
+    case 'merge.conflict-unresolvable':
+    case 'qa.tier-disagreement':
+    case 'project.budget-exceeded':
+    case 'coach.completed':
+    case 'coach.dispatch-triggered':
+    case 'coach.skipped-forbidden-target':
+    case 'coach.dispatch-failed':
+    case 'workflow.smoke-failed':
+    case 'agent.cancelled':
+    case 'spec.wp-issues-created':
+    case 'merge-decision.completed':
+    case 'audit.completed':
+    case 'audit.failed':
+    case 'audit.autonomy-gate-fired':
+    case 'agent.investigation-seed-empty':
+    case 'state.transition-deferred':
+    case 'agent.bug-enhance-hallucinated':
+    case 'agent.bug-enhance-workspace-empty':
+    case 'agent.run-aborted':
+      return <CompactOperationalEvent key={event.id} event={event} />;
     case 'agent.investigation-context-injected':
       return <InvestigationContextInjectedEvent key={event.id} event={event} />;
     case 'investigation.digest-applied':

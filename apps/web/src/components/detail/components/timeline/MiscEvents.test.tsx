@@ -18,6 +18,14 @@ function makeEvent(kind: string, payload: unknown, id = 1): AgentEventDto {
   } as AgentEventDto;
 }
 
+function withRawProbe(payload: unknown): unknown {
+  if (typeof payload === 'string') {
+    const parsed = JSON.parse(payload) as Record<string, unknown>;
+    return JSON.stringify({ ...parsed, rawProbeKey: 'raw-value' });
+  }
+  return { ...(payload as Record<string, unknown>), rawProbeKey: 'raw-value' };
+}
+
 describe('Misc timeline events', () => {
   it('renders agent.budget-exceeded as summary text instead of raw JSON', () => {
     const event = makeEvent('agent.budget-exceeded', {
@@ -105,6 +113,181 @@ describe('Misc timeline events', () => {
     expect(rendered).toContain('1 prior investigation');
     expect(rendered).toContain('12 ms');
     expect(rendered).not.toContain('"candidateFileCount"');
+  });
+
+  it('renders agent.bug-enhance-lazy as seed counts instead of raw JSON', () => {
+    const event = makeEvent('agent.bug-enhance-lazy', {
+      hadExistingSeed: false,
+      producedSeed: true,
+      candidateFileCount: 4,
+      candidateComponentCount: 3,
+      candidateRouteCount: 0,
+      ranMs: 41636,
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Bug grounding seed')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('Produced seed');
+    expect(rendered).toContain('lazy run');
+    expect(rendered).toContain('4 candidate files');
+    expect(rendered).toContain('3 components');
+    expect(rendered).toContain('0 routes');
+    expect(rendered).toContain('41.6 s');
+    expect(rendered).not.toContain('"hadExistingSeed"');
+  });
+
+  it('renders agent.redundant-read as a compact warning instead of raw JSON', () => {
+    const event = makeEvent('agent.redundant-read', {
+      path: 'apps/web/src/components/chat/components/ChatPanel.tsx',
+      count: 4,
+      guidance:
+        'Subsequent reads of the same file re-inject identical bytes into the kv-cache. Reuse what is already loaded or widen the line range in a single call.',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Redundant file read')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('4 reads');
+    expect(rendered).toContain('apps/web/src/components/chat/components/ChatPanel.tsx');
+    expect(rendered).toContain('Reuse what is already loaded');
+    expect(rendered).not.toContain('"guidance"');
+  });
+
+  it('renders operational timeline events as JSX cards instead of raw JSON', () => {
+    const cases: Array<{ kind: string; title: string; payload: unknown }> = [
+      {
+        kind: 'agent.fallback-triggered',
+        title: 'Fallback triggered',
+        payload: { skill: 'implement', modelId: 'gpt-5.5', fallbackModel: 'gpt-5.4' },
+      },
+      { kind: 'agent.repo-override', title: 'Repository override', payload: { repo: 'web' } },
+      { kind: 'merge.conflict', title: 'Merge conflict', payload: { prNumber: 123 } },
+      {
+        kind: 'merge.conflict-resolved',
+        title: 'Merge conflict resolved',
+        payload: { prNumber: 123, sha: 'abc123' },
+      },
+      {
+        kind: 'merge.conflict-unresolvable',
+        title: 'Merge conflict unresolved',
+        payload: { prNumber: 123, error: 'manual resolution required' },
+      },
+      {
+        kind: 'qa.tier-disagreement',
+        title: 'QA tier disagreement',
+        payload: { runId: 'qa-run', disagreements: [{ tier: 'functional' }] },
+      },
+      {
+        kind: 'project.budget-exceeded',
+        title: 'Project budget exceeded',
+        payload: { totalTokens: 114216854, limitTokens: 100000000, totalCostUsd: 253.64 },
+      },
+      {
+        kind: 'coach.completed',
+        title: 'Coach completed',
+        payload: { targetSkillName: 'investigate', candidateId: 42, hasPatch: true },
+      },
+      {
+        kind: 'coach.dispatch-triggered',
+        title: 'Coach dispatch triggered',
+        payload: { targetSkillName: 'investigate', playbookId: 'playbook-1', patternCount: 2 },
+      },
+      {
+        kind: 'coach.skipped-forbidden-target',
+        title: 'Coach skipped forbidden target',
+        payload: { targetSkillName: 'qa', reason: 'forbidden-target' },
+      },
+      {
+        kind: 'coach.dispatch-failed',
+        title: 'Coach dispatch failed',
+        payload: { targetSkillName: 'investigate', error: 'runtime failed' },
+      },
+      {
+        kind: 'workflow.smoke-failed',
+        title: 'Workflow smoke failed',
+        payload: JSON.stringify({ failedCheck: 'gh auth status', reason: 'not logged in' }),
+      },
+      {
+        kind: 'agent.cancelled',
+        title: 'Agent cancelled',
+        payload: { runId: 'cancelled-run', reason: 'timeout', elapsedMs: 120000 },
+      },
+      {
+        kind: 'spec.wp-issues-created',
+        title: 'Work package issues created',
+        payload: { pipelineRunId: 'pipeline-1', count: 3 },
+      },
+      {
+        kind: 'merge-decision.completed',
+        title: 'Merge decision completed',
+        payload: { passed: false, prNumber: 123, reason: 'score-below-threshold', score: 70 },
+      },
+      {
+        kind: 'audit.completed',
+        title: 'Audit completed',
+        payload: { trigger: 'nightly', rating: 'strong', auditScore: 87 },
+      },
+      {
+        kind: 'audit.failed',
+        title: 'Audit failed',
+        payload: { trigger: 'nightly', pipelineRunId: 'pipeline-1', error: 'schema failed' },
+      },
+      {
+        kind: 'audit.autonomy-gate-fired',
+        title: 'Audit autonomy gate fired',
+        payload: { trigger: 'nightly', auditScore: 55, threshold: 70 },
+      },
+      {
+        kind: 'agent.investigation-seed-empty',
+        title: 'Investigation seed empty',
+        payload: { reason: 'No grounded seed artifact.' },
+      },
+      {
+        kind: 'state.transition-deferred',
+        title: 'State transition deferred',
+        payload: { from: 'factory:investigating', to: 'factory:needs-prd', error: 'retry failed' },
+      },
+      {
+        kind: 'agent.bug-enhance-hallucinated',
+        title: 'Bug grounding pruned',
+        payload: { runId: 'bug-run', droppedCount: 3, originalCount: 3 },
+      },
+      {
+        kind: 'agent.bug-enhance-workspace-empty',
+        title: 'Bug grounding workspace missing',
+        payload: { workspaceDir: '/tmp/missing', runId: 'bug-run' },
+      },
+      {
+        kind: 'agent.run-aborted',
+        title: 'Agent run aborted',
+        payload: { reason: 'excessive-redundant-reads', redundantReads: 5, totalReads: 10 },
+      },
+    ];
+
+    render(
+      <ul>
+        {cases.map((item, index) =>
+          renderTimelineItem(
+            {
+              kind: 'event',
+              event: makeEvent(item.kind, withRawProbe(item.payload), index),
+            },
+            index,
+          ),
+        )}
+      </ul>,
+    );
+
+    const rendered = document.body.textContent ?? '';
+    for (const item of cases) {
+      expect(screen.getByText(item.title)).toBeTruthy();
+      expect(document.querySelector(`[data-event-kind="${item.kind}"]`)).toBeTruthy();
+    }
+    expect(rendered).not.toContain('"rawProbeKey"');
+    expect(rendered).not.toContain('raw-value');
   });
 
   it('renders agent.investigation-context-injected as summary text instead of raw JSON', () => {

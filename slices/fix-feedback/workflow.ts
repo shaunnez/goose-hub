@@ -16,6 +16,11 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { deriveObservedChangedFiles } from '@goose-hub/core/workspaces/observed-changes.js';
+import {
+  orchestratorCommitAll,
+  orchestratorPushBranch,
+} from '@goose-hub/core/workspaces/orchestrator-git.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
 
 /** Maximum prior dev decision-summaries surfaced to the repair agent. */
@@ -30,16 +35,32 @@ interface PriorDevDecision {
 
 function collectPriorDevDecisions(
   events: ReturnType<typeof eventStore.replay>,
-  devRunId: string | undefined,
+  prLifecycle: PrLifecycle | undefined,
 ): PriorDevDecision[] {
-  if (devRunId == null) return [];
+  const priorRunIds = [prLifecycle?.devRunId, prLifecycle?.pipelineRunId].filter(
+    (id): id is string => typeof id === 'string' && id.length > 0,
+  );
+  if (priorRunIds.length === 0) return [];
   const out: PriorDevDecision[] = [];
   for (const event of events) {
     if (event.kind !== 'agent.decision-summary') continue;
-    if (event.runId != null && event.runId !== devRunId) continue;
     const payload = event.payload as { runId?: unknown; kind?: unknown; summary?: unknown } | null;
     if (payload == null) continue;
-    if (event.runId == null && payload.runId !== devRunId) continue;
+    const candidateRunId =
+      typeof event.runId === 'string'
+        ? event.runId
+        : typeof payload.runId === 'string'
+          ? payload.runId
+          : undefined;
+    if (
+      candidateRunId == null ||
+      !priorRunIds.some(
+        (priorRunId) =>
+          candidateRunId === priorRunId || candidateRunId.startsWith(`${priorRunId}:wp:`),
+      )
+    ) {
+      continue;
+    }
     if (typeof payload.kind !== 'string' || typeof payload.summary !== 'string') continue;
     out.push({ kind: payload.kind, summary: payload.summary });
     if (out.length >= PRIOR_DECISION_LIMIT) break;
@@ -47,9 +68,9 @@ function collectPriorDevDecisions(
   return out;
 }
 
-function collectPriorChangedFiles(worktreePath: string): string[] {
+function collectPriorChangedFiles(worktreePath: string, baseBranch?: string): string[] {
   try {
-    return getChangedFilesSince(worktreePath).slice(0, PRIOR_CHANGED_FILES_LIMIT);
+    return getChangedFilesSince(worktreePath, baseBranch).slice(0, PRIOR_CHANGED_FILES_LIMIT);
   } catch {
     return [];
   }
@@ -74,6 +95,8 @@ function buildPriorInvestigationPayload(investigation: InvestigationContext | un
 
 export interface FixFeedbackDeps {
   runtime?: AgentRuntime;
+  orchestratorCommitAllImpl?: typeof orchestratorCommitAll;
+  orchestratorPushBranchImpl?: typeof orchestratorPushBranch;
 }
 
 /**
@@ -88,11 +111,25 @@ function findPrLifecycle(events: ReturnType<typeof eventStore.replay>): PrLifecy
   if (prOpened == null) return undefined;
   const payload = prOpened.payload as Record<string, unknown>;
   const rawPrNumber = payload.prNumber ?? payload.number;
+  const devRunId = typeof payload.devRunId === 'string' ? payload.devRunId : undefined;
+  const pipelineRunId =
+    typeof payload.pipelineRunId === 'string' ? payload.pipelineRunId : undefined;
+  const branch =
+    typeof payload.branch === 'string'
+      ? payload.branch
+      : devRunId != null
+        ? `factory/${devRunId}`
+        : pipelineRunId != null
+          ? `factory/${pipelineRunId}`
+          : undefined;
   return {
-    pipelineRunId: typeof payload.pipelineRunId === 'string' ? payload.pipelineRunId : undefined,
-    devRunId: typeof payload.devRunId === 'string' ? payload.devRunId : undefined,
+    pipelineRunId,
+    devRunId,
     worktreePath: typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined,
     prNumber: typeof rawPrNumber === 'number' ? rawPrNumber : undefined,
+    branch,
+    baseBranch: typeof payload.baseBranch === 'string' ? payload.baseBranch : 'main',
+    branchSource: typeof payload.branch === 'string' ? 'pr.opened' : 'fallback',
   };
 }
 
@@ -122,6 +159,9 @@ type PrLifecycle = {
   devRunId?: string;
   worktreePath?: string;
   prNumber?: number;
+  branch?: string;
+  baseBranch?: string;
+  branchSource: 'pr.opened' | 'fallback';
 };
 
 type SourceFailure = {
@@ -255,8 +295,13 @@ export async function runFixFeedbackWorkflow(
     worktreePath: prLifecycle?.worktreePath,
     prNumber: prLifecycle?.prNumber,
     devRunId: prLifecycle?.devRunId,
+    branch: prLifecycle?.branch,
+    baseBranch: prLifecycle?.baseBranch,
+    branchSource: prLifecycle?.branchSource,
   });
   const projectConfig = await getProjectBySlug(projectId);
+  const commitAllFn = deps.orchestratorCommitAllImpl ?? orchestratorCommitAll;
+  const pushBranchFn = deps.orchestratorPushBranchImpl ?? orchestratorPushBranch;
   const { runtime, resolvedBudget } = resolveProjectAgentExecution({
     skill: 'implement',
     role: 'developer',
@@ -302,6 +347,43 @@ export async function runFixFeedbackWorkflow(
     });
     return;
   }
+  const branch = prLifecycle?.branch;
+  if (branch == null) {
+    await stateSource.comment(
+      workItem.externalId,
+      buildAgentComment(
+        'Dev',
+        'Failed',
+        'No PR branch found — cannot push repair commit, escalating to needs-human',
+      ),
+    );
+    await stateSource.transitionState(
+      workItem.externalId,
+      'factory:needs-fix',
+      'factory:needs-human',
+    );
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:needs-fix',
+      to: 'factory:needs-human',
+      by: 'fix-feedback',
+      runId,
+      extraPayload: repairPayload,
+    });
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.run-failed',
+      payload: {
+        runId,
+        error: 'fix-feedback: no branch found in pr.opened events',
+        ...repairPayload,
+      },
+      runId,
+    });
+    return;
+  }
 
   const implementPrompt = readPromptWithContext('implement', projectId);
   const implementJsonSchema = toJsonSchema(ImplementSchema);
@@ -314,8 +396,8 @@ export async function runFixFeedbackWorkflow(
     worktreePath,
   });
   const priorInvestigationPayload = buildPriorInvestigationPayload(priorInvestigation);
-  const priorDevDecisions = collectPriorDevDecisions(events, prLifecycle?.devRunId);
-  const priorDevChangedFiles = collectPriorChangedFiles(worktreePath);
+  const priorDevDecisions = collectPriorDevDecisions(events, prLifecycle);
+  const priorDevChangedFiles = collectPriorChangedFiles(worktreePath, prLifecycle?.baseBranch);
 
   await stateSource.transitionState(
     workItem.externalId,
@@ -416,6 +498,13 @@ export async function runFixFeedbackWorkflow(
       },
     });
 
+    const observedChangedFiles = deriveObservedChangedFiles(worktreePath);
+    const commitSha = commitAllFn(
+      worktreePath,
+      `fix(#${workItem.externalId}): address feedback cycle ${repairCycle}`,
+    );
+    pushBranchFn(worktreePath, branch);
+
     reconcileDecisionSummaries(
       runId,
       projectId,
@@ -430,10 +519,15 @@ export async function runFixFeedbackWorkflow(
       kind: 'agent.fix-feedback-complete',
       payload: {
         ...repairPayload,
+        commitSha,
         filesWritten: implementOutput.filesWritten.length,
         testsWritten: implementOutput.testsWritten.length,
         confidence: implementOutput.confidence,
         testsRun: implementOutput.testsRun,
+        observedChangedFiles: {
+          count: observedChangedFiles.count,
+          paths: observedChangedFiles.paths,
+        },
       },
       runId,
     });
