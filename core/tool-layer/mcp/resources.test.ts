@@ -39,19 +39,46 @@ afterEach(() => {
 
 describe('uriToWorkspaceRelative', () => {
   it('strips factory:// prefix', () => {
-    expect(uriToWorkspaceRelative('factory://src/index.ts')).toBe('src/index.ts');
+    expect(uriToWorkspaceRelative('factory://src/index.ts')).toEqual({ op: 'read', path: 'src/index.ts' });
   });
 
   it('strips file:/// prefix', () => {
-    expect(uriToWorkspaceRelative('file:///src/index.ts')).toBe('src/index.ts');
+    expect(uriToWorkspaceRelative('file:///src/index.ts')).toEqual({ op: 'read', path: 'src/index.ts' });
   });
 
   it('strips file:// prefix (two slashes)', () => {
-    expect(uriToWorkspaceRelative('file://src/index.ts')).toBe('src/index.ts');
+    expect(uriToWorkspaceRelative('file://src/index.ts')).toEqual({ op: 'read', path: 'src/index.ts' });
   });
 
   it('passes bare path through unchanged', () => {
-    expect(uriToWorkspaceRelative('src/index.ts')).toBe('src/index.ts');
+    expect(uriToWorkspaceRelative('src/index.ts')).toEqual({ op: 'read', path: 'src/index.ts' });
+  });
+
+  it('handles codex read_file?path=… URI form', () => {
+    expect(uriToWorkspaceRelative('read_file?path=package.json')).toEqual({
+      op: 'read',
+      path: 'package.json',
+    });
+  });
+
+  it('handles codex file_exists?path=… URI form', () => {
+    expect(uriToWorkspaceRelative('file_exists?path=apps/web/src/components/chat/components/ChatDock.tsx')).toEqual({
+      op: 'exists',
+      path: 'apps/web/src/components/chat/components/ChatDock.tsx',
+    });
+  });
+
+  it('url-decodes percent-encoded paths in tool-shaped URIs', () => {
+    expect(uriToWorkspaceRelative('read_file?path=apps%2Fweb%2Fsrc%2Findex.ts')).toEqual({
+      op: 'read',
+      path: 'apps/web/src/index.ts',
+    });
+  });
+
+  it('keeps bare path / factory:// / file:// forms as read', () => {
+    expect(uriToWorkspaceRelative('factory://core/types.ts')).toEqual({ op: 'read', path: 'core/types.ts' });
+    expect(uriToWorkspaceRelative('file:///core/types.ts')).toEqual({ op: 'read', path: 'core/types.ts' });
+    expect(uriToWorkspaceRelative('core/types.ts')).toEqual({ op: 'read', path: 'core/types.ts' });
   });
 });
 
@@ -152,5 +179,30 @@ describe('resources/read', () => {
     );
     // The underlying readFileTool is called; it may return cached result
     expect(resourceReadCall).toBeDefined();
+  });
+
+  it('routes file_exists?path=… via fileExistsTool and serializes { exists: bool }', async () => {
+    const result = await readWorkspaceResource(ctx, 'file_exists?path=README.md');
+    expect(result.contents[0].mimeType).toBe('application/json');
+    expect(JSON.parse(result.contents[0].text as string)).toEqual({
+      exists: true,
+      path: 'README.md',
+    });
+  });
+
+  it('routes file_exists for a missing path and reports exists:false (no throw)', async () => {
+    const result = await readWorkspaceResource(ctx, 'file_exists?path=does-not-exist.ts');
+    expect(JSON.parse(result.contents[0].text as string)).toMatchObject({ exists: false });
+  });
+
+  it('shares run-cache with read_file for the same canonical path', async () => {
+    const { readFileTool } = await import('./tools/read.js');
+    await readFileTool(ctx, { path: 'README.md' });
+    const result = await readWorkspaceResource(ctx, 'read_file?path=README.md');
+    // The audit event should be marked cached:true on the second read.
+    const events = eventStore.replay({ workItemId: ctx.workItemId });
+    const last = events.findLast((e) => (e.payload as any).tool_name === 'resources/read');
+    expect((last?.payload as any).cached).toBe(true);
+    expect(result.contents[0].text).toBeDefined();
   });
 });

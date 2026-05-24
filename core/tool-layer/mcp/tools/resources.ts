@@ -5,25 +5,39 @@ import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 import { eventStore } from '../../../event-stream/store.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
-import { readFileTool } from './read.js';
+import { fileExistsTool, readFileTool } from './read.js';
 
 export { ResourceTemplate };
 
 const FACTORY_URI_PREFIX = 'factory://';
+const TOOL_URI_RE = /^(read_file|file_exists)\?path=(.+)$/;
+
+export type ResourceOp = { op: 'read'; path: string } | { op: 'exists'; path: string };
 
 /**
- * Normalise an incoming URI/path to a workspace-relative path string.
+ * Normalise an incoming URI/path to a workspace-relative path with operation tag.
  * Accepts:
- *   factory://<worktree-relative>   → strip prefix
- *   file:///<path>                  → strip file:// prefix
- *   bare path                       → use as-is
+ *   read_file?path=<path>           → {op: 'read', path}
+ *   file_exists?path=<path>         → {op: 'exists', path}
+ *   factory://<worktree-relative>   → {op: 'read', path}
+ *   file:///<path>                  → {op: 'read', path}
+ *   bare path                       → {op: 'read', path}
  */
-export function uriToWorkspaceRelative(uri: string): string {
-  if (uri.startsWith(FACTORY_URI_PREFIX)) return uri.slice(FACTORY_URI_PREFIX.length);
+export function uriToWorkspaceRelative(uri: string): ResourceOp {
+  const toolMatch = TOOL_URI_RE.exec(uri);
+  if (toolMatch != null) {
+    const op = toolMatch[1] === 'file_exists' ? 'exists' : 'read';
+    return { op, path: decodeURIComponent(toolMatch[2]) };
+  }
+  if (uri.startsWith(FACTORY_URI_PREFIX)) {
+    return { op: 'read', path: uri.slice(FACTORY_URI_PREFIX.length) };
+  }
   // file:// forms: strip the scheme but keep the path
   const fileMatch = /^file:\/\/\/?(.*)$/.exec(uri);
-  if (fileMatch) return fileMatch[1];
-  return uri;
+  if (fileMatch) {
+    return { op: 'read', path: fileMatch[1] };
+  }
+  return { op: 'read', path: uri };
 }
 
 export function workspaceRelativeToUri(relativePath: string): string {
@@ -89,7 +103,7 @@ export function buildWorkspaceResourceTemplate(ctx: FactoryContext): ResourceTem
 }
 
 /**
- * Read a workspace file by URI, routing through the read_file pipeline
+ * Read a workspace file by URI, routing through the read_file or file_exists pipeline
  * (same per-run cache key, secret redaction, path policy, redundancy check).
  */
 export async function readWorkspaceResource(
@@ -97,11 +111,29 @@ export async function readWorkspaceResource(
   uri: URL | string,
 ): Promise<ReadResourceResult> {
   const uriStr = typeof uri === 'string' ? uri : uri.toString();
-  const relativePath = uriToWorkspaceRelative(uriStr);
-  const auditBase = { tool_name: 'resources/read', uri: uriStr, relativePath };
+  const parsed = uriToWorkspaceRelative(uriStr);
+  const auditBase = { tool_name: 'resources/read', uri: uriStr, relativePath: parsed.path, op: parsed.op };
 
   try {
-    const result = await readFileTool(ctx, { path: relativePath });
+    if (parsed.op === 'exists') {
+      const result = await fileExistsTool(ctx, { path: parsed.path });
+      eventStore.appendEvent({
+        projectId: ctx.projectId,
+        workItemId: ctx.workItemId,
+        runId: ctx.runId,
+        personaId: ctx.personaId ?? null,
+        kind: 'agent.tool-call',
+        payload: { ...auditBase, status: 'ok' },
+      });
+      return {
+        contents: [{
+          uri: workspaceRelativeToUri(result.path.path),
+          mimeType: 'application/json',
+          text: JSON.stringify({ exists: result.exists, path: result.path.path }),
+        }],
+      } satisfies ReadResourceResult;
+    }
+    const result = await readFileTool(ctx, { path: parsed.path });
     eventStore.appendEvent({
       projectId: ctx.projectId,
       workItemId: ctx.workItemId,
@@ -114,7 +146,7 @@ export async function readWorkspaceResource(
         cached: (result as { cached?: boolean }).cached ?? false,
       },
     });
-    const canonicalUri = workspaceRelativeToUri(result.path?.path ?? relativePath);
+    const canonicalUri = workspaceRelativeToUri(result.path?.path ?? parsed.path);
     return {
       contents: [{ uri: canonicalUri, mimeType: 'text/plain', text: result.content }],
     } satisfies ReadResourceResult;
