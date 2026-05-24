@@ -14,6 +14,7 @@ import {
   applyLatestEventState,
   backfillIssueTimelineEvents,
   mergeIssueEvents,
+  patchIssueStateFromLatestTransition,
 } from '../lib/live-events';
 import { SECTIONS } from '../lib/sections';
 import { computeIsLive } from '../lib/timeline';
@@ -68,10 +69,12 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
     queryKey: ['events', slug, id],
     queryFn: async ({ signal }) => {
       const { events } = await fetchEventsPage(slug, id, { limit: TIMELINE_PAGE_SIZE }, signal);
-      return mergeIssueEvents(
+      const merged = mergeIssueEvents(
         queryClient.getQueryData<AgentEventDto[]>(['events', slug, id]),
         events,
       );
+      patchIssueStateFromLatestTransition(queryClient, slug, id, merged);
+      return merged;
     },
     enabled: id.length > 0,
   });

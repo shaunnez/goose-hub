@@ -87,13 +87,24 @@ function makePRDReadModel(advisor?: string): PrdReadModelDto {
   };
 }
 
+function makeTestClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
 function render_(jsx: React.ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{jsx}</QueryClientProvider>);
+  return renderWithClient(jsx, makeTestClient());
+}
+
+function renderWithClient(jsx: React.ReactNode, client = makeTestClient()) {
+  return {
+    client,
+    ...render(<QueryClientProvider client={client}>{jsx}</QueryClientProvider>),
+  };
 }
 
 describe('PRDSection', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(fetchEvents).mockResolvedValue([]);
   });
 
@@ -146,20 +157,34 @@ describe('PRDSection', () => {
       expect(screen.getByTestId('prd-request-changes-btn')).toBeTruthy();
       expect(screen.getByTestId('prd-decline-btn')).toBeTruthy();
     });
+    expect(screen.getByTestId('prd-approval-controls').textContent).toContain(
+      'Approve to route into delivery.',
+    );
+    expect(screen.getByTestId('prd-approval-controls').textContent).not.toContain(
+      'decomposing into vertical slices',
+    );
     unmount();
 
     render_(<PRDSection projectSlug="proj" id="42" state="factory:decomposing" />);
     await waitFor(() => {
       expect(screen.getByTestId('prd-section')).toBeTruthy();
     });
+    expect(screen.getByTestId('prd-approved-banner').textContent).toContain(
+      'decomposing into vertical slices',
+    );
     expect(screen.queryByTestId('prd-approve-btn')).toBeNull();
     expect(screen.queryByTestId('prd-request-changes-btn')).toBeNull();
   });
 
-  it('Approve PRD button calls approvePRD API', async () => {
+  it('Approve PRD button calls approvePRD API and invalidates issue, event, PRD, and intervention queries', async () => {
     vi.mocked(fetchPRD).mockResolvedValue(makePRDReadModel());
     vi.mocked(approvePRD).mockResolvedValueOnce({ ok: true });
-    render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
+    const queryClient = makeTestClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    renderWithClient(
+      <PRDSection projectSlug="proj" id="42" state="factory:prd-review" />,
+      queryClient,
+    );
     await waitFor(() => {
       expect(screen.getByTestId('prd-approve-btn')).toBeTruthy();
     });
@@ -167,6 +192,27 @@ describe('PRDSection', () => {
     await waitFor(() => {
       expect(approvePRD).toHaveBeenCalledWith('proj', '42');
     });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue', 'proj', '42'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issues', 'proj'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['prd', 'proj', '42'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['events', 'proj', '42'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['interventions', 'issue', 'proj', '42'],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['intervention-timeline', 'proj', '42'],
+    });
+  });
+
+  it('shows approved/routed copy and hides approval controls for factory:dev-ready', async () => {
+    vi.mocked(fetchPRD).mockResolvedValue(makePRDReadModel());
+    render_(<PRDSection projectSlug="proj" id="42" state="factory:dev-ready" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('prd-approved-banner').textContent).toContain('routed to delivery');
+    });
+    expect(screen.queryByTestId('prd-approval-controls')).toBeNull();
+    expect(screen.queryByTestId('prd-approve-btn')).toBeNull();
   });
 
   it('Request Changes opens the concern form and submits revisePRD', async () => {
