@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { collectScopeManifest } from './manifest.js';
+import { collectScopeManifest } from './scope-manifest.js';
 
 function scratchRepo(): string {
   const root = mkdtempSync(join(tmpdir(), 'manifest-'));

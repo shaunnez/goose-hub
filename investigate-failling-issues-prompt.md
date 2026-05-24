@@ -8,12 +8,23 @@ Investigate this Goose Hub issue and its agent runs.
   Determine whether the agent workflow for this issue is healthy, efficient, and correctly grounded. The user cares most about whether agents are working, whether context is propagating correctly, and whether token/cache/cost behavior is
   reasonable.
 
+  Before inspecting actual cost rows, read the issue/story and form a high-level expected-cost model for the workflow. Base the estimate on the story shape, expected stages, acceptance criteria, likely code/test surface, and prior similar Goose
+  Hub workflow behavior. Do not anchor the estimate on actual `agent_run_costs`; estimate first, then compare against observed costs.
+
   Use the URL to identify the project/issue, then use the local database as the source of truth. Prefer `~/.factory/data/factory.db` and inspect relevant rows from `events`, `agent_runs`, `agent_run_costs`, `agent_run_tool_stats`, and
   workflow-specific tables. The UI timeline is secondary.
 
   Ignore orphaned runs caused by server restarts. Do not count a run as a workflow failure unless it is clearly linked to this issue’s active workflow path.
 
   Answer these questions:
+
+  0. Stage cost estimate vs actual
+  - What stages should this story reasonably need? Include only stages that should exist for this issue type and path, for example triage, repo-match, scout/parallel investigation, investigate, playwright-repro, spec-author, acceptance-contract,
+    implement / implement-wp, dev-review, fix-feedback, QA, review, and retro.
+  - For each expected stage, estimate a reasonable USD range before reading actual cost rows. Use ranges, not false precision.
+  - After checking the DB, compare the estimate to actual cost and token/tool behavior when available.
+  - If the workflow was killed, cancelled, orphaned, or has not reached a stage yet, show the actual as partial/unknown and say why. Do not treat incomplete actuals as successful low-cost runs.
+  - Call out stages that should not have run, stages that reran unexpectedly, and stages missing despite being expected.
 
   1. Spec author
   - Did the spec-author run execute properly?
@@ -48,6 +59,9 @@ Investigate this Goose Hub issue and its agent runs.
   Output format:
   - Brief verdict: 3-6 bullets.
   - Confidence: High / Medium / Low, with one sentence explaining why.
+  - Estimate vs actual cost table:
+    | Stage | Expected? | Estimate | Actual | Status | Variance | Evidence / notes |
+    Use USD ranges for estimates. Use actual USD/tokens/cache/tool stats where present. Use `partial`, `unknown`, `not reached`, `killed`, `cancelled`, or `orphaned` explicitly when applicable.
   - Findings: grouped by Spec Author, Implement, Parallel Agents, QA, Fix Feedback, Repeat QA.
   - Cost/context assessment: concise notes on token/cache/tool efficiency.
   - Recommendations: concrete issues, fixes, or further investigation. Prefer narrow product/workflow fixes over generic prompt advice.

@@ -43,7 +43,8 @@ This doc maps every plan goal/task/AC to the delivered code so a reviewer can au
 ### G2
 
 **Task 4 — `collectScopeManifest`** ✅
-`skills/spec-author/manifest.ts:20` — capped at `MANIFEST_CAP=800`, skips `.git/node_modules/.factory/dist/build/.pnpm`, returns `{path, kind}` entries. Test: `skills/spec-author/manifest.test.ts`.
+`core/workspaces/scope-manifest.ts:20` — capped at `MANIFEST_CAP=800`, skips `.git/node_modules/.factory/dist/build/.pnpm`, rejects absolute/traversal scopeRoots outside repoRoot, returns `{path, kind}` entries. Test: `core/workspaces/scope-manifest.test.ts`.
+- **Relocated from plan:** plan placed this in `skills/spec-author/manifest.ts`. It's a generic worktree walker with zero spec-author coupling, and fix-feedback (which drives `implement`, not spec-author) needs it too. Moved to `core/workspaces/` so both the spec-author skill and the fix-feedback slice import it through `core/` rather than reaching cross-domain into another skill's folder.
 
 **Task 5 — wire manifest into spec-author context** ✅
 `skills/spec-author/skill.config.ts:71` adds `existingFileManifest` + allowlist entry (`:91`). `slices/spec-author/workflow.ts:228` `deriveSpecScopeRoots`, `:425-439` collects + injects (only when non-empty). Prompt documents the contract.
@@ -64,7 +65,7 @@ This doc maps every plan goal/task/AC to the delivered code so a reviewer can au
 - G2: `context.existingFileManifest` populated from investigation keyFiles + allowlisted.
 - G1: `appendRuntimeAdvisoryEvent` produces `agent.runtime-advisory` (surface `resources/read failed`, stderr includes `?path=`), and **no** `agent.run-blocked` emitted.
 
-`fix-feedback` now reuses the shared `skills/spec-author/manifest.ts` collector for its implement context manifest, so the same cap, skipped directories, and traversal guards apply outside spec-author too.
+`fix-feedback` now reuses the shared `core/workspaces/scope-manifest.ts` collector for its implement context manifest, so the same cap, skipped directories, and traversal guards apply outside spec-author too.
 
 ## Plan "Eval" table — measurability
 

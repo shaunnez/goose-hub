@@ -23,7 +23,7 @@ vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
   invokeSkill: (...args: unknown[]) => mockInvokeSkill(...args),
 }));
 
-vi.mock('@goose-hub/skills/spec-author/manifest.js', () => ({
+vi.mock('@goose-hub/core/workspaces/scope-manifest.js', () => ({
   collectScopeManifest: vi.fn().mockReturnValue([]),
 }));
 
@@ -983,7 +983,7 @@ describe('runSpecAuthorWorkflow', () => {
     });
 
     it('injects existingFileManifest derived from investigationSynthesis keyFiles into context', async () => {
-      const { collectScopeManifest } = await import('@goose-hub/skills/spec-author/manifest.js');
+      const { collectScopeManifest } = await import('@goose-hub/core/workspaces/scope-manifest.js');
       vi.mocked(collectScopeManifest).mockReturnValueOnce([
         { path: 'apps/web/src/components/detail', kind: 'dir' },
         { path: 'apps/web/src/components/detail/TaskHeader.tsx', kind: 'file' },
@@ -1029,7 +1029,7 @@ describe('runSpecAuthorWorkflow', () => {
     });
 
     it('derives scopeRoots from investigationSynthesis.keyFiles and ignores PRD slices without paths', async () => {
-      const { collectScopeManifest } = await import('@goose-hub/skills/spec-author/manifest.js');
+      const { collectScopeManifest } = await import('@goose-hub/core/workspaces/scope-manifest.js');
 
       vi.mocked(eventStore.replay).mockImplementation((query?: { kind?: string }) => {
         if (query?.kind === 'agent.investigation-complete') {
@@ -1106,7 +1106,7 @@ describe('runSpecAuthorWorkflow', () => {
     });
 
     it('derives scopeRoots from scout report digest files when investigation synthesis has no keyFiles', async () => {
-      const { collectScopeManifest } = await import('@goose-hub/skills/spec-author/manifest.js');
+      const { collectScopeManifest } = await import('@goose-hub/core/workspaces/scope-manifest.js');
       const scoutRepo = await import('@goose-hub/core/scout-reports/repository.js');
 
       vi.mocked(eventStore.replay).mockReturnValue([

@@ -22,8 +22,8 @@ import {
   orchestratorCommitAll,
   orchestratorPushBranch,
 } from '@goose-hub/core/workspaces/orchestrator-git.js';
+import { collectScopeManifest } from '@goose-hub/core/workspaces/scope-manifest.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
-import { collectScopeManifest } from '@goose-hub/skills/spec-author/manifest.js';
 
 /** Maximum prior dev decision-summaries surfaced to the repair agent. */
 const PRIOR_DECISION_LIMIT = 20;

@@ -8,12 +8,12 @@ import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { buildScoutReportDigestBundle } from '@goose-hub/core/scout-reports/digest.js';
 import { listScoutReportsForInvestigation } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { collectScopeManifest } from '@goose-hub/core/workspaces/scope-manifest.js';
 import {
   cleanupWorktree,
   createWorktree,
   resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
-import { collectScopeManifest } from '@goose-hub/skills/spec-author/manifest.js';
 import {
   type EngineeringSpec,
   EngineeringSpecSchema,
