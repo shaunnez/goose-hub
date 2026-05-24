@@ -3,6 +3,7 @@ import { ChatLauncher } from './ChatLauncher';
 import { ChatPanel } from './ChatPanel';
 
 const STORAGE_KEY = 'hub-chat-open';
+const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 
 /**
  * Top-level entry point: hosts the slide-out chat panel + the floating
@@ -17,6 +18,7 @@ export function ChatDock() {
       return false;
     }
   });
+  const [panelKey, setPanelKey] = useState(0);
 
   useEffect(() => {
     try {
@@ -24,10 +26,26 @@ export function ChatDock() {
     } catch {}
   }, [open]);
 
+  const closeAndReset = () => {
+    try {
+      localStorage.removeItem(ACTIVE_CONVERSATION_STORAGE_KEY);
+    } catch {}
+    setPanelKey((key) => key + 1);
+    setOpen(false);
+  };
+
+  const handleLauncherToggle = () => {
+    if (open) {
+      closeAndReset();
+      return;
+    }
+    setOpen(true);
+  };
+
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} />
-      <ChatLauncher open={open} onToggle={() => setOpen((o) => !o)} />
+      <ChatPanel key={panelKey} open={open} onClose={closeAndReset} />
+      <ChatLauncher open={open} onToggle={handleLauncherToggle} />
     </>
   );
 }
