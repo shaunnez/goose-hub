@@ -92,10 +92,9 @@ const config: SkillConfig = {
       .optional(),
     priorEvidenceSpecPath: z
       .string()
-      .nullable()
       .optional()
       .describe(
-        'Path to the evidence spec authored or reused by the prior dev/fix-feedback cycle on this work item.',
+        'Path to the evidence spec authored or reused by the prior dev/fix-feedback cycle on this work item. Omitted when no prior cycle exists; the call site coerces null → omission.',
       ),
   }),
   outputSchema: ImplementSchema,
