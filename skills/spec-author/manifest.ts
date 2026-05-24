@@ -1,6 +1,14 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join, posix } from 'node:path';
 
+function isDirSync(abs: string): boolean {
+  try {
+    return statSync(abs).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.factory', 'dist', 'build', '.pnpm']);
 const MANIFEST_CAP = 800;
 
@@ -17,7 +25,7 @@ export function collectScopeManifest(
   for (const scope of scopeRoots) {
     if (out.length >= MANIFEST_CAP) break;
     const abs = join(repoRoot, scope);
-    if (!existsSync(abs)) continue;
+    if (!existsSync(abs) || !isDirSync(abs)) continue;
     walk(abs, scope, out);
   }
   return out.slice(0, MANIFEST_CAP);

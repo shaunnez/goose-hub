@@ -13,6 +13,7 @@ import {
   createWorktree,
   resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
+import { collectScopeManifest } from '@goose-hub/skills/spec-author/manifest.js';
 import {
   type EngineeringSpec,
   EngineeringSpecSchema,
@@ -21,7 +22,6 @@ import {
   type ValidationResult,
   validateEngineeringSpec,
 } from '@goose-hub/skills/spec-author/validate.js';
-import { collectScopeManifest } from '@goose-hub/skills/spec-author/manifest.js';
 import { normalizeEngineeringSpecPaths } from './path-normalization.js';
 import { type PrdPlanningContext, buildPrdPlanningContext } from './prd-planning-context.js';
 import { createWpIssueProjections } from './wp-issue-projection.js';

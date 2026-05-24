@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
 import { collectScopeManifest } from './manifest.js';
 
 function scratchRepo(): string {
@@ -16,8 +16,14 @@ describe('collectScopeManifest', () => {
   it('returns file + dir entries under each scopeRoot, capped at 800', () => {
     const root = scratchRepo();
     const out = collectScopeManifest(root, ['apps/web/src/components/detail']);
-    expect(out.find((e) => e.path === 'apps/web/src/components/detail/TaskHeader.tsx' && e.kind === 'file')).toBeDefined();
-    expect(out.find((e) => e.path === 'apps/web/src/components/detail' && e.kind === 'dir')).toBeDefined();
+    expect(
+      out.find(
+        (e) => e.path === 'apps/web/src/components/detail/TaskHeader.tsx' && e.kind === 'file',
+      ),
+    ).toBeDefined();
+    expect(
+      out.find((e) => e.path === 'apps/web/src/components/detail' && e.kind === 'dir'),
+    ).toBeDefined();
     expect(out.length).toBeLessThanOrEqual(800);
   });
 
