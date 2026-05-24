@@ -18,3 +18,5 @@ coverage/
 .e2e-chat.db-wal
 .worktrees
 .playwright-mcp
+investigations/
+investigate-failling-issues-prompt.md
