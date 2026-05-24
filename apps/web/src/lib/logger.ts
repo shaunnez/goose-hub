@@ -2,11 +2,7 @@ type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 function log(level: LogLevel, message: string, meta?: Record<string, unknown>): void {
   const prefix = `[goose-hub:${level}]`;
-  if (meta != null) {
-    console[level === 'debug' ? 'log' : level](prefix, message, meta);
-  } else {
-    console[level === 'debug' ? 'log' : level](prefix, message);
-  }
+  console[level === 'debug' ? 'log' : level](prefix, message);
 }
 
 export const logger = {
