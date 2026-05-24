@@ -4,7 +4,12 @@ import {
   discoverPackageRoots,
   normalizeRepoRelativePath,
 } from '@goose-hub/core/workspaces/path-normalization.js';
-import { CONSTRAINT_SOURCE_PATTERN, type EngineeringSpec } from './schema.js';
+import {
+  CONSTRAINT_SOURCE_PATTERN,
+  type EngineeringSpec,
+  fileOwnedPath,
+  fileOwnedStatus,
+} from './schema.js';
 
 /**
  * Engineering Spec validators (M19.02, issue #559).
@@ -100,7 +105,8 @@ export function validateEngineeringSpec(
   // ── File ownership: same path may not appear in two WPs (full-stop). ──
   const ownerByPath = new Map<string, string>();
   for (const wp of spec.workPackages) {
-    for (const path of wp.filesOwned) {
+    for (const entry of wp.filesOwned) {
+      const path = fileOwnedPath(entry);
       const prior = ownerByPath.get(path);
       if (prior != null && prior !== wp.id) {
         errors.push({
@@ -145,7 +151,7 @@ export function validateEngineeringSpec(
   }
 
   // ── Sensitive-path risk-register requirement. ──
-  const allFilesOwned = spec.workPackages.flatMap((wp) => wp.filesOwned);
+  const allFilesOwned = spec.workPackages.flatMap((wp) => wp.filesOwned.map(fileOwnedPath));
   const sensitiveTouches = allFilesOwned.filter((p) => sensitivePattern.test(p));
   if (sensitiveTouches.length > 0 && spec.riskRegister.length === 0) {
     errors.push({
@@ -305,8 +311,9 @@ export function validateEngineeringSpec(
     (f.endsWith('.ts') || f.endsWith('.tsx')) && !EXEMPT_SUFFIX.test(f);
   const isTestFile = (f: string) => /\.(test|spec)\.(ts|tsx)$/.test(f);
   for (const wp of spec.workPackages) {
-    const hasProductionTs = wp.filesOwned.some(isProductionTs);
-    const hasTestFile = wp.filesOwned.some(isTestFile);
+    const paths = wp.filesOwned.map(fileOwnedPath);
+    const hasProductionTs = paths.some(isProductionTs);
+    const hasTestFile = paths.some(isTestFile);
     if (hasProductionTs && !hasTestFile) {
       errors.push({
         rule: 'wp-missing-test-file',
@@ -362,33 +369,28 @@ export function validateEngineeringSpec(
     });
   }
 
-  // 2. Grounded in code — when repoRoot is provided, verify each WP file
-  //    actually exists in the worktree. (Constraint source check above is
-  //    a strict subset of this; this catches WP filesOwned that don't yet
-  //    exist either.) Soft check: only fire on files that *should* already
-  //    exist (not on files the WP plans to create). Since the spec doesn't
-  //    distinguish create vs modify, we only emit a warning-level error
-  //    when none of the WP's files exist. That suggests a typo, not a
-  //    plan to create a new module.
+  // 2. Grounded in code — per-file existence check. Production files under
+  //    apps/, core/, slices/, skills/ must exist in the worktree OR be
+  //    annotated { status: 'new' }. Test, config, and .d.ts files are exempt.
+  const GROUNDABLE_SCOPE_RE = /^(apps|core|slices|skills)\//;
+  const EXEMPT_SUFFIX_FOR_GROUNDING = /\.(test|spec)\.(ts|tsx)$|\.(config|d)\.ts$/;
+
   if (options.repoRoot != null) {
     const repoRoot = options.repoRoot;
     for (const wp of spec.workPackages) {
-      const anyExists = wp.filesOwned.some((p) => existsSync(join(repoRoot, p)));
-      // Skip when WP touches sensitive paths (likely brand-new modules).
-      if (!anyExists && !wp.filesOwned.some((p) => sensitivePattern.test(p))) {
-        // Soft signal — emit only if filesOwned ALL look like they should
-        // exist (e.g. paths under existing directories) but none do.
-        const allLookExisting = wp.filesOwned.every((p) => {
-          const dir = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '';
-          return existsSync(join(repoRoot, dir));
+      for (const entry of wp.filesOwned) {
+        const path = fileOwnedPath(entry);
+        const status = fileOwnedStatus(entry);
+        if (status === 'new') continue;
+        if (!GROUNDABLE_SCOPE_RE.test(path)) continue;
+        if (EXEMPT_SUFFIX_FOR_GROUNDING.test(path)) continue;
+        if (sensitivePattern.test(path)) continue;
+        if (existsSync(join(repoRoot, path))) continue;
+        errors.push({
+          rule: 'self-check-grounded-in-code',
+          message: `WP '${wp.id}' filesOwned path '${path}' does not exist in worktree and is not annotated status:'new'. Either fix the path or declare it as a new file.`,
+          ref: wp.id,
         });
-        if (allLookExisting) {
-          errors.push({
-            rule: 'self-check-grounded-in-code',
-            message: `WP '${wp.id}' files do not exist in worktree but their parent dirs do — possible typo`,
-            ref: wp.id,
-          });
-        }
       }
     }
   }

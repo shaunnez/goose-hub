@@ -862,3 +862,87 @@ describe('validateEngineeringSpec — TDD contract (wp-missing-test-file)', () =
     expect(testFileErrors).toHaveLength(0);
   });
 });
+
+// ─── Per-file self-check-grounded-in-code ────────────────────────────────────
+
+describe('self-check-grounded-in-code (per-file)', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'spec-author-validate-'));
+  mkdirSync(join(tmp, 'apps/web/src/components/detail'), { recursive: true });
+  writeFileSync(join(tmp, 'apps/web/src/components/detail/TaskHeader.tsx'), '');
+
+  it('errors when a WP filesOwned entry is a missing production .tsx without status:new', () => {
+    const result = validateEngineeringSpec(
+      baseSpec({
+        workPackages: [
+          {
+            id: 'WP1',
+            filesOwned: [
+              'apps/web/src/components/detail/TaskHeader.tsx', // exists
+              'apps/web/src/components/detail/OverviewSection.tsx', // missing
+            ],
+            changes: 'Add TaskHeader and OverviewSection components.',
+            dependsOn: [],
+            builderTier: 'haiku',
+          },
+        ],
+        executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+        interfaceContracts: [],
+      }),
+      { repoRoot: tmp },
+    );
+    expect(result.ok).toBe(false);
+    expect(
+      (result as { ok: false; errors: Array<{ rule: string; message: string }> }).errors.some(
+        (e) =>
+          e.rule === 'self-check-grounded-in-code' && e.message.includes('OverviewSection.tsx'),
+      ),
+    ).toBe(true);
+  });
+
+  it('accepts missing files when annotated as status:new', () => {
+    const result = validateEngineeringSpec(
+      baseSpec({
+        workPackages: [
+          {
+            id: 'WP1',
+            filesOwned: [
+              { path: 'apps/web/src/components/detail/OverviewSection.tsx', status: 'new' },
+              // test file also new — exempt from grounding check
+              'apps/web/src/components/detail/OverviewSection.test.tsx',
+            ],
+            changes: 'Add OverviewSection component and test.',
+            dependsOn: [],
+            builderTier: 'haiku',
+          },
+        ],
+        executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+        interfaceContracts: [],
+      }),
+      { repoRoot: tmp },
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('skips existence check for *.test.ts, *.spec.ts, *.config.ts, *.d.ts (still allowed to plan new)', () => {
+    const result = validateEngineeringSpec(
+      baseSpec({
+        workPackages: [
+          {
+            id: 'WP1',
+            filesOwned: [
+              'apps/web/src/components/detail/TaskHeader.test.tsx', // missing test file — ok
+              'apps/web/src/components/detail/TaskHeader.tsx', // existing prod file
+            ],
+            changes: 'Add TaskHeader component and test.',
+            dependsOn: [],
+            builderTier: 'haiku',
+          },
+        ],
+        executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+        interfaceContracts: [],
+      }),
+      { repoRoot: tmp },
+    );
+    expect(result.ok).toBe(true);
+  });
+});

@@ -17,6 +17,7 @@ import { collectScopeManifest } from '@goose-hub/skills/spec-author/manifest.js'
 import {
   type EngineeringSpec,
   EngineeringSpecSchema,
+  fileOwnedPath,
 } from '@goose-hub/skills/spec-author/schema.js';
 import {
   type ValidationResult,
@@ -162,7 +163,8 @@ function emitSpecContractGateBlocked(input: {
 function duplicateFilesOwned(spec: EngineeringSpec): DuplicateOwnedPath[] {
   const ownersByPath = new Map<string, Set<string>>();
   for (const wp of spec.workPackages) {
-    for (const path of wp.filesOwned) {
+    for (const entry of wp.filesOwned) {
+      const path = fileOwnedPath(entry);
       const owners = ownersByPath.get(path) ?? new Set<string>();
       owners.add(wp.id);
       ownersByPath.set(path, owners);

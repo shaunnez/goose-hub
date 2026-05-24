@@ -3,7 +3,7 @@ import {
   discoverPackageRoots,
   normalizeRepoRelativePath,
 } from '@goose-hub/core/workspaces/path-normalization.js';
-import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
+import { type EngineeringSpec, fileOwnedPath } from '@goose-hub/skills/spec-author/schema.js';
 
 export type SpecPathNormalizationField = {
   field: string;
@@ -25,7 +25,7 @@ export function normalizeEngineeringSpecPaths(input: {
   const packageRoots = discoverPackageRoots(input.worktreePath);
   const fields: SpecPathNormalizationField[] = [];
   const referencePaths = [
-    ...input.spec.workPackages.flatMap((wp) => wp.filesOwned),
+    ...input.spec.workPackages.flatMap((wp) => wp.filesOwned.map(fileOwnedPath)),
     ...input.spec.interfaceContracts.map((contract) => contract.file),
     ...input.spec.schemaChanges.migrations,
     ...(input.referencePaths ?? []),
@@ -64,9 +64,15 @@ export function normalizeEngineeringSpecPaths(input: {
     })),
     workPackages: input.spec.workPackages.map((wp, wpIndex) => ({
       ...wp,
-      filesOwned: wp.filesOwned.map((path, pathIndex) =>
-        normalizeField(`workPackages[${wpIndex}].filesOwned[${pathIndex}]`, path),
-      ),
+      filesOwned: wp.filesOwned.map((entry, pathIndex) => {
+        const rawPath = fileOwnedPath(entry);
+        const normalized = normalizeField(
+          `workPackages[${wpIndex}].filesOwned[${pathIndex}]`,
+          rawPath,
+        );
+        if (typeof entry === 'string') return normalized;
+        return { ...entry, path: normalized };
+      }),
     })),
   };
 
