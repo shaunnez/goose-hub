@@ -1,8 +1,8 @@
 /** @vitest-environment jsdom */
-import type { AgentEventDto, EngineeringSpecDto } from '@/lib/types';
+import type { AcceptanceContractDto, AgentEventDto, EngineeringSpecDto } from '@/lib/types';
 import { ActiveProjectProvider } from '@/state/active-project';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InvestigationSection } from './InvestigationSection';
@@ -76,6 +76,26 @@ const ENGINEERING_SPEC: EngineeringSpecDto = {
   riskRegister: [],
 };
 
+const ACCEPTANCE_CONTRACT: AcceptanceContractDto = {
+  source: 'engineering-spec',
+  runId: 'run-1',
+  criteria: [
+    {
+      id: 'AC1',
+      statement: 'Users can log in.',
+      executableChecks: [
+        {
+          id: 'check-1',
+          command:
+            'pnpm vitest run apps/web/src/components/detail/components/InvestigationSection.test.tsx',
+          expectedExitCodes: [0],
+          kind: 'unit',
+        },
+      ],
+    },
+  ],
+};
+
 function investigationEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   return {
     ...INVESTIGATION_EVENT,
@@ -101,10 +121,17 @@ function toolCallEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   };
 }
 
-function renderSection(events: AgentEventDto[] = [], spec?: EngineeringSpecDto | null) {
+function renderSection(
+  events: AgentEventDto[] = [],
+  spec?: EngineeringSpecDto | null,
+  contract?: AcceptanceContractDto | null,
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['events', 'test-proj', '42'], events);
   if (spec !== undefined) qc.setQueryData(['spec', 'test-proj', '42'], spec);
+  if (contract !== undefined) {
+    qc.setQueryData(['acceptance-contract', 'test-proj', '42'], contract);
+  }
   render(
     <QueryClientProvider client={qc}>
       <ActiveProjectProvider initialSlug="test-proj">
@@ -133,6 +160,31 @@ describe('InvestigationSection', () => {
     expect(screen.getByText('1 work package · 1 AC')).toBeTruthy();
   });
 
+  it('uses accordions with the expected default states and toggles for investigation sections', async () => {
+    renderSection([INVESTIGATION_EVENT], ENGINEERING_SPEC, ACCEPTANCE_CONTRACT);
+
+    expect(screen.getByRole('button', { name: /findings/i })).toBeTruthy();
+    expect(screen.getByTestId('findings-content')).toBeTruthy();
+
+    expect(screen.getByRole('button', { name: /acceptance criteria/i })).toBeTruthy();
+    expect(screen.queryByText('Users can log in.')).toBeNull();
+
+    expect(screen.getByRole('button', { name: /engineering spec/i })).toBeTruthy();
+    expect(screen.queryByText('Build the authentication flow with token refresh.')).toBeNull();
+
+    expect(screen.getByTestId('investigation-accordion-key-files')).toBeTruthy();
+    expect(screen.getByTestId('investigation-accordion-open-questions')).toBeTruthy();
+    expect(screen.getByTestId('investigation-accordion-investigation-trail')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /acceptance criteria/i }));
+    fireEvent.click(screen.getByRole('button', { name: /engineering spec/i }));
+
+    expect(screen.getByText('Users can log in.')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText('Build the authentication flow with token refresh.')).toBeTruthy();
+    });
+  });
+
   it('displays the correct confidence badge for high confidence', () => {
     renderSection([INVESTIGATION_EVENT]);
     const badge = screen.getByTestId('confidence-badge');
@@ -140,16 +192,26 @@ describe('InvestigationSection', () => {
     expect(badge.textContent).toContain('high');
   });
 
-  it('renders key files list', () => {
+  it('renders key files inside the shared accordion pattern', () => {
     renderSection([INVESTIGATION_EVENT]);
+    expect(screen.getByTestId('investigation-accordion-key-files')).toBeTruthy();
+    expect(screen.queryByTestId('key-files-list')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /key files/i }));
+
     const filesList = screen.getByTestId('key-files-list');
     expect(filesList).toBeTruthy();
     expect(screen.getByText('src/auth/login.ts')).toBeTruthy();
     expect(screen.getByText('src/auth/session.ts')).toBeTruthy();
   });
 
-  it('renders open questions list', () => {
+  it('renders open questions inside the shared accordion pattern', () => {
     renderSection([INVESTIGATION_EVENT]);
+    expect(screen.getByTestId('investigation-accordion-open-questions')).toBeTruthy();
+    expect(screen.queryByTestId('open-questions-list')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /open questions/i }));
+
     const questionsList = screen.getByTestId('open-questions-list');
     expect(questionsList).toBeTruthy();
     expect(screen.getByText('Does this affect the mobile app?')).toBeTruthy();

@@ -13,8 +13,8 @@ import { timeAgo } from '@/lib/utils';
 import { useActiveProject } from '@/state/active-project';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 // import { Filter, RefreshCw } from 'lucide-react';
-import { Search } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronDown, ChevronRight, ClipboardCheck, Package, Search } from 'lucide-react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import {
   CONFIDENCE_NUM,
@@ -39,6 +39,72 @@ interface InvestigationSectionProps {
   id: string;
   itemType?: string;
   itemState?: string;
+}
+
+interface InvestigationAccordionSectionProps {
+  title: string;
+  sectionId: string;
+  defaultOpen?: boolean;
+  summary?: string;
+  icon?: ReactNode;
+  children: ReactNode;
+}
+
+function InvestigationAccordionSection({
+  title,
+  sectionId,
+  defaultOpen = false,
+  summary,
+  icon,
+  children,
+}: InvestigationAccordionSectionProps) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div
+      data-testid={`investigation-accordion-${sectionId}`}
+      className="rounded-lg border border-line bg-bg-elev overflow-hidden"
+    >
+      <button
+        type="button"
+        data-testid={`investigation-accordion-toggle-${sectionId}`}
+        onClick={() => setOpen((value) => !value)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-bg-elev-2 text-left cursor-pointer"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {icon}
+          <span className="text-[10.5px] uppercase tracking-wider text-fg-2 shrink-0">{title}</span>
+          {summary != null && summary.length > 0 && (
+            <span className="text-[11px] text-fg-4 truncate">{summary}</span>
+          )}
+        </div>
+        <span className="shrink-0 text-fg-4">
+          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </span>
+      </button>
+      {open && <div className="px-4 py-4 border-t border-line">{children}</div>}
+    </div>
+  );
+}
+
+function AutoExpandedSpecDetails({
+  spec,
+  itemState,
+}: { spec: EngineeringSpecDto; itemState?: string }) {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const button = wrapperRef.current?.querySelector('button');
+    if (button instanceof HTMLButtonElement) {
+      button.click();
+    }
+  }, []);
+
+  return (
+    <div ref={wrapperRef}>
+      <SpecDetails spec={spec} itemState={itemState} />
+    </div>
+  );
 }
 
 export function InvestigationSection({
@@ -230,58 +296,86 @@ export function InvestigationSection({
         <StatCard label="Conf" value={investigate.confidence} sub={confSub} />
       </div>
 
-      {/* Root-cause finding card */}
       {investigate.findings.trim().length > 0 && (
-        <FindingCard
-          severity={investigate.confidence}
-          title="Root cause hypothesis"
-          body={
-            <div
-              data-testid="findings-content"
-              className="prose prose-sm prose-invert max-w-none text-[13px] text-fg-2 [&_p]:mb-2 [&_ul]:mb-2 [&_li]:ml-4 [&_li]:list-disc [&_code]:font-mono [&_code]:text-[12px]"
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml
-              dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(investigate.findings) }}
-            />
-          }
-          conf={conf}
-          personaInitials={initials}
-          personaName={personaLabel}
-        />
-      )}
-
-      {/* Key files as long finding cards */}
-      {investigate.keyFiles.length > 0 && (
-        <div data-testid="key-files-list" className="flex flex-col gap-3">
-          {investigate.keyFiles.map((f) => {
-            const basename = f.path.split('/').pop() ?? f.path;
-            return (
-              <FindingCard
-                key={f.path}
-                severity={investigate.confidence}
-                title={basename}
-                body={f.reason ? <span>{f.reason}</span> : <span className="text-fg-2">—</span>}
-                filePath={f.path}
-                viewUrl={githubBase != null ? `${githubBase}/${f.path}` : undefined}
-                conf={conf}
-                personaInitials={initials}
-                personaName={personaLabel}
+        <InvestigationAccordionSection
+          title="Findings"
+          sectionId="findings"
+          defaultOpen
+          summary="Root cause hypothesis"
+        >
+          <FindingCard
+            severity={investigate.confidence}
+            title="Root cause hypothesis"
+            body={
+              <div
+                data-testid="findings-content"
+                className="prose prose-sm prose-invert max-w-none text-[13px] text-fg-2 [&_p]:mb-2 [&_ul]:mb-2 [&_li]:ml-4 [&_li]:list-disc [&_code]:font-mono [&_code]:text-[12px]"
+                // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml
+                dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(investigate.findings) }}
               />
-            );
-          })}
-        </div>
+            }
+            conf={conf}
+            personaInitials={initials}
+            personaName={personaLabel}
+          />
+        </InvestigationAccordionSection>
       )}
 
-      <AcceptanceContractDetails contract={acceptanceContract} />
-
-      {/* Engineering spec */}
-      {spec != null && <SpecDetails spec={spec} itemState={itemState} />}
-
-      {/* Open questions */}
-      {investigate.openQuestions.length > 0 && (
-        <div className="rounded-lg border border-line bg-bg-elev px-4 py-4">
-          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-2">
-            Open questions
+      {investigate.keyFiles.length > 0 && (
+        <InvestigationAccordionSection
+          title="Key Files"
+          sectionId="key-files"
+          summary={`${investigate.keyFiles.length} file${investigate.keyFiles.length !== 1 ? 's' : ''}`}
+        >
+          <div data-testid="key-files-list" className="flex flex-col gap-3">
+            {investigate.keyFiles.map((f) => {
+              const basename = f.path.split('/').pop() ?? f.path;
+              return (
+                <FindingCard
+                  key={f.path}
+                  severity={investigate.confidence}
+                  title={basename}
+                  body={f.reason ? <span>{f.reason}</span> : <span className="text-fg-2">—</span>}
+                  filePath={f.path}
+                  viewUrl={githubBase != null ? `${githubBase}/${f.path}` : undefined}
+                  conf={conf}
+                  personaInitials={initials}
+                  personaName={personaLabel}
+                />
+              );
+            })}
           </div>
+        </InvestigationAccordionSection>
+      )}
+
+      {acceptanceContract != null && acceptanceContract.criteria.length > 0 && (
+        <InvestigationAccordionSection
+          title="Acceptance Criteria"
+          sectionId="acceptance-criteria"
+          summary={`${acceptanceContract.criteria.length} AC`}
+          icon={<ClipboardCheck size={12} className="shrink-0 text-[color:var(--accent)]" />}
+        >
+          <AcceptanceContractDetails contract={acceptanceContract} />
+        </InvestigationAccordionSection>
+      )}
+
+      {spec != null && (
+        <InvestigationAccordionSection
+          title="Engineering Spec"
+          sectionId="engineering-spec"
+          summary={`${spec.workPackages.length} work package${spec.workPackages.length !== 1 ? 's' : ''} · ${spec.acceptanceCriteriaCount} AC`}
+          icon={<Package size={12} className="shrink-0 text-[color:var(--accent)]" />}
+        >
+          <AutoExpandedSpecDetails spec={spec} itemState={itemState} />
+        </InvestigationAccordionSection>
+      )}
+
+      {investigate.openQuestions.length > 0 && (
+        <InvestigationAccordionSection
+          title="Open Questions"
+          sectionId="open-questions"
+          summary={`${investigate.openQuestions.length} pending`}
+        >
           <ul data-testid="open-questions-list" className="space-y-1 list-disc list-inside">
             {investigate.openQuestions.map((q) => (
               <li key={q} className="text-[12.5px] text-fg-2">
@@ -289,19 +383,16 @@ export function InvestigationSection({
               </li>
             ))}
           </ul>
-        </div>
+        </InvestigationAccordionSection>
       )}
 
-      {/* Investigation trail */}
       {investigate.decisionSummaries.length > 0 && (
-        <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
-          <div className="px-4 py-3 border-b border-line bg-bg-elev-2 flex items-baseline gap-2">
-            <div className="text-[10.5px] uppercase tracking-wider text-fg-2">
-              Investigation trail
-            </div>
-            <div className="text-[12px] text-fg-3">What was looked at, in order</div>
-          </div>
-          <ol data-testid="investigation-trail" className="px-4 py-3 flex flex-col gap-2">
+        <InvestigationAccordionSection
+          title="Investigation Trail"
+          sectionId="investigation-trail"
+          summary="What was looked at, in order"
+        >
+          <ol data-testid="investigation-trail" className="flex flex-col gap-2">
             {investigate.decisionSummaries.map((s, i) => (
               <li
                 // biome-ignore lint/suspicious/noArrayIndexKey: trail is append-only and indices are stable for a given event payload
@@ -333,16 +424,16 @@ export function InvestigationSection({
               </li>
             ))}
           </ol>
-        </div>
+        </InvestigationAccordionSection>
       )}
 
-      {/* Human review notes posted via the investigation gate */}
       {humanNotes.length > 0 && (
-        <div data-testid="investigation-human-notes">
-          <h4 className="text-[11px] font-medium text-fg-3 mb-2 uppercase tracking-wide">
-            Human review notes
-          </h4>
-          <div className="space-y-2">
+        <InvestigationAccordionSection
+          title="Human Review Notes"
+          sectionId="human-review-notes"
+          summary={`${humanNotes.length} note${humanNotes.length !== 1 ? 's' : ''}`}
+        >
+          <div data-testid="investigation-human-notes" className="space-y-2">
             {humanNotes.map((note) => (
               <div
                 key={note.id}
@@ -361,12 +452,13 @@ export function InvestigationSection({
               </div>
             ))}
           </div>
-        </div>
+        </InvestigationAccordionSection>
       )}
 
-      {/* Playwright captures (bug items only) */}
       {itemType === 'bug' && (
-        <PlaywrightCaptureSection projectSlug={projectSlug} id={id} itemType={itemType} />
+        <InvestigationAccordionSection title="Playwright Captures" sectionId="playwright-captures">
+          <PlaywrightCaptureSection projectSlug={projectSlug} id={id} itemType={itemType} />
+        </InvestigationAccordionSection>
       )}
 
       {/* Human proceed gate */}
