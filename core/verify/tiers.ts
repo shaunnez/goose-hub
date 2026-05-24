@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { db } from '@goose-hub/core/db/db.js';
 import { wpIterations } from '@goose-hub/core/db/schema.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
-import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
+import { type EngineeringSpec, fileOwnedPath } from '@goose-hub/skills/spec-author/schema.js';
 import { and, desc, eq } from 'drizzle-orm';
 
 export type RegressionPolicy = 'escalate' | 'ignore';
@@ -77,7 +77,8 @@ export function verifyStructural(
   const findings: VerifyFinding[] = [];
 
   for (const wp of spec.workPackages) {
-    for (const filePath of wp.filesOwned) {
+    for (const entry of wp.filesOwned) {
+      const filePath = fileOwnedPath(entry);
       const fullPath = join(worktreePath, filePath);
       if (existsSync(fullPath)) {
         evidence.push(`file-exists: ${filePath} (WP ${wp.id})`);

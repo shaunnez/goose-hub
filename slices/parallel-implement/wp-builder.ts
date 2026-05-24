@@ -24,7 +24,7 @@ import {
 } from '@goose-hub/core/workspaces/path-normalization.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
 import type { ImplementWpOutput } from '@goose-hub/skills/implement-wp/schema.js';
-import type { WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
+import { type WorkPackage, fileOwnedPath } from '@goose-hub/skills/spec-author/schema.js';
 import type { PrdPlanningContext } from '../spec-author/prd-planning-context.js';
 import type { recordWpIteration } from './parallel-helpers.js';
 
@@ -88,12 +88,14 @@ function normalizeWpFilesOwned(input: {
 }): { wp: WorkPackage; fields: NormalizedPathField[]; ambiguousFields: NormalizedPathField[] } {
   const packageRoots = discoverPackageRoots(input.worktreePath);
   const fields: NormalizedPathField[] = [];
-  const filesOwned = input.wp.filesOwned.map((rawPath, index) => {
+  const rawPaths = input.wp.filesOwned.map(fileOwnedPath);
+  const filesOwned = input.wp.filesOwned.map((entry, index) => {
+    const rawPath = fileOwnedPath(entry);
     const result = normalizeRepoRelativePath({
       rawPath,
       worktreePath: input.worktreePath,
       packageRoots,
-      referencePaths: input.wp.filesOwned,
+      referencePaths: rawPaths,
     });
     if (result.path !== rawPath || result.ambiguous != null) {
       fields.push({
@@ -104,7 +106,8 @@ function normalizeWpFilesOwned(input: {
         ...(result.ambiguous != null && { ambiguous: result.ambiguous }),
       });
     }
-    return result.path;
+    if (typeof entry === 'string') return result.path;
+    return { ...entry, path: result.path };
   });
   return {
     wp: { ...input.wp, filesOwned },
@@ -126,7 +129,7 @@ function normalizeImplementWpOutputPaths(input: {
 } {
   const packageRoots = discoverPackageRoots(input.worktreePath);
   const referencePaths = [
-    ...input.wp.filesOwned,
+    ...input.wp.filesOwned.map(fileOwnedPath),
     ...input.output.filesWritten.map((file) => file.path),
     ...input.output.testsWritten.map((test) => test.path),
     ...input.output.testsRun.paths,
@@ -303,21 +306,22 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       runId: wpRunId,
     });
   }
+  const wpFilePaths = wp.filesOwned.map(fileOwnedPath);
   const codeSnippets = buildCodeSnippets({
     worktreePath: opts.scratchWorktreePath,
-    filesOwned: wp.filesOwned,
+    filesOwned: wpFilePaths,
   });
   const codeContext =
     opts.investigation == null
       ? []
       : buildCodeContextBundle({
           worktreePath: opts.scratchWorktreePath,
-          keyFiles: opts.investigation.keyFiles.filter((file) => wp.filesOwned.includes(file.path)),
+          keyFiles: opts.investigation.keyFiles.filter((file) => wpFilePaths.includes(file.path)),
         });
   const verificationCommands = wpRelevantExecutableChecks({
     acceptanceContract: opts.acceptanceContract,
     verificationCommands: opts.verificationCommands,
-    filesOwned: wp.filesOwned,
+    filesOwned: wpFilePaths,
   });
 
   const spawnSpec: AgentSpec = {
@@ -336,7 +340,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       },
       wp: {
         id: wp.id,
-        filesOwned: wp.filesOwned,
+        filesOwned: wpFilePaths,
         changes: wp.changes,
         dependsOn: wp.dependsOn,
       },
@@ -398,14 +402,14 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     appendSystemPrompt: opts.implementWpPrompt,
     sandboxMode: 'preconfigured', // writeWpBuilderSandbox already ran in workflow.ts before spawn
     env: {
-      FACTORY_WP_FILESOWNED: wp.filesOwned.join(':'),
+      FACTORY_WP_FILESOWNED: wpFilePaths.join(':'),
       FACTORY_WP_ID: wp.id,
     },
   };
 
   // Write WP sandbox fresh for each spawn attempt (covers retries and preserves
   // decision-capture hook when experimental.recordDecisionTool is enabled).
-  writeWpBuilderSandbox(opts.scratchWorktreePath, wp.filesOwned, wp.id, {
+  writeWpBuilderSandbox(opts.scratchWorktreePath, wpFilePaths, wp.id, {
     role: 'developer',
     recordDecisionTool: getRecordDecisionTool(projectId),
   });
@@ -438,7 +442,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       payload: { wpId: wp.id, wpRunId, elapsedMs: Date.now() - start },
       runId: wpRunId,
     });
-    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned);
+    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned.map(fileOwnedPath));
     opts.recordIterationFn(runId, wp.id, iteration, 'failed', 'timeout');
     return { status: 'timeout', wpId: wp.id, errorReason: 'timeout', runId: wpRunId };
   }
@@ -451,7 +455,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       payload: { wpId: wp.id, wpRunId, errorReason: errorReason ?? 'unknown' },
       runId: wpRunId,
     });
-    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned);
+    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned.map(fileOwnedPath));
     opts.recordIterationFn(runId, wp.id, iteration, 'failed', errorReason ?? 'unknown');
     return { status: 'failed', wpId: wp.id, errorReason: errorReason ?? 'unknown', runId: wpRunId };
   }
@@ -468,7 +472,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       payload: { wpId: wp.id, wpRunId, errorReason: reason },
       runId: wpRunId,
     });
-    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned);
+    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned.map(fileOwnedPath));
     opts.recordIterationFn(runId, wp.id, iteration, 'failed', reason);
     return { status: 'failed', wpId: wp.id, errorReason: reason, runId: wpRunId };
   }
@@ -503,7 +507,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       payload: { wpId: wp.id, wpRunId, errorReason: reason },
       runId: wpRunId,
     });
-    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned);
+    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned.map(fileOwnedPath));
     opts.recordIterationFn(runId, wp.id, iteration, 'failed', reason);
     return { status: 'failed', wpId: wp.id, errorReason: reason, runId: wpRunId };
   }

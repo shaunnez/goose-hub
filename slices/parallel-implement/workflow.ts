@@ -45,7 +45,7 @@ import {
   resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
-import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
+import { type EngineeringSpec, fileOwnedPath } from '@goose-hub/skills/spec-author/schema.js';
 import { normalizeEngineeringSpecPaths } from '../spec-author/path-normalization.js';
 import { buildPrdPlanningContext } from '../spec-author/prd-planning-context.js';
 import {
@@ -359,7 +359,9 @@ export async function runParallelImplementWorkflow(
   let issueWorktreePath: string | undefined;
 
   try {
-    const plannedWpFiles = specForRun.workPackages.flatMap((wp) => wp.filesOwned);
+    const plannedWpFiles = specForRun.workPackages.flatMap((wp) =>
+      wp.filesOwned.map(fileOwnedPath),
+    );
     if (!pathsTouchInvestigationSurface(plannedWpFiles, investigation)) {
       append({
         projectId,
@@ -534,9 +536,10 @@ export async function runParallelImplementWorkflow(
               observedPaths: changedPaths,
             });
 
+            const wpOwnedPaths = wp.filesOwned.map(fileOwnedPath);
             const outsideOwned = observedOutsideOwned({
               observedPaths: changedPaths,
-              filesOwned: wp.filesOwned,
+              filesOwned: wpOwnedPaths,
             });
             if (outsideOwned.length > 0) {
               const reason = `observed changes outside filesOwned: ${outsideOwned.join(', ')}`;
@@ -550,7 +553,7 @@ export async function runParallelImplementWorkflow(
                   wpId: wp.id,
                   gate: 'implement-wp-observed-changes',
                   reason: 'observed-changes-outside-files-owned',
-                  filesOwned: compactPaths(wp.filesOwned),
+                  filesOwned: compactPaths(wpOwnedPaths),
                   observedChangedFiles: compactPaths(changedPaths),
                   outsideOwned: compactPaths(outsideOwned),
                 },
@@ -599,7 +602,7 @@ export async function runParallelImplementWorkflow(
               payload: { wpId: wp.id, wpRunId, errorReason: reason },
               runId: wpRunId,
             });
-            revertFn(scratchWorktreePath, wp.filesOwned);
+            revertFn(scratchWorktreePath, wp.filesOwned.map(fileOwnedPath));
             recordFn(runId, wp.id, iteration, 'failed', `commit-failed: ${reason}`);
             allWpResults.push({
               wpId: wp.id,

@@ -1,5 +1,9 @@
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import type { EngineeringSpec, WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
+import {
+  type EngineeringSpec,
+  type WorkPackage,
+  fileOwnedPath,
+} from '@goose-hub/skills/spec-author/schema.js';
 
 type WpProjection = {
   wp: WorkPackage;
@@ -56,7 +60,7 @@ function buildProjectionBody(input: {
     `Dependency batch: ${input.batch ?? 'unbatched'}`,
     '',
     '### Owned files',
-    bulletList(input.wp.filesOwned.map((path) => `\`${path}\``)),
+    bulletList(input.wp.filesOwned.map((entry) => `\`${fileOwnedPath(entry)}\``)),
     '',
     '### Changes',
     input.wp.changes,

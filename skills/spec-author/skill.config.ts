@@ -67,6 +67,11 @@ export const SpecAuthorContextSchema = z.object({
   investigationSynthesis: z.string().optional(),
   /** One-shot validation feedback when the workflow retries a mechanically invalid spec. */
   repairFeedback: z.string().optional(),
+  /** Capped list of files+dirs under the spec scopeRoots. Use to ground WP filesOwned. */
+  existingFileManifest: z
+    .array(z.object({ path: z.string(), kind: z.enum(['file', 'dir']) }))
+    .optional()
+    .describe('Capped list of files+dirs under the spec scopeRoots. Use to ground WP filesOwned.'),
 });
 
 const config: SkillConfig = {
@@ -83,6 +88,7 @@ const config: SkillConfig = {
     'wave2Reports',
     'investigationSynthesis',
     'repairFeedback',
+    'existingFileManifest',
   ],
   /**
    * Read bundle: spec-author authors a JSON artefact in its terminal

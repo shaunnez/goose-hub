@@ -16,6 +16,7 @@ The `<task>` block contains:
 - `<scoutReports>` (optional) — JSON-stringified Wave-1 scout report digest metadata (M19.01). This is `scout-report-digest-v1`, not the raw scout report JSON. It includes top findings, high-confidence facts, files referenced, risks, contradictions, and artifact keys for full reports when they were offloaded.
 - `<wave2Reports>` (optional) — JSON-stringified Wave-2 deep-agent report digest metadata (interface-designer artefacts, risk-analyst register). This is also digest-first and may include artifact keys for full reports.
 - `<repairFeedback>` (optional) — validator errors from a prior attempt. When present, return a complete corrected JSON object and address every listed error.
+- `<existingFileManifest>` (optional) — JSON array `[{path, kind: 'file' | 'dir'}]` listing files and directories that already exist under the spec scopeRoots. Every WP `filesOwned[].path` that points to a non-test, non-`*.config.ts` production file under `apps/`, `core/`, `slices/`, or `skills/` MUST either appear in this manifest OR be annotated as `{ "path": "…", "status": "new" }`. The validator hard-rejects unannotated missing paths.
 
 **Fallback rule.** If `<scoutReports>` is absent (the swarm is not yet wired or not dispatched for this run), fall back to manual investigation: read the rooted workspace directly via the read bundle. The spec format does not require the swarm to be implementable.
 
@@ -58,6 +59,15 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
 12. **`riskRegister`** — at least one risk when the spec touches `auth | session | crypto | secret` paths.
 
 ### Hard rules
+
+#### Grounded `filesOwned`
+
+Each WP `filesOwned` entry is one of:
+
+- A bare string path: `"apps/web/src/components/detail/TaskHeader.tsx"` — must exist in `<existingFileManifest>`.
+- An object `{ "path": "apps/web/src/components/detail/NewSection.tsx", "status": "new" }` — declares a file to be created. Validator skips the existence check.
+
+Do not invent paths. If `<existingFileManifest>` is absent, fall back to the manual investigation path and read the directory with `list_dir` before authoring `filesOwned`.
 
 #### File ownership (full-stop, not per-batch)
 
