@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eventStore } from '../../event-stream/store.js';
 import type { FactoryContext } from './context.js';
+import { buildFactoryMcpServer } from './server.js';
 import {
   buildWorkspaceResourceTemplate,
   readWorkspaceResource,
@@ -222,5 +223,23 @@ describe('resources/read', () => {
     const last = [...events].reverse().find((e) => (e.payload as ToolCallPayload).tool_name === 'resources/read');
     expect((last?.payload as ToolCallPayload).cached).toBe(true);
     expect(asText(result.contents[0]).text).toBeDefined();
+  });
+
+  it('does not throw "Invalid URL" when called with read_file?path=… via the server transport', async () => {
+    writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'test-pkg' }, null, 2));
+    const server = buildFactoryMcpServer(ctx);
+    // Access the low-level Server's _requestHandlers map to call the handler directly
+    type HandlerMap = Map<string, (req: unknown, extra: unknown) => Promise<unknown>>;
+    const handlers = (server.server as unknown as { _requestHandlers: HandlerMap })['_requestHandlers'];
+    const handler = handlers.get('resources/read');
+    expect(handler).toBeDefined();
+    const response = await handler!(
+      {
+        method: 'resources/read',
+        params: { uri: 'read_file?path=package.json' },
+      },
+      {},
+    );
+    expect((response as { contents: Array<{ text: string }> }).contents[0].text).toContain('"name"');
   });
 });

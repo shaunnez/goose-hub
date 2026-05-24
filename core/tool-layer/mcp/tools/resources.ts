@@ -110,6 +110,14 @@ export function buildWorkspaceResourceTemplate(ctx: FactoryContext): ResourceTem
 }
 
 /**
+ * Return the flat list of workspace resources for resources/list.
+ * Used by the low-level setRequestHandler registration in server.ts.
+ */
+export function listWorkspaceResources(ctx: FactoryContext): { resources: WorkspaceResource[] } {
+  return { resources: collectWorkspaceResources(ctx) };
+}
+
+/**
  * Read a workspace file by URI, routing through the read_file or file_exists pipeline
  * (same per-run cache key, secret redaction, path policy, redundancy check).
  */

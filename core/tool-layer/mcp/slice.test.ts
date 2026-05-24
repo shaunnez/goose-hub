@@ -142,9 +142,11 @@ describe('server resources', () => {
       };
     };
 
-    expect(internals._resourceHandlersInitialized).toBe(true);
-    expect(Object.keys(internals._registeredResources ?? {})).toEqual([]);
-    expect(Object.keys(internals._registeredResourceTemplates ?? {})).toContain('workspace-files');
+    // With low-level setRequestHandler registration, the SDK's high-level resource bookkeeping
+    // (_resourceHandlersInitialized, _registeredResourceTemplates) is not used. Verify that
+    // the handlers are registered directly on server.server._requestHandlers instead.
+    expect(internals.server?._requestHandlers?.has('resources/list')).toBe(true);
+    expect(internals.server?._requestHandlers?.has('resources/read')).toBe(true);
 
     const listResult = await internals.server?._requestHandlers?.get('resources/list')?.(
       { method: 'resources/list', params: {} },
