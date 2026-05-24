@@ -22,12 +22,24 @@ export function costFromCliEnvelope(envelope: unknown): CostUsage | null {
   const inputTokens = numericField(usage, ['input_tokens', 'inputTokens', 'prompt_tokens']) ?? 0;
   const outputTokens =
     numericField(usage, ['output_tokens', 'outputTokens', 'completion_tokens']) ?? 0;
+  const cachedInputTokens =
+    numericField(usage, ['cached_input_tokens', 'cachedInputTokens']) ??
+    numericField((usage.prompt_tokens_details ?? {}) as Record<string, unknown>, ['cached_tokens']) ??
+    0;
+  const reasoningOutputTokens =
+    numericField(usage, ['reasoning_output_tokens', 'reasoningOutputTokens']) ??
+    numericField((usage.completion_tokens_details ?? {}) as Record<string, unknown>, [
+      'reasoning_tokens',
+    ]) ??
+    0;
 
   if (cost == null && inputTokens === 0 && outputTokens === 0) return null;
 
   return {
     inputTokens,
     outputTokens,
+    cachedInputTokens,
+    reasoningOutputTokens,
     costUsd: cost ?? 0,
     costLabel: 'estimated',
   };
@@ -41,9 +53,16 @@ export function costFromCliEnvelope(envelope: unknown): CostUsage | null {
 export function costFromApiUsage(input: {
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens?: number;
+  reasoningOutputTokens?: number;
   costUsd: number;
 }): CostUsage {
-  return { ...input, costLabel: 'exact' };
+  return {
+    ...input,
+    cachedInputTokens: input.cachedInputTokens ?? 0,
+    reasoningOutputTokens: input.reasoningOutputTokens ?? 0,
+    costLabel: 'exact',
+  };
 }
 
 function numericField(obj: Record<string, unknown>, keys: string[]): number | null {
