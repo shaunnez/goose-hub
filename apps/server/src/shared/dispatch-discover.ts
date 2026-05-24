@@ -10,18 +10,24 @@ import { REPO_ROOT } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
 
 const GRILL_QUESTION_MARKER = '<!-- factory:grill-question -->';
+const LEGACY_PRD_MARKER = '<!-- factory:prd -->';
 const SYSTEM_MARKER = '<!-- factory:system -->';
 const CHILD_ISSUES_MARKER = '## Child issues';
 /**
  * Build the `priorReplies` array for grill-and-prd from issue comments.
- * Agent messages: grill questions (<!-- factory:grill-question -->). System-marker
- * and child-issues comments are excluded as noise.
+ * Agent messages: grill questions (<!-- factory:grill-question -->). System-marker,
+ * legacy PRD marker, and child-issues comments are excluded as noise.
  */
 function buildPriorReplies(
   comments: ReadonlyArray<{ body: string }>,
 ): Array<{ role: 'user' | 'agent'; content: string }> {
   return comments
-    .filter((c) => !c.body.startsWith(SYSTEM_MARKER) && !c.body.startsWith(CHILD_ISSUES_MARKER))
+    .filter(
+      (c) =>
+        !c.body.startsWith(SYSTEM_MARKER) &&
+        !c.body.startsWith(LEGACY_PRD_MARKER) &&
+        !c.body.startsWith(CHILD_ISSUES_MARKER),
+    )
     .map((c) => ({
       role: c.body.startsWith(GRILL_QUESTION_MARKER) ? ('agent' as const) : ('user' as const),
       content: c.body,
