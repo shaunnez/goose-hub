@@ -21,6 +21,7 @@ import {
   type ValidationResult,
   validateEngineeringSpec,
 } from '@goose-hub/skills/spec-author/validate.js';
+import { collectScopeManifest } from '@goose-hub/skills/spec-author/manifest.js';
 import { normalizeEngineeringSpecPaths } from './path-normalization.js';
 import { type PrdPlanningContext, buildPrdPlanningContext } from './prd-planning-context.js';
 import { createWpIssueProjections } from './wp-issue-projection.js';
@@ -65,6 +66,7 @@ type SpecAuthorContext = {
   scoutReports?: string;
   wave2Reports?: string;
   investigationSynthesis?: string;
+  existingFileManifest?: Array<{ path: string; kind: 'file' | 'dir' }>;
 };
 
 type SpecAttempt = {
@@ -216,6 +218,48 @@ function investigationKeyFilePaths(event: { payload: unknown } | undefined): str
   });
 }
 
+function dirOf(p: string): string {
+  const slash = p.lastIndexOf('/');
+  return slash === -1 ? '' : p.slice(0, slash);
+}
+
+function deriveSpecScopeRoots(input: {
+  prdContext?: { verticalSlices?: Array<unknown> };
+  investigationSynthesis?: string;
+}): string[] {
+  const roots = new Set<string>();
+
+  if (input.investigationSynthesis != null) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(input.investigationSynthesis);
+    } catch {
+      parsed = null;
+    }
+    const keyFiles = (parsed as { keyFiles?: unknown } | null)?.keyFiles;
+    if (Array.isArray(keyFiles)) {
+      for (const file of keyFiles) {
+        if (file != null && typeof file === 'object') {
+          const path = (file as { path?: unknown }).path;
+          if (typeof path === 'string' && path.length > 0) {
+            const d = dirOf(path);
+            if (d.length > 0) roots.add(d);
+          }
+        }
+      }
+    }
+  }
+
+  for (const s of input.prdContext?.verticalSlices ?? []) {
+    if (s != null && typeof s === 'object') {
+      const path = (s as { path?: unknown }).path;
+      if (typeof path === 'string' && path.length > 0) roots.add(path);
+    }
+  }
+
+  return Array.from(roots);
+}
+
 function stringifyScoutDigestForContext(
   reports: ReturnType<typeof buildScoutReportDigestBundle>['reports'],
 ): string {
@@ -346,6 +390,9 @@ export async function runSpecAuthorWorkflow(
       }
     }
 
+    const scopeRoots = deriveSpecScopeRoots({ prdContext, investigationSynthesis });
+    const existingFileManifest = collectScopeManifest(worktreePath, scopeRoots);
+
     const baseContext: SpecAuthorContext = {
       workItem: workItemCtx,
       issueType: workItem.type === 'bug' ? 'bug' : 'feature',
@@ -356,6 +403,7 @@ export async function runSpecAuthorWorkflow(
       scoutReports,
       wave2Reports,
       investigationSynthesis,
+      existingFileManifest,
     };
 
     if (prdContext != null) {

@@ -23,6 +23,10 @@ vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
   invokeSkill: (...args: unknown[]) => mockInvokeSkill(...args),
 }));
 
+vi.mock('@goose-hub/skills/spec-author/manifest.js', () => ({
+  collectScopeManifest: vi.fn().mockReturnValue([]),
+}));
+
 vi.mock('@goose-hub/skills/spec-author/validate.js', () => ({
   validateEngineeringSpec: (...args: unknown[]) => mockValidateEngineeringSpec(...args),
 }));
@@ -976,6 +980,52 @@ describe('runSpecAuthorWorkflow', () => {
         phase: 'wave1',
         artifactKeys: ['scout-report:abc'],
       });
+    });
+
+    it('injects existingFileManifest derived from investigationSynthesis keyFiles into context', async () => {
+      const { collectScopeManifest } = await import('@goose-hub/skills/spec-author/manifest.js');
+      vi.mocked(collectScopeManifest).mockReturnValueOnce([
+        { path: 'apps/web/src/components/detail', kind: 'dir' },
+        { path: 'apps/web/src/components/detail/TaskHeader.tsx', kind: 'file' },
+      ]);
+
+      vi.mocked(eventStore.replay).mockReturnValue([
+        {
+          id: 1,
+          projectId: 'goose-hub-self',
+          workItemId: 'github:shaunnez/goose-hub#55',
+          kind: 'agent.investigation-complete',
+          payload: {
+            investigationRunId: null,
+            investigate: {
+              findings: 'The component renders incorrectly.',
+              keyFiles: [{ path: 'apps/web/src/components/detail/TaskHeader.tsx' }],
+              confidence: 'high',
+              openQuestions: [],
+            },
+          },
+          runId: 'investigation-run',
+          createdAt: '2026-05-14T00:00:00Z',
+        },
+      ] as never);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(collectScopeManifest).toHaveBeenCalledWith(
+        '/tmp/test-spec-worktree',
+        expect.arrayContaining(['apps/web/src/components/detail']),
+      );
+      expect(mockInvokeSkill).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            existingFileManifest: [
+              { path: 'apps/web/src/components/detail', kind: 'dir' },
+              { path: 'apps/web/src/components/detail/TaskHeader.tsx', kind: 'file' },
+            ],
+          }),
+        }),
+      );
     });
 
     it('blocks ambiguous package-relative filesOwned before persistence', async () => {
