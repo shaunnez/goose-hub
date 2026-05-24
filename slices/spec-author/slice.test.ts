@@ -1028,7 +1028,7 @@ describe('runSpecAuthorWorkflow', () => {
       );
     });
 
-    it('derives scopeRoots from investigationSynthesis.keyFiles only (PRD slices have no .path field)', async () => {
+    it('derives scopeRoots from investigationSynthesis.keyFiles and ignores PRD slices without paths', async () => {
       const { collectScopeManifest } = await import('@goose-hub/skills/spec-author/manifest.js');
 
       vi.mocked(eventStore.replay).mockImplementation((query?: { kind?: string }) => {
@@ -1094,7 +1094,7 @@ describe('runSpecAuthorWorkflow', () => {
         '/repo',
       );
 
-      // scopeRoots should be derived from investigationSynthesis.keyFiles only
+      // scopeRoots should be derived from investigationSynthesis.keyFiles.
       expect(collectScopeManifest).toHaveBeenCalledWith(
         '/tmp/test-spec-worktree',
         expect.arrayContaining(['core/service']),
@@ -1103,6 +1103,59 @@ describe('runSpecAuthorWorkflow', () => {
       const call = vi.mocked(collectScopeManifest).mock.calls[0];
       const roots = call?.[1] ?? [];
       expect(roots).not.toContain('Slice A');
+    });
+
+    it('derives scopeRoots from scout report digest files when investigation synthesis has no keyFiles', async () => {
+      const { collectScopeManifest } = await import('@goose-hub/skills/spec-author/manifest.js');
+      const scoutRepo = await import('@goose-hub/core/scout-reports/repository.js');
+
+      vi.mocked(eventStore.replay).mockReturnValue([
+        {
+          id: 1,
+          projectId: 'goose-hub-self',
+          workItemId: 'github:shaunnez/goose-hub#55',
+          kind: 'agent.investigation-complete',
+          payload: {
+            investigationRunId: 'inv-run',
+            investigate: {
+              findings: 'Scout-only file evidence is available.',
+              keyFiles: [],
+              confidence: 'medium',
+              openQuestions: [],
+            },
+          },
+          runId: 'inv-run',
+          createdAt: '2026-05-14T00:00:00Z',
+        },
+      ] as never);
+      vi.mocked(scoutRepo.listScoutReportsForInvestigation).mockReturnValueOnce([
+        {
+          id: 1,
+          projectId: 'goose-hub-self',
+          workItemId: 'github:shaunnez/goose-hub#55',
+          investigationRunId: 'inv-run',
+          scoutSkill: 'scout-code-path',
+          report: {
+            findings: [
+              {
+                file: 'apps/web/src/components/detail/TaskHeader.tsx',
+                fact: 'TaskHeader owns the title rendering.',
+                confidence: 'high',
+              },
+            ],
+            filesReferenced: ['core/workflows/workflow-catalog.ts'],
+          },
+          createdAt: '2026-05-14T00:00:00Z',
+        },
+      ]);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(collectScopeManifest).toHaveBeenCalledWith(
+        '/tmp/test-spec-worktree',
+        expect.arrayContaining(['apps/web/src/components/detail', 'core/workflows']),
+      );
     });
 
     it('omits existingFileManifest from context when collectScopeManifest returns []', async () => {

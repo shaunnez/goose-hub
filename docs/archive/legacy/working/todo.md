@@ -1,13 +1,18 @@
+# Todo 
+1. Research Task
+2. Consolidate bug/feature(Task)/chore/research and finalise decisions + flows
+3. Pre-issue (reconcile and fix)
+4. Memory
+5. Bitbucket/jira/local state instead of github issues
+6. Parallel repair
+7. Dispose removed, blocked by, rewrite?
+8. Scratchpad / think on how we handover info between agents smartly.
+9. PRD in github is bad
+10. Loading ... should always be something inside timeline "agent run" window indicating it's loading. This is seen on code but not other types. Obviously disappears when run is done and/or "resume" shows. General loading - details page all have "no content" part, but should have a consistent "loading" page as well.
+
 # Should the contract phase  spec author run emit content visible in investigation or prd? 
 http://localhost:5173/projects/goose-hub-self/items/957/timeline
 
-# Compare chore, bug
-Compare chore, bug, feature on siple task
-
-# Decline PR ??
-W
-# Investigation group
-needs to sum up costs and tokens
 
 # Parallel repair
 Plan
@@ -127,30 +132,6 @@ Should be "view error" -> takes to timeline.
 review claude-code-skills-training-deck.md
 
 
-# Todo more
-Triage / repo run fails -- needs to error out
-
-Cannot see claude $ on timeline
-
-Budgets for claude were too low on triage 
-
-When grill me is ready to ask question, banner should appear saying "question ready - grill " with link
-
-It would be good to see what the grill question was in timeline, all i can see is it going and searching files - no context of what its doing
-
-Scouts .. not sure what model .. nor plahwright
-
-REPO MATCH ON OPUS??
-
-How many turns should scouts have
-
-MIssing budget for scouts and things
-
-Wave agents now showing "started at" and appearing abnove investigation run which is also not showing started at...
-
-Missing cost / tokens on swarm / wave / investigation
-
-
 # todo - make into a plan
 
 Problem: Blocked factory:dev-ready issues are never re-dispatched
@@ -226,46 +207,27 @@ e2e tests around grill prd and fail?
   - pnpm lint clean                                                                                                       
   - No slice imports from other slices in M11 slices
   - slice.test.ts + README.md present in every modified slice  
+----                                                                                                                               
 
-# more on m11
-
----                                                                                                                                         
-  Dependency scheduler (M11.03) — confirmed gap                                                                                               
-                                                                                                                                              
-  filterEligibleByDependencies is never called from triage-batch.ts or dispatch.ts. The issue (#292) has all ACs ticked as done, but the      
-  wiring into the actual dispatch path is missing. This isn't a "later milestone" design — the AC explicitly says "Before dispatching a       
-  workflow, the scheduler calls..." That's a real miss. The unit tests pass in isolation but the hook into the real dispatch loop was never
-  added.                                                                                                                                      
-                                                
-  You can't currently test the blocked-dep scenario end-to-end because dispatch ignores deps entirely.                                        
-  
-  ---                                                                                                                                         
-  Retrospective page — yes, it's real and wired 
-                                                                                                                                              
+# Retrospective page — yes, it's real and wired 
+                                                                                                                                          
   core/workflows/retrospective.ts does call both archiveLifecycle (line 223) and computeTrend (line 130). The archive and trend data flow on
   every retrospective run. Your retrospective detail page in the UI has: decision summaries, learning entries, persona scores, trend icon,    
   improvement candidates, and a PlaybooksTab in the roster. M11.11 is genuinely working — you'll see data there after any completed run.
                                                                                                                                               
-  The POST /api/projects/:slug/learning/mine endpoint is also wired (router.ts:107 calls minePatterns), so you can manually trigger pattern   
-  mining.                             
+  The POST /api/projects/:slug/learning/mine endpoint is also wired (router.ts:107 calls minePatterns), so you can manually trigger pattern     mining.                             
                                                                                                                                               
-  ---                                           
-  M11.14 auto-trigger — wired, gated by config
-                                                                                                                                              
+# M11.14 auto-trigger — wired, gated by config
+                                                                                                                                             
   The code IS there in cross-run-retro.ts (lines 398–408). It fires when coachPolicy.enabled = true in agentConfig. Default is false in
-  supervised mode per the issue spec. So it's not broken — it's off by default. To enable: set coachPolicy.enabled = true in your project     
-  config, plus it needs ≥3 archived lifecycles and consistencyScore ≥ 0.8. You won't see it trigger until you've run enough issues through to
+  supervised mode per the issue spec. So it's not broken — it's off by default. To enable: set coachPolicy.enabled = true in your project  config, plus it needs ≥3 archived lifecycles and consistencyScore ≥ 0.8. You won't see it trigger until you've run enough issues through to
   done.                                                                                                                                       
-                                                
-  ---                                 
-  M11.11 — what it actually does
+#  M11.11 — what it actually does
                                                                                                                                               
   Two things happen every time an issue reaches factory:done:
                                                                                                                                               
-  1. archiveLifecycle writes a row to archived_lifecycles — a permanent record of all decision summaries, learning entries, quality scores,   
-  and costs for that run.                                                                                                                     
-  2. computeTrend reads the last 5 quality scores for a role and returns improving | stable | declining, shown as an icon on the retrospective
-   page.                                                                                                                                      
+  1. archiveLifecycle writes a row to archived_lifecycles — a permanent record of all decision summaries, learning entries, quality scores, and costs for tha run.                                                                                                                     
+  2. computeTrend reads the last 5 quality scores for a role and returns improving | stable | declining, shown as an icon on the retrospective p age.                                                                                                                                      
                                       
   Then separately, minePatterns (manual trigger or eventually automatic) reads across all archived lifecycles to find recurring decision      
   patterns — groups them by (kind, role), computes how consistent they are (e.g. "Dev always queries GitHub Issues first — 80% of the time").
@@ -273,43 +235,20 @@ e2e tests around grill prd and fail?
                                                 
   To see it: run 3+ issues through to done, then hit the retrospective section on any of them. The trend arrow should be populated. Hit POST  
   /api/projects/:slug/learning/mine to see patterns in the DB.
-                                                                                                                                              
-  ---                                           
-  M11.10 — do you need it?            
-                          
-  Since filterEligibleByDependencies isn't wired into dispatch, any M11.10 integration tests testing "dep blocks dispatch" would currently
-  fail or be testing a stub. The e2e tests you have cover the full lifecycle pipeline, not dep-aware scheduling specifically. So: M11.10 is   
-  blocked on the M11.03 wiring gap. Fix the wiring first, then M11.10 tests become meaningful.
-                                                                                                                                              
-  Priority: the single most impactful fix is wiring filterEligibleByDependencies into triage-batch.ts before dispatch. That one call makes the
-   headline M11 feature actually work. Want me to do that?
-
----                                                                                                                     
-  Dependency parser / blocked scheduling                                                                                  
-                                                                                                                          
-  parseDependencies exists and is tested. But filterEligibleByDependencies (the thing that actually stops dispatch) is    
-  never called from triage-batch or dispatch. So: no, if you create issue A depending on open B, the scheduler will still 
-  dispatch A. The filter is implemented and unit-tested in isolation but not wired into the production dispatch path.     
-                                                                                                                          
-  UI blocked badge on Kanban card — the UI parser copy exists in apps/web/src/lib/dependency-parser.ts. Whether the Kanban
-   card actually renders it depends on M11.05's UI wiring, which I'd need to verify separately.                           
-                                                                                                                          
-  Bottom line: dep blocking is not actually enforced end-to-end right now.                                                
-                                      
-  ---                                                                                                                     
-  Lifecycle archive + pattern miner + convergence detector                                                                
+                                                                                                                                                                                                                                                                       
+  # Lifecycle archive + pattern miner + convergence detector                                                                
                                                                                                                           
   These are wired — archiveLifecycle and computeTrend both get called from core/workflows/retrospective.ts. So after a run
    completes and retrospective fires, data flows through. You can't "browse" it directly in UI yet — it writes to SQLite. 
   To see it you'd query the DB directly or wait until a retrospective run surfaces results. No dedicated UI panel exists.
                                                                                                                           
-  Cross-merge retrospective + playbook writer + gate thresholds                                                           
+  # Cross-merge retrospective + playbook writer + gate thresholds                                                           
                                       
   exportPlaybook + computeGateThresholds are called from core/workflows/cross-run-retro.ts and the CLI (goose playbook    
   export <slug>). So the CLI command works. Gate thresholds get computed and stored, but there's no UI showing them —
   you'd use the CLI.                                                                                                      
                                                 
-  Skill coach                         
+  # Skill coach                         
 
   Exists at skills/skill-coach/. No workflow calls it. Manual trigger only — you'd invoke it explicitly, it proposes diffs
    to skill prompts. The auto-trigger (M11.14) is described as shipped but per the code survey no workflow wires the
@@ -318,50 +257,21 @@ e2e tests around grill prd and fail?
   Predictive model router (one sentence)
 
   No implementation found in the codebase — marked shipped in PLAN.md but the code doesn't exist.                         
-  
-  ---                                                                                                                     
-  Smoke gate in UI / timeline                   
+                                                                                                                    
+  # Smoke gate in UI / timeline                   
                                                                                                                           
   runSmoke in core/orchestrator/smoke.ts is never called. The workflow.smoke-failed event type is registered in the event
   schema, so if it ran it would appear in timeline. But it doesn't run. Smoke gate is a stub.                             
                                                 
-  ---                                                                                                                     
-  M11.10 — do you need it?                      
+                                                                                                                    
+  # M11.10 — do you need it?                      
                                       
   Depends what your e2e tests cover. There's apps/web/e2e/pipeline/full-lifecycle.spec.ts but it's not
   dep-scheduling-specific. M11.10 would specifically test: dep blocks dispatch, dep close unblocks, cross-repo dep,       
   unregistered dep → needs-human, multi-parallel. Given that filterEligibleByDependencies isn't wired into dispatch at
   all, writing those tests right now would fail — so M11.10 is blocked on first fixing the wiring gap, then testing it.   
                                                 
-  ---                                 
-  TL;DR on M11 health
-                     
-  ┌──────────────────────────┬─────────────┬─────────────────┬───────────────────┐
-  │         Feature          │ Code exists │ Wired into prod │ Visually testable │                                        
-  ├──────────────────────────┼─────────────┼─────────────────┼───────────────────┤
-  │ Dep parser               │ Yes         │ Partial         │ No                │                                        
-  ├──────────────────────────┼─────────────┼─────────────────┼───────────────────┤
-  │ Dep blocking at dispatch │ Yes         │ No              │ No                │                                        
-  ├──────────────────────────┼─────────────┼─────────────────┼───────────────────┤
-  │ Lifecycle archive        │ Yes         │ Yes             │ CLI/DB only       │                                        
-  ├──────────────────────────┼─────────────┼─────────────────┼───────────────────┤                                        
-  │ Pattern miner            │ Yes         │ Yes             │ CLI/DB only       │
-  ├──────────────────────────┼─────────────┼─────────────────┼───────────────────┤                                        
-  │ Playbook writer          │ Yes         │ Yes (CLI)       │ CLI               │
-  ├──────────────────────────┼─────────────┼─────────────────┼───────────────────┤                                        
-  │ Skill coach              │ Yes         │ No              │ Manual invoke     │
-  ├──────────────────────────┼─────────────┼─────────────────┼───────────────────┤                                        
-  │ Model router             │ No          │ No              │ No                │
-  ├──────────────────────────┼─────────────┼─────────────────┼───────────────────┤                                        
-  │ Smoke gate               │ Yes         │ No              │ No                │
-  └──────────────────────────┴─────────────┴─────────────────┴───────────────────┘     
-
-# Todo
-1. Loading ... should always be something inside timeline "agent run" window indicating it's loading. This is seen on code but not other types. Obviously disappears when run is done and/or "resume" shows
-
-2. General loading - details page all have "no content" part, but should have a consistent "loading" page as well.
-
-3. Remove fake triage
+  ---            
 
 # Retrospective  
 

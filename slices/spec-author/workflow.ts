@@ -228,8 +228,15 @@ function dirOf(p: string): string {
 function deriveSpecScopeRoots(input: {
   prdContext?: { verticalSlices?: Array<unknown> };
   investigationSynthesis?: string;
+  scoutReports?: string;
+  wave2Reports?: string;
 }): string[] {
   const roots = new Set<string>();
+  const addPath = (path: unknown) => {
+    if (typeof path !== 'string' || path.length === 0) return;
+    const d = dirOf(path);
+    if (d.length > 0) roots.add(d);
+  };
 
   if (input.investigationSynthesis != null) {
     let parsed: unknown;
@@ -242,10 +249,37 @@ function deriveSpecScopeRoots(input: {
     if (Array.isArray(keyFiles)) {
       for (const file of keyFiles) {
         if (file != null && typeof file === 'object') {
-          const path = (file as { path?: unknown }).path;
-          if (typeof path === 'string' && path.length > 0) {
-            const d = dirOf(path);
-            if (d.length > 0) roots.add(d);
+          addPath((file as { path?: unknown }).path);
+        }
+      }
+    }
+  }
+
+  for (const digestJson of [input.scoutReports, input.wave2Reports]) {
+    if (digestJson == null) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(digestJson);
+    } catch {
+      parsed = null;
+    }
+    const reports = (parsed as { reports?: unknown } | null)?.reports;
+    if (!Array.isArray(reports)) continue;
+    for (const report of reports) {
+      if (report == null || typeof report !== 'object') continue;
+      const digest = report as {
+        filesReferenced?: unknown;
+        topFindings?: unknown;
+        highConfidenceFacts?: unknown;
+      };
+      if (Array.isArray(digest.filesReferenced)) {
+        for (const file of digest.filesReferenced) addPath(file);
+      }
+      for (const findings of [digest.topFindings, digest.highConfidenceFacts]) {
+        if (!Array.isArray(findings)) continue;
+        for (const finding of findings) {
+          if (finding != null && typeof finding === 'object') {
+            addPath((finding as { file?: unknown }).file);
           }
         }
       }
@@ -253,7 +287,7 @@ function deriveSpecScopeRoots(input: {
   }
 
   // PRD vertical slices have fields title/goal/estimatedSize/journeyRefs — no .path field.
-  // Scope roots are derived solely from investigationSynthesis.keyFiles above.
+  // Scope roots are derived from code-bearing investigation/scout evidence above.
 
   return Array.from(roots);
 }
@@ -388,7 +422,12 @@ export async function runSpecAuthorWorkflow(
       }
     }
 
-    const scopeRoots = deriveSpecScopeRoots({ prdContext, investigationSynthesis });
+    const scopeRoots = deriveSpecScopeRoots({
+      prdContext,
+      investigationSynthesis,
+      scoutReports,
+      wave2Reports,
+    });
     const existingFileManifest = collectScopeManifest(worktreePath, scopeRoots);
 
     const baseContext: SpecAuthorContext = {

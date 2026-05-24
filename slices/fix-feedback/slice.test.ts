@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import type { EventKind } from '@goose-hub/core/event-stream/store.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -713,6 +716,59 @@ describe('runFixFeedbackWorkflow', () => {
       expect(appendedEvents).not.toEqual(
         expect.arrayContaining([expect.objectContaining({ kind: 'agent.run-blocked' })]),
       );
+    });
+
+    it('uses the shared capped manifest collector for fix-feedback existingFileManifest', async () => {
+      const worktreePath = mkdtempSync(join(tmpdir(), 'fix-feedback-manifest-'));
+      try {
+        const scopeRoot = join(worktreePath, 'apps/web/src/components/detail');
+        mkdirSync(join(scopeRoot, 'node_modules/pkg'), { recursive: true });
+        writeFileSync(join(scopeRoot, 'AAnchor.tsx'), 'export const AAnchor = () => null;\n');
+        writeFileSync(
+          join(scopeRoot, 'node_modules/pkg/index.ts'),
+          'export const ignored = true;\n',
+        );
+        for (let i = 0; i < 820; i++) {
+          writeFileSync(join(scopeRoot, `Generated${i}.tsx`), 'export const x = 1;\n');
+        }
+
+        mockLatestInvestigationContext.mockReturnValue({
+          findings: 'Repair detail surface.',
+          keyFiles: [{ path: 'apps/web/src/components/detail/AAnchor.tsx' }],
+          openQuestions: [],
+          investigationRunId: 'investigation-1',
+        });
+        vi.mocked(eventStore.replay).mockReturnValue([
+          makePrOpenedEvent(worktreePath),
+          makeQaCompletedEvent(),
+        ]);
+
+        const customRun = vi.fn().mockResolvedValue({
+          output: makeImplementOutput(),
+          decisionSummaries: [],
+          events: [],
+        });
+        const customRuntime: AgentRuntime = { run: customRun };
+
+        await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo', {
+          runtime: customRuntime,
+        });
+
+        const manifest = customRun.mock.calls[0][0].context.existingFileManifest as Array<{
+          path: string;
+          kind: 'file' | 'dir';
+        }>;
+        expect(manifest.length).toBeLessThanOrEqual(800);
+        expect(manifest).toEqual(
+          expect.arrayContaining([
+            { path: 'apps/web/src/components/detail', kind: 'dir' },
+            { path: 'apps/web/src/components/detail/AAnchor.tsx', kind: 'file' },
+          ]),
+        );
+        expect(manifest.some((entry) => entry.path.includes('node_modules'))).toBe(false);
+      } finally {
+        rmSync(worktreePath, { recursive: true, force: true });
+      }
     });
 
     it('omits priorInvestigation when none recorded', async () => {
