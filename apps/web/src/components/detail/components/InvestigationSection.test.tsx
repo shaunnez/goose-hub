@@ -5,7 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { InvestigationSection } from './InvestigationSection';
+import {
+  type InvestigationAccordionSectionConfig,
+  InvestigationSection,
+} from './InvestigationSection';
 
 afterEach(cleanup);
 
@@ -158,6 +161,17 @@ describe('InvestigationSection', () => {
     renderSection([INVESTIGATION_EVENT], ENGINEERING_SPEC);
     expect(screen.getByText('Engineering Spec')).toBeTruthy();
     expect(screen.getByText('1 work package · 1 AC')).toBeTruthy();
+  });
+
+  it('exports the investigation accordion config contract', () => {
+    const config: InvestigationAccordionSectionConfig = {
+      title: 'Findings',
+      sectionId: 'findings',
+      children: <div>Config body</div>,
+    };
+
+    expect(config.sectionId).toBe('findings');
+    expect(config.children).toBeTruthy();
   });
 
   it('uses accordions with the expected default states and toggles for investigation sections', async () => {

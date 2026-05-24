@@ -13,8 +13,8 @@ import { timeAgo } from '@/lib/utils';
 import { useActiveProject } from '@/state/active-project';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 // import { Filter, RefreshCw } from 'lucide-react';
-import { ChevronDown, ChevronRight, ClipboardCheck, Package, Search } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { ClipboardCheck, Package, Search } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import {
   CONFIDENCE_NUM,
@@ -30,6 +30,7 @@ import { ConfidenceBadge } from './ConfidenceBadge';
 import { CostBadge } from './CostBadge';
 import { FindingCard } from './FindingCard';
 import { PlaywrightCaptureSection } from './PlaywrightCaptureSection';
+import { SectionAccordion } from './SectionAccordion';
 import { SectionEmptyState } from './SectionEmptyState';
 import { SpecDetails } from './SpecDetails';
 import { StatCard } from './StatCard';
@@ -41,11 +42,12 @@ interface InvestigationSectionProps {
   itemState?: string;
 }
 
-interface InvestigationAccordionSectionProps {
+export interface InvestigationAccordionSectionConfig {
   title: string;
-  sectionId: string;
+  sectionId?: string;
+  testId?: string;
   defaultOpen?: boolean;
-  summary?: string;
+  summary?: ReactNode;
   icon?: ReactNode;
   children: ReactNode;
 }
@@ -53,57 +55,25 @@ interface InvestigationAccordionSectionProps {
 function InvestigationAccordionSection({
   title,
   sectionId,
+  testId,
   defaultOpen = false,
   summary,
   icon,
   children,
-}: InvestigationAccordionSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
+}: InvestigationAccordionSectionConfig) {
+  const resolvedTestId =
+    testId ?? (sectionId != null ? `investigation-accordion-${sectionId}` : undefined);
 
   return (
-    <div
-      data-testid={`investigation-accordion-${sectionId}`}
-      className="rounded-lg border border-line bg-bg-elev overflow-hidden"
+    <SectionAccordion
+      title={title}
+      defaultOpen={defaultOpen}
+      summary={summary}
+      icon={icon}
+      testId={resolvedTestId}
     >
-      <button
-        type="button"
-        data-testid={`investigation-accordion-toggle-${sectionId}`}
-        onClick={() => setOpen((value) => !value)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-bg-elev-2 text-left cursor-pointer"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          {icon}
-          <span className="text-[10.5px] uppercase tracking-wider text-fg-2 shrink-0">{title}</span>
-          {summary != null && summary.length > 0 && (
-            <span className="text-[11px] text-fg-4 truncate">{summary}</span>
-          )}
-        </div>
-        <span className="shrink-0 text-fg-4">
-          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        </span>
-      </button>
-      {open && <div className="px-4 py-4 border-t border-line">{children}</div>}
-    </div>
-  );
-}
-
-function AutoExpandedSpecDetails({
-  spec,
-  itemState,
-}: { spec: EngineeringSpecDto; itemState?: string }) {
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const button = wrapperRef.current?.querySelector('button');
-    if (button instanceof HTMLButtonElement) {
-      button.click();
-    }
-  }, []);
-
-  return (
-    <div ref={wrapperRef}>
-      <SpecDetails spec={spec} itemState={itemState} />
-    </div>
+      {children}
+    </SectionAccordion>
   );
 }
 
@@ -324,8 +294,8 @@ export function InvestigationSection({
       {investigate.keyFiles.length > 0 && (
         <InvestigationAccordionSection
           title="Key Files"
-          sectionId="key-files"
           summary={`${investigate.keyFiles.length} file${investigate.keyFiles.length !== 1 ? 's' : ''}`}
+          testId="investigation-accordion-key-files"
         >
           <div data-testid="key-files-list" className="flex flex-col gap-3">
             {investigate.keyFiles.map((f) => {
@@ -351,9 +321,9 @@ export function InvestigationSection({
       {acceptanceContract != null && acceptanceContract.criteria.length > 0 && (
         <InvestigationAccordionSection
           title="Acceptance Criteria"
-          sectionId="acceptance-criteria"
           summary={`${acceptanceContract.criteria.length} AC`}
           icon={<ClipboardCheck size={12} className="shrink-0 text-[color:var(--accent)]" />}
+          testId="investigation-accordion-acceptance-criteria"
         >
           <AcceptanceContractDetails contract={acceptanceContract} />
         </InvestigationAccordionSection>
@@ -362,19 +332,19 @@ export function InvestigationSection({
       {spec != null && (
         <InvestigationAccordionSection
           title="Engineering Spec"
-          sectionId="engineering-spec"
           summary={`${spec.workPackages.length} work package${spec.workPackages.length !== 1 ? 's' : ''} · ${spec.acceptanceCriteriaCount} AC`}
           icon={<Package size={12} className="shrink-0 text-[color:var(--accent)]" />}
+          testId="investigation-accordion-engineering-spec"
         >
-          <AutoExpandedSpecDetails spec={spec} itemState={itemState} />
+          <SpecDetails spec={spec} itemState={itemState} defaultOpen hideHeader />
         </InvestigationAccordionSection>
       )}
 
       {investigate.openQuestions.length > 0 && (
         <InvestigationAccordionSection
           title="Open Questions"
-          sectionId="open-questions"
           summary={`${investigate.openQuestions.length} pending`}
+          testId="investigation-accordion-open-questions"
         >
           <ul data-testid="open-questions-list" className="space-y-1 list-disc list-inside">
             {investigate.openQuestions.map((q) => (
@@ -389,8 +359,8 @@ export function InvestigationSection({
       {investigate.decisionSummaries.length > 0 && (
         <InvestigationAccordionSection
           title="Investigation Trail"
-          sectionId="investigation-trail"
           summary="What was looked at, in order"
+          testId="investigation-accordion-investigation-trail"
         >
           <ol data-testid="investigation-trail" className="flex flex-col gap-2">
             {investigate.decisionSummaries.map((s, i) => (
@@ -430,8 +400,8 @@ export function InvestigationSection({
       {humanNotes.length > 0 && (
         <InvestigationAccordionSection
           title="Human Review Notes"
-          sectionId="human-review-notes"
           summary={`${humanNotes.length} note${humanNotes.length !== 1 ? 's' : ''}`}
+          testId="investigation-accordion-human-review-notes"
         >
           <div data-testid="investigation-human-notes" className="space-y-2">
             {humanNotes.map((note) => (
@@ -456,7 +426,10 @@ export function InvestigationSection({
       )}
 
       {itemType === 'bug' && (
-        <InvestigationAccordionSection title="Playwright Captures" sectionId="playwright-captures">
+        <InvestigationAccordionSection
+          title="Playwright Captures"
+          testId="investigation-accordion-playwright-captures"
+        >
           <PlaywrightCaptureSection projectSlug={projectSlug} id={id} itemType={itemType} />
         </InvestigationAccordionSection>
       )}
