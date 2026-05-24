@@ -1115,6 +1115,26 @@ describe('runInvestigateWorkflow', () => {
         .mock.calls.find(([e]) => e.kind === 'state.transition-deferred');
       expect(deferredCall).toBeDefined();
     });
+
+    it('routes to needs-human when transitionState throws a permanent error after investigation-complete', async () => {
+      const source = makeMockSource({
+        transitionState: vi.fn().mockRejectedValue(new Error('HTTP 403 Forbidden')),
+      });
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+
+      await runInvestigateWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:investigating',
+        'factory:needs-human',
+      );
+      const runFailed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+      expect(runFailed).toBeDefined();
+    });
   });
 
   afterEach(() => {
