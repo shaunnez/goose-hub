@@ -18,11 +18,11 @@ import {
   symbolHintsToKeyFiles,
 } from '@goose-hub/core/symbol-index/lookup.js';
 import { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-git.js';
+import { resolveWorkflowBaseForWorkItem } from '@goose-hub/core/workspaces/workflow-base.js';
 import {
   cleanupWorktree,
   createWorktree,
   prewarmWorktree,
-  resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
 import { EvidencePostPlanSchema } from '@goose-hub/skills/evidence-post/schema.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
@@ -60,7 +60,7 @@ export interface FixIssueDeps {
   /** Override resolveWorktreeHeadSha (used by tests to avoid real git subprocess). */
   resolveWorktreeHeadShaImpl?: typeof resolveWorktreeHeadSha;
   /** Override resolveWorkflowBase (used by tests to avoid real git subprocess). */
-  resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
+  resolveWorkflowBaseImpl?: typeof resolveWorkflowBaseForWorkItem;
   /**
    * Override orchestratorCommitAll (used by tests). Orchestrator commits the
    * implement skill's output before opening the PR (ADR 0031 — builder no-commit rule).
@@ -102,7 +102,7 @@ export async function runFixIssueWorkflow(
   const cleanupWtFn = deps.cleanupWorktreeImpl ?? cleanupWorktree;
   const prewarmWtFn = deps.prewarmWorktreeImpl ?? prewarmWorktree;
   const resolveHeadShaFn = deps.resolveWorktreeHeadShaImpl ?? resolveWorktreeHeadSha;
-  const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBase;
+  const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBaseForWorkItem;
   const orchestratorCommitFn = deps.orchestratorCommitAllImpl ?? orchestratorCommitAll;
 
   const implementPrompt = readPromptWithContext('implement', projectId);
@@ -117,6 +117,8 @@ export async function runFixIssueWorkflow(
     injectedRuntime: deps.runtime,
   });
   const workflowBase = resolveWorkflowBaseFn(
+    projectId,
+    workItem.id,
     targetRepo,
     implementExecution.projectConfig?.targetRepo?.defaultBranch,
   );

@@ -30,16 +30,17 @@ The agent's job is to investigate from the user-language issue, fix the bug, and
 
 ```
 pnpm dogfood run <seed-id> [--server-url=…] [--repo=…] [--project-slug=…] [--timeout-ms=…]
-                           [--no-restore] [--skip-verify-red]
+                           [--no-restore] [--skip-verify-red] [--skip-verify-green]
+                           [--delete-remote-branch-on-finish]
 ```
 
 What it does:
 
-1. Pre-flight: verifies `gh` is installed + authenticated.
-2. Applies the seed to your working tree and runs the truth-signal test locally; aborts if the test isn't red or unrelated tests are also failing.
-3. Calls `gh issue create` with the seed's user-language title + body + labels (including `factory:triaging`). Records a pending run row.
+1. Pre-flight: verifies `gh` is installed + authenticated and the operator worktree is clean.
+2. Creates `dogfood/<runId>/<seed-id>`, applies the seed there, runs the truth-signal test locally, commits the seed, and pushes the seed branch.
+3. Calls `gh issue create` with the seed's user-language title + body + labels (including `factory:triaging`). Records a pending run row plus a durable `dogfood.seed-applied` event carrying `baseBranch`, `baseRef`, `seedCommit`, and `truthSignal`.
 4. Opens an SSE connection to your local server and prints a workflow-specific checklist that ticks off as `state.transitioned` events arrive. Stops when the workflow reaches a terminal state or any agent run fails.
-5. Records the completion (reached-terminal / stalled / failed:<node>) and restores the seed locally. Prints the `pnpm dogfood record` invocation you should run once you've eyeballed truth-pass / qa-correct / hygiene-clean.
+5. Records the completion (reached-terminal / stalled / failed:<node>), checks the truth signal against the final PR branch when possible, restores the operator's original branch, and deletes the local dogfood branch.
 
 **Seed mechanics:**
 
@@ -61,7 +62,7 @@ pnpm dogfood runs [--limit=N]              # List recent dogfood runs (default 2
 pnpm dogfood runs:summary                  # Aggregate stats across all recorded runs
 ```
 
-The outcome row lives in `~/.factory/dogfood/runs.jsonl` (one JSON line per run). Each row carries `seedId`, `workflow`, `startedAt`, `issue` (number + URL), `completion`, and the four outcome signals:
+The outcome row lives in `~/.factory/dogfood/runs.jsonl` (one JSON line per run). Each row carries `seedId`, `workflow`, `startedAt`, `issue` (number + URL), `baseBranch`, `baseRef`, `seedCommit`, `completion`, and the four outcome signals:
 
 - `truthPass` — did the truth-signal test go red → green on the PR head?
 - `qaCorrect` — did the QA agent's verdict match `truthPass`? (Measures QA accuracy.)
@@ -74,50 +75,33 @@ Completion is one of: `pending | reached-terminal | stalled | aborted-by-human |
 
 The harness handles seed mechanics, issue-command generation, and outcome recording. Kicking the workflow itself is still manual — needs a running server with the project's mode set to `supervised`.
 
-1. **Apply the seed locally on `main`:**
+1. **Run the orchestrator from a clean checkout:**
    ```bash
-   pnpm dogfood apply logger-001-drop-meta
-   pnpm dogfood verify-red logger-001-drop-meta   # Confirm the truth-signal test is red
-   git add -A && git commit -m "seed: logger-001 drop-meta"
-   git push origin main
+   pnpm dogfood run logger-001-drop-meta
    ```
 
-2. **Generate the file-issue command and record a pending run:**
-   ```bash
-   pnpm dogfood file-issue logger-001-drop-meta
-   # Prints the `gh issue create` command + creates a pending row in ~/.factory/dogfood/runs.jsonl
-   # Run the printed command yourself (or paste into the GitHub UI if no gh)
-   pnpm dogfood record <run-id> --issue-url=<url-from-gh-output>
-   ```
-
-3. **Let the workflow run.** With the local server running and the project on supervised mode, dispatch picks up `factory:triaging` and routes through:
+2. **Let the workflow run.** With the local server running and the project on supervised mode, dispatch picks up `factory:triaging` and routes through:
    `triage → investigate → dev-ready → fix-issue → needs-qa → needs-review → approved → merged`
 
-4. **Watch the event stream:**
+3. **Watch the event stream:**
    ```bash
-   curl -N "http://localhost:3001/events?projectId=goose-hub-self&workItemId=<n>"
+   curl -N "http://localhost:3001/events?projectId=goose-hub-self&workItemId=github:shaunnez/goose-hub#<n>"
    ```
 
-5. **Once the PR merges**, the seed is naturally restored (the agent's fix returns the file to a passing state). Record the outcome:
+4. **Once the PR merges**, record any remaining manual outcome signals:
    ```bash
    pnpm dogfood record <run-id> \
      --completion=reached-terminal \
-     --truth-pass=true \
      --qa-correct=true \
      --hygiene-clean=true
    ```
 
-6. **If something stalls or fails**, record where:
+5. **If something stalls or fails**, record where:
    ```bash
    pnpm dogfood record <run-id> --completion=failed:qa:playwright-crashed --truth-pass=false
    ```
-   Then restore and reset:
-   ```bash
-   pnpm dogfood restore logger-001-drop-meta
-   git checkout main && git reset --hard HEAD~1 && git push --force-with-lease origin main
-   ```
 
-7. **See the trend:**
+6. **See the trend:**
    ```bash
    pnpm dogfood runs:summary
    # Total runs, pass rates, by-workflow + by-seed breakdowns

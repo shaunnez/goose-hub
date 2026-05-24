@@ -129,6 +129,14 @@ vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   }),
 }));
 
+vi.mock('@goose-hub/core/workspaces/workflow-base.js', () => ({
+  resolveWorkflowBaseForWorkItem: vi.fn().mockReturnValue({
+    branch: 'main',
+    ref: 'origin/main',
+    source: 'configured-default',
+  }),
+}));
+
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return { ...actual, readFileSync: vi.fn().mockReturnValue('# mock prompt') };
@@ -537,6 +545,30 @@ describe('runInvestigateWorkflow', () => {
 
       expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'origin/main');
       expect(cleanupWorktree).toHaveBeenCalledOnce();
+    });
+
+    it('creates the investigation worktree from a dogfood seed base ref when metadata exists', async () => {
+      const { createWorktree } = await import('@goose-hub/core/workspaces/worktree.js');
+      const { resolveWorkflowBaseForWorkItem } = await import(
+        '@goose-hub/core/workspaces/workflow-base.js'
+      );
+      vi.mocked(resolveWorkflowBaseForWorkItem).mockReturnValueOnce({
+        branch: 'dogfood/run/logger-001-drop-meta',
+        ref: 'seed-commit-sha',
+        source: 'dogfood-seed',
+      });
+
+      const item = makeWorkItem({ id: 'github:owner/repo#123', externalId: '123' });
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(item, makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(resolveWorkflowBaseForWorkItem).toHaveBeenCalledWith(
+        'goose-hub-self',
+        'github:owner/repo#123',
+        '/repo',
+        expect.any(String),
+      );
+      expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'seed-commit-sha');
     });
 
     it('emits only one parent run-started event and suppresses the synthesis duplicate', async () => {

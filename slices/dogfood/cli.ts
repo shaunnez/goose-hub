@@ -30,7 +30,9 @@ End-to-end orchestrator:
   run <seed-id> [flags]         Apply seed → file issue → tail event stream → record outcome.
                                 Flags: --server-url=, --repo=, --project-slug=, --timeout-ms=,
                                 --no-restore (leave the seed applied on finish),
-                                --skip-verify-red (skip the local truth-signal check)
+                                --skip-verify-red (skip the local red check),
+                                --skip-verify-green (skip the final green check),
+                                --delete-remote-branch-on-finish
 
 Outcome tracking:
   file-issue <seed-id>          Print the gh-issue-create command and record a pending run
@@ -192,7 +194,9 @@ async function main(): Promise<void> {
         projectSlug: flags['project-slug'],
         timeoutMs: flags['timeout-ms'] ? Number(flags['timeout-ms']) : undefined,
         restoreOnFinish: flags['no-restore'] !== 'true',
+        deleteRemoteBranchOnFinish: flags['delete-remote-branch-on-finish'] === 'true',
         skipVerifyRed: flags['skip-verify-red'] === 'true',
+        skipVerifyGreen: flags['skip-verify-green'] === 'true',
       });
       return;
     }
