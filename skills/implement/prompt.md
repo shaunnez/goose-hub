@@ -21,6 +21,7 @@ The `<task>` block can include:
 - `<relatedSurface>` — deterministic execution lane from the workflow.
 - `<revisionPass>` — `0` or `1`.
 - `<evidencePostEnabled>` — whether frontend evidence specs should be produced.
+- `<priorEvidenceSpecPath>` — path to the evidence spec authored or reused by the prior dev/fix-feedback cycle on this work item, when present.
 
 `<relatedSurface>` is prescriptive unless stale:
 
