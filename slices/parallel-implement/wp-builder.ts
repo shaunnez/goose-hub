@@ -402,7 +402,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     appendSystemPrompt: opts.implementWpPrompt,
     sandboxMode: 'preconfigured', // writeWpBuilderSandbox already ran in workflow.ts before spawn
     env: {
-      FACTORY_WP_FILESOWNED: wp.filesOwned.join(':'),
+      FACTORY_WP_FILESOWNED: wpFilePaths.join(':'),
       FACTORY_WP_ID: wp.id,
     },
   };
