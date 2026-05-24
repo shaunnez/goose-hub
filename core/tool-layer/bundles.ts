@@ -16,6 +16,7 @@ const FT_READ = [
   'mcp__factory-tools__search_text',
   'mcp__factory-tools__file_exists',
   'mcp__factory-tools__file_info',
+  'mcp__factory-tools__repo_intel.query',
 ];
 const FT_WRITE = [
   'mcp__factory-tools__write_file',

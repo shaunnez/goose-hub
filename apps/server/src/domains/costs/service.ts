@@ -8,8 +8,10 @@ import {
 import type { Result } from '#shared/middleware.js';
 import {
   type CostRow,
+  type WorkItemToolStatsRow,
   listCostsForProjectSince,
   listCostsForWorkItem,
+  listToolStatsForWorkItem,
   totalsByStageForProjectSince,
   totalsForProjectSince,
 } from './repository.js';
@@ -52,12 +54,24 @@ export interface CostRowDto {
   costLabel: CostLabel;
   personaId: string | null;
   createdAt: string;
+  readCount: number;
+  grepCount: number;
+  writeCount: number;
+  editCount: number;
+  bytesRead: number;
+  uniquePathsRead: number;
+  redundantReads: number;
 }
 
 export interface WorkItemCostsDto {
   workItemId: string;
   totalUsd: number;
   hasEstimated: boolean;
+  rows: CostRowDto[];
+}
+
+export interface WorkItemToolStatsDto {
+  workItemId: string;
   rows: CostRowDto[];
 }
 
@@ -144,6 +158,9 @@ export async function getCostsForWorkItem(workItemId: string): Promise<Result<Wo
     return { ok: false, error: 'workItemId is required', status: 400 };
   }
   const rows = listCostsForWorkItem(workItemId);
+  const toolStatsByRun = new Map(
+    listToolStatsForWorkItem(workItemId).map((row) => [row.runId, row]),
+  );
   const totalUsd = rows.reduce((s, r) => s + r.costUsd, 0);
   const hasEstimated = rows.some((r) => r.costLabel === 'estimated');
   return {
@@ -152,12 +169,27 @@ export async function getCostsForWorkItem(workItemId: string): Promise<Result<Wo
       workItemId,
       totalUsd,
       hasEstimated,
-      rows: rows.map(toRowDto),
+      rows: rows.map((row) => toRowDto(row, toolStatsByRun.get(row.runId))),
     },
   };
 }
 
-function toRowDto(r: CostRow): CostRowDto {
+export async function getToolStatsForWorkItem(
+  workItemId: string,
+): Promise<Result<WorkItemToolStatsDto>> {
+  if (!workItemId.trim()) {
+    return { ok: false, error: 'workItemId is required', status: 400 };
+  }
+  return {
+    ok: true,
+    data: {
+      workItemId,
+      rows: listToolStatsForWorkItem(workItemId).map((row) => toRowDto(row, row)),
+    },
+  };
+}
+
+function toRowDto(r: CostRow | WorkItemToolStatsRow, stats?: WorkItemToolStatsRow): CostRowDto {
   return {
     runId: r.runId,
     workItemId: r.workItemId,
@@ -171,5 +203,12 @@ function toRowDto(r: CostRow): CostRowDto {
     costLabel: r.costLabel,
     personaId: r.personaId,
     createdAt: r.createdAt,
+    readCount: stats?.readCount ?? 0,
+    grepCount: stats?.grepCount ?? 0,
+    writeCount: stats?.writeCount ?? 0,
+    editCount: stats?.editCount ?? 0,
+    bytesRead: stats?.bytesRead ?? 0,
+    uniquePathsRead: stats?.uniquePathsRead ?? 0,
+    redundantReads: stats?.redundantReads ?? 0,
   };
 }

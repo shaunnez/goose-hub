@@ -86,6 +86,8 @@ vi.mock('@/lib/api', () => ({
           p95OutputTokens: 700,
           medianCostUsd: 0.1,
           p95CostUsd: 0.3,
+          p95ReadCount: 12,
+          p95BytesRead: 8192,
           maxCostOutlier: { runId: 'r1', costUsd: 0.3 },
           timeoutRate: 0,
           budgetExceededRate: 0,
@@ -130,6 +132,8 @@ describe('ProjectBudgetPanel', () => {
     expect(screen.getByText(/from skill-default: holdout skill ignores/)).toBeTruthy();
     expect(screen.getByText(/from fallback: holdout skill ignores/)).toBeTruthy();
     expect(screen.getByText(/from db: project_skill_settings\.effort override/)).toBeTruthy();
+    expect(await screen.findByText('p95 reads 12')).toBeTruthy();
+    expect(await screen.findByText('p95 bytes 8.0 KB')).toBeTruthy();
     expect(await screen.findByText('This skill looks stable and inexpensive.')).toBeTruthy();
   });
 });

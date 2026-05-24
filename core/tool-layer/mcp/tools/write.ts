@@ -10,6 +10,7 @@ import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
+import { invalidateRunCacheForPaths } from '../run-cache.js';
 import type {
   ApplyPatchInput,
   CreateDirectoryInput,
@@ -107,6 +108,7 @@ export async function writeFileTool(
 
   await mkdir(dirname(resolved.absolute), { recursive: true });
   await writeFile(resolved.absolute, input.content, 'utf8');
+  invalidateRunCacheForPaths(ctx.runId, [resolved.canonical.path]);
 
   emitToolCall(ctx, {
     tool: 'write_file',
@@ -172,6 +174,7 @@ export async function editFileTool(
   }
 
   await writeFile(resolved.absolute, next, 'utf8');
+  invalidateRunCacheForPaths(ctx.runId, [resolved.canonical.path]);
 
   emitToolCall(ctx, {
     tool: 'edit_file',
@@ -274,6 +277,10 @@ export async function applyPatchTool(
     const filesChanged: RepoRelativePath[] = rawFiles.map((rawPath) =>
       rawPathToCanonical(rawPath, ctx.workspaceRoot),
     );
+    invalidateRunCacheForPaths(
+      ctx.runId,
+      filesChanged.map((path) => path.path),
+    );
 
     emitToolCall(ctx, {
       tool: 'apply_patch',
@@ -356,6 +363,7 @@ export async function moveFileTool(
 
   await mkdir(dirname(toResolved.absolute), { recursive: true });
   await rename(fromResolved.absolute, toResolved.absolute);
+  invalidateRunCacheForPaths(ctx.runId, [fromResolved.canonical.path, toResolved.canonical.path]);
 
   emitToolCall(ctx, {
     tool: 'move_file',
@@ -403,6 +411,7 @@ export async function deleteFileTool(
   }
 
   if (existed) await rm(resolved.absolute, { force: true });
+  invalidateRunCacheForPaths(ctx.runId, [resolved.canonical.path]);
 
   emitToolCall(ctx, {
     tool: 'delete_file',

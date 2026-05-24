@@ -7,6 +7,7 @@ import {
   Cpu,
   FileStack,
   Info,
+  Network,
   Route,
   Target,
   User,
@@ -24,6 +25,25 @@ type BudgetExceededPayload = {
   overByUsd?: number;
 };
 
+type ToolIntensityAnomalyPayload = {
+  runId?: string;
+  skill?: string;
+  readCount?: number;
+  p95ReadCount?: number;
+  thresholdReadCount?: number;
+  bytesRead?: number;
+  redundantReads?: number;
+};
+
+type ToolViolationPayload = {
+  role?: string;
+  runId?: string;
+  disallowedKey?: string;
+  leakedKey?: string;
+  leak?: string;
+  source?: string;
+};
+
 type InvestigationContextInjectedPayload = {
   skill?: string;
   wpId?: string;
@@ -32,6 +52,39 @@ type InvestigationContextInjectedPayload = {
   keyFileCount?: number;
   findingsChars?: number;
   openQuestionCount?: number;
+};
+
+type InvestigationSeedBuiltPayload = {
+  candidateFileCount?: number;
+  candidateSymbolCount?: number;
+  recentlyChangedCount?: number;
+  priorInvestigationCount?: number;
+  builtMs?: number;
+};
+
+type BugEnhanceLazyPayload = {
+  hadExistingSeed?: boolean;
+  producedSeed?: boolean;
+  candidateFileCount?: number;
+  candidateComponentCount?: number;
+  candidateRouteCount?: number;
+  ranMs?: number;
+};
+
+type RedundantReadPayload = {
+  path?: string;
+  count?: number;
+  guidance?: string;
+};
+
+type CompactOperationalPayload = Record<string, unknown>;
+
+type InvestigationDigestAppliedPayload = {
+  wave?: string;
+  scoutCount?: number;
+  rawBytes?: number;
+  digestBytes?: number;
+  bytesSaved?: number;
 };
 
 type RelatedSurfacePayload = {
@@ -116,6 +169,33 @@ function formatShortId(value: string | undefined): string | null {
 function formatByteCount(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function payloadRecord(payload: unknown): CompactOperationalPayload | null {
+  if (payload == null) return null;
+  if (typeof payload === 'string') {
+    try {
+      const parsed = JSON.parse(payload);
+      return parsed != null && typeof parsed === 'object'
+        ? (parsed as CompactOperationalPayload)
+        : { message: payload };
+    } catch {
+      return { message: payload };
+    }
+  }
+  return typeof payload === 'object' ? (payload as CompactOperationalPayload) : { value: payload };
+}
+
+function payloadString(payload: CompactOperationalPayload | null, key: string): string | null {
+  const value = payload?.[key];
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return null;
+}
+
+function payloadNumber(payload: CompactOperationalPayload | null, key: string): number | null {
+  const value = payload?.[key];
+  return typeof value === 'number' ? value : null;
 }
 
 export function ManualActionEvent({ event }: { event: AgentEventDto }) {
@@ -327,6 +407,67 @@ export function AgentBudgetExceededEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
+export function ToolIntensityAnomalyEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as ToolIntensityAnomalyPayload | null;
+  const shortRunId = formatShortId(p?.runId ?? event.runId ?? undefined);
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-warning bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-2 text-[11px] text-fg-3">
+        <AlertTriangle size={13} className="shrink-0 text-amber-400" />
+        <span className="font-mono uppercase tracking-wider">Tool intensity anomaly</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-fg-2">
+        {p?.skill != null && <span>{p.skill}</span>}
+        {typeof p?.readCount === 'number' && <span>{p.readCount} reads</span>}
+        {typeof p?.p95ReadCount === 'number' && <span>p95 {p.p95ReadCount} reads</span>}
+        {typeof p?.thresholdReadCount === 'number' && (
+          <span className="text-amber-300">threshold {p.thresholdReadCount} reads</span>
+        )}
+        {typeof p?.bytesRead === 'number' && <span>{formatByteCount(p.bytesRead)} read</span>}
+        {typeof p?.redundantReads === 'number' && p.redundantReads > 0 && (
+          <span>{p.redundantReads} redundant reads</span>
+        )}
+      </div>
+      {shortRunId != null && (
+        <div className="mt-1 text-[11px] font-mono text-fg-4">run {shortRunId}</div>
+      )}
+    </li>
+  );
+}
+
+export function ToolViolationEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as ToolViolationPayload | null;
+  const key = p?.disallowedKey ?? p?.leakedKey ?? null;
+  const shortRunId = formatShortId(p?.runId ?? event.runId ?? undefined);
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-warning bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <AlertTriangle size={13} className="shrink-0 text-amber-400" />
+        <span className="font-mono uppercase tracking-wider">Tool violation</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        {p?.role != null && <span>{p.role}</span>}
+        {key != null && <span>blocked key {key}</span>}
+        {p?.leak != null && <span>{p.leak} leak</span>}
+        {p?.source != null && <span>{p.source}</span>}
+      </div>
+      {shortRunId != null && (
+        <div className="mt-1 text-[11px] font-mono text-fg-4">run {shortRunId}</div>
+      )}
+    </li>
+  );
+}
+
 export function AgentDisclosureEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as DisclosurePayload | null;
   const artifactKeys = p?.artifactKeys ?? [];
@@ -355,6 +496,365 @@ export function AgentDisclosureEvent({ event }: { event: AgentEventDto }) {
             </span>
           ))}
         </div>
+      )}
+    </li>
+  );
+}
+
+export function InvestigationSeedBuiltEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as InvestigationSeedBuiltPayload | null;
+  const candidateFiles = typeof p?.candidateFileCount === 'number' ? p.candidateFileCount : null;
+  const candidateSymbols =
+    typeof p?.candidateSymbolCount === 'number' ? p.candidateSymbolCount : null;
+  const recentChanges = typeof p?.recentlyChangedCount === 'number' ? p.recentlyChangedCount : null;
+  const priorInvestigations =
+    typeof p?.priorInvestigationCount === 'number' ? p.priorInvestigationCount : null;
+  const builtMs = typeof p?.builtMs === 'number' ? p.builtMs : null;
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <FileStack size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Investigation seed built</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        {candidateFiles != null && (
+          <span>
+            {candidateFiles} candidate file{candidateFiles === 1 ? '' : 's'}
+          </span>
+        )}
+        {candidateSymbols != null && (
+          <span>
+            {candidateSymbols} symbol hint{candidateSymbols === 1 ? '' : 's'}
+          </span>
+        )}
+        {recentChanges != null && (
+          <span>
+            {recentChanges} recent change{recentChanges === 1 ? '' : 's'}
+          </span>
+        )}
+        {priorInvestigations != null && (
+          <span>
+            {priorInvestigations} prior investigation{priorInvestigations === 1 ? '' : 's'}
+          </span>
+        )}
+        {builtMs != null && <span>{builtMs} ms</span>}
+      </div>
+    </li>
+  );
+}
+
+export function BugEnhanceLazyEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as BugEnhanceLazyPayload | null;
+  const candidateFiles = typeof p?.candidateFileCount === 'number' ? p.candidateFileCount : null;
+  const candidateComponents =
+    typeof p?.candidateComponentCount === 'number' ? p.candidateComponentCount : null;
+  const candidateRoutes = typeof p?.candidateRouteCount === 'number' ? p.candidateRouteCount : null;
+  const ranMs = typeof p?.ranMs === 'number' ? p.ranMs : null;
+  const producedSeed = p?.producedSeed === true;
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <FileStack size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Bug grounding seed</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        <span>{producedSeed ? 'Produced seed' : 'No seed produced'}</span>
+        {p?.hadExistingSeed === false && <span>lazy run</span>}
+        {p?.hadExistingSeed === true && <span>existing seed found</span>}
+        {candidateFiles != null && (
+          <span>
+            {candidateFiles} candidate file{candidateFiles === 1 ? '' : 's'}
+          </span>
+        )}
+        {candidateComponents != null && (
+          <span>
+            {candidateComponents} component{candidateComponents === 1 ? '' : 's'}
+          </span>
+        )}
+        {candidateRoutes != null && (
+          <span>
+            {candidateRoutes} route{candidateRoutes === 1 ? '' : 's'}
+          </span>
+        )}
+        {ranMs != null && <span>{(ranMs / 1000).toFixed(1)} s</span>}
+      </div>
+    </li>
+  );
+}
+
+export function RedundantReadEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as RedundantReadPayload | null;
+  const count = typeof p?.count === 'number' ? p.count : null;
+  const path = p?.path ?? null;
+  const guidance = p?.guidance ?? null;
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-warning bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <AlertTriangle size={13} className="shrink-0 text-amber-400" />
+        <span className="font-mono uppercase tracking-wider">Redundant file read</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        {count != null && (
+          <span>
+            {count} read{count === 1 ? '' : 's'}
+          </span>
+        )}
+        {path != null && <span className="font-mono text-fg-2 break-all">{path}</span>}
+      </div>
+      {guidance != null && <div className="mt-2 text-[11.5px] text-fg-3">{guidance}</div>}
+    </li>
+  );
+}
+
+function compactOperationalEventDetails(event: AgentEventDto): {
+  title: string;
+  tone: 'default' | 'warning' | 'danger' | 'success';
+  icon: 'info' | 'warning';
+  facts: string[];
+  detail: string | null;
+} {
+  const p = payloadRecord(event.payload);
+  const facts: string[] = [];
+  let detail: string | null = null;
+  const title = EVENT_KIND_LABEL[event.kind] ?? event.kind;
+  let tone: 'default' | 'warning' | 'danger' | 'success' = 'default';
+  let icon: 'info' | 'warning' = 'info';
+
+  const push = (value: string | null) => {
+    if (value != null && value.length > 0) facts.push(value);
+  };
+  const pushNumber = (key: string, label: string) => {
+    const value = payloadNumber(p, key);
+    if (value != null) facts.push(`${value} ${label}`);
+  };
+
+  switch (event.kind) {
+    case 'agent.fallback-triggered':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'skill'));
+      push(payloadString(p, 'role'));
+      push(payloadString(p, 'modelId'));
+      push(payloadString(p, 'fallbackModel'));
+      detail = payloadString(p, 'reason') ?? payloadString(p, 'error');
+      break;
+    case 'agent.repo-override':
+      push(payloadString(p, 'repo'));
+      break;
+    case 'merge.conflict':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'prNumber'));
+      detail = 'Merge paused until the conflict is resolved.';
+      break;
+    case 'merge.conflict-resolved':
+      tone = 'success';
+      push(payloadString(p, 'prNumber'));
+      push(payloadString(p, 'sha'));
+      break;
+    case 'merge.conflict-unresolvable':
+      tone = 'danger';
+      icon = 'warning';
+      push(payloadString(p, 'prNumber'));
+      push(payloadString(p, 'prUrl'));
+      detail = payloadString(p, 'error');
+      break;
+    case 'qa.tier-disagreement':
+      tone = 'danger';
+      icon = 'warning';
+      push(payloadString(p, 'runId') ?? formatShortId(event.runId ?? undefined));
+      if (Array.isArray(p?.disagreements)) {
+        facts.push(
+          `${p.disagreements.length} disagreement${p.disagreements.length === 1 ? '' : 's'}`,
+        );
+      }
+      detail = 'QA output disagreed with deterministic tier verdicts.';
+      break;
+    case 'project.budget-exceeded': {
+      tone = 'warning';
+      icon = 'warning';
+      const totalTokens = payloadNumber(p, 'totalTokens');
+      const limitTokens = payloadNumber(p, 'limitTokens');
+      const totalCostUsd = payloadNumber(p, 'totalCostUsd');
+      if (totalTokens != null) facts.push(`${formatTokens(totalTokens)} tokens used`);
+      if (limitTokens != null) facts.push(`${formatTokens(limitTokens)} token limit`);
+      if (totalCostUsd != null) facts.push(`${formatCost(totalCostUsd)} total`);
+      break;
+    }
+    case 'coach.completed':
+      tone = 'success';
+      push(payloadString(p, 'targetSkillName'));
+      push(payloadString(p, 'confidence'));
+      pushNumber('candidateId', 'candidate');
+      if (payloadString(p, 'hasPatch') != null) {
+        facts.push(payloadString(p, 'hasPatch') === 'true' ? 'patch proposed' : 'no patch');
+      }
+      break;
+    case 'coach.dispatch-triggered':
+      push(payloadString(p, 'targetSkillName'));
+      push(payloadString(p, 'playbookId'));
+      pushNumber('patternCount', 'patterns');
+      break;
+    case 'coach.skipped-forbidden-target':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'targetSkillName'));
+      detail = payloadString(p, 'reason');
+      break;
+    case 'coach.dispatch-failed':
+      tone = 'danger';
+      icon = 'warning';
+      push(payloadString(p, 'targetSkillName'));
+      push(payloadString(p, 'playbookId'));
+      detail = payloadString(p, 'error');
+      break;
+    case 'workflow.smoke-failed':
+      tone = 'danger';
+      icon = 'warning';
+      push(payloadString(p, 'failedCheck'));
+      detail = payloadString(p, 'reason');
+      break;
+    case 'agent.cancelled':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'runId') ?? formatShortId(event.runId ?? undefined));
+      push(payloadString(p, 'reason'));
+      if (payloadNumber(p, 'elapsedMs') != null) facts.push(`${payloadNumber(p, 'elapsedMs')} ms`);
+      break;
+    case 'spec.wp-issues-created':
+      tone = 'success';
+      push(payloadString(p, 'pipelineRunId') ?? formatShortId(event.runId ?? undefined));
+      pushNumber('count', 'issues');
+      break;
+    case 'merge-decision.completed':
+      tone = payloadString(p, 'passed') === 'true' ? 'success' : 'warning';
+      icon = payloadString(p, 'passed') === 'true' ? 'info' : 'warning';
+      push(payloadString(p, 'prNumber'));
+      push(payloadString(p, 'reason'));
+      pushNumber('score', 'score');
+      detail = payloadString(p, 'detail');
+      break;
+    case 'audit.completed':
+      tone = payloadString(p, 'autonomyGateFired') === 'true' ? 'warning' : 'success';
+      icon = payloadString(p, 'autonomyGateFired') === 'true' ? 'warning' : 'info';
+      push(payloadString(p, 'trigger'));
+      push(payloadString(p, 'rating'));
+      pushNumber('auditScore', 'score');
+      pushNumber('recommendationCount', 'recommendations');
+      pushNumber('improvementCandidateCount', 'candidates');
+      break;
+    case 'audit.failed':
+      tone = 'danger';
+      icon = 'warning';
+      push(payloadString(p, 'trigger'));
+      push(payloadString(p, 'pipelineRunId'));
+      detail = payloadString(p, 'error');
+      break;
+    case 'audit.autonomy-gate-fired':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'trigger'));
+      pushNumber('auditScore', 'score');
+      pushNumber('threshold', 'threshold');
+      break;
+    case 'agent.investigation-seed-empty':
+      tone = 'warning';
+      icon = 'warning';
+      detail = payloadString(p, 'reason') ?? payloadString(p, 'guidance');
+      break;
+    case 'state.transition-deferred':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'from'));
+      push(payloadString(p, 'to'));
+      push(payloadString(p, 'by'));
+      detail = payloadString(p, 'error') ?? payloadString(p, 'reason');
+      break;
+    case 'agent.bug-enhance-hallucinated':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'runId') ?? formatShortId(event.runId ?? undefined));
+      pushNumber('droppedCount', 'dropped');
+      pushNumber('originalCount', 'original');
+      detail = 'Candidate files were pruned because they did not exist in the workspace.';
+      break;
+    case 'agent.bug-enhance-workspace-empty':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'workspaceDir'));
+      push(payloadString(p, 'runId') ?? formatShortId(event.runId ?? undefined));
+      detail = 'Workspace was unavailable, so bug grounding paths were not pruned.';
+      break;
+    case 'agent.run-aborted':
+      tone = 'danger';
+      icon = 'warning';
+      push(payloadString(p, 'reason'));
+      pushNumber('redundantReads', 'redundant reads');
+      pushNumber('totalReads', 'total reads');
+      break;
+  }
+
+  if (facts.length === 0) {
+    push(payloadString(p, 'runId') ?? formatShortId(event.runId ?? undefined));
+    push(payloadString(p, 'pipelineRunId'));
+    push(payloadString(p, 'message'));
+  }
+
+  return { title, tone, icon, facts, detail };
+}
+
+export function CompactOperationalEvent({ event }: { event: AgentEventDto }) {
+  const details = compactOperationalEventDetails(event);
+  const borderClass =
+    details.tone === 'danger'
+      ? 'border-danger'
+      : details.tone === 'warning'
+        ? 'border-warning'
+        : details.tone === 'success'
+          ? 'border-success'
+          : 'border-line';
+  const Icon = details.icon === 'warning' ? AlertTriangle : Info;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className={`rounded-md border ${borderClass} bg-bg-elev/60 px-4 py-3`}
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <Icon
+          size={13}
+          className={`shrink-0 ${details.icon === 'warning' ? 'text-amber-400' : ''}`}
+        />
+        <span className="font-mono uppercase tracking-wider">{details.title}</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      {details.facts.length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+          {details.facts.map((fact) => (
+            <span key={fact}>{fact}</span>
+          ))}
+        </div>
+      )}
+      {details.detail != null && (
+        <div className="mt-2 text-[11.5px] text-fg-3">{details.detail}</div>
       )}
     </li>
   );
@@ -405,6 +905,51 @@ export function InvestigationContextInjectedEvent({ event }: { event: AgentEvent
       {shortRunId != null && (
         <div className="mt-1 text-[11px] font-mono text-fg-4">investigation {shortRunId}</div>
       )}
+    </li>
+  );
+}
+
+export function InvestigationDigestAppliedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as InvestigationDigestAppliedPayload | null;
+  const scoutCount = typeof p?.scoutCount === 'number' ? p.scoutCount : null;
+  const rawBytes = typeof p?.rawBytes === 'number' ? p.rawBytes : null;
+  const digestBytes = typeof p?.digestBytes === 'number' ? p.digestBytes : null;
+  const bytesSaved = typeof p?.bytesSaved === 'number' ? p.bytesSaved : null;
+  const savedPercent =
+    rawBytes != null && rawBytes > 0 && bytesSaved != null
+      ? Math.round((bytesSaved / rawBytes) * 100)
+      : null;
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <Network size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Investigation digest applied</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        {p?.wave != null && <span className="font-mono">{p.wave}</span>}
+        {scoutCount != null && (
+          <span>
+            {scoutCount} scout{scoutCount === 1 ? '' : 's'}
+          </span>
+        )}
+        {rawBytes != null && digestBytes != null && (
+          <span>
+            {formatByteCount(rawBytes)} raw → {formatByteCount(digestBytes)} digest
+          </span>
+        )}
+        {bytesSaved != null && (
+          <span>
+            {formatByteCount(bytesSaved)} saved
+            {savedPercent != null ? ` (${savedPercent}%)` : ''}
+          </span>
+        )}
+      </div>
     </li>
   );
 }

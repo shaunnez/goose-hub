@@ -598,11 +598,20 @@ function buildFixFeedbackAttemptRunIndex(events: AgentEventDto[]): Map<string, s
   for (const event of events) {
     if (!isFixFeedbackRelatedEvent(event)) continue;
     const attemptId = eventPayloadString(event, 'attemptId');
+    if (event.runId != null && event.runId.trim() !== '') {
+      attemptByRunId.set(event.runId, attemptId ?? event.runId);
+    }
     if (attemptId == null) continue;
     attemptIds.add(attemptId);
-    if (event.runId != null && event.runId.trim() !== '') {
-      attemptByRunId.set(event.runId, attemptId);
-    }
+  }
+
+  for (const event of events) {
+    if (event.kind !== 'agent.retry-escalated') continue;
+    const originalRunId = eventPayloadString(event, 'runId');
+    const retryRunId = eventPayloadString(event, 'retryRunId');
+    if (originalRunId == null || retryRunId == null) continue;
+    const attemptId = attemptByRunId.get(originalRunId);
+    if (attemptId != null) attemptByRunId.set(retryRunId, attemptId);
   }
 
   if (attemptIds.size === 1) {
@@ -622,11 +631,11 @@ function fixFeedbackSegmentIdForEvent(
   event: AgentEventDto,
   fixFeedbackAttemptByRunId: ReadonlyMap<string, string>,
 ): string | null {
-  if (!isFixFeedbackRelatedEvent(event)) return null;
   const attemptId =
     eventPayloadString(event, 'attemptId') ??
     (event.runId == null ? null : (fixFeedbackAttemptByRunId.get(event.runId) ?? null));
   if (attemptId != null) return `fix-feedback:${attemptId}`;
+  if (!isFixFeedbackRelatedEvent(event)) return null;
   return event.runId == null ? null : `fix-feedback:${event.runId}`;
 }
 

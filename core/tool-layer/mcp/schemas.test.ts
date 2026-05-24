@@ -3,6 +3,7 @@ import {
   FACTORY_TOOL_NAMES,
   ReadFileInput,
   RecordDecisionInput,
+  RepoIntelQueryRefined,
   RunPackageScriptInput,
   SearchTextInput,
   WriteFileInput,
@@ -101,5 +102,35 @@ describe('schema input validation', () => {
   it('WriteFileInput allows empty content but not missing path', () => {
     expect(WriteFileInput.safeParse({ path: 'a.txt', content: '' }).success).toBe(true);
     expect(WriteFileInput.safeParse({ content: 'hi' }).success).toBe(false);
+  });
+});
+
+describe('RepoIntelQueryRefined (per-intent discriminated validation)', () => {
+  it.each([
+    ['find-symbol', 'name', { name: 'AuthService' }],
+    ['find-callers', 'symbol', { symbol: 'AuthService' }],
+    ['find-calls-of', 'symbol', { symbol: 'AuthService' }],
+    ['find-jsx-usages', 'component', { component: 'Button' }],
+    ['find-importers', 'module + symbol', { module: '@/lib/api', symbol: 'api' }],
+    ['find-route', 'pathPattern', { pathPattern: '/projects/:slug' }],
+    ['find-component', 'component', { component: 'Button' }],
+    ['route-for-component', 'component', { component: 'ProjectPage' }],
+    ['find-tests-for', 'target', { target: 'src/auth.ts' }],
+    ['related-files', 'target', { target: 'src/auth.ts' }],
+    ['fetch-artifact', 'artifactKey', { artifactKey: 'scout-report:abc' }],
+  ])('%s requires %s', (intent, _desc, args) => {
+    expect(RepoIntelQueryRefined.safeParse({ intent }).success).toBe(false);
+    expect(RepoIntelQueryRefined.safeParse({ intent, ...args }).success).toBe(true);
+  });
+
+  it.each([
+    ['recent-changes', {}],
+    ['prior-investigation', {}],
+  ])('%s allows empty payload (all fields optional)', (intent, args) => {
+    expect(RepoIntelQueryRefined.safeParse({ intent, ...args }).success).toBe(true);
+  });
+
+  it('rejects unknown intent', () => {
+    expect(RepoIntelQueryRefined.safeParse({ intent: 'not-real' }).success).toBe(false);
   });
 });

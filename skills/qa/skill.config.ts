@@ -17,6 +17,7 @@ import { QaOutputSchema, TestRunSchema, VerificationSummarySchema } from './sche
  *   <task>
  *     <workItem>{"title":"...","body":"...","number":123}</workItem>
  *     <prDiff>...</prDiff>
+ *     <prDiffWithContext>{"changedFiles":["..."],"hunks":[...]}</prDiffWithContext>
  *     <projectCommands>{"testCommand":"...","lintCommand":"...","e2eCommand":"..."}</projectCommands>
  *     <verificationSummary>{"changedFiles":...,"commands":...,"testRun":...}</verificationSummary>
  *     <sliceTests>["path/to/test.ts"]</sliceTests>
@@ -31,6 +32,24 @@ export const QaContextSchema = z.object({
   }),
   /** The git diff of the PR being reviewed — what was actually changed */
   prDiff: z.string(),
+  /** Diff-derived changed-file and hunk metadata. Contains no developer or investigation reasoning. */
+  prDiffWithContext: z
+    .object({
+      changedFiles: z.array(z.string()),
+      hunkCount: z.number().int().min(0),
+      hunks: z.array(
+        z.object({
+          file: z.string(),
+          oldStart: z.number().int().min(0),
+          oldLines: z.number().int().min(0),
+          newStart: z.number().int().min(0),
+          newLines: z.number().int().min(0),
+          heading: z.string().optional(),
+        }),
+      ),
+      diffCharCount: z.number().int().min(0),
+    })
+    .optional(),
   /** Shell commands to run verification — project-specific */
   projectCommands: z.object({
     testCommand: z.string(),
@@ -136,6 +155,7 @@ const config: SkillConfig = {
   contextAllowlist: [
     'workItem',
     'prDiff',
+    'prDiffWithContext',
     'projectCommands',
     'e2eDecision',
     'sliceTests',

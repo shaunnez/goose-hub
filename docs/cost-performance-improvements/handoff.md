@@ -30,3 +30,300 @@
 - Notes:
   - Created dedicated issue #1001 because the prompt-guardrail work from `wave2-and-timeline-analysis.md` did not have an existing issue. This was implemented before #994 rather than folded into telemetry.
 - Next branch to create: `cost-perf/994-tool-intensity-telemetry` from `cost-perf/1001-prompt-guardrails`
+
+## Issue #994 - Tool-intensity telemetry
+
+- Branch name: `cost-perf/994-tool-intensity-telemetry`
+- PR number/url: #1003 - https://github.com/shaunnez/goose-hub/pull/1003
+- Parent branch: `cost-perf/1001-prompt-guardrails`
+- Files changed:
+  - `CONTEXT.md`
+  - `apps/server/src/domains/costs/router.test.ts`
+  - `apps/server/src/domains/costs/router.ts`
+  - `apps/server/src/domains/costs/service.test.ts`
+  - `apps/server/src/domains/costs/service.ts`
+  - `apps/web/src/components/detail/components/CostsSection.test.tsx`
+  - `apps/web/src/components/detail/components/CostsSection.tsx`
+  - `apps/web/src/components/detail/components/TimelineEvents.tsx`
+  - `apps/web/src/components/detail/components/timeline/MiscEvents.test.tsx`
+  - `apps/web/src/components/detail/components/timeline/MiscEvents.tsx`
+  - `apps/web/src/components/detail/lib/timeline/labels.ts`
+  - `apps/web/src/components/settings/components/ProjectBudgetPanel.test.tsx`
+  - `apps/web/src/components/settings/components/ProjectBudgetPanel.tsx`
+  - `apps/web/src/lib/types.ts`
+  - `core/agent-runtime/claude-cli.test.ts`
+  - `core/agent-runtime/claude-cli.ts`
+  - `core/agent-runtime/codex-cli-runtime.test.ts`
+  - `core/agent-runtime/codex-cli.ts`
+  - `core/cost/repository.test.ts`
+  - `core/cost/repository.ts`
+  - `core/db/migrations/0039_agent_run_tool_stats.sql`
+  - `core/db/migrations/meta/_journal.json`
+  - `core/db/schema.ts`
+  - `core/event-stream/kinds.ts`
+  - `core/runtime-profiler/profile-runs.test.ts`
+  - `core/runtime-profiler/profile-runs.ts`
+  - `core/runtime-profiler/types.ts`
+  - `core/tool-layer/mcp/audit.ts`
+  - `core/tool-layer/mcp/tools/read.ts`
+- Tests run:
+  - `pnpm vitest run core/cost/repository.test.ts core/agent-runtime/claude-cli.test.ts core/agent-runtime/codex-cli-runtime.test.ts apps/server/src/domains/costs/service.test.ts apps/server/src/domains/costs/router.test.ts core/runtime-profiler/profile-runs.test.ts apps/web/src/components/settings/components/ProjectBudgetPanel.test.tsx apps/web/src/components/detail/components/CostsSection.test.tsx apps/web/src/components/detail/lib/costs.test.ts apps/web/src/components/detail/components/timeline/MiscEvents.test.tsx`
+  - `pnpm --filter @goose-hub/web build`
+  - `pnpm manifest --check`
+  - `pnpm audit-docs`
+  - `DB_PATH=/private/tmp/goose-hub-tool-stats-migrate-2.db pnpm tsx core/db/migrate.ts` (sandbox `listen EPERM` first, then passed with escalation)
+- Remaining risks:
+  - `read_many_files` can be counted in addition to its internal `read_file` audit events when both are emitted in the same run.
+  - The anomaly threshold uses the available same-project/same-skill p95 history; early sparse baselines can be noisy.
+- Next branch to create: `cost-perf/995-run-cache` from `cost-perf/994-tool-intensity-telemetry`
+
+## Issue #995 - Per-run MCP read/search cache
+
+- Branch name: `cost-perf/995-run-cache`
+- PR number/url: #1004 - https://github.com/shaunnez/goose-hub/pull/1004
+- Parent branch: `cost-perf/994-tool-intensity-telemetry`
+- Files changed:
+  - `CONTEXT.md`
+  - `core/tool-layer/mcp/audit.ts`
+  - `core/tool-layer/mcp/run-cache.ts`
+  - `core/tool-layer/mcp/slice.test.ts`
+  - `core/tool-layer/mcp/tools/read.ts`
+  - `core/tool-layer/mcp/tools/write.ts`
+- Tests run:
+  - `pnpm vitest run core/tool-layer/mcp/slice.test.ts core/tool-layer/mcp/tools/read.test.ts core/tool-layer/mcp/tools/write.test.ts core/cost/repository.test.ts apps/server/src/domains/costs/service.test.ts apps/server/src/domains/costs/router.test.ts`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm exec biome check core/tool-layer/mcp/run-cache.ts core/tool-layer/mcp/audit.ts core/tool-layer/mcp/tools/read.ts core/tool-layer/mcp/tools/write.ts core/tool-layer/mcp/slice.test.ts apps/server/src/domains/costs/repository.ts`
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+- Remaining risks:
+  - Cache state is process-local by design; restarting the MCP process drops all entries.
+  - `list_files` keys include the effective `limit` as a correctness extension beyond the issue wording, because limit changes the returned payload.
+  - This cache only removes repeated disk/process work inside a single run; separate scouts still need #996's shared InvestigationSeed.
+- Notes:
+  - While verifying #995, `pnpm exec tsc --noEmit --pretty false` exposed a missing #994 server repository re-export. PR #1003 was amended and force-pushed with that parent-stack fix before #995 was rebased.
+- Next branch to create: `cost-perf/998-duplicate-call-nudge` from `cost-perf/995-run-cache`
+
+## Issue #998 - Duplicate-call advisory nudge
+
+- Branch name: `cost-perf/998-duplicate-call-nudge`
+- PR number/url: #1005 - https://github.com/shaunnez/goose-hub/pull/1005
+- Parent branch: `cost-perf/995-run-cache`
+- Files changed:
+  - `CONTEXT.md`
+  - `core/tool-layer/mcp/audit.ts`
+  - `core/tool-layer/mcp/run-cache.ts`
+  - `core/tool-layer/mcp/slice.test.ts`
+  - `core/tool-layer/mcp/tools/read.ts`
+  - `core/tool-layer/post-tool-use-hook.test.ts`
+  - `core/tool-layer/post-tool-use-hook.ts`
+- Tests run:
+  - `pnpm vitest run core/tool-layer/mcp/slice.test.ts core/tool-layer/mcp/tools/read.test.ts core/tool-layer/post-tool-use-hook.test.ts core/tool-layer/mcp/tools/write.test.ts core/cost/repository.test.ts`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm exec biome check core/tool-layer/mcp/run-cache.ts core/tool-layer/mcp/audit.ts core/tool-layer/mcp/tools/read.ts core/tool-layer/mcp/slice.test.ts core/tool-layer/post-tool-use-hook.ts core/tool-layer/post-tool-use-hook.test.ts CONTEXT.md`
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+- Remaining risks:
+  - The deployed PostToolUse hook is a short-lived command, so durable per-run duplicate counting cannot live inside that script's memory. The counter lives beside #995's process-local MCP run cache, and the hook forwards the generated nudge as non-blocking `additionalContext`.
+  - The advisory currently covers cacheable MCP read/list/search calls that share #995 cache-key semantics; non-cacheable tools are not nudged.
+  - The reminder is returned in the structured MCP result and forwarded by PostToolUse context; downstream clients that ignore PostToolUse `additionalContext` will still see `duplicateNudge` in the tool payload.
+- Next branch to create: `cost-perf/996-investigation-seed` from `cost-perf/998-duplicate-call-nudge`
+
+## Issue #996 - InvestigationSeed shared scout context
+
+- Branch name: `cost-perf/996-investigation-seed`
+- PR number/url: #1006 - https://github.com/shaunnez/goose-hub/pull/1006
+- Parent branch: `cost-perf/998-duplicate-call-nudge`
+- Files changed:
+  - `CONTEXT.md`
+  - `apps/web/src/components/detail/lib/timeline/labels.ts`
+  - `core/agent-runtime/git-intel.ts`
+  - `core/agent-runtime/scout-prefetch.ts`
+  - `core/agent-runtime/scout-prefetch.test.ts`
+  - `core/agent-runtime/scout-runner.ts`
+  - `core/agent-runtime/swarm.test.ts`
+  - `core/event-stream/kinds.ts`
+  - `skills/scout-code-path/prompt.md`
+  - `skills/scout-code-path/skill.config.ts`
+  - `skills/scout-dependency/prompt.md`
+  - `skills/scout-dependency/skill.config.ts`
+  - `skills/scout-pattern/prompt.md`
+  - `skills/scout-pattern/skill.config.ts`
+  - `skills/scout-schema/prompt.md`
+  - `skills/scout-schema/skill.config.ts`
+  - `skills/scout-test-inventory/prompt.md`
+  - `skills/scout-test-inventory/skill.config.ts`
+  - `skills/scout-user-journey/prompt.md`
+  - `skills/scout-user-journey/skill.config.ts`
+  - `slices/investigate/slice.test.ts`
+  - `slices/investigate/workflow.ts`
+- Tests run:
+  - `pnpm vitest run core/agent-runtime/scout-prefetch.test.ts core/agent-runtime/swarm.test.ts slices/investigate/slice.test.ts skills/scout-code-path/slice.test.ts skills/scout-dependency/slice.test.ts skills/scout-pattern/slice.test.ts skills/scout-schema/slice.test.ts skills/scout-test-inventory/slice.test.ts skills/scout-user-journey/slice.test.ts`
+  - `pnpm vitest run core/agent-runtime/scout-prefetch.test.ts core/agent-runtime/swarm.test.ts slices/investigate/slice.test.ts skills/scout-code-path/slice.test.ts skills/scout-dependency/slice.test.ts skills/scout-pattern/slice.test.ts skills/scout-schema/slice.test.ts skills/scout-test-inventory/slice.test.ts skills/scout-user-journey/slice.test.ts apps/web/src/components/detail/lib/timeline.test.ts -t "EVENT_KIND_LABEL"`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm skill-contract:audit`
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+  - `pnpm exec biome check CONTEXT.md core/agent-runtime/git-intel.ts core/agent-runtime/scout-prefetch.ts core/agent-runtime/scout-prefetch.test.ts core/agent-runtime/scout-runner.ts core/agent-runtime/swarm.test.ts core/event-stream/kinds.ts apps/web/src/components/detail/lib/timeline/labels.ts slices/investigate/workflow.ts slices/investigate/slice.test.ts skills/scout-code-path/prompt.md skills/scout-code-path/skill.config.ts skills/scout-dependency/prompt.md skills/scout-dependency/skill.config.ts skills/scout-pattern/prompt.md skills/scout-pattern/skill.config.ts skills/scout-schema/prompt.md skills/scout-schema/skill.config.ts skills/scout-test-inventory/prompt.md skills/scout-test-inventory/skill.config.ts skills/scout-user-journey/prompt.md skills/scout-user-journey/skill.config.ts`
+- Remaining risks:
+  - A full `apps/web/src/components/detail/lib/timeline.test.ts` run still has the pre-existing fix-feedback section split failure; the #996 label path was verified with the `EVENT_KIND_LABEL` subset.
+  - InvestigationSeed reduces cross-scout rediscovery through shared context only. It does not extend #995's per-run cache across separate scout runs.
+- Next branch to create: `cost-perf/997-repo-intel-query` from `cost-perf/996-investigation-seed`
+
+## Issue #997 - repo_intel.query MCP tool
+
+- Branch name: `cost-perf/997-repo-intel-query`
+- PR number/url: #1007 - https://github.com/shaunnez/goose-hub/pull/1007
+- Parent branch: `cost-perf/996-investigation-seed`
+- Files changed:
+  - `CONTEXT.md`
+  - `core/symbol-index/lookup.ts`
+  - `core/tool-layer/bundles.ts`
+  - `core/tool-layer/mcp/audit.ts`
+  - `core/tool-layer/mcp/run-cache.ts`
+  - `core/tool-layer/mcp/schemas.ts`
+  - `core/tool-layer/mcp/server.ts`
+  - `core/tool-layer/mcp/tools/repo-intel.ts`
+  - `core/tool-layer/mcp/tools/repo-intel.test.ts`
+  - `docs/adr/0048-repo-intelligence-tool.md`
+  - `skills/implement/prompt.md`
+  - `skills/investigate/prompt.md`
+  - `skills/scout-code-path/prompt.md`
+  - `skills/scout-dependency/prompt.md`
+  - `skills/scout-pattern/prompt.md`
+  - `skills/scout-schema/prompt.md`
+  - `skills/scout-test-inventory/prompt.md`
+  - `skills/scout-user-journey/prompt.md`
+- Tests run:
+  - `pnpm vitest run core/tool-layer/mcp/tools/repo-intel.test.ts core/tool-layer/mcp/slice.test.ts core/tool-layer/mcp/tools/read.test.ts core/tool-layer/mcp/tools/write.test.ts skills/scout-code-path/slice.test.ts skills/scout-dependency/slice.test.ts skills/scout-pattern/slice.test.ts skills/scout-schema/slice.test.ts skills/scout-test-inventory/slice.test.ts skills/scout-user-journey/slice.test.ts skills/investigate/slice.test.ts skills/implement/slice.test.ts`
+  - `pnpm vitest run core/tool-layer/mcp/tools/repo-intel.test.ts core/tool-layer/mcp/slice.test.ts`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm exec biome check core/tool-layer/mcp/tools/repo-intel.ts core/tool-layer/mcp/tools/repo-intel.test.ts core/tool-layer/mcp/run-cache.ts core/tool-layer/mcp/audit.ts core/tool-layer/mcp/schemas.ts core/tool-layer/mcp/server.ts core/tool-layer/bundles.ts core/symbol-index/lookup.ts skills/scout-code-path/prompt.md skills/scout-dependency/prompt.md skills/scout-pattern/prompt.md skills/scout-schema/prompt.md skills/scout-test-inventory/prompt.md skills/scout-user-journey/prompt.md skills/investigate/prompt.md skills/implement/prompt.md CONTEXT.md docs/adr/0048-repo-intelligence-tool.md`
+  - `pnpm skill-contract:audit`
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+- Remaining risks:
+  - MCP registration uses the tool-local Zod object shape, while the exported TypeScript `RepoIntelQuery` documents the stricter discriminated union; invalid/missing intent-specific fields return typed `invalid-args` results.
+  - QA/review filtering strips decision-summary and implementation-reasoning fields from prior-investigation/artifact payloads, but does not yet route those payloads through the full prompt context assembly allowlist.
+- Next branch to create: `cost-perf/1000-scout-digest` from `cost-perf/997-repo-intel-query`
+
+## Issue #1000 - scoutDigest handoff
+
+- Branch name: `cost-perf/1000-scout-digest`
+- PR number/url: #1008 - https://github.com/shaunnez/goose-hub/pull/1008
+- Parent branch: `cost-perf/997-repo-intel-query`
+- Files changed:
+  - `CONTEXT.md`
+  - `apps/web/src/components/detail/lib/timeline/labels.ts`
+  - `core/event-stream/kinds.ts`
+  - `core/scout-reports/digest.ts`
+  - `skills/investigate/prompt.md`
+  - `skills/investigate/skill.config.ts`
+  - `skills/wave2-interface-designer/prompt.md`
+  - `skills/wave2-interface-designer/skill.config.ts`
+  - `skills/wave2-interface-designer/slice.test.ts`
+  - `skills/wave2-risk-analyst/prompt.md`
+  - `skills/wave2-risk-analyst/skill.config.ts`
+  - `slices/investigate/investigation-planner.test.ts`
+  - `slices/investigate/investigation-planner.ts`
+  - `slices/investigate/slice.test.ts`
+  - `slices/investigate/wave2-selection.ts`
+  - `slices/investigate/workflow.ts`
+- Tests run:
+  - `pnpm vitest run core/scout-reports/digest.test.ts slices/investigate/investigation-planner.test.ts slices/investigate/slice.test.ts skills/investigate/slice.test.ts skills/wave2-interface-designer/slice.test.ts skills/wave2-risk-analyst/slice.test.ts`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm exec biome check CONTEXT.md apps/web/src/components/detail/lib/timeline/labels.ts core/event-stream/kinds.ts core/scout-reports/digest.ts slices/investigate/workflow.ts slices/investigate/slice.test.ts slices/investigate/investigation-planner.ts slices/investigate/investigation-planner.test.ts slices/investigate/wave2-selection.ts skills/investigate/prompt.md skills/investigate/skill.config.ts skills/wave2-interface-designer/prompt.md skills/wave2-interface-designer/skill.config.ts skills/wave2-interface-designer/slice.test.ts skills/wave2-risk-analyst/prompt.md skills/wave2-risk-analyst/skill.config.ts`
+  - `pnpm skill-contract:audit`
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+- Remaining risks:
+  - Cross-validation contradictions are represented through digest report fields and the new digest-applied event; there is no separate raw contradictions JSON in synthesis context anymore.
+  - Raw scout reports remain persisted unchanged, but any agent wanting full text now needs to request it through #997 `repo_intel.query`.
+- Next branch to create: `cost-perf/993-handoff-precision` from `cost-perf/1000-scout-digest`
+
+## Issue #993 - Handoff precision and codeContext
+
+- Branch name: `cost-perf/993-handoff-precision`
+- PR number/url: #1009 - https://github.com/shaunnez/goose-hub/pull/1009
+- Parent branch: `cost-perf/1000-scout-digest`
+- Files changed:
+  - `CONTEXT.md`
+  - `core/agent-runtime/code-context.ts`
+  - `core/agent-runtime/code-context.test.ts`
+  - `core/agent-runtime/investigation-context.ts`
+  - `core/agent-runtime/pr-diff-context.ts`
+  - `core/agent-runtime/pr-diff-context.test.ts`
+  - `docs/cost-performance-improvements/handoff.md`
+  - `skills/implement/prompt.md`
+  - `skills/implement/skill.config.ts`
+  - `skills/investigate/prompt.md`
+  - `skills/investigate/schema.ts`
+  - `skills/investigate/slice.test.ts`
+  - `skills/qa/prompt.md`
+  - `skills/qa/skill.config.ts`
+  - `skills/qa/slice.test.ts`
+  - `skills/review/prompt.md`
+  - `skills/review/skill.config.ts`
+  - `skills/review/slice.test.ts`
+  - `slices/fix-issue/implement-phase.ts`
+  - `slices/fix-issue/slice.test.ts`
+  - `slices/fix-issue/workflow.ts`
+  - `slices/qa/slice.test.ts`
+  - `slices/qa/workflow.ts`
+  - `slices/review/review-spec.ts`
+  - `slices/review/slice.test.ts`
+- Tests run:
+  - `pnpm vitest run core/agent-runtime/code-context.test.ts core/agent-runtime/pr-diff-context.test.ts skills/investigate/slice.test.ts slices/fix-issue/slice.test.ts skills/implement/slice.test.ts skills/qa/slice.test.ts skills/review/slice.test.ts slices/qa/slice.test.ts slices/review/slice.test.ts`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm skill-contract:audit`
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+  - `pnpm exec biome check core/agent-runtime/code-context.ts core/agent-runtime/code-context.test.ts core/agent-runtime/pr-diff-context.ts core/agent-runtime/pr-diff-context.test.ts core/agent-runtime/investigation-context.ts skills/investigate/schema.ts skills/investigate/slice.test.ts skills/investigate/prompt.md skills/implement/skill.config.ts skills/implement/prompt.md slices/fix-issue/workflow.ts slices/fix-issue/implement-phase.ts slices/fix-issue/slice.test.ts skills/qa/skill.config.ts skills/qa/slice.test.ts skills/qa/prompt.md skills/review/skill.config.ts skills/review/slice.test.ts skills/review/prompt.md slices/qa/workflow.ts slices/qa/slice.test.ts slices/review/review-spec.ts slices/review/slice.test.ts`
+- Remaining risks:
+  - `codeContext` is best-effort and skips missing files or key files without line numbers; implement still receives the original investigation and related-surface handoff.
+  - `prDiffWithContext` is deliberately diff-derived only, so QA/Review holdout agents may still need read-only tools when a diff hunk needs broader file context.
+- Next branch to create: `cost-perf/999-ast-route-index` from `cost-perf/993-handoff-precision`
+
+## Issue #999 - AST queries and route/component index
+
+- Branch name: `cost-perf/999-ast-route-index`
+- PR number/url: #1010 - https://github.com/shaunnez/goose-hub/pull/1010
+- Parent branch: `cost-perf/993-handoff-precision`
+- Files changed:
+  - `CONTEXT.md`
+  - `core/route-index/README.md`
+  - `core/route-index/builder.ts`
+  - `core/route-index/db.ts`
+  - `core/route-index/freshness.ts`
+  - `core/route-index/index.ts`
+  - `core/route-index/lookup.ts`
+  - `core/route-index/package.json`
+  - `core/route-index/slice.test.ts`
+  - `core/route-index/types.ts`
+  - `core/symbol-index/ast-query.ts`
+  - `core/symbol-index/ast-query.test.ts`
+  - `core/symbol-index/index.ts`
+  - `core/tool-layer/mcp/schemas.ts`
+  - `core/tool-layer/mcp/server.ts`
+  - `core/tool-layer/mcp/tools/repo-intel.ts`
+  - `core/tool-layer/mcp/tools/repo-intel.test.ts`
+  - `docs/adr/0049-treesitter-and-route-index.md`
+  - `docs/cost-performance-improvements/handoff.md`
+  - `docs/inventory.md`
+  - `package.json`
+  - `pnpm-lock.yaml`
+  - `pnpm-workspace.yaml`
+  - `scripts/build-route-index.ts`
+  - `scripts/query-route-index.ts`
+- Tests run:
+  - `pnpm vitest run core/symbol-index/ast-query.test.ts core/route-index/slice.test.ts core/tool-layer/mcp/tools/repo-intel.test.ts core/tool-layer/mcp/slice.test.ts core/tool-layer/mcp/schemas.test.ts core/symbol-index/slice.test.ts`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm route-index --db /private/tmp/goose-hub-route-index-test.db` (rerun with escalation because sandbox blocked tsx IPC pipe creation)
+  - `pnpm route find / --db /private/tmp/goose-hub-route-index-test.db` (rerun with escalation because sandbox blocked tsx IPC pipe creation)
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+  - `pnpm skill-contract:audit`
+  - `pnpm exec biome check CONTEXT.md core/symbol-index/ast-query.ts core/symbol-index/ast-query.test.ts core/symbol-index/index.ts core/route-index/builder.ts core/route-index/db.ts core/route-index/freshness.ts core/route-index/index.ts core/route-index/lookup.ts core/route-index/slice.test.ts core/route-index/types.ts core/tool-layer/mcp/schemas.ts core/tool-layer/mcp/server.ts core/tool-layer/mcp/tools/repo-intel.ts core/tool-layer/mcp/tools/repo-intel.test.ts scripts/build-route-index.ts scripts/query-route-index.ts package.json pnpm-workspace.yaml docs/adr/0049-treesitter-and-route-index.md core/route-index/README.md`
+- Remaining risks:
+  - The issue requested a `CLAUDE.md` Stack update, but `CLAUDE.md`/FACTORY_RULES governance forbids Factory PRs from modifying governance files. The PR leaves that checkbox unresolved and needs a human decision or separate allowed governance process.
+  - ADR 0049 records the dependency decision as TypeScript-parser-backed structural AST queries for this slice instead of adding native tree-sitter packages immediately; revisit the ADR if native tree-sitter grammar support becomes necessary.
+- Next branch to create: none; this is the last issue in the requested Wave 2 cost-performance stack.

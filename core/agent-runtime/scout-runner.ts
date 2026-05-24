@@ -64,6 +64,8 @@ export const SCOUT_CONTEXT_ALLOWLIST: readonly string[] = [
   'scoutFocus',
   'scoutReports',
   'symbolIndexHints',
+  'investigationSeed',
+  'scoutDigest',
 ];
 
 export interface RunOneScoutContext {

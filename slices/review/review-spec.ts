@@ -1,5 +1,6 @@
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import type { AgentRuntime, AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
+import { buildPrDiffWithContext } from '@goose-hub/core/agent-runtime/pr-diff-context.js';
 // slices/review/review-spec.ts
 import type { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import type { ReviewerSlot } from '@goose-hub/core/db/repositories/project-review-settings.js';
@@ -138,10 +139,17 @@ export function buildReviewSpec(params: {
         number: Number(params.workItem.externalId),
       },
       prDiff: params.prDiff,
+      prDiffWithContext: buildPrDiffWithContext(params.prDiff),
       qaVerdict: params.qaResult,
       acceptanceContract: params.acceptanceContract ?? undefined,
     },
-    contextAllowlist: ['workItem', 'prDiff', 'qaVerdict', 'acceptanceContract'],
+    contextAllowlist: [
+      'workItem',
+      'prDiff',
+      'prDiffWithContext',
+      'qaVerdict',
+      'acceptanceContract',
+    ],
     freshContext: true,
     toolBundles: ['read', 'validate'],
     toolExtras: [],

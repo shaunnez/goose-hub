@@ -1,13 +1,17 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockEventStore, mockRecordCost, mockSpawn } = vi.hoisted(() => ({
+const { mockEventStore, mockRecordCost, mockRecordToolStatsForRun, mockSpawn } = vi.hoisted(() => ({
   mockEventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
   mockRecordCost: vi.fn(),
+  mockRecordToolStatsForRun: vi.fn(),
   mockSpawn: vi.fn(),
 }));
 
-vi.mock('../cost/repository.js', () => ({ recordCost: mockRecordCost }));
+vi.mock('../cost/repository.js', () => ({
+  recordCost: mockRecordCost,
+  recordToolStatsForRun: mockRecordToolStatsForRun,
+}));
 vi.mock('../event-stream/store.js', () => ({ eventStore: mockEventStore }));
 vi.mock('../cost/skill-stage.js', () => ({ stageForSkill: vi.fn().mockReturnValue('develop') }));
 vi.mock('../db/repositories/project-settings.js', () => ({
@@ -936,6 +940,7 @@ describe('CodexCliRuntime timeout handling', () => {
         outputTokens: 50,
       }),
     );
+    expect(mockRecordToolStatsForRun).toHaveBeenCalledWith('run-codex');
     const calls = mockEventStore.appendEvent.mock.calls;
     const recordCostOrder = mockRecordCost.mock.invocationCallOrder[0];
     const budgetCall = calls.find(([e]) => e.kind === 'agent.budget-exceeded');

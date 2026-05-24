@@ -371,6 +371,13 @@ export interface CostRowDto {
   costLabel: CostLabel;
   personaId: string | null;
   createdAt: string;
+  readCount?: number;
+  grepCount?: number;
+  writeCount?: number;
+  editCount?: number;
+  bytesRead?: number;
+  uniquePathsRead?: number;
+  redundantReads?: number;
 }
 
 export interface CostWindowTotals {
@@ -661,6 +668,8 @@ export interface RuntimeProfilerDto {
       p95OutputTokens: number;
       medianCostUsd: number;
       p95CostUsd: number;
+      p95ReadCount: number;
+      p95BytesRead: number;
       maxCostOutlier: { runId: string; costUsd: number } | null;
       timeoutRate: number;
       budgetExceededRate: number;

@@ -134,6 +134,24 @@ export function orchestratorCommitAll(worktreePath: string, commitMsg: string): 
 }
 
 /**
+ * Pushes the current worktree HEAD to an existing orchestrator-managed branch.
+ *
+ * Used by repair workflows that reuse an already-open PR instead of opening a
+ * new one. `--force-with-lease` preserves retry semantics without clobbering a
+ * branch that moved independently.
+ */
+export function orchestratorPushBranch(worktreePath: string, branchName: string): void {
+  if (branchName.trim().length === 0) {
+    throw new Error('branchName is required to push orchestrator changes');
+  }
+  execFileSync('git', ['push', '--force-with-lease', 'origin', `HEAD:refs/heads/${branchName}`], {
+    cwd: worktreePath,
+    stdio: 'pipe',
+    env: GIT_ENV,
+  });
+}
+
+/**
  * Reverts a WP builder's file changes in the scratch worktree.
  *
  * Called when a WP fails so its partial work does not pollute the next

@@ -66,6 +66,211 @@ export const FileExistsInput = z.object({ path: WorkspacePath }).strict();
 
 export const FileInfoInput = z.object({ path: WorkspacePath }).strict();
 
+const SymbolName = z.string().min(1).max(200);
+const ModuleName = z.string().min(1).max(500);
+const PathPattern = z.string().min(1).max(500);
+const ArtifactKey = z.string().min(1).max(500);
+const SymbolKind = z.enum(['function', 'class', 'type', 'const', 'enum', 'variable']);
+const LiteralArg = z
+  .object({
+    argIndex: z.number().int().min(0).max(20),
+    literal: z.string().min(0).max(500),
+  })
+  .strict();
+const WithProp = z
+  .object({
+    name: z.string().min(1).max(200),
+    value: z.string().min(0).max(500).optional(),
+  })
+  .strict();
+
+const UrlString = z.string().min(1).max(2000);
+const Phrase = z.string().min(1).max(200);
+
+/**
+ * Wire schema for `repo_intel.query`. All fields except `intent` are optional
+ * because the MCP SDK input schema is registered via `.shape` (flat object).
+ * Per-intent required-field validation is enforced by `RepoIntelQueryRefined`
+ * inside the dispatcher, which returns structured `invalid-args` errors so
+ * agents can self-correct without guessing.
+ */
+export const RepoIntelQueryInput = z
+  .object({
+    intent: z.enum([
+      'find-symbol',
+      'find-callers',
+      'find-calls-of',
+      'find-jsx-usages',
+      'find-importers',
+      'find-route',
+      'find-component',
+      'route-for-component',
+      'find-tests-for',
+      'related-files',
+      'recent-changes',
+      'prior-investigation',
+      'fetch-artifact',
+      'route-for-url',
+      'fuzzy-component',
+      'recent-touched',
+    ]),
+    name: SymbolName.optional(),
+    kind: SymbolKind.optional(),
+    symbol: SymbolName.optional(),
+    component: SymbolName.optional(),
+    module: ModuleName.optional(),
+    pathPattern: PathPattern.optional(),
+    literalArg: LiteralArg.optional(),
+    withProp: WithProp.optional(),
+    target: WorkspacePath.optional(),
+    path: WorkspacePath.optional(),
+    sinceDays: z.number().int().min(1).max(365).optional(),
+    workItemId: z.string().min(1).max(200).optional(),
+    targetFile: WorkspacePath.optional(),
+    artifactKey: ArtifactKey.optional(),
+    url: UrlString.optional(),
+    phrase: Phrase.optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  })
+  .strict();
+
+/**
+ * Per-intent discriminated union used by the dispatcher to surface
+ * field-specific `invalid-args` errors. The wire schema (above) accepts any
+ * combination of optional fields; this schema rejects calls missing the
+ * required arg for their intent. Agents see the missing field name and an
+ * example in `fallbackHint`.
+ */
+export const RepoIntelQueryRefined = z.discriminatedUnion('intent', [
+  z
+    .object({
+      intent: z.literal('find-symbol'),
+      name: SymbolName,
+      kind: SymbolKind.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('find-callers'),
+      symbol: SymbolName,
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('find-calls-of'),
+      symbol: SymbolName,
+      literalArg: LiteralArg.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('find-jsx-usages'),
+      component: SymbolName,
+      withProp: WithProp.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('find-importers'),
+      module: ModuleName,
+      symbol: SymbolName,
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('find-route'),
+      pathPattern: PathPattern,
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('find-component'),
+      component: SymbolName,
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('route-for-component'),
+      component: SymbolName,
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('find-tests-for'),
+      target: WorkspacePath,
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('related-files'),
+      target: WorkspacePath,
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('recent-changes'),
+      path: WorkspacePath.optional(),
+      sinceDays: z.number().int().min(1).max(365).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('prior-investigation'),
+      workItemId: z.string().min(1).max(200).optional(),
+      targetFile: WorkspacePath.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('fetch-artifact'),
+      artifactKey: ArtifactKey,
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('route-for-url'),
+      url: UrlString,
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('fuzzy-component'),
+      phrase: Phrase,
+      limit: z.number().int().min(1).max(50).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('recent-touched'),
+      sinceDays: z.number().int().min(1).max(365).optional(),
+      limit: z.number().int().min(1).max(50).optional(),
+    })
+    .strict(),
+]);
+
+/**
+ * Example payloads for each intent, used to build agent-facing
+ * `invalid-args` hints when a required field is missing.
+ */
+export const REPO_INTEL_EXAMPLES: Record<string, string> = {
+  'find-symbol': "{intent:'find-symbol', name:'AuthService'}",
+  'find-callers': "{intent:'find-callers', symbol:'AuthService'}",
+  'find-calls-of': "{intent:'find-calls-of', symbol:'authenticate'}",
+  'find-jsx-usages': "{intent:'find-jsx-usages', component:'Button'}",
+  'find-importers': "{intent:'find-importers', module:'@/lib/api', symbol:'api'}",
+  'find-route': "{intent:'find-route', pathPattern:'/projects/:slug'}",
+  'find-component': "{intent:'find-component', component:'Button'}",
+  'route-for-component': "{intent:'route-for-component', component:'ProjectPage'}",
+  'find-tests-for': "{intent:'find-tests-for', target:'src/auth.ts'}",
+  'related-files': "{intent:'related-files', target:'src/auth.ts'}",
+  'recent-changes': "{intent:'recent-changes', sinceDays:14}",
+  'prior-investigation': "{intent:'prior-investigation', workItemId:'github:owner/repo#42'}",
+  'fetch-artifact': "{intent:'fetch-artifact', artifactKey:'scout-report:abc'}",
+  'route-for-url': "{intent:'route-for-url', url:'http://localhost:5173/projects/x'}",
+  'fuzzy-component': "{intent:'fuzzy-component', phrase:'chat widget'}",
+  'recent-touched': "{intent:'recent-touched', sinceDays:14}",
+};
+
 // ─── write / edit ────────────────────────────────────────────────────────────
 
 export const WriteFileInput = z.object({ path: WorkspacePath, content: z.string() }).strict();
@@ -245,6 +450,7 @@ export const FACTORY_TOOL_NAMES = [
   'search_text',
   'file_exists',
   'file_info',
+  'repo_intel.query',
   // write / edit
   'write_file',
   'edit_file',

@@ -50,15 +50,22 @@ import {
   AgentBudgetExceededEvent,
   AgentDisclosureEvent,
   AgentModelSelectedEvent,
+  BugEnhanceLazyEvent,
+  CompactOperationalEvent,
   ContractDriftEvent,
   DiscoveryBudgetExceededEvent,
   FallbackEvent,
   InvestigationContextInjectedEvent,
+  InvestigationDigestAppliedEvent,
+  InvestigationSeedBuiltEvent,
   ManualActionEvent,
   MilestoneActivatedEvent,
+  RedundantReadEvent,
   RelatedSurfaceManifestEvent,
   StateTransitionedEvent,
   SystemNoteEvent,
+  ToolIntensityAnomalyEvent,
+  ToolViolationEvent,
   WrongSurfaceGuardEvent,
 } from './timeline/MiscEvents';
 import {
@@ -69,6 +76,7 @@ import {
   ParallelWpStartedEvent,
   ParallelWpTimeoutEvent,
   SpecCompletedEvent,
+  SpecPrdContextAttachedEvent,
 } from './timeline/ParallelImplementEvents';
 import { PhaseGroupWrapper } from './timeline/PhaseGroupWrapper';
 import { PrMergedEvent, PrOpenedEvent } from './timeline/PrEvents';
@@ -216,8 +224,40 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentModelSelectedEvent key={event.id} event={event} />;
     case 'agent.budget-exceeded':
       return <AgentBudgetExceededEvent key={event.id} event={event} />;
+    case 'agent.investigation-seed-built':
+      return <InvestigationSeedBuiltEvent key={event.id} event={event} />;
+    case 'agent.bug-enhance-lazy':
+      return <BugEnhanceLazyEvent key={event.id} event={event} />;
+    case 'agent.redundant-read':
+      return <RedundantReadEvent key={event.id} event={event} />;
+    case 'agent.fallback-triggered':
+    case 'agent.repo-override':
+    case 'merge.conflict':
+    case 'merge.conflict-resolved':
+    case 'merge.conflict-unresolvable':
+    case 'qa.tier-disagreement':
+    case 'project.budget-exceeded':
+    case 'coach.completed':
+    case 'coach.dispatch-triggered':
+    case 'coach.skipped-forbidden-target':
+    case 'coach.dispatch-failed':
+    case 'workflow.smoke-failed':
+    case 'agent.cancelled':
+    case 'spec.wp-issues-created':
+    case 'merge-decision.completed':
+    case 'audit.completed':
+    case 'audit.failed':
+    case 'audit.autonomy-gate-fired':
+    case 'agent.investigation-seed-empty':
+    case 'state.transition-deferred':
+    case 'agent.bug-enhance-hallucinated':
+    case 'agent.bug-enhance-workspace-empty':
+    case 'agent.run-aborted':
+      return <CompactOperationalEvent key={event.id} event={event} />;
     case 'agent.investigation-context-injected':
       return <InvestigationContextInjectedEvent key={event.id} event={event} />;
+    case 'investigation.digest-applied':
+      return <InvestigationDigestAppliedEvent key={event.id} event={event} />;
     case 'agent.related-surface-manifest-created':
       return <RelatedSurfaceManifestEvent key={event.id} event={event} />;
     case 'agent.discovery-budget-exceeded':
@@ -266,6 +306,10 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentToolCallEvent key={event.id} event={event} />;
     case 'agent.tool-result':
       return <AgentToolResultEvent key={event.id} event={event} />;
+    case 'agent.tool-intensity-anomaly':
+      return <ToolIntensityAnomalyEvent key={event.id} event={event} />;
+    case 'tool.violation':
+      return <ToolViolationEvent key={event.id} event={event} />;
     case 'agent.verify-command':
       return <AgentVerifyCommandEvent key={event.id} event={event} />;
     case 'tool.stdout-truncated':
@@ -364,6 +408,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <SwarmWaveEvent key={event.id} event={event} />;
     case 'spec.completed':
       return <SpecCompletedEvent key={event.id} event={event} />;
+    case 'spec.prd-context-attached':
+      return <SpecPrdContextAttachedEvent key={event.id} event={event} />;
     case 'parallel-implement.iteration-started':
       return <ParallelIterationStartedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-started':

@@ -29,6 +29,7 @@ import {
   ReadFileInput,
   ReadManyFilesInput,
   RecordDecisionInput,
+  RepoIntelQueryInput,
   RunFullSuiteIfNeededInput,
   RunIsolatedTestInput,
   RunLintInput,
@@ -79,6 +80,8 @@ import {
   readManyFilesTool,
   searchTextTool,
 } from './tools/read.js';
+import { repoIntelQueryTool } from './tools/repo-intel.js';
+import { buildWorkspaceResourceTemplate, readWorkspaceResource } from './tools/resources.js';
 import {
   runLintTool,
   runPackageScriptTool,
@@ -97,10 +100,6 @@ import {
 
 const SERVER_NAME = 'factory-tools';
 const SERVER_VERSION = '0.1.0';
-
-interface ResourceHandlerInstaller {
-  setResourceRequestHandlers(): void;
-}
 
 interface JsonContent {
   type: 'text';
@@ -133,9 +132,14 @@ function errorResult(err: unknown): { content: JsonContent[]; isError: true } {
  */
 export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
-  // Register MCP resource handlers even though factory-tools intentionally exposes no resources.
-  // Codex probes resources/list during startup; returning an empty list keeps workspace files hidden.
-  (server as unknown as ResourceHandlerInstaller).setResourceRequestHandlers();
+  // Register resources/list + resources/read so codex-cli (which probes resources/* on startup)
+  // gets real workspace file enumeration instead of -32603 errors.
+  server.resource(
+    'workspace-files',
+    buildWorkspaceResourceTemplate(ctx),
+    { description: 'Files in the agent workspace, filtered by path policy.' },
+    async (uri) => readWorkspaceResource(ctx, uri),
+  );
 
   server.registerTool(
     'get_project_context',
@@ -299,6 +303,23 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
     async (input) => {
       try {
         const result = await fileInfoTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'repo_intel.query',
+    {
+      description:
+        'Query repository intelligence helpers for symbols, AST calls/imports/JSX, routes, related files, tests, recent changes, prior scout reports, or artifacts before falling back to grep.',
+      inputSchema: RepoIntelQueryInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await repoIntelQueryTool(ctx, input);
         return { content: jsonContent(result), structuredContent: { ...result } };
       } catch (err) {
         return errorResult(err);

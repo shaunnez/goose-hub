@@ -23,6 +23,8 @@
     "symbol-index": "tsx scripts/build-symbol-index.ts",
     "symbol-index:report": "tsx scripts/report-symbol-index-lookups.ts",
     "symbol": "tsx scripts/query-symbol-index.ts",
+    "route-index": "tsx scripts/build-route-index.ts",
+    "route": "tsx scripts/query-route-index.ts",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
     "dogfood": "tsx slices/dogfood/cli.ts",

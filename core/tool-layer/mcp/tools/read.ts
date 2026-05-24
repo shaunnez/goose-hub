@@ -1,6 +1,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { z } from 'zod';
+import { eventStore } from '../../../event-stream/store.js';
 import type { RepoRelativePath } from '../../path-contract.js';
 import { canonicalizeFactoryToolPath } from '../../path-contract.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
@@ -13,6 +14,13 @@ import {
 } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
+import {
+  getCachedRunResult,
+  normalizeRunCacheKey,
+  recordDuplicateToolCall,
+  recordRead,
+  setCachedRunResult,
+} from '../run-cache.js';
 import type {
   FileExistsInput,
   FileInfoInput,
@@ -51,11 +59,16 @@ export interface ReadFileResult {
   startLine: number;
   endLine: number;
   totalLines: number;
+  cached?: true;
+  duplicateNudge?: string;
+  redundantReadNudge?: string;
 }
 
 export interface ReadManyFilesResult {
   files: Array<{ path: RepoRelativePath; content: string; truncated: boolean }>;
   errors: Array<{ path: string; reason: string }>;
+  cached?: true;
+  duplicateNudge?: string;
 }
 
 export interface ListDirEntry {
@@ -67,11 +80,15 @@ export interface ListDirResult {
   path: RepoRelativePath;
   entries: ListDirEntry[];
   truncated: boolean;
+  cached?: true;
+  duplicateNudge?: string;
 }
 
 export interface ListFilesResult {
   files: RepoRelativePath[];
   truncated: boolean;
+  cached?: true;
+  duplicateNudge?: string;
 }
 
 export interface SearchMatch {
@@ -83,6 +100,8 @@ export interface SearchMatch {
 export interface SearchTextResult {
   matches: SearchMatch[];
   truncated: boolean;
+  cached?: true;
+  duplicateNudge?: string;
 }
 
 export interface FileInfoResult {
@@ -119,6 +138,20 @@ function handleBlocked(
     message: err.message,
   });
   throw err;
+}
+
+function duplicateAuditFields(duplicate: ReturnType<typeof recordDuplicateToolCall> | null): {
+  duplicateCount?: number;
+} {
+  return duplicate != null && duplicate.duplicateCount >= 2
+    ? { duplicateCount: duplicate.duplicateCount }
+    : {};
+}
+
+function duplicateNudgeFields(duplicate: ReturnType<typeof recordDuplicateToolCall> | null): {
+  duplicateNudge?: string;
+} {
+  return duplicate?.duplicateNudge != null ? { duplicateNudge: duplicate.duplicateNudge } : {};
 }
 
 function rawPathToCanonical(rawPath: string, workspaceRoot: string): RepoRelativePath {
@@ -273,6 +306,55 @@ export async function readFileTool(
     throw err;
   }
 
+  const cacheKey = normalizeRunCacheKey({
+    toolName: 'read_file',
+    args: input,
+    workspaceRoot: ctx.workspaceRoot,
+  });
+  const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
+  const redundant = recordRead(ctx.runId, resolved.canonical.path, {
+    projectId: ctx.projectId,
+    workItemId: ctx.workItemId,
+    personaId: ctx.personaId,
+  });
+  if (redundant.nudge != null) {
+    eventStore.appendEvent({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId,
+      runId: ctx.runId,
+      personaId: ctx.personaId ?? null,
+      kind: 'agent.redundant-read',
+      payload: {
+        path: resolved.canonical.path,
+        count: redundant.count,
+        guidance:
+          'Subsequent reads of the same file re-inject identical bytes into the kv-cache. Reuse what is already loaded or widen the line range in a single call.',
+      },
+    });
+  }
+  const redundantReadFields =
+    redundant.nudge != null ? { redundantReadNudge: redundant.nudge } : {};
+  const cached =
+    cacheKey == null ? null : getCachedRunResult<ReadFileResult>(ctx.runId, cacheKey.key);
+  if (cached != null) {
+    const result = {
+      ...cached,
+      cached: true as const,
+      ...duplicateNudgeFields(duplicate),
+      ...redundantReadFields,
+    };
+    emitToolCall(ctx, {
+      tool: 'read_file',
+      input: { path: input.path },
+      status: 'ok',
+      truncated: result.truncated,
+      bytesRead: Buffer.byteLength(result.content, 'utf8'),
+      cached: true,
+      ...duplicateAuditFields(duplicate),
+    });
+    return result;
+  }
+
   const buffer = await readFile(resolved.absolute);
   const totalBytes = buffer.byteLength;
   const truncatedByBytes = totalBytes > READ_FILE_CAP_BYTES;
@@ -295,6 +377,7 @@ export async function readFileTool(
     startLine: startIndex + 1,
     endLine: startIndex + sliced.length,
     totalLines: allLines.length,
+    ...redundantReadFields,
   };
 
   emitToolCall(ctx, {
@@ -302,7 +385,10 @@ export async function readFileTool(
     input: { path: input.path },
     status: 'ok',
     truncated,
+    bytesRead: Buffer.byteLength(result.content, 'utf8'),
+    ...duplicateAuditFields(duplicate),
   });
+  if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, result);
   return result;
 }
 
@@ -315,6 +401,25 @@ export async function readManyFilesTool(
   ctx: FactoryContext,
   input: z.infer<typeof ReadManyFilesInput>,
 ): Promise<ReadManyFilesResult> {
+  const cacheKey = normalizeRunCacheKey({
+    toolName: 'read_many_files',
+    args: input,
+    workspaceRoot: ctx.workspaceRoot,
+  });
+  const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
+  const cached =
+    cacheKey == null ? null : getCachedRunResult<ReadManyFilesResult>(ctx.runId, cacheKey.key);
+  if (cached != null) {
+    emitToolCall(ctx, {
+      tool: 'read_many_files',
+      input: { count: input.paths.length },
+      status: 'ok',
+      cached: true,
+      ...duplicateAuditFields(duplicate),
+    });
+    return { ...cached, cached: true as const, ...duplicateNudgeFields(duplicate) };
+  }
+
   const files: ReadManyFilesResult['files'] = [];
   const errors: ReadManyFilesResult['errors'] = [];
 
@@ -332,8 +437,11 @@ export async function readManyFilesTool(
     tool: 'read_many_files',
     input: { count: input.paths.length },
     status: 'ok',
+    ...duplicateAuditFields(duplicate),
   });
-  return { files, errors };
+  const result = { files, errors };
+  if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, result);
+  return result;
 }
 
 /**
@@ -354,6 +462,26 @@ export async function listDirTool(
   }
 
   const depth = input.depth ?? 1;
+  const cacheKey = normalizeRunCacheKey({
+    toolName: 'list_dir',
+    args: { ...input, depth },
+    workspaceRoot: ctx.workspaceRoot,
+  });
+  const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
+  const cached =
+    cacheKey == null ? null : getCachedRunResult<ListDirResult>(ctx.runId, cacheKey.key);
+  if (cached != null) {
+    emitToolCall(ctx, {
+      tool: 'list_dir',
+      input: { path: input.path, depth },
+      status: 'ok',
+      truncated: cached.truncated,
+      cached: true,
+      ...duplicateAuditFields(duplicate),
+    });
+    return { ...cached, cached: true as const, ...duplicateNudgeFields(duplicate) };
+  }
+
   const entries: ListDirEntry[] = [];
   let truncated = false;
   const dirWorkspacePath = resolved.canonical.path;
@@ -396,8 +524,11 @@ export async function listDirTool(
     input: { path: input.path, depth },
     status: 'ok',
     truncated,
+    ...duplicateAuditFields(duplicate),
   });
-  return { path: resolved.canonical, entries, truncated };
+  const result = { path: resolved.canonical, entries, truncated };
+  if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, result);
+  return result;
 }
 
 /**
@@ -423,6 +554,26 @@ export async function listFilesTool(
   args.push(searchPath);
 
   const limit = Math.min(input.limit ?? LIST_FILES_CAP, LIST_FILES_CAP);
+  const cacheKey = normalizeRunCacheKey({
+    toolName: 'list_files',
+    args: { ...input, limit },
+    workspaceRoot: ctx.workspaceRoot,
+  });
+  const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
+  const cached =
+    cacheKey == null ? null : getCachedRunResult<ListFilesResult>(ctx.runId, cacheKey.key);
+  if (cached != null) {
+    emitToolCall(ctx, {
+      tool: 'list_files',
+      input: { path: input.path ?? null, glob: input.glob ?? null },
+      status: 'ok',
+      truncated: cached.truncated,
+      noMatches: cached.files.length === 0,
+      cached: true,
+      ...duplicateAuditFields(duplicate),
+    });
+    return { ...cached, cached: true as const, ...duplicateNudgeFields(duplicate) };
+  }
 
   const result = await runCommand({
     command: 'rg',
@@ -462,8 +613,11 @@ export async function listFilesTool(
     durationMs: result.durationMs,
     truncated,
     noMatches: files.length === 0 && (rgSpawnFailed(result) || rgNoMatches(result)),
+    ...duplicateAuditFields(duplicate),
   });
-  return { files, truncated };
+  const output = { files, truncated };
+  if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, output);
+  return output;
 }
 
 /**
@@ -501,6 +655,28 @@ export async function searchTextTool(
   }
   args.push('--', input.query, searchPath);
 
+  const limit = Math.min(input.maxMatches ?? SEARCH_MAX_MATCHES, SEARCH_MAX_MATCHES);
+  const cacheKey = normalizeRunCacheKey({
+    toolName: 'search_text',
+    args: { ...input, maxMatches: limit },
+    workspaceRoot: ctx.workspaceRoot,
+  });
+  const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
+  const cached =
+    cacheKey == null ? null : getCachedRunResult<SearchTextResult>(ctx.runId, cacheKey.key);
+  if (cached != null) {
+    emitToolCall(ctx, {
+      tool: 'search_text',
+      input: { query: input.query, path: input.path ?? null, glob: input.glob ?? null },
+      status: 'ok',
+      truncated: cached.truncated,
+      noMatches: cached.matches.length === 0,
+      cached: true,
+      ...duplicateAuditFields(duplicate),
+    });
+    return { ...cached, cached: true as const, ...duplicateNudgeFields(duplicate) };
+  }
+
   const result = await runCommand({
     command: 'rg',
     args,
@@ -510,7 +686,6 @@ export async function searchTextTool(
     env: minimalEnv(),
   });
 
-  const limit = Math.min(input.maxMatches ?? SEARCH_MAX_MATCHES, SEARCH_MAX_MATCHES);
   let matches: SearchMatch[];
   let truncated: boolean;
 
@@ -553,8 +728,11 @@ export async function searchTextTool(
     durationMs: result.durationMs,
     truncated,
     noMatches: matches.length === 0 && (rgSpawnFailed(result) || rgNoMatches(result)),
+    ...duplicateAuditFields(duplicate),
   });
-  return { matches, truncated };
+  const output = { matches, truncated };
+  if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, output);
+  return output;
 }
 
 /**

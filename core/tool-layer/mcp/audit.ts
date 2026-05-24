@@ -14,9 +14,20 @@ export interface ToolCallAudit {
   input: Record<string, unknown>;
   durationMs?: number;
   truncated?: boolean;
+  bytesRead?: number;
+  cached?: boolean;
+  duplicateCount?: number;
+  repo_intel_intent?: string;
   status?: 'ok' | 'failed' | 'timed_out';
   exitCode?: number | null;
   noMatches?: boolean;
+  /**
+   * Sorted list of keys present in the tool input. Used to debug shape
+   * mismatches (e.g. agent called `repo_intel.query` without required args)
+   * from the event stream without logging values, which keeps PII out and
+   * keeps event payloads small.
+   */
+  inputKeys?: string[];
 }
 
 export interface BlockedToolCallAudit extends ToolCallAudit {

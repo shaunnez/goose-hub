@@ -6,6 +6,7 @@ import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
+import { buildPrDiffWithContext } from '@goose-hub/core/agent-runtime/pr-diff-context.js';
 import { killProcessGroupOrChild } from '@goose-hub/core/agent-runtime/process-kill.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
@@ -544,6 +545,7 @@ export async function runQaWorkflow(
     const deterministicTierResults = deterministic
       ? toAgentTierResults(deterministic.tierResults)
       : undefined;
+    const prDiffWithContext = buildPrDiffWithContext(prDiff);
 
     const qaResult = await runtime.run({
       runId,
@@ -558,6 +560,7 @@ export async function runQaWorkflow(
           number: Number(workItem.externalId),
         },
         prDiff,
+        prDiffWithContext,
         projectCommands: {
           testCommand,
           lintCommand,
@@ -575,6 +578,7 @@ export async function runQaWorkflow(
       contextAllowlist: [
         'workItem',
         'prDiff',
+        'prDiffWithContext',
         'projectCommands',
         'verificationSummary',
         'e2eDecision',

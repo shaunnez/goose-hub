@@ -1,13 +1,21 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { z } from 'zod';
+import { eventStore } from '../../../event-stream/store.js';
 import { getProjectBySlug } from '../../../projects/loader.js';
 import type { ProjectConfig, StackConfig } from '../../../types.js';
 import type { RepoRelativePath } from '../../path-contract.js';
+import { type ParsedTestFailures, parseTestFailures } from '../../test-failure-parser.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { type CommandResult, minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
+import {
+  clearTestFailureCounter,
+  consecutiveTestFailures,
+  recordTestFailure,
+  testRetryCap,
+} from '../run-cache.js';
 import type {
   RunLintInput,
   RunPackageScriptInput,
@@ -53,6 +61,12 @@ export interface VerifyResult {
   command: ReadonlyArray<string>;
   rawPaths?: string[];
   paths?: RepoRelativePath[];
+  /**
+   * Parsed test-failure summary for `run_tests` — populated when the
+   * underlying command failed and the output was recognisable as Vitest
+   * (JSON or text). Caps failure list at 5 to keep prompt cost down.
+   */
+  failureSummary?: ParsedTestFailures;
 }
 
 function tokeniseCommand(command: string): string[] {
@@ -139,6 +153,43 @@ export async function runTestsTool(
     pathMetadata = { rawPaths: [input.path], paths: [canonical] };
   }
 
+  const retryPathKey = pathMetadata?.paths[0]?.path ?? null;
+  const cap = testRetryCap();
+  const priorFailures = consecutiveTestFailures(ctx.runId, retryPathKey);
+  if (priorFailures >= cap) {
+    const blocked = buildRetryCapBlockedResult(argv, cap, priorFailures, retryPathKey);
+    emitToolCall(ctx, {
+      tool: 'run_tests',
+      input: {
+        path: input.path ?? null,
+        command: argv.join(' '),
+        rawPaths: pathMetadata?.rawPaths ?? [],
+        paths: pathMetadata?.paths.map((path) => path.path) ?? [],
+      },
+      status: 'failed',
+      exitCode: blocked.exitCode,
+      durationMs: blocked.durationMs,
+      truncated: false,
+    });
+    eventStore.appendEvent({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId,
+      runId: ctx.runId,
+      personaId: ctx.personaId ?? null,
+      kind: 'tool.violation',
+      payload: {
+        tool: 'run_tests',
+        reason: 'excessive-test-retries',
+        path: retryPathKey,
+        consecutiveFailures: priorFailures,
+        cap,
+        guidance:
+          'Edit the failing source or test before retrying. Read the assertion, classify the failure, then make a targeted change.',
+      },
+    });
+    return blocked;
+  }
+
   const result = await runCommand({
     command: argv[0],
     args: argv.slice(1),
@@ -146,6 +197,17 @@ export async function runTestsTool(
     timeoutMs: TEST_TIMEOUT_MS,
     env: minimalEnv(),
   });
+
+  if (result.status === 'ok') {
+    clearTestFailureCounter(ctx.runId, retryPathKey);
+  } else if (result.status === 'failed') {
+    recordTestFailure(ctx.runId, retryPathKey);
+  }
+
+  const failureSummary =
+    result.status === 'failed'
+      ? parseTestFailures({ stdout: result.stdout, stderr: result.stderr })
+      : undefined;
 
   emitToolCall(ctx, {
     tool: 'run_tests',
@@ -160,7 +222,26 @@ export async function runTestsTool(
     durationMs: result.durationMs,
     truncated: result.truncated,
   });
-  return toVerifyResult(argv, result, pathMetadata);
+  const verifyResult = toVerifyResult(argv, result, pathMetadata);
+  return failureSummary != null ? { ...verifyResult, failureSummary } : verifyResult;
+}
+
+function buildRetryCapBlockedResult(
+  argv: ReadonlyArray<string>,
+  cap: number,
+  observed: number,
+  retryPathKey: string | null,
+): VerifyResult {
+  const pathLabel = retryPathKey ?? '<all>';
+  return {
+    status: 'failed',
+    exitCode: null,
+    stdout: '',
+    stderr: `[harness] run_tests retry cap reached (${observed}/${cap} consecutive failures on ${pathLabel}). Edit the failing source or test before invoking run_tests again — read the prior failure output, classify the cause, then make a targeted change.`,
+    durationMs: 0,
+    truncated: false,
+    command: argv,
+  };
 }
 
 export async function runLintTool(

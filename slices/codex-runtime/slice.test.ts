@@ -46,7 +46,10 @@ vi.mock('@goose-hub/core/tool-layer/sandbox.js', () => ({
   writeCodexWorkspaceSandbox: vi.fn(),
   writeWorkspaceSandbox: vi.fn(),
 }));
-vi.mock('@goose-hub/core/cost/repository.js', () => ({ recordCost: vi.fn() }));
+vi.mock('@goose-hub/core/cost/repository.js', () => ({
+  recordCost: vi.fn(),
+  recordToolStatsForRun: vi.fn(),
+}));
 
 interface MockProcess {
   stdout: EventEmitter;

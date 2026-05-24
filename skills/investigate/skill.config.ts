@@ -1,4 +1,5 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
+import { ScoutReportDigestBundleSchema } from '@goose-hub/core/scout-reports/digest.js';
 import { z } from 'zod';
 import { InvestigateSchema } from './schema.js';
 
@@ -7,7 +8,7 @@ import { InvestigateSchema } from './schema.js';
  *
  *   <task>
  *     <workItem>{"title":"...","body":"...","number":123}</workItem>
- *     <scoutReports>...</scoutReports>
+ *     <scoutDigest>...</scoutDigest>
  *   </task>
  *
  * - workItem.title   — the issue title (used as starting investigation signal)
@@ -20,14 +21,14 @@ export const InvestigateContextSchema = z.object({
     body: z.string(),
     number: z.number(),
   }),
-  /** JSON-serialised wave reports + contradictions passed by the orchestrator post-M19.16. */
-  scoutReports: z.string().optional(),
+  /** Typed wave report digest passed by the orchestrator post-M20.07. */
+  scoutDigest: ScoutReportDigestBundleSchema.optional(),
 });
 
 const config: SkillConfig = {
   contextSchema: InvestigateContextSchema,
   outputSchema: InvestigateSchema,
-  contextAllowlist: ['workItem', 'scoutReports'],
+  contextAllowlist: ['workItem', 'scoutDigest'],
   /**
    * Tool bundle 'read' maps to ['read', 'search', 'work-item-read'].
    * The investigator has NO write access — file writes will be rejected.

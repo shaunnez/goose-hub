@@ -10,6 +10,7 @@ import { ImplementSchema } from './schema.js';
  *     <workItem>{"title":"...","body":"...","number":123,"priority":"medium"}</workItem>
  *     <stack>{"testCommand":"pnpm test","lintCommand":"pnpm lint","typecheckCommand":"pnpm typecheck"}</stack>
  *     <advisorFeedback>...</advisorFeedback>               <!-- optional, when revising -->
+ *     <codeContext>[{"path":"...","startLine":1,"endLine":20,"snippet":"..."}]</codeContext>
  *     <revisionPass>0 | 1</revisionPass>                   <!-- optional, default 0 -->
  *   </task>
  */
@@ -46,12 +47,33 @@ const config: SkillConfig = {
             z.object({
               path: z.string(),
               reason: z.string().optional(),
+              line: z.number().int().min(1).optional(),
+              symbol: z.string().optional(),
+              snippet: z.string().optional(),
             }),
           )
           .optional(),
         openQuestions: z.array(z.string()).optional(),
+        fixHint: z
+          .object({
+            file: z.string(),
+            line: z.number().int().min(1),
+            currentCode: z.string(),
+            suggestedApproach: z.string(),
+          })
+          .optional(),
         investigationRunId: z.string().optional(),
       })
+      .optional(),
+    codeContext: z
+      .array(
+        z.object({
+          path: z.string(),
+          startLine: z.number().int().min(1),
+          endLine: z.number().int().min(1),
+          snippet: z.string(),
+        }),
+      )
       .optional(),
     relatedSurface: z
       .object({
@@ -79,6 +101,7 @@ const config: SkillConfig = {
     'stack.lintCommand',
     'stack.typecheckCommand',
     'investigation',
+    'codeContext',
     'relatedSurface',
     'advisorFeedback',
     'revisionPass',

@@ -5,12 +5,14 @@ const {
   mockTotalsByStage,
   mockListCostsForWorkItem,
   mockListCostsForProjectSince,
+  mockListToolStatsForWorkItem,
   mockEventReplay,
 } = vi.hoisted(() => ({
   mockTotalsForProject: vi.fn(),
   mockTotalsByStage: vi.fn(),
   mockListCostsForWorkItem: vi.fn(),
   mockListCostsForProjectSince: vi.fn(),
+  mockListToolStatsForWorkItem: vi.fn(),
   mockEventReplay: vi.fn(),
 }));
 
@@ -23,14 +25,18 @@ vi.mock('./repository.js', () => ({
   totalsByStageForProjectSince: mockTotalsByStage,
   listCostsForWorkItem: mockListCostsForWorkItem,
   listCostsForProjectSince: mockListCostsForProjectSince,
+  listToolStatsForWorkItem: mockListToolStatsForWorkItem,
 }));
 
-const { getCostSummary, getCostsForWorkItem } = await import('./service.js');
+const { getCostSummary, getCostsForWorkItem, getToolStatsForWorkItem } = await import(
+  './service.js'
+);
 
 describe('getCostSummary', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockEventReplay.mockReturnValue([]);
+    mockListToolStatsForWorkItem.mockReturnValue([]);
   });
 
   it('rejects empty projectId', async () => {
@@ -239,11 +245,87 @@ describe('getCostsForWorkItem', () => {
         createdAt: '2026-05-01T00:00:00Z',
       },
     ]);
+    mockListToolStatsForWorkItem.mockReturnValue([
+      {
+        runId: 'r1',
+        workItemId: 'github:owner/repo#1',
+        stage: 'qa',
+        skill: 'qa',
+        modelId: 'claude-sonnet-4-6',
+        inputTokens: 100,
+        outputTokens: 50,
+        costUsd: 0.01,
+        costLabel: 'estimated',
+        personaId: null,
+        readCount: 3,
+        grepCount: 1,
+        writeCount: 0,
+        editCount: 0,
+        bytesRead: 4096,
+        uniquePathsRead: 2,
+        redundantReads: 1,
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+      },
+    ]);
     const r = await getCostsForWorkItem('github:owner/repo#1');
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data.rows).toHaveLength(2);
     expect(r.data.totalUsd).toBeCloseTo(0.015);
     expect(r.data.hasEstimated).toBe(true);
+    expect(r.data.rows[0]).toMatchObject({
+      readCount: 3,
+      grepCount: 1,
+      bytesRead: 4096,
+      uniquePathsRead: 2,
+      redundantReads: 1,
+    });
+    expect(r.data.rows[1]).toMatchObject({
+      readCount: 0,
+      bytesRead: 0,
+      redundantReads: 0,
+    });
+  });
+});
+
+describe('getToolStatsForWorkItem', () => {
+  it('returns the joined tool-intensity rows for a work item', async () => {
+    mockListToolStatsForWorkItem.mockReturnValue([
+      {
+        runId: 'r1',
+        workItemId: 'github:owner/repo#1',
+        stage: 'dev',
+        skill: 'implement',
+        modelId: 'gpt-5.4',
+        inputTokens: 100,
+        outputTokens: 20,
+        costUsd: 0.1,
+        costLabel: 'estimated',
+        personaId: null,
+        readCount: 7,
+        grepCount: 2,
+        writeCount: 1,
+        editCount: 1,
+        bytesRead: 8192,
+        uniquePathsRead: 5,
+        redundantReads: 2,
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+      },
+    ]);
+
+    const r = await getToolStatsForWorkItem('github:owner/repo#1');
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.rows[0]).toMatchObject({
+      runId: 'r1',
+      skill: 'implement',
+      provider: 'codex',
+      readCount: 7,
+      bytesRead: 8192,
+      redundantReads: 2,
+    });
   });
 });

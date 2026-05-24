@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import type { ExecutableCheck } from '@goose-hub/core/acceptance-contracts/types.js';
+import { buildCodeContextBundle } from '@goose-hub/core/agent-runtime/code-context.js';
 import type {
   AgentBudgets,
   AgentResult,
@@ -306,6 +307,13 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     worktreePath: opts.scratchWorktreePath,
     filesOwned: wp.filesOwned,
   });
+  const codeContext =
+    opts.investigation == null
+      ? []
+      : buildCodeContextBundle({
+          worktreePath: opts.scratchWorktreePath,
+          keyFiles: opts.investigation.keyFiles.filter((file) => wp.filesOwned.includes(file.path)),
+        });
   const verificationCommands = wpRelevantExecutableChecks({
     acceptanceContract: opts.acceptanceContract,
     verificationCommands: opts.verificationCommands,
@@ -333,6 +341,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
         dependsOn: wp.dependsOn,
       },
       ...(codeSnippets.length > 0 ? { codeSnippets } : {}),
+      ...(codeContext.length > 0 ? { codeContext } : {}),
       ...(verificationCommands.length > 0 ? { verificationCommands } : {}),
       investigation: opts.investigation,
       acceptanceContract: opts.acceptanceContract,
@@ -370,6 +379,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       'wp.changes',
       'wp.dependsOn',
       'codeSnippets',
+      'codeContext',
       'verificationCommands',
       'investigation',
       'acceptanceContract',

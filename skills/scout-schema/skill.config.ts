@@ -1,4 +1,5 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
+import { InvestigationSeedSchema } from '@goose-hub/core/agent-runtime/scout-prefetch.js';
 import { z } from 'zod';
 import { ScoutOutputSchema } from './schema.js';
 
@@ -33,6 +34,7 @@ export const ScoutSchemaContextSchema = z.object({
       }),
     )
     .optional(),
+  investigationSeed: InvestigationSeedSchema.optional(),
 });
 
 const config: SkillConfig = {
@@ -44,6 +46,7 @@ const config: SkillConfig = {
     'workItem.number',
     'scoutFocus',
     'symbolIndexHints',
+    'investigationSeed',
   ],
   toolBundles: ['read'],
   modelPin: 'haiku',

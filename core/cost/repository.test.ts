@@ -1,10 +1,13 @@
-import { sql } from 'drizzle-orm';
+import { like, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../db/db.js';
-import { agentRunCosts } from '../db/schema.js';
+import { events, agentRunCosts, agentRunToolStats } from '../db/schema.js';
+import { eventStore } from '../event-stream/store.js';
 import {
   listCostsForWorkItem,
+  listToolStatsForWorkItem,
   recordCost,
+  recordToolStatsForRun,
   totalSpendForSkill,
   totalsByStageForProjectSince,
   totalsForProjectSince,
@@ -31,14 +34,34 @@ beforeAll(() => {
   db.run(
     sql`CREATE UNIQUE INDEX IF NOT EXISTS agent_run_costs_run_id_uniq ON agent_run_costs (run_id)`,
   );
+  db.run(sql`CREATE TABLE IF NOT EXISTS agent_run_tool_stats (
+    run_id TEXT PRIMARY KEY,
+    read_count INTEGER NOT NULL DEFAULT 0,
+    grep_count INTEGER NOT NULL DEFAULT 0,
+    write_count INTEGER NOT NULL DEFAULT 0,
+    edit_count INTEGER NOT NULL DEFAULT 0,
+    bytes_read INTEGER NOT NULL DEFAULT 0,
+    unique_paths_read INTEGER NOT NULL DEFAULT 0,
+    redundant_reads INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  )`);
 });
 
 beforeEach(() => {
   db.delete(agentRunCosts).where(sql`project_id = ${PROJECT}`).run();
+  db.delete(agentRunToolStats)
+    .where(like(agentRunToolStats.runId, `${PROJECT}:%`))
+    .run();
+  db.delete(events).where(sql`project_id = ${PROJECT}`).run();
 });
 
 afterAll(() => {
   db.delete(agentRunCosts).where(sql`project_id = ${PROJECT}`).run();
+  db.delete(agentRunToolStats)
+    .where(like(agentRunToolStats.runId, `${PROJECT}:%`))
+    .run();
+  db.delete(events).where(sql`project_id = ${PROJECT}`).run();
 });
 
 describe('recordCost', () => {
@@ -89,6 +112,127 @@ describe('recordCost', () => {
     const rows = listCostsForWorkItem('github:owner/repo#1');
     expect(rows).toHaveLength(1);
     expect(rows[0].costUsd).toBe(0.001);
+  });
+});
+
+describe('recordToolStatsForRun', () => {
+  it('aggregates read/search/write/edit calls and detects repeated read paths within one run', () => {
+    const runId = `${PROJECT}:tool-stats-run`;
+    recordCost({
+      runId,
+      projectId: PROJECT,
+      workItemId: 'github:owner/repo#99',
+      stage: 'dev',
+      skill: 'implement',
+      modelId: 'claude-sonnet-4-6',
+      inputTokens: 100,
+      outputTokens: 10,
+      costUsd: 0.2,
+      costLabel: 'estimated',
+      personaId: null,
+    });
+    appendTool(runId, 'read_file', 'src/a.ts', { bytesRead: 120 });
+    appendTool(runId, 'search_text', null);
+    appendTool(runId, 'read_file', 'src/a.ts', { bytesRead: 120 });
+    appendTool(runId, 'read_file', 'src/b.ts', { bytesRead: 80 });
+    appendTool(runId, 'write_file', 'src/b.ts');
+    appendTool(runId, 'edit_file', 'src/c.ts');
+
+    const stats = recordToolStatsForRun(runId);
+
+    expect(stats).toMatchObject({
+      runId,
+      readCount: 3,
+      grepCount: 1,
+      writeCount: 1,
+      editCount: 1,
+      bytesRead: 320,
+      uniquePathsRead: 2,
+      redundantReads: 1,
+    });
+
+    const [joined] = listToolStatsForWorkItem('github:owner/repo#99');
+    expect(joined).toMatchObject({
+      runId,
+      skill: 'implement',
+      costUsd: 0.2,
+      readCount: 3,
+      bytesRead: 320,
+      redundantReads: 1,
+    });
+  });
+
+  it('keeps run stats idempotent when aggregation is called more than once', () => {
+    const runId = `${PROJECT}:tool-stats-idempotent`;
+    recordCost({
+      runId,
+      projectId: PROJECT,
+      workItemId: 'github:owner/repo#100',
+      stage: 'qa',
+      skill: 'qa',
+      modelId: 'gpt-5.4',
+      inputTokens: 100,
+      outputTokens: 10,
+      costUsd: 0.2,
+      costLabel: 'estimated',
+      personaId: null,
+    });
+    appendTool(runId, 'Read', 'src/a.ts', { bytes_read: 12 });
+
+    recordToolStatsForRun(runId);
+    const stats = recordToolStatsForRun(runId);
+
+    expect(stats.readCount).toBe(1);
+    expect(listToolStatsForWorkItem('github:owner/repo#100')).toHaveLength(1);
+  });
+
+  it('emits a tool-intensity anomaly when read count exceeds twice the skill p95 baseline', () => {
+    const baselineRunId = `${PROJECT}:baseline`;
+    recordCost({
+      runId: baselineRunId,
+      projectId: PROJECT,
+      workItemId: 'github:owner/repo#101',
+      stage: 'dev',
+      skill: 'implement',
+      modelId: 'gpt-5.4',
+      inputTokens: 100,
+      outputTokens: 10,
+      costUsd: 0.2,
+      costLabel: 'estimated',
+      personaId: null,
+    });
+    appendTool(baselineRunId, 'read_file', 'src/a.ts');
+    appendTool(baselineRunId, 'read_file', 'src/b.ts');
+    recordToolStatsForRun(baselineRunId);
+
+    const runId = `${PROJECT}:anomaly`;
+    recordCost({
+      runId,
+      projectId: PROJECT,
+      workItemId: 'github:owner/repo#102',
+      stage: 'dev',
+      skill: 'implement',
+      modelId: 'gpt-5.4',
+      inputTokens: 100,
+      outputTokens: 10,
+      costUsd: 0.2,
+      costLabel: 'estimated',
+      personaId: null,
+    });
+    for (let index = 0; index < 5; index += 1) {
+      appendTool(runId, 'read_file', `src/high-${index}.ts`);
+    }
+
+    recordToolStatsForRun(runId);
+
+    const [event] = eventStore.replay({ runId, kind: 'agent.tool-intensity-anomaly' });
+    expect(event?.payload).toMatchObject({
+      runId,
+      skill: 'implement',
+      readCount: 5,
+      p95ReadCount: 2,
+      thresholdReadCount: 4,
+    });
   });
 });
 
@@ -236,3 +380,23 @@ describe('totalsByStageForProjectSince', () => {
     expect(stages[1].totalUsd).toBeCloseTo(0.3);
   });
 });
+
+function appendTool(
+  runId: string,
+  toolName: string,
+  path: string | null,
+  extra: Record<string, unknown> = {},
+): void {
+  eventStore.appendEvent({
+    projectId: PROJECT,
+    workItemId: 'github:owner/repo#99',
+    runId,
+    kind: 'agent.tool-call',
+    payload: {
+      tool_name: toolName,
+      tool_input: path == null ? {} : { path },
+      ...(path == null ? {} : { canonical_path: { path } }),
+      ...extra,
+    },
+  });
+}

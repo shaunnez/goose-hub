@@ -7,6 +7,7 @@ import {
   ParallelWpCommittedEvent,
   ParallelWpStartedEvent,
   SpecCompletedEvent,
+  SpecPrdContextAttachedEvent,
 } from './ParallelImplementEvents';
 
 afterEach(cleanup);
@@ -39,6 +40,30 @@ describe('ParallelImplementEvents', () => {
     expect(screen.getByText('Work item #743')).toBeTruthy();
     expect(screen.getByText('pipeline 805e37ae')).toBeTruthy();
     expect(document.body.textContent).not.toContain('"pipelineRunId"');
+  });
+
+  it('renders spec.prd-context-attached as PRD context metadata instead of raw JSON', () => {
+    render(
+      <ul>
+        <SpecPrdContextAttachedEvent
+          event={makeEvent('spec.prd-context-attached', {
+            source: 'event',
+            prdRunId: '8c59166f-0844-41c5-ab2b-1f21261428d2',
+            artifactKey: 'prd-planning-context.raw-prd:d7c34899ada5664e5ab3366c',
+            inlineSections: ['title', 'problem', 'acceptanceCriteria', 'implementationDecisions'],
+          })}
+        />
+      </ul>,
+    );
+
+    expect(screen.getByText('PRD context attached')).toBeTruthy();
+    expect(screen.getByText('event')).toBeTruthy();
+    expect(screen.getByText('prd 8c59166f')).toBeTruthy();
+    expect(screen.getByText('4 inline sections')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('prd-planning-context.raw-prd:d7c34899ada5664e5ab3366c');
+    expect(rendered).toContain('title, problem, acceptanceCriteria, implementationDecisions');
+    expect(rendered).not.toContain('"inlineSections"');
   });
 
   it('renders iteration-started with work package chips', () => {

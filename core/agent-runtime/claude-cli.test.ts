@@ -1,20 +1,29 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockDbInsert, mockRecordCost, mockEventStore, mockExecFileSync, mockSpawn } = vi.hoisted(
-  () => ({
-    mockDbInsert: vi.fn().mockImplementation(() => ({
-      values: vi.fn().mockReturnValue({ run: vi.fn() }),
-    })),
-    mockRecordCost: vi.fn(),
-    mockEventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
-    mockExecFileSync: vi.fn().mockReturnValue('/usr/local/bin/claude\n'),
-    mockSpawn: vi.fn(),
-  }),
-);
+const {
+  mockDbInsert,
+  mockRecordCost,
+  mockRecordToolStatsForRun,
+  mockEventStore,
+  mockExecFileSync,
+  mockSpawn,
+} = vi.hoisted(() => ({
+  mockDbInsert: vi.fn().mockImplementation(() => ({
+    values: vi.fn().mockReturnValue({ run: vi.fn() }),
+  })),
+  mockRecordCost: vi.fn(),
+  mockRecordToolStatsForRun: vi.fn(),
+  mockEventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
+  mockExecFileSync: vi.fn().mockReturnValue('/usr/local/bin/claude\n'),
+  mockSpawn: vi.fn(),
+}));
 
 vi.mock('../db/db.js', () => ({ db: { insert: mockDbInsert } }));
-vi.mock('../cost/repository.js', () => ({ recordCost: mockRecordCost }));
+vi.mock('../cost/repository.js', () => ({
+  recordCost: mockRecordCost,
+  recordToolStatsForRun: mockRecordToolStatsForRun,
+}));
 vi.mock('../event-stream/store.js', () => ({ eventStore: mockEventStore }));
 vi.mock('../cost/extract.js', () => ({ costFromCliEnvelope: vi.fn().mockReturnValue(null) }));
 vi.mock('../cost/skill-stage.js', () => ({ stageForSkill: vi.fn().mockReturnValue('develop') }));
@@ -212,6 +221,7 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
         workItemId: 'github:owner/repo#1',
       }),
     );
+    expect(mockRecordToolStatsForRun).toHaveBeenCalledWith('run-abc');
   });
 
   it('emits model and runtime metadata when the run starts', async () => {
@@ -255,6 +265,7 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
         outputTokens: 50,
       }),
     );
+    expect(mockRecordToolStatsForRun).toHaveBeenCalledWith('run-abc');
 
     const calls = mockEventStore.appendEvent.mock.calls;
     const budgetIndex = calls.findIndex(([e]) => e.kind === 'agent.budget-exceeded');

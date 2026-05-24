@@ -21,6 +21,17 @@ vi.mock('@goose-hub/core/db/db.js', () => ({
   },
 }));
 
+const { mockStoreArtifact, mockRunBugEnhance } = vi.hoisted(() => ({
+  mockStoreArtifact: vi.fn(),
+  mockRunBugEnhance: vi.fn().mockResolvedValue({ markdown: null, groundedHints: null }),
+}));
+vi.mock('@goose-hub/core/agent-artifacts/repository.js', () => ({
+  storeArtifact: mockStoreArtifact,
+}));
+vi.mock('@goose-hub/core/agent-runtime/bug-enhance-runner.js', () => ({
+  runBugEnhance: mockRunBugEnhance,
+}));
+
 import { dispatchTriageBatch } from '#shared/dispatch.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { deleteInboxItem, getInboxItem, insertInboxItem, listInboxItems } from './repository.js';
@@ -135,6 +146,57 @@ describe('promoteInboxItem', () => {
     expect(mockSource.createIssue).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'research', title: 'Research X' }),
     );
+  });
+
+  it('persists grounded hints as investigation-seed artifact when bug-enhance produces them', async () => {
+    const bugItem = { id: 7, title: 'Chat bug', body: 'desc', type: 'bug', createdAt: '2026-05' };
+    vi.mocked(getInboxItem).mockResolvedValueOnce(bugItem);
+    mockSource.createIssue.mockResolvedValueOnce({
+      id: 'github:owner/repo#100',
+      externalId: '100',
+      title: 'Chat bug',
+    });
+    mockRunBugEnhance.mockResolvedValueOnce({
+      markdown: '**Location**\napps/web/src/components/chat/components/ChatPanel.tsx',
+      groundedHints: {
+        candidateFiles: [
+          { path: 'apps/web/src/components/chat/components/ChatPanel.tsx', confidence: 'high' },
+        ],
+        candidateComponents: [],
+        candidateRoutes: [],
+      },
+    });
+
+    await promoteInboxItem(7, 'my-proj', undefined, true);
+
+    expect(mockStoreArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'investigation-seed',
+        workItemId: 'github:owner/repo#100',
+        artifactKey: 'investigation-seed:promotion:github:owner/repo#100',
+      }),
+    );
+    const payload = mockStoreArtifact.mock.calls[0][0].payload as {
+      candidateFiles: Array<{ path: string }>;
+    };
+    expect(payload.candidateFiles).toEqual([
+      { path: 'apps/web/src/components/chat/components/ChatPanel.tsx', root: 'worktree' },
+    ]);
+  });
+
+  it('skips seed persistence when bug-enhance returns no grounded hints', async () => {
+    const bugItem = { id: 8, title: 'Chat bug', body: 'desc', type: 'bug', createdAt: '2026-05' };
+    vi.mocked(getInboxItem).mockResolvedValueOnce(bugItem);
+    mockSource.createIssue.mockResolvedValueOnce({
+      id: 'github:owner/repo#101',
+      externalId: '101',
+      title: 'Chat bug',
+    });
+    mockRunBugEnhance.mockResolvedValueOnce({ markdown: 'some markdown', groundedHints: null });
+
+    await promoteInboxItem(8, 'my-proj', undefined, true);
+
+    expect(mockStoreArtifact).not.toHaveBeenCalled();
   });
 
   it('defaults body to empty string when item body is falsy', async () => {

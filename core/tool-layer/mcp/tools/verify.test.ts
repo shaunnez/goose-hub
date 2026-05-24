@@ -126,3 +126,148 @@ describe('runTargetedCommandTool', () => {
     ).rejects.toMatchObject({ kind: 'StackCommandMissingError' });
   });
 });
+
+describe('runTestsTool retry cap', () => {
+  beforeEach(() => {
+    writeFileSync(join(workspace, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+    writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'demo' }));
+    writeFileSync(join(workspace, 'README.md'), '# demo\n');
+    mkdirSync(join(workspace, 'apps/web/src'), { recursive: true });
+    writeFileSync(join(workspace, 'apps/web/src/foo.test.ts'), 'test("x", () => {});\n');
+  });
+
+  function mockFailed() {
+    mockRunCommand.mockResolvedValue({
+      status: 'failed',
+      exitCode: 1,
+      stdout: 'FAIL',
+      stderr: '',
+      durationMs: 12,
+      truncated: false,
+    });
+  }
+
+  it('blocks the 4th consecutive failed run on the same path and emits tool.violation', async () => {
+    mockFailed();
+    for (let i = 0; i < 3; i++) {
+      const result = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+      expect(result.status).toBe('failed');
+    }
+    mockRunCommand.mockClear();
+
+    const blocked = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    expect(blocked.status).toBe('failed');
+    expect(mockRunCommand).not.toHaveBeenCalled();
+    expect(blocked.stderr).toMatch(/retry cap|consecutive failures/i);
+
+    const violations = (await import('../../../event-stream/store.js')).eventStore
+      .replay({ runId: ctx.runId, kind: 'tool.violation' })
+      .filter(
+        (event) => (event.payload as { reason?: unknown }).reason === 'excessive-test-retries',
+      );
+    expect(violations.length).toBeGreaterThan(0);
+  });
+
+  it('resets the cap after a write/edit invalidates the same path', async () => {
+    const { invalidateRunCacheForPaths } = await import('../run-cache.js');
+    mockFailed();
+    for (let i = 0; i < 3; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    invalidateRunCacheForPaths(ctx.runId, ['apps/web/src/foo.test.ts']);
+
+    mockRunCommand.mockClear();
+    const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    expect(mockRunCommand).toHaveBeenCalledOnce();
+    expect(next.status).toBe('failed');
+  });
+
+  it('counters are isolated per path', async () => {
+    mockFailed();
+    writeFileSync(join(workspace, 'apps/web/src/bar.test.ts'), 'test("y", () => {});\n');
+    for (let i = 0; i < 3; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    mockRunCommand.mockClear();
+    const other = await runTestsTool(ctx, { path: 'src/bar.test.ts' });
+    expect(mockRunCommand).toHaveBeenCalledOnce();
+    expect(other.status).toBe('failed');
+  });
+
+  it('attaches a parsed failureSummary when the test command exits non-zero with vitest JSON output', async () => {
+    const vitestJson = JSON.stringify({
+      numTotalTests: 1,
+      numPassedTests: 0,
+      numFailedTests: 1,
+      testResults: [
+        {
+          name: '/work/apps/web/src/foo.test.ts',
+          status: 'failed',
+          assertionResults: [
+            {
+              ancestorTitles: ['suite'],
+              title: 'fails',
+              status: 'failed',
+              failureMessages: [
+                'AssertionError: expected 1 to equal 2\n    at /work/apps/web/src/foo.test.ts:5:7',
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'failed',
+      exitCode: 1,
+      stdout: vitestJson,
+      stderr: '',
+      durationMs: 18,
+      truncated: false,
+    });
+    const result = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    expect(result.failureSummary).toBeDefined();
+    expect(result.failureSummary?.parserUsed).toBe('vitest-json');
+    expect(result.failureSummary?.failures).toHaveLength(1);
+    expect(result.failureSummary?.failures[0]).toMatchObject({
+      testName: 'suite > fails',
+      category: 'assertion',
+      file: '/work/apps/web/src/foo.test.ts',
+    });
+  });
+
+  it('omits failureSummary when the test command exits cleanly', async () => {
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'ok',
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      durationMs: 18,
+      truncated: false,
+    });
+    const result = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    expect(result.failureSummary).toBeUndefined();
+  });
+
+  it('a successful run clears the failure counter for that path', async () => {
+    mockFailed();
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'ok',
+      exitCode: 0,
+      stdout: 'PASS',
+      stderr: '',
+      durationMs: 5,
+      truncated: false,
+    });
+    const passed = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    expect(passed.status).toBe('ok');
+
+    mockFailed();
+    mockRunCommand.mockClear();
+    // Now should permit at least 3 more failures before blocking.
+    for (let i = 0; i < 3; i++) {
+      const result = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+      expect(result.status).toBe('failed');
+    }
+    expect(mockRunCommand).toHaveBeenCalledTimes(3);
+  });
+});

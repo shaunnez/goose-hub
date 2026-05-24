@@ -1,5 +1,10 @@
+import { getArtifact, storeArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { ResolvedBudget } from '@goose-hub/core/agent-runtime/budgets.js';
+import {
+  persistGroundedSeed,
+  runBugEnhance,
+} from '@goose-hub/core/agent-runtime/bug-enhance-runner.js';
 import { crossValidate } from '@goose-hub/core/agent-runtime/cross-validate.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
@@ -15,6 +20,10 @@ import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconc
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
+import {
+  buildInvestigationSeed,
+  emitInvestigationSeedBuilt,
+} from '@goose-hub/core/agent-runtime/scout-prefetch.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
@@ -27,7 +36,12 @@ import { transitionAndEmitState } from '@goose-hub/core/event-stream/state-trans
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
+import {
+  type ScoutReportDigestBundle,
+  buildScoutReportDigestBundle,
+} from '@goose-hub/core/scout-reports/digest.js';
 import { persistScoutReport } from '@goose-hub/core/scout-reports/repository.js';
+import type { ScoutReport as StoredScoutReport } from '@goose-hub/core/scout-reports/types.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ensureSymbolIndexFresh } from '@goose-hub/core/symbol-index/freshness.js';
 import {
@@ -293,8 +307,10 @@ export async function runInvestigateWorkflow(
     personaId,
   });
 
+  let investigationSucceeded = false;
+
   try {
-    let allScoutReports: string | undefined;
+    let synthesisScoutDigest: ScoutReportDigestBundle | undefined;
 
     if (investigationSwarmEnabled) {
       const initialPlan = planInvestigation({
@@ -360,6 +376,73 @@ export async function runInvestigateWorkflow(
         personaId,
       });
 
+      // Lazy-run bug-enhance when a UI/web bug arrives without a
+      // promotion-time grounded seed (e.g. issue filed directly on GitHub,
+      // bypassing the inbox). Anchors scouts/dev to concrete files so they
+      // don't brute-search the repo. See
+      // docs/cost-performance-improvements/bug-1011-cost-postmortem-and-plan.md (A7).
+      if (workItem.type === 'bug') {
+        const seedKey = `investigation-seed:promotion:${workItem.id}`;
+        const existing = getArtifact(seedKey);
+        if (existing == null) {
+          const lazyStartedAt = Date.now();
+          const enhancement = await runBugEnhance({
+            projectId,
+            workItemId: workItem.id,
+            title: workItem.title,
+            body: workItem.body,
+            workspaceDir: worktreePath,
+          });
+          const hasUsable = enhancement.groundedHints != null;
+          if (hasUsable && enhancement.groundedHints != null) {
+            persistGroundedSeed({
+              projectId,
+              workItemId: workItem.id,
+              runId,
+              hints: enhancement.groundedHints,
+            });
+          }
+          eventStore.appendEvent({
+            projectId,
+            workItemId: workItem.id,
+            runId,
+            personaId,
+            kind: 'agent.bug-enhance-lazy',
+            payload: {
+              hadExistingSeed: false,
+              producedSeed: hasUsable,
+              candidateFileCount: enhancement.groundedHints?.candidateFiles.length ?? 0,
+              candidateComponentCount: enhancement.groundedHints?.candidateComponents.length ?? 0,
+              candidateRouteCount: enhancement.groundedHints?.candidateRoutes.length ?? 0,
+              ranMs: Date.now() - lazyStartedAt,
+            },
+          });
+        }
+      }
+
+      const seedStartedAt = Date.now();
+      const investigationSeed = await buildInvestigationSeed(workItem, {
+        id: projectId,
+        worktreePath,
+      });
+      storeArtifact({
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        kind: 'investigation-seed',
+        artifactKey: `investigation-seed:${runId}`,
+        summary: `InvestigationSeed for #${workItem.externalId}`,
+        payload: investigationSeed,
+      });
+      emitInvestigationSeedBuilt({
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        personaId,
+        seed: investigationSeed,
+        builtMs: Date.now() - seedStartedAt,
+      });
+
       const patternTokens = symbolIdentifiers.slice(0, 4);
       const patternFocus =
         patternTokens.length > 0
@@ -376,8 +459,8 @@ export async function runInvestigateWorkflow(
             : [];
         const specWithHints =
           shapedHints.length > 0
-            ? { ...spec, extraContext: { symbolIndexHints: shapedHints } }
-            : spec;
+            ? { ...spec, extraContext: { symbolIndexHints: shapedHints, investigationSeed } }
+            : { ...spec, extraContext: { investigationSeed } };
         if (
           spec.scoutName === 'scout-code-path' ||
           spec.scoutName === 'scout-dependency' ||
@@ -515,9 +598,16 @@ export async function runInvestigateWorkflow(
 
       // Cross-validate Wave 1 before dispatching Wave 2
       const cvResult = crossValidate(wave1Result.reports);
-      const wave1Context = JSON.stringify({
-        wave1: wave1HandoffReports,
-        contradictions: cvResult.contradictions,
+      const wave1Digest = buildScoutReportDigestBundle(
+        toStoredScoutReports(projectId, workItem.id, runId, wave1HandoffReports),
+      );
+      emitDigestApplied({
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        personaId,
+        wave: 'wave-1-to-wave-2',
+        digest: wave1Digest,
       });
 
       const wave2Plan = planInvestigation({
@@ -525,11 +615,14 @@ export async function runInvestigateWorkflow(
         swarmEnabled: true,
         wave1Reports: wave1Result.reports,
         contradictions: cvResult.contradictions,
-        scoutReportsContext: wave1Context,
+        scoutDigestContext: wave1Digest,
       });
       finalInvestigationPlan = wave2Plan;
       scoutEffortHints = wave2Plan.scoutEffortHints;
-      const wave2Scouts = wave2Plan.selectedWave2Scouts;
+      const wave2Scouts = wave2Plan.selectedWave2Scouts.map((spec) => ({
+        ...spec,
+        extraContext: { ...(spec.extraContext ?? {}), investigationSeed },
+      }));
 
       const wave2HandoffReports: unknown[] = [];
       if (wave2Scouts.length > 0) {
@@ -601,21 +694,30 @@ export async function runInvestigateWorkflow(
       }
 
       // Build full context for the synthesis investigator
-      allScoutReports = JSON.stringify({
-        wave1: wave1HandoffReports,
-        wave2: wave2HandoffReports,
-        contradictions: cvResult.contradictions,
+      synthesisScoutDigest = buildScoutReportDigestBundle(
+        toStoredScoutReports(projectId, workItem.id, runId, [
+          ...wave1HandoffReports,
+          ...wave2HandoffReports,
+        ]),
+      );
+      emitDigestApplied({
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        personaId,
+        wave: 'wave-1-to-synthesis',
+        digest: synthesisScoutDigest,
       });
     }
 
     const investigateContext: {
       workItem: typeof workItemCtx;
-      scoutReports?: string;
+      scoutDigest?: ScoutReportDigestBundle;
     } = {
       workItem: workItemCtx,
     };
-    if (allScoutReports != null) {
-      investigateContext.scoutReports = allScoutReports;
+    if (synthesisScoutDigest != null) {
+      investigateContext.scoutDigest = synthesisScoutDigest;
     }
 
     // Synthesis — invoke investigate skill with scout evidence when swarm is enabled.
@@ -623,7 +725,7 @@ export async function runInvestigateWorkflow(
     // blob and writes findings, so we use a lighter model and fresh context (no
     // accumulated conversation history needed).
     const synthModelOverride =
-      investigationSwarmEnabled && allScoutReports != null
+      investigationSwarmEnabled && synthesisScoutDigest != null
         ? defaultModelForTierAndProvider(
             'sonnet',
             forcedRuntimeProvider ?? investigateBudget.provider,
@@ -641,7 +743,7 @@ export async function runInvestigateWorkflow(
         modelOverride: synthModelOverride,
         suppressRunStarted: true,
         freshContextOverride:
-          investigationSwarmEnabled && allScoutReports != null ? true : undefined,
+          investigationSwarmEnabled && synthesisScoutDigest != null ? true : undefined,
       },
     });
 
@@ -848,6 +950,7 @@ export async function runInvestigateWorkflow(
     });
 
     accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'success' });
+    investigationSucceeded = true;
     await transitionAndEmitState({
       mode: 'legal',
       source: stateSource,
@@ -860,6 +963,10 @@ export async function runInvestigateWorkflow(
       runId,
     });
   } catch (err) {
+    // If agent.investigation-complete was already emitted, don't escalate to needs-human.
+    // The investigation succeeded; only the remote label flip failed.
+    if (investigationSucceeded) return;
+
     accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
 
@@ -899,4 +1006,48 @@ export async function runInvestigateWorkflow(
   } finally {
     cleanupWorktree(runId);
   }
+}
+
+function toStoredScoutReports(
+  projectId: string,
+  workItemId: string,
+  investigationRunId: string,
+  reports: unknown[],
+): StoredScoutReport[] {
+  return reports.map((report, index) => {
+    const record = report as { scoutName?: unknown; report?: unknown };
+    return {
+      id: index + 1,
+      projectId,
+      workItemId,
+      investigationRunId,
+      scoutSkill: typeof record.scoutName === 'string' ? record.scoutName : `scout-${index + 1}`,
+      report,
+      createdAt: new Date(0).toISOString(),
+    };
+  });
+}
+
+function emitDigestApplied(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId: string;
+  wave: 'wave-1-to-wave-2' | 'wave-1-to-synthesis';
+  digest: ScoutReportDigestBundle;
+}): void {
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    runId: input.runId,
+    personaId: input.personaId,
+    kind: 'investigation.digest-applied',
+    payload: {
+      wave: input.wave,
+      scoutCount: input.digest.reports.length,
+      rawBytes: input.digest.rawBytes,
+      digestBytes: input.digest.digestBytes,
+      bytesSaved: input.digest.bytesSaved,
+    },
+  });
 }

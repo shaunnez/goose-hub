@@ -563,6 +563,10 @@ describe('qa skill config', () => {
     expect(config.contextAllowlist).toContain('prDiff');
   });
 
+  it('contextAllowlist contains prDiffWithContext', () => {
+    expect(config.contextAllowlist).toContain('prDiffWithContext');
+  });
+
   it('contextAllowlist contains projectCommands', () => {
     expect(config.contextAllowlist).toContain('projectCommands');
   });
@@ -579,6 +583,12 @@ describe('qa skill config', () => {
     const valid = QaContextSchema.safeParse({
       workItem: { title: 'Fix auth bug', body: 'Auth breaks on login.', number: 42 },
       prDiff: 'diff --git a/src/foo.ts b/src/foo.ts\n...',
+      prDiffWithContext: {
+        changedFiles: ['src/foo.ts'],
+        hunkCount: 1,
+        hunks: [{ file: 'src/foo.ts', oldStart: 1, oldLines: 1, newStart: 1, newLines: 2 }],
+        diffCharCount: 42,
+      },
       projectCommands: { testCommand: 'pnpm test ', lintCommand: 'pnpm biome check .' },
     });
     expect(valid.success).toBe(true);

@@ -350,6 +350,8 @@ function RuntimeProfilerSection({
                       <span>p95 ${entry.metrics.p95CostUsd.toFixed(2)}</span>
                       <span>p95 in {entry.metrics.p95InputTokens.toLocaleString()} tok</span>
                       <span>p95 out {entry.metrics.p95OutputTokens.toLocaleString()} tok</span>
+                      <span>p95 reads {entry.metrics.p95ReadCount.toLocaleString()}</span>
+                      <span>p95 bytes {formatByteCount(entry.metrics.p95BytesRead)}</span>
                     </div>
                   </div>
                   <div className="min-w-0 text-right text-[11px] text-fg-3">
@@ -399,6 +401,11 @@ function ProfilerMetric({ label, value }: { label: string; value: number }) {
       {label} {Math.round(value * 100)}%
     </span>
   );
+}
+
+function formatByteCount(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
 export function ProjectBudgetPanel({ slug }: Props) {

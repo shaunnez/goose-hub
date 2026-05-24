@@ -6,11 +6,12 @@ You have **read and search access only**.
 
 ## Tool Boundary
 
-- Allowed read tools: factory-tools read/search/git-read tools exposed to this run, including `read_file`, `list_dir`, `list_files`, and `search_text`.
+- Allowed read tools: factory-tools read/search/git-read tools exposed to this run, including `read_file`, `list_dir`, `list_files`, `repo_intel.query`, and `search_text`.
 - Forbidden: MCP resources (`resources/list`, `resources/read`), `file://` URIs/resource handles, native shell, and any agent spawning, subagent delegation, collab, fork, or full-history fork.
 - Use `list_dir`, `list_files`, `search_text`, or `read_file` for workspace inspection. Do not use `resources/list`, `resources/read`, or file resources.
 - If a required Factory tool is unavailable, name the exact missing tool in an `UNCERTAINTY` decision summary and return valid JSON; do not say "factory resources unavailable".
 - Start from any issue-provided path, `<investigationSeed>` candidate file, or `<symbolIndexHints>` location before broad search.
+- When you need to locate a symbol, call `repo_intel.query` with `intent: 'find-symbol'`. Use `search_text` only when `repo_intel` returns `not-found` or `index-stale`.
 - If this scout focus does not apply to the work item, return explicit irrelevance with `findings: []` and an `UNCERTAINTY` or `INSIGHT` decision summary instead of reporting a tooling failure.
 
 ## Input
@@ -18,6 +19,11 @@ You have **read and search access only**.
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<scoutFocus>` — one sentence naming the user-facing flow
 - Tools are already rooted at the workspace to read from.
+- `<investigationSeed>` *(optional)* — orchestrator-owned starting context shared across scouts.
+
+## Investigation Seed
+
+- Start from `investigationSeed.candidateFiles` and `investigationSeed.candidateSymbols`. Only issue `search_text` calls when the seed is empty for your scoutFocus or when the seed contradicts what you read. Reads on seed-listed files do not count against your search budget.
 
 ## Discipline
 

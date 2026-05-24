@@ -56,8 +56,13 @@ describe('wave2-interface-designer skill', () => {
   it('contextSchema accepts the canonical wave2 context shape', () => {
     const result = Wave2InterfaceDesignerContextSchema.safeParse({
       workItem: { title: 't', body: 'b', number: 1 },
-      scoutReports: '[]',
-      worktreePath: '/tmp/x',
+      scoutDigest: {
+        reports: [],
+        artifactKeys: [],
+        rawBytes: 0,
+        digestBytes: 0,
+        bytesSaved: 0,
+      },
     });
     expect(result.success).toBe(true);
   });
@@ -72,7 +77,7 @@ describe('wave2-interface-designer skill', () => {
     expect(prompt).toContain(
       'Once the target boundary and artefact shape are known, stop using tools',
     );
-    expect(prompt).toContain('Treat `<scoutDigest>` and `<scoutReports>` as primary evidence');
+    expect(prompt).toContain('Treat `<scoutDigest>` as primary evidence');
     expect(prompt).toContain("kind: 'component-contract'");
     expect(prompt).toContain("kind: 'state-transition'");
     expect(prompt).toContain("kind: 'test-contract'");

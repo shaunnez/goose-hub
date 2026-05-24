@@ -60,6 +60,12 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'agent.repo-override': 'triage',
   'agent.investigation-complete': 'investigation',
   'agent.investigation-context-injected': 'investigation',
+  'agent.investigation-seed-built': 'investigation',
+  'agent.investigation-seed-empty': 'investigation',
+  'agent.bug-enhance-lazy': 'investigation',
+  'agent.bug-enhance-hallucinated': 'investigation',
+  'agent.bug-enhance-workspace-empty': 'investigation',
+  'investigation.digest-applied': 'investigation',
   'agent.related-surface-manifest-created': 'investigation',
   'agent.discovery-budget-exceeded': 'investigation',
   'agent.wrong-surface-guard': 'investigation',
@@ -93,6 +99,7 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
 
 const TRANSITION_EVENT_KINDS = new Set([
   'state.transitioned',
+  'state.transition-deferred',
   'manual.action',
   'gate.awaiting-human',
   'gate.approved',
@@ -111,7 +118,9 @@ export const RUNTIME_INHERIT_TIMELINE_EVENT_KINDS = new Set<string>([
   'agent.run-failed',
   'agent.budget-exceeded',
   'agent.tool-call',
+  'agent.tool-intensity-anomaly',
   'agent.tool-result',
+  'agent.redundant-read',
   'tool.stdout-truncated',
   'tool.timeout',
   'agent.fallback-triggered',
@@ -124,6 +133,8 @@ export const RUNTIME_INHERIT_TIMELINE_EVENT_KINDS = new Set<string>([
   'agent.model-selected',
   'agent.verify-command',
   'agent.cancelled',
+  'agent.run-aborted',
+  'tool.violation',
   'symbol-index.lookup',
   'symbol-index.hints-used',
 ]);
@@ -132,7 +143,6 @@ const INTENTIONALLY_SYSTEM_EVENT_KINDS = new Set<string>([
   'milestone.activated',
   'system.note',
   'project.budget-exceeded',
-  'tool.violation',
   'workflow.smoke-failed',
   'audit.autonomy-gate-fired',
 ]);
@@ -265,6 +275,7 @@ export function resolveTimelineSection(
   if (exactSection != null) return exactSection;
 
   if (event.kind.startsWith('repo-match.')) return 'triage';
+  if (event.kind.startsWith('investigation.')) return 'investigation';
   if (event.kind.startsWith('grill.')) return 'grill';
   if (event.kind.startsWith('prd.')) return 'prd';
   if (event.kind.startsWith('decompose.')) return 'decompose';

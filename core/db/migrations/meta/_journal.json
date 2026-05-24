@@ -274,6 +274,20 @@
       "when": 1779341266516,
       "tag": "0038_outgoing_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1779400000000,
+      "tag": "0039_agent_run_tool_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1779529448689,
+      "tag": "0040_wild_invaders",
+      "breakpoints": true
     }
   ]
 }

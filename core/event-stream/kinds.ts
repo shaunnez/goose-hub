@@ -10,6 +10,7 @@ export const EVENT_KINDS = [
   'system.note',
   'manual.action',
   'agent.tool-call',
+  'agent.tool-intensity-anomaly',
   'tool.stdout-truncated',
   'tool.timeout',
   'agent.run-started',
@@ -21,6 +22,8 @@ export const EVENT_KINDS = [
   'agent.repo-override',
   'agent.investigation-complete',
   'agent.investigation-context-injected',
+  'agent.investigation-seed-built',
+  'investigation.digest-applied',
   'agent.related-surface-manifest-created',
   'agent.discovery-budget-exceeded',
   'agent.wrong-surface-guard',
@@ -127,6 +130,13 @@ export const EVENT_KINDS = [
   'chat.tool-completed',
   'chat.tool-failed',
   'chat.run-failed',
+  'agent.redundant-read',
+  'agent.investigation-seed-empty',
+  'agent.bug-enhance-lazy',
+  'state.transition-deferred',
+  'agent.bug-enhance-hallucinated',
+  'agent.bug-enhance-workspace-empty',
+  'agent.run-aborted',
 ] as const;
 
 export type EventKind = (typeof EVENT_KINDS)[number];

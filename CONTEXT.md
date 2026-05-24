@@ -317,6 +317,12 @@ No other code in `core/` may call `insertEvent` directly. Lint rule enforces. On
 
 **`invokeSkill()` is the canonical spawn entry point** for skill-driven agent runs (`core/agent-runtime/invoke-skill.ts`). It enforces contextSchema validation before spawn and outputSchema validation after. `contextAllowlist` is required on every `SkillConfig` — no silent empty-allowlist fallback. See ADR 0038.
 
+**Investigation Seed.** Before Wave-1 scout fan-out, `slices/investigate/workflow.ts` builds one orchestrator-owned `InvestigationSeed` via `core/agent-runtime/scout-prefetch.ts`. The seed contains capped candidate files, symbol hits, related test files, recent git touches, and prior overlapping investigation ids. Scouts receive it through the explicit `investigationSeed` allowlist key and must start from seed files/symbols before issuing new searches. This reduces cross-scout rediscovery by shared context, not by sharing #995's per-run cache across separate scout runs.
+
+**Scout Digest Handoff.** Wave-2 scouts and the final investigate synthesis receive `scoutDigest` (`ScoutReportDigestBundle`) instead of raw `scoutReports`. Raw scout reports remain persisted in `core/scout-reports/`; consumers fetch them on demand through `repo_intel.query` with `intent: 'prior-investigation'` when the digest is insufficient for a specific finding.
+
+**Line-Precise Handoff Context.** Investigation outputs may attach `line`, `symbol`, and short `snippet` fields to `keyFiles`, plus an optional `fixHint`. Before `implement` runs, `slices/fix-issue/workflow.ts` builds a bounded `codeContext` bundle from those line-marked key files (`core/agent-runtime/code-context.ts`) and injects it through the explicit implement allowlist. QA and Review receive `prDiffWithContext`, a diff-derived changed-file/hunk summary from `core/agent-runtime/pr-diff-context.ts`; it preserves holdout boundaries because it contains only PR diff metadata, not developer or investigation reasoning.
+
 **Two guards, different paths:**
 - `contextAllowlist: ContextKey[]` — the *manifest*. Filters which keys from `AgentSpec.context` render into the user-prompt XML. Guards against wrong keys at spec construction time. Now required (not optional) on `SkillConfig`.
 - `freshContext: boolean` — the *closure assertion*. When `true`, no other injection channel adds anything. Guards against runtime infrastructure adding ambient state the AgentSpec author doesn't control.
@@ -505,6 +511,8 @@ All cost logic lives in `core/cost/`: `extract.ts` (parsers), `repository.ts` (w
 
 **`agent_run_costs`** has a unique index on `runId` — duplicate inserts (retries, webhook redeliveries) are silently ignored. Every run produces exactly one row, even at `costUsd = 0`, so dashboards reflect every run.
 
+**Tool-intensity telemetry** lives in `agent_run_tool_stats`, keyed one-to-one by `runId`. The agent runtime calls `recordToolStatsForRun(runId)` synchronously after `recordCost()`, aggregating `agent.tool-call` rows into read/search/write/edit counts, returned bytes, unique paths read, and redundant reads. The per-issue costs API joins these stats back onto cost rows, and a high-read outlier emits `agent.tool-intensity-anomaly` when a run exceeds 2x the same-skill p95 read baseline.
+
 **Stages:** `triage`, `investigate`, `dev`, `qa`, `review`, `retrospective`, `other`. Stage is UI-only metadata; never influences workflow logic. Unknown skills fall into `other` (soft fallback).
 
 **UI convention:** `~$0.04` for estimated, `$0.04` for exact. Enforced in frontend, not DB.
@@ -592,6 +600,14 @@ Path policy denylist: absolute paths, `..`, `~`, `.codex`, `.agents`, `.claude`,
 Every path-bearing tool response returns the structured `RepoRelativePath` shape (`{ path, root, packageRoot?, normalizedFrom? }`) from `core/tool-layer/path-contract.ts`, not a bare string. Package-relative inputs are normalized when uniquely resolvable; ambiguous inputs return a `PathPolicyViolation` with `code: 'ambiguous_path'`.
 
 Every tool call emits `agent.tool-call`. The audit payload is normalized via `core/tool-layer/tool-call-audit.ts` (`normalizeToolCallAuditPayload`) so every path-bearing event carries `raw_path` + `canonical_path`. Every blocked call emits `agent.tool-call` with `blocked: true` and a reason code. Workflow-owned mutations (commit, open PR, transition, publish evidence) are not exposed to normal bundles; the orchestrator drives them.
+
+Read-side MCP tools use a process-local per-`FACTORY_RUN_ID` cache in `core/tool-layer/mcp/run-cache.ts`. `read_file`, `read_many_files`, `list_dir`, `list_files`, `search_text`, and `repo_intel.query` are cached; cache keys are built from canonical tool paths plus the arguments that affect output. Cached hits still emit `agent.tool-call` with `cached: true`. `write_file`, `edit_file`, `apply_patch`, `move_file`, and `delete_file` invalidate overlapping read/list/search entries, and `agent.run-completed` / `agent.run-failed` evict the whole run cache. This never crosses separate scout or synthesis runs.
+
+Duplicate-call nudges are advisory only. `core/tool-layer/mcp/run-cache.ts` tracks identical cache-key calls per run and marks `agent.tool-call` with `duplicateCount` from the second call onward; at the configured threshold (`FACTORY_DUPLICATE_NUDGE_THRESHOLD`, default 3) the PostToolUse hook forwards a one-line `additionalContext` reminder. The hook never blocks, denies, aborts, or fails duplicate calls.
+
+**Repo Intelligence Tool.** `mcp__factory-tools__repo_intel.query` is the preferred structured lookup before grep. It dispatches to existing harness helpers for `find-symbol`, `find-callers`, `find-tests-for`, `related-files`, `recent-changes`, `prior-investigation`, and `fetch-artifact`. Path-bearing inputs still go through MCP path policy. `recent-changes` reuses #996's `gitRecentChanges()` helper. `agent.tool-call` audit includes `repo_intel_intent` so telemetry can break down usage by intent. QA/review holdout callers receive prior-investigation and artifact payloads with decision-summary/implementation-reasoning fields stripped.
+
+**AST and Route Intelligence.** `repo_intel.query` also supports TypeScript/TSX structural intents for `find-calls-of`, `find-jsx-usages`, and `find-importers`, backed by `core/symbol-index/ast-query.ts`. Frontend route/component lookups live in `core/route-index/` as a regenerable SQLite cache at `~/.factory/route-index.db`; rebuild with `pnpm route-index` or `pnpm route refresh`, and query with `pnpm route find`, `pnpm route component`, or `pnpm route route-for-component`. Route/AST stale-index failures degrade to typed `index-stale` tool results with a `search_text` fallback hint.
 
 `core/tool-layer/tools/{read,write,bash,test}.ts` and their tests have been deleted (Phase 7 cleanup complete). `core/tool-layer/tools/record-decision.ts` is the surviving helper, wrapped by `mcp/tools/context.ts`.
 
