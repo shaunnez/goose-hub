@@ -59,7 +59,8 @@ export function SpecDetails({
     <div className="rounded-lg border border-[color:var(--accent)]/20 bg-bg-elev overflow-hidden">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
         className="w-full flex items-center justify-between px-4 py-3 bg-bg-elev-2 text-left cursor-pointer"
       >
         <div className="flex items-center gap-2 min-w-0">

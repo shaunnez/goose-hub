@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import type { AcceptanceContractDto } from '@/lib/types';
 import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AcceptanceContractDetails } from './AcceptanceContractDetails';
 
@@ -25,13 +26,31 @@ const CONTRACT: AcceptanceContractDto = {
 };
 
 describe('AcceptanceContractDetails', () => {
-  it('renders the resolved contract source and criteria', () => {
+  it('renders a collapsed accordion header by default', () => {
     render(<AcceptanceContractDetails contract={CONTRACT} />);
 
-    expect(screen.getByText('Acceptance Contract')).toBeTruthy();
+    const toggle = screen.getByRole('button', { name: /acceptance contract/i });
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByText('Normalized · 1 AC')).toBeTruthy();
+    expect(screen.queryByText('Lane cards are ordered newest first.')).toBeNull();
+  });
+
+  it('toggles the acceptance criteria body without losing content', async () => {
+    const user = userEvent.setup();
+    render(<AcceptanceContractDetails contract={CONTRACT} />);
+
+    const toggle = screen.getByRole('button', { name: /acceptance contract/i });
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Lane cards are ordered newest first.')).toBeTruthy();
     expect(screen.getByText('pnpm vitest run apps/web/src/lib/lanes.config.test.ts')).toBeTruthy();
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Lane cards are ordered newest first.')).toBeNull();
   });
 
   it('renders nothing without criteria', () => {

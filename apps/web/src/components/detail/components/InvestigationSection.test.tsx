@@ -4,6 +4,7 @@ import { ActiveProjectProvider } from '@/state/active-project';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InvestigationSection } from './InvestigationSection';
 
@@ -31,6 +32,10 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/lib/markdown', () => ({
   renderMarkdownToHtml: (s: string) => `<p>${s}</p>`,
+}));
+
+vi.mock('./PlaywrightCaptureSection', () => ({
+  PlaywrightCaptureSection: () => <div data-testid="playwright-capture-content">capture</div>,
 }));
 
 const INVESTIGATION_EVENT: AgentEventDto = {
@@ -76,6 +81,17 @@ const ENGINEERING_SPEC: EngineeringSpecDto = {
   riskRegister: [],
 };
 
+const ACCEPTANCE_CONTRACT = {
+  source: 'engineering-spec' as const,
+  criteria: [{ id: 'AC-1', statement: 'Users can log in.' }],
+};
+
+const HUMAN_NOTE = {
+  id: 7,
+  body: 'Human review notes:\n\nPlease verify the mobile session flow.',
+  createdAt: new Date().toISOString(),
+};
+
 function investigationEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   return {
     ...INVESTIGATION_EVENT,
@@ -101,14 +117,35 @@ function toolCallEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   };
 }
 
-function renderSection(events: AgentEventDto[] = [], spec?: EngineeringSpecDto | null) {
+function renderSection({
+  events = [],
+  spec,
+  contract,
+  comments = [],
+  itemType,
+  itemState,
+}: {
+  events?: AgentEventDto[];
+  spec?: EngineeringSpecDto | null;
+  contract?: typeof ACCEPTANCE_CONTRACT | null;
+  comments?: Array<{ id: number; body: string; createdAt: string }>;
+  itemType?: string;
+  itemState?: string;
+} = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['events', 'test-proj', '42'], events);
   if (spec !== undefined) qc.setQueryData(['spec', 'test-proj', '42'], spec);
+  if (contract !== undefined) qc.setQueryData(['acceptance-contract', 'test-proj', '42'], contract);
+  qc.setQueryData(['comments', 'test-proj', '42'], comments);
   render(
     <QueryClientProvider client={qc}>
       <ActiveProjectProvider initialSlug="test-proj">
-        <InvestigationSection projectSlug="test-proj" id="42" />
+        <InvestigationSection
+          projectSlug="test-proj"
+          id="42"
+          itemType={itemType}
+          itemState={itemState}
+        />
       </ActiveProjectProvider>
     </QueryClientProvider>,
   );
@@ -116,32 +153,50 @@ function renderSection(events: AgentEventDto[] = [], spec?: EngineeringSpecDto |
 
 describe('InvestigationSection', () => {
   it('shows empty state when no investigation events exist', () => {
-    renderSection([]);
+    renderSection();
     expect(screen.getByTestId('investigation-empty-state')).toBeTruthy();
     expect(screen.getByText('Investigation has not run yet.')).toBeTruthy();
   });
 
-  it('renders findings when investigation event is present', () => {
-    renderSection([INVESTIGATION_EVENT]);
+  it('renders findings expanded by default and keeps acceptance/spec collapsed', () => {
+    renderSection({
+      events: [INVESTIGATION_EVENT],
+      spec: ENGINEERING_SPEC,
+      contract: ACCEPTANCE_CONTRACT,
+    });
     expect(screen.getByTestId('investigation-section')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /findings/i })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
     expect(screen.getByTestId('findings-content')).toBeTruthy();
+    expect(screen.getByTestId('key-files-list')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /acceptance contract/i })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.getByRole('button', { name: /engineering spec/i })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByText('Users can log in.')).toBeNull();
   });
 
   it('renders the Engineering Spec panel when a spec exists', () => {
-    renderSection([INVESTIGATION_EVENT], ENGINEERING_SPEC);
+    renderSection({ events: [INVESTIGATION_EVENT], spec: ENGINEERING_SPEC });
     expect(screen.getByText('Engineering Spec')).toBeTruthy();
     expect(screen.getByText('1 work package · 1 AC')).toBeTruthy();
   });
 
   it('displays the correct confidence badge for high confidence', () => {
-    renderSection([INVESTIGATION_EVENT]);
+    renderSection({ events: [INVESTIGATION_EVENT] });
     const badge = screen.getByTestId('confidence-badge');
     expect(badge).toBeTruthy();
     expect(badge.textContent).toContain('high');
   });
 
   it('renders key files list', () => {
-    renderSection([INVESTIGATION_EVENT]);
+    renderSection({ events: [INVESTIGATION_EVENT] });
     const filesList = screen.getByTestId('key-files-list');
     expect(filesList).toBeTruthy();
     expect(screen.getByText('src/auth/login.ts')).toBeTruthy();
@@ -149,7 +204,7 @@ describe('InvestigationSection', () => {
   });
 
   it('renders open questions list', () => {
-    renderSection([INVESTIGATION_EVENT]);
+    renderSection({ events: [INVESTIGATION_EVENT] });
     const questionsList = screen.getByTestId('open-questions-list');
     expect(questionsList).toBeTruthy();
     expect(screen.getByText('Does this affect the mobile app?')).toBeTruthy();
@@ -165,7 +220,7 @@ describe('InvestigationSection', () => {
         },
       },
     };
-    renderSection([lowConfEvent]);
+    renderSection({ events: [lowConfEvent] });
     const badge = screen.getByTestId('confidence-badge');
     expect(badge.textContent).toContain('low');
     expect(badge.className).toContain('text-red-400');
@@ -181,7 +236,7 @@ describe('InvestigationSection', () => {
         },
       },
     };
-    renderSection([medConfEvent]);
+    renderSection({ events: [medConfEvent] });
     const badge = screen.getByTestId('confidence-badge');
     expect(badge.textContent).toContain('medium');
     expect(badge.className).toContain('text-yellow-400');
@@ -197,7 +252,7 @@ describe('InvestigationSection', () => {
         },
       },
     };
-    renderSection([noFilesEvent]);
+    renderSection({ events: [noFilesEvent] });
     expect(screen.queryByTestId('key-files-list')).toBeNull();
   });
 
@@ -211,7 +266,7 @@ describe('InvestigationSection', () => {
         },
       },
     };
-    renderSection([noQuestionsEvent]);
+    renderSection({ events: [noQuestionsEvent] });
     expect(screen.queryByTestId('open-questions-list')).toBeNull();
   });
 
@@ -237,7 +292,7 @@ describe('InvestigationSection', () => {
       },
     });
 
-    renderSection([newer, older]);
+    renderSection({ events: [newer, older] });
 
     expect(screen.getByText('New finding')).toBeTruthy();
     expect(screen.queryByText('Old finding')).toBeNull();
@@ -260,8 +315,62 @@ describe('InvestigationSection', () => {
       },
     });
 
-    renderSection([newer, newRunSearch, older, oldRunRead]);
+    renderSection({ events: [newer, newRunSearch, older, oldRunRead] });
 
     expect(screen.getByText('0 file reads · 1 search')).toBeTruthy();
+  });
+
+  it('toggles investigation accordions independently while preserving content and controls', async () => {
+    const user = userEvent.setup();
+    renderSection({
+      events: [INVESTIGATION_EVENT],
+      spec: ENGINEERING_SPEC,
+      contract: ACCEPTANCE_CONTRACT,
+      comments: [HUMAN_NOTE],
+      itemType: 'bug',
+      itemState: 'factory:gate-pending',
+    });
+
+    const findingsToggle = screen.getByRole('button', { name: /findings/i });
+    const questionsToggle = screen.getByRole('button', { name: /open questions/i });
+    const trailToggle = screen.getByRole('button', { name: /investigation trail/i });
+    const notesToggle = screen.getByRole('button', { name: /human review notes/i });
+    const captureToggle = screen.getByRole('button', { name: /playwright capture/i });
+    const gateToggle = screen.getByRole('button', { name: /human review required/i });
+
+    expect(screen.getByText('Does this affect the mobile app?')).toBeTruthy();
+    expect(screen.getByTestId('investigation-trail')).toBeTruthy();
+    expect(screen.getByTestId('playwright-capture-content')).toBeTruthy();
+    expect(screen.getByTestId('investigation-proceed-button')).toBeTruthy();
+
+    await user.click(findingsToggle);
+    expect(findingsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('findings-content')).toBeNull();
+    expect(screen.queryByTestId('key-files-list')).toBeNull();
+    expect(screen.getByText('Does this affect the mobile app?')).toBeTruthy();
+
+    await user.click(questionsToggle);
+    expect(questionsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Does this affect the mobile app?')).toBeNull();
+    expect(screen.getByTestId('investigation-trail')).toBeTruthy();
+
+    await user.click(trailToggle);
+    expect(trailToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('investigation-trail')).toBeNull();
+    expect(screen.getByText('Please verify the mobile session flow.')).toBeTruthy();
+
+    await user.click(notesToggle);
+    expect(notesToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Please verify the mobile session flow.')).toBeNull();
+    expect(screen.getByTestId('playwright-capture-content')).toBeTruthy();
+
+    await user.click(captureToggle);
+    expect(captureToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('playwright-capture-content')).toBeNull();
+    expect(screen.getByTestId('investigation-proceed-button')).toBeTruthy();
+
+    await user.click(gateToggle);
+    expect(gateToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('investigation-proceed-button')).toBeNull();
   });
 });
