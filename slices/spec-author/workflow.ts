@@ -408,7 +408,6 @@ export async function runSpecAuthorWorkflow(
       const latestPrd = await resolveLatestPrd({
         projectId,
         workItemId: workItem.id,
-        loadLegacyComments: () => stateSource.listComments(workItem.externalId),
       });
       if (latestPrd != null) {
         prdContext =

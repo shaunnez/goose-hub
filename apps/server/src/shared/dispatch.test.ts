@@ -1511,7 +1511,7 @@ describe('dispatchRetro', () => {
 // ─── dispatchGrillAndPrd — buildPriorReplies filtering ───────────────────
 
 describe('dispatchGrillAndPrd: buildPriorReplies filtering', () => {
-  it('excludes system-marker and child-issues; includes PRD as agent role', async () => {
+  it('excludes system-marker, legacy PRD marker, and child-issues while preserving grill Q&A', async () => {
     const source = {
       getItem: vi.fn().mockResolvedValue({ state: 'factory:grilling' }),
       listComments: vi
@@ -1520,8 +1520,8 @@ describe('dispatchGrillAndPrd: buildPriorReplies filtering', () => {
           { body: '<!-- factory:grill-question -->\n**Round 1** — What is the scope?' },
           { body: 'It is admin only.' },
           { body: '<!-- factory:system -->\nUser rejected the PRD; returning to grill.' },
-          { body: '## Child issues\n- #10 slice 1' },
           { body: '<!-- factory:prd -->\n# PRD\n```json\n{}\n```' },
+          { body: '## Child issues\n- #10 slice 1' },
         ]),
     };
     mockGetSourceForSlug.mockResolvedValue(source);
@@ -1533,12 +1533,11 @@ describe('dispatchGrillAndPrd: buildPriorReplies filtering', () => {
     const call = mockRunGrillAndPrdWorkflow.mock.calls[0][0] as {
       priorReplies: Array<{ role: string; content: string }>;
     };
-    // system-marker and child-issues excluded; PRD included as agent role
-    expect(call.priorReplies).toHaveLength(3);
+    // system-marker, legacy PRD marker, and child-issues excluded.
+    expect(call.priorReplies).toHaveLength(2);
     expect(call.priorReplies[0].role).toBe('agent'); // grill question
     expect(call.priorReplies[1].role).toBe('user'); // user reply
     expect(call.priorReplies[1].content).toBe('It is admin only.');
-    expect(call.priorReplies[2].role).toBe('agent'); // PRD draft
   });
 });
 

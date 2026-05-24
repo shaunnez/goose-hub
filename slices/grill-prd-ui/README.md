@@ -19,7 +19,7 @@ UI:
   parsed PRD (title, problem, proposed solution, AC table, journeys,
   behaviors, vertical slices, complexity badge) plus the `Approve PRD` /
   `Reject` buttons when the issue is in `factory:prd-review`. Advisor concerns,
-  if present in the marker comment, render as a collapsible "Advisor notes"
+  if present in the PRD read model, render as a collapsible "Advisor notes"
   panel above the PRD content.
 - `apps/web/src/components/detail/components/GrillSection.tsx` — renders the
   grill conversation (agent question vs. user reply distinguished by the
@@ -27,9 +27,6 @@ UI:
   button. Send posts a comment and, when in `factory:gate-pending`,
   transitions back to `factory:grilling` so the orchestrator can pick it up
   on the next tick. The reply renders optimistically.
-- `apps/web/src/components/detail/lib/parse-prd-comment.ts` — pure parser
-  for the `<!-- factory:prd -->` marker comment, extracting both the JSON
-  PRD and the optional advisor concerns markdown block.
 - `apps/web/src/components/detail/lib/sections.ts` — `prd` flipped to
   `available: true`; new `grill` section added between `prd` and `code`.
 - `apps/web/src/components/detail/components/LeftRail.tsx` — adds
@@ -85,10 +82,7 @@ The Reject button calls `POST /reject-prd`, which:
 
 ## Tests
 
-- `slice.test.ts` — slice-level smoke test that asserts the parser and the
-  approve/reject helpers work end-to-end against the in-memory state source.
-- `apps/web/src/components/detail/lib/parse-prd-comment.test.ts` — pure
-  parser tests.
+- `slice.test.ts` — slice-level smoke test that asserts the approve/reject helpers work end-to-end against the in-memory state source.
 - `apps/web/src/components/detail/components/PRDSection.test.tsx` — RTL
   component tests covering empty / drafting / approved-state / advisor-notes
   / approve-button / reject-button / parse-error scenarios.

@@ -1,15 +1,6 @@
 import { eventStore } from '../event-stream/store.js';
 
-const PRD_MARKER = '<!-- factory:prd -->';
-const JSON_FENCE = /```json\s*\n([\s\S]*?)\n```/;
-const ADVISOR_HEADING = /\n##\s+Advisor concerns\s*\n/;
-
-export type LatestPrdSource = 'event' | 'legacy-comment';
-
-export interface LegacyPrdComment {
-  body: string;
-  createdAt: string;
-}
+export type LatestPrdSource = 'event';
 
 export interface LatestPrdResult {
   prd: unknown | null;
@@ -22,7 +13,6 @@ export interface LatestPrdResult {
 export interface ResolveLatestPrdInput {
   projectId: string;
   workItemId: string;
-  loadLegacyComments?: () => Promise<ReadonlyArray<LegacyPrdComment>>;
 }
 
 interface PrdDraftedPayload {
@@ -40,32 +30,6 @@ function normalizeAdvisorConcerns(value: unknown): string | null {
     return concerns.length > 0 ? concerns.map((item) => `- ${item}`).join('\n') : null;
   }
   return null;
-}
-
-export function isLegacyPrdMarkerComment(body: string): boolean {
-  return body.startsWith(PRD_MARKER);
-}
-
-export function parseLegacyPrdComment(
-  body: string,
-): Pick<LatestPrdResult, 'prd' | 'advisorConcerns'> {
-  if (!isLegacyPrdMarkerComment(body)) return { prd: null, advisorConcerns: null };
-
-  const fenceMatch = body.match(JSON_FENCE);
-  let prd: unknown | null = null;
-  if (fenceMatch != null) {
-    try {
-      prd = JSON.parse(fenceMatch[1]);
-    } catch {
-      prd = null;
-    }
-  }
-
-  const advisorIdx = body.search(ADVISOR_HEADING);
-  const advisorConcerns =
-    advisorIdx >= 0 ? body.slice(advisorIdx).replace(ADVISOR_HEADING, '').trimEnd() : null;
-
-  return { prd, advisorConcerns };
 }
 
 export async function resolveLatestPrd(
@@ -90,19 +54,5 @@ export async function resolveLatestPrd(
     }
   }
 
-  if (input.loadLegacyComments == null) return null;
-
-  const comments = await input.loadLegacyComments();
-  const matches = comments.filter((comment) => isLegacyPrdMarkerComment(comment.body));
-  if (matches.length === 0) return null;
-
-  const sorted = [...matches].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
-  const latest = sorted[sorted.length - 1];
-  const parsed = parseLegacyPrdComment(latest.body);
-  return {
-    ...parsed,
-    source: 'legacy-comment',
-    createdAt: latest.createdAt,
-    runId: null,
-  };
+  return null;
 }

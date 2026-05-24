@@ -6,13 +6,60 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { ParsedPRDView } from '../lib/parse-prd-comment';
 import { SectionEmptyState } from './SectionEmptyState';
 
 interface PRDSectionProps {
   projectSlug: string;
   id: string;
   state: string | undefined;
+}
+
+export interface ParsedPRDView {
+  title?: string;
+  problem?: string;
+  proposedSolution?: string;
+  outOfScope?: string[];
+  successCriteria?: string[];
+  acceptanceCriteria?: Array<{
+    id: string;
+    statement: string;
+    journeyId?: string;
+    crossCutting?: boolean;
+  }>;
+  journeys?: Array<{
+    id: string;
+    persona: string;
+    trigger: string;
+    steps: Array<{
+      userAction: string;
+      systemResponse: string;
+      dataShown: string;
+      stateChange: string;
+    }>;
+    successState: string;
+    errorStates: Array<{ error: string; recovery: string }>;
+    edgeCases: string[];
+  }>;
+  functionalSpec?: {
+    behaviors: Array<{ when: string; given: string; then: string }>;
+  };
+  verticalSlices?: Array<{
+    title: string;
+    goal: string;
+    estimatedSize: 'S' | 'M' | 'L';
+    journeyRefs: string[];
+  }>;
+  estimatedComplexity?: 'low' | 'medium' | 'high';
+  implementationDecisions?: Array<{
+    decision: string;
+    rationale?: string;
+    moduleRef?: string;
+  }>;
+  testingDecisions?: {
+    approach: string;
+    modulesToTest: string[];
+    priorArt?: string;
+  };
 }
 
 const COMPLEXITY_COLORS: Record<string, string> = {
@@ -649,6 +696,3 @@ function Section({
     </section>
   );
 }
-
-// Re-exported for tests / typing convenience.
-export type { ParsedPRDView };

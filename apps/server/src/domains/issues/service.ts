@@ -364,7 +364,7 @@ export async function getIssuePrd(
     prd: {
       prd: unknown | null;
       advisorConcerns: string | null;
-      source: 'event' | 'legacy-comment';
+      source: 'event';
       createdAt: string;
       runId: string | null;
     } | null;
@@ -377,7 +377,6 @@ export async function getIssuePrd(
   const prd = await resolveLatestPrd({
     projectId: slug,
     workItemId,
-    loadLegacyComments: () => source.listComments(id),
   });
   return { ok: true, data: { prd } };
 }

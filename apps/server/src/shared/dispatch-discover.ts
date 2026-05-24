@@ -9,27 +9,27 @@ import { getMaxParallelAgents, withParallelLock } from './dispatch-lock.js';
 import { REPO_ROOT } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
 
-const PRD_MARKER = '<!-- factory:prd -->';
 const GRILL_QUESTION_MARKER = '<!-- factory:grill-question -->';
+const LEGACY_PRD_MARKER = '<!-- factory:prd -->';
 const SYSTEM_MARKER = '<!-- factory:system -->';
 const CHILD_ISSUES_MARKER = '## Child issues';
 /**
  * Build the `priorReplies` array for grill-and-prd from issue comments.
- * Agent messages: grill questions (<!-- factory:grill-question -->) and PRD
- * drafts (<!-- factory:prd -->). PRD drafts are included so the griller sees
- * what was produced when a user declines and re-enters grilling.
- * System-marker and child-issues comments are excluded as noise.
+ * Agent messages: grill questions (<!-- factory:grill-question -->). System-marker,
+ * legacy PRD marker, and child-issues comments are excluded as noise.
  */
 function buildPriorReplies(
   comments: ReadonlyArray<{ body: string }>,
 ): Array<{ role: 'user' | 'agent'; content: string }> {
   return comments
-    .filter((c) => !c.body.startsWith(SYSTEM_MARKER) && !c.body.startsWith(CHILD_ISSUES_MARKER))
+    .filter(
+      (c) =>
+        !c.body.startsWith(SYSTEM_MARKER) &&
+        !c.body.startsWith(LEGACY_PRD_MARKER) &&
+        !c.body.startsWith(CHILD_ISSUES_MARKER),
+    )
     .map((c) => ({
-      role:
-        c.body.startsWith(GRILL_QUESTION_MARKER) || c.body.startsWith(PRD_MARKER)
-          ? ('agent' as const)
-          : ('user' as const),
+      role: c.body.startsWith(GRILL_QUESTION_MARKER) ? ('agent' as const) : ('user' as const),
       content: c.body,
     }));
 }
@@ -199,7 +199,6 @@ export async function dispatchDecomposePrd(slug: string, issueNumber: number): P
       const prdOutput = await resolveLatestPrd({
         projectId: slug,
         workItemId: item.id,
-        loadLegacyComments: () => source.listComments(issueNumber.toString()),
       });
       if (prdOutput == null) {
         logger.error('dispatchDecomposePrd: no PRD draft found', { slug, issueNumber });

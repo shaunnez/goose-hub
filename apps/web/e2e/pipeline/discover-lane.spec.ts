@@ -11,7 +11,7 @@
  *   - State-gated UI: Grill tab present in grilling state, PRD tab absent
  *   - Grill chat: agent question renders, user reply posts + transitions state
  *   - PRD tab appears once state is factory:prd-review
- *   - PRD content (title, problem, slices) renders from the mock comment
+ *   - PRD content (title, problem, slices) renders from the mock prd.drafted event
  *   - Approve PRD: POSTs /approve-prd and advances to factory:dev-ready
  *
  * What is intentionally deferred (see TODO comments below):
@@ -57,12 +57,15 @@ async function seedIssue(opts: {
   return res.json() as Promise<{ issueNumber: number; workItemId: string }>;
 }
 
+async function seedPrd(issueNumber: number, prd = buildMockPrd()): Promise<void> {
+  await postServer(`/projects/test/${SLUG}/issues/${issueNumber}/seed-prd`, { prd });
+}
+
 /**
- * Minimal PRD body matching the <!-- factory:prd --> format expected by
- * PRDSection.tsx. The JSON blob is intentionally compact — just enough fields
- * to render title, problem, and one vertical slice.
+ * Minimal PRD payload for the /prd read model. The JSON blob is intentionally
+ * compact — just enough fields to render title, problem, and one vertical slice.
  */
-function buildMockPrdCommentBody(): string {
+function buildMockPrd() {
   const prd = {
     title: 'Better Search',
     problem: 'Current search misses obvious keyword matches.',
@@ -116,7 +119,7 @@ function buildMockPrdCommentBody(): string {
     },
     decisionSummaries: [{ kind: 'PLAN', summary: 'Mock PRD for E2E.' }],
   };
-  return `<!-- factory:prd -->\n# PRD\n\n\`\`\`json\n${JSON.stringify(prd, null, 2)}\n\`\`\``;
+  return prd;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +207,7 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
   // ─────────────────────────────────────────────────────────────────────────
   // Steps 6-7: PRD tab appears and renders content once state is
   // factory:prd-review. The mock here seeds the issue directly at prd-review
-  // and uses the /comment endpoint to plant the PRD comment, then verifies
+  // and seeds a local prd.drafted event, then verifies
   // the PRD section renders and the Approve button works.
   //
   // This avoids a multi-round grill sequence (already covered by
@@ -219,9 +222,7 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
       state: 'factory:prd-review',
     });
 
-    await postServer(`/projects/${SLUG}/issues/${issueNumber}/comment`, {
-      body: buildMockPrdCommentBody(),
-    });
+    await seedPrd(issueNumber);
 
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/prd`);
     const statePill = page.getByTestId('state-pill');
@@ -248,9 +249,7 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
       state: 'factory:prd-review',
     });
 
-    await postServer(`/projects/${SLUG}/issues/${issueNumber}/comment`, {
-      body: buildMockPrdCommentBody(),
-    });
+    await seedPrd(issueNumber);
 
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/prd`);
     const statePill = page.getByTestId('state-pill');
@@ -268,11 +267,10 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
     // Form closes after successful submission
     await expect(form).not.toBeVisible({ timeout: 10_000 });
 
-    // Plant a v2 PRD comment to simulate the background workflow completing
-    const v2Prd = buildMockPrdCommentBody().replace('Better Search', 'Better Search v2');
-    await postServer(`/projects/${SLUG}/issues/${issueNumber}/comment`, { body: v2Prd });
+    // Seed a v2 PRD event to simulate the background workflow completing.
+    await seedPrd(issueNumber, { ...buildMockPrd(), title: 'Better Search v2' });
 
-    // The PRD section should update to show v2 content once comments are refreshed.
+    // The PRD section should update to show v2 content once the PRD read model refreshes.
     // Reload to trigger a fresh fetch (React Query cache would need a poll cycle otherwise).
     await page.reload();
     await expect(page.getByTestId('prd-title')).toHaveText('Better Search v2', {
@@ -292,10 +290,8 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
       state: 'factory:prd-review',
     });
 
-    // Plant a PRD comment so PRDSection has content to render.
-    await postServer(`/projects/${SLUG}/issues/${issueNumber}/comment`, {
-      body: buildMockPrdCommentBody(),
-    });
+    // Seed a PRD event so PRDSection has content to render.
+    await seedPrd(issueNumber);
 
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/prd`);
     const statePill = page.getByTestId('state-pill');

@@ -179,7 +179,6 @@ export async function revisePRD(
   const latestPrd = await resolveLatestPrd({
     projectId: slug,
     workItemId,
-    loadLegacyComments: () => source.listComments(id),
   });
   const priorPrd = latestPrd?.prd != null ? (latestPrd.prd as PRDOutput) : undefined;
   if (priorPrd == null) {

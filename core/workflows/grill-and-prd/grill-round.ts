@@ -41,9 +41,7 @@ export async function runGrillRound(input: RunGrillRoundInput): Promise<GrillRou
     deps,
   } = input;
 
-  const roundNumber =
-    priorReplies.filter((r) => r.role === 'agent' && !r.content.startsWith('<!-- factory:prd -->'))
-      .length + 1;
+  const roundNumber = priorReplies.filter((r) => r.role === 'agent').length + 1;
 
   let result: Awaited<ReturnType<typeof invokeSkill>>;
 
