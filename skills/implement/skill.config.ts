@@ -28,7 +28,13 @@ export const ImplementContextSchema = z.object({
   }),
   advisorFeedback: z.string().optional(),
   revisionPass: z.union([z.literal(0), z.literal(1)]).optional(),
-  priorEvidenceSpecPath: z.string().nullable().optional(),
+  priorEvidenceSpecPath: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      'Path to the evidence spec authored or reused by the prior dev/fix-feedback cycle on this work item. Omitted when no prior cycle exists; the call site coerces null → omission.',
+    ),
   existingFileManifest: z
     .array(
       z.object({

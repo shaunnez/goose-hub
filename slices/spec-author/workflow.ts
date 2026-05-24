@@ -13,9 +13,11 @@ import {
   createWorktree,
   resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
+import { collectScopeManifest } from '@goose-hub/skills/spec-author/manifest.js';
 import {
   type EngineeringSpec,
   EngineeringSpecSchema,
+  fileOwnedPath,
 } from '@goose-hub/skills/spec-author/schema.js';
 import {
   type ValidationResult,
@@ -65,6 +67,7 @@ type SpecAuthorContext = {
   scoutReports?: string;
   wave2Reports?: string;
   investigationSynthesis?: string;
+  existingFileManifest?: Array<{ path: string; kind: 'file' | 'dir' }>;
 };
 
 type SpecAttempt = {
@@ -160,7 +163,8 @@ function emitSpecContractGateBlocked(input: {
 function duplicateFilesOwned(spec: EngineeringSpec): DuplicateOwnedPath[] {
   const ownersByPath = new Map<string, Set<string>>();
   for (const wp of spec.workPackages) {
-    for (const path of wp.filesOwned) {
+    for (const entry of wp.filesOwned) {
+      const path = fileOwnedPath(entry);
       const owners = ownersByPath.get(path) ?? new Set<string>();
       owners.add(wp.id);
       ownersByPath.set(path, owners);
@@ -214,6 +218,44 @@ function investigationKeyFilePaths(event: { payload: unknown } | undefined): str
     }
     return [];
   });
+}
+
+function dirOf(p: string): string {
+  const slash = p.lastIndexOf('/');
+  return slash === -1 ? '' : p.slice(0, slash);
+}
+
+function deriveSpecScopeRoots(input: {
+  prdContext?: { verticalSlices?: Array<unknown> };
+  investigationSynthesis?: string;
+}): string[] {
+  const roots = new Set<string>();
+
+  if (input.investigationSynthesis != null) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(input.investigationSynthesis);
+    } catch {
+      parsed = null;
+    }
+    const keyFiles = (parsed as { keyFiles?: unknown } | null)?.keyFiles;
+    if (Array.isArray(keyFiles)) {
+      for (const file of keyFiles) {
+        if (file != null && typeof file === 'object') {
+          const path = (file as { path?: unknown }).path;
+          if (typeof path === 'string' && path.length > 0) {
+            const d = dirOf(path);
+            if (d.length > 0) roots.add(d);
+          }
+        }
+      }
+    }
+  }
+
+  // PRD vertical slices have fields title/goal/estimatedSize/journeyRefs — no .path field.
+  // Scope roots are derived solely from investigationSynthesis.keyFiles above.
+
+  return Array.from(roots);
 }
 
 function stringifyScoutDigestForContext(
@@ -346,6 +388,9 @@ export async function runSpecAuthorWorkflow(
       }
     }
 
+    const scopeRoots = deriveSpecScopeRoots({ prdContext, investigationSynthesis });
+    const existingFileManifest = collectScopeManifest(worktreePath, scopeRoots);
+
     const baseContext: SpecAuthorContext = {
       workItem: workItemCtx,
       issueType: workItem.type === 'bug' ? 'bug' : 'feature',
@@ -356,6 +401,8 @@ export async function runSpecAuthorWorkflow(
       scoutReports,
       wave2Reports,
       investigationSynthesis,
+      // Omit when empty so the prompt's fallback behaviour (keyed on field absence) fires correctly.
+      ...(existingFileManifest.length > 0 && { existingFileManifest }),
     };
 
     if (prdContext != null) {

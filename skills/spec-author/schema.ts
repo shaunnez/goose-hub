@@ -73,10 +73,33 @@ export const InterfaceContractSchema = z.object({
   lineRange: optionalAiString,
 });
 
+export const FileOwnedEntrySchema = z.union([
+  z.string().min(1).describe(RepoRelativePathDescription),
+  z.object({
+    path: z.string().min(1).describe(RepoRelativePathDescription),
+    status: z.enum(['existing', 'new']).optional(),
+  }),
+]);
+
+/**
+ * Extract the file path from a FileOwnedEntry (bare string or annotated object).
+ */
+export function fileOwnedPath(entry: z.infer<typeof FileOwnedEntrySchema>): string {
+  return typeof entry === 'string' ? entry : entry.path;
+}
+
+/**
+ * Extract the status from a FileOwnedEntry. Bare strings are treated as 'existing'.
+ */
+export function fileOwnedStatus(entry: z.infer<typeof FileOwnedEntrySchema>): 'existing' | 'new' {
+  if (typeof entry === 'string') return 'existing';
+  return entry.status ?? 'existing';
+}
+
 export const WorkPackageSchema = z.object({
   id: z.string().min(1),
   /** Paths this WP owns. No path may appear in two WPs (full-stop, not per-batch). */
-  filesOwned: z.array(z.string().min(1).describe(RepoRelativePathDescription)).min(1),
+  filesOwned: z.array(FileOwnedEntrySchema).min(1),
   /** Description of changes — file:line citations encouraged. */
   changes: z.string().min(1),
   /** WP ids this WP depends on; must reference real WPs in the spec. */

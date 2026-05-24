@@ -142,15 +142,28 @@ describe('server resources', () => {
       };
     };
 
-    expect(internals._resourceHandlersInitialized).toBe(true);
-    expect(Object.keys(internals._registeredResources ?? {})).toEqual([]);
-    expect(Object.keys(internals._registeredResourceTemplates ?? {})).toContain('workspace-files');
+    // With low-level setRequestHandler registration, the SDK's high-level resource bookkeeping
+    // (_resourceHandlersInitialized, _registeredResourceTemplates) is not used. Verify that
+    // the handlers are registered directly on server.server._requestHandlers instead.
+    expect(internals.server?._requestHandlers?.has('resources/list')).toBe(true);
+    expect(internals.server?._requestHandlers?.has('resources/read')).toBe(true);
+    expect(internals.server?._requestHandlers?.has('resources/templates/list')).toBe(true);
 
     const listResult = await internals.server?._requestHandlers?.get('resources/list')?.(
       { method: 'resources/list', params: {} },
       {},
     );
     expect((listResult as { resources: unknown[] }).resources).toEqual([]);
+
+    const templatesResult = await internals.server?._requestHandlers?.get(
+      'resources/templates/list',
+    )?.({ method: 'resources/templates/list', params: {} }, {});
+    expect(
+      (templatesResult as { resourceTemplates: Array<{ name: string; uriTemplate: string }> })
+        .resourceTemplates,
+    ).toEqual([
+      expect.objectContaining({ name: 'workspace-files', uriTemplate: 'factory://{+path}' }),
+    ]);
   });
 });
 

@@ -96,20 +96,6 @@ function buildPriorInvestigationPayload(investigation: InvestigationContext | un
   };
 }
 
-function findPriorEvidenceSpecPath(events: ReturnType<typeof eventStore.replay>): string | null {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i];
-    if (event.kind !== 'agent.implement-complete' && event.kind !== 'agent.fix-feedback-complete') {
-      continue;
-    }
-    const payload = event.payload as { evidenceSpecPath?: unknown } | null;
-    if (typeof payload?.evidenceSpecPath === 'string' && payload.evidenceSpecPath.length > 0) {
-      return payload.evidenceSpecPath;
-    }
-  }
-  return null;
-}
-
 function deriveScopeRootsFromInvestigation(
   investigation: InvestigationContext | undefined,
 ): string[] {
@@ -252,6 +238,25 @@ function nextRepairCycle(events: ReturnType<typeof eventStore.replay>): number {
 }
 
 /**
+ * Scans events backward for the most recent `agent.implement-complete` or
+ * `agent.fix-feedback-complete` event that has a non-empty `evidenceSpecPath`,
+ * and returns it so the repair run can reuse the prior cycle's spec.
+ */
+function findPriorEvidenceSpecPath(events: ReturnType<typeof eventStore.replay>): string | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind !== 'agent.implement-complete' && e.kind !== 'agent.fix-feedback-complete') {
+      continue;
+    }
+    const payload = e.payload as { evidenceSpecPath?: unknown };
+    if (typeof payload.evidenceSpecPath === 'string' && payload.evidenceSpecPath.length > 0) {
+      return payload.evidenceSpecPath;
+    }
+  }
+  return null;
+}
+
+/**
  * Finds the most recent failure from either `qa.completed` (non-pass) or
  * `review.completed` (needs-fix), whichever is later in the event stream,
  * and formats it as advisor feedback for the implement skill.
@@ -351,7 +356,6 @@ export async function runFixFeedbackWorkflow(
   const prLifecycle = findPrLifecycle(events);
   const sourceFailure = findLatestSourceFailure(events);
   const repairCycle = nextRepairCycle(events);
-  const priorEvidenceSpecPath = findPriorEvidenceSpecPath(events);
   const repairPayload = compactPayload({
     pipelineRunId: prLifecycle?.pipelineRunId,
     attemptId,
@@ -469,6 +473,7 @@ export async function runFixFeedbackWorkflow(
   );
   const priorDevDecisions = collectPriorDevDecisions(events, prLifecycle);
   const priorDevChangedFiles = collectPriorChangedFiles(worktreePath, prLifecycle?.baseBranch);
+  const priorEvidenceSpecPath = findPriorEvidenceSpecPath(events) ?? undefined;
 
   await stateSource.transitionState(
     workItem.externalId,

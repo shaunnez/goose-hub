@@ -37,6 +37,20 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
+function fileOwnedArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === 'string') {
+      out.push(entry);
+    } else if (entry != null && typeof entry === 'object' && 'path' in entry) {
+      const path = (entry as { path: unknown }).path;
+      if (typeof path === 'string') out.push(path);
+    }
+  }
+  return out;
+}
+
 function numberArray(value: unknown): number[] {
   return Array.isArray(value)
     ? value.filter((item): item is number => typeof item === 'number')
@@ -115,7 +129,7 @@ function projectEngineeringSpec(record: NonNullable<ReturnType<typeof getEnginee
     ...(architecture != null ? { architecture } : {}),
     workPackages: objectArray(s.workPackages).map((wp, index) => ({
       id: stringValue(wp.id, `WP${index + 1}`),
-      filesOwned: stringArray(wp.filesOwned),
+      filesOwned: fileOwnedArray(wp.filesOwned),
       changes: stringValue(wp.changes),
       dependsOn: stringArray(wp.dependsOn),
       builderTier: stringValue(wp.builderTier),
