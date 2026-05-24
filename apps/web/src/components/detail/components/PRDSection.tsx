@@ -1,5 +1,6 @@
 import { approvePRD, declinePRD, fetchEvents, fetchPRD, revisePRD } from '@/lib/api';
 import { renderMarkdownToHtml } from '@/lib/markdown';
+import { interventionKeys } from '@/lib/query-keys';
 import type { AgentEventDto, PrdReadModelDto } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2 } from 'lucide-react';
@@ -19,6 +20,21 @@ const COMPLEXITY_COLORS: Record<string, string> = {
   medium: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
   high: 'bg-red-500/15 text-red-300 border-red-500/30',
 };
+
+const PRD_ROUTED_TO_DELIVERY_STATES = new Set([
+  'factory:dev-ready',
+  'factory:spec-ready',
+  'factory:in-progress',
+  'factory:needs-qa',
+  'factory:qa-failed',
+  'factory:needs-review',
+  'factory:needs-fix',
+  'factory:approved',
+  'factory:merge-conflict',
+  'factory:retrospecting',
+  'factory:done',
+  'factory:archived',
+]);
 
 export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
   const queryClient = useQueryClient();
@@ -54,6 +70,8 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
     void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
     void queryClient.invalidateQueries({ queryKey: ['prd', projectSlug, id] });
     void queryClient.invalidateQueries({ queryKey: ['events', projectSlug, id] });
+    void queryClient.invalidateQueries({ queryKey: ['interventions', 'issue', projectSlug, id] });
+    void queryClient.invalidateQueries({ queryKey: interventionKeys.timeline(projectSlug, id) });
   };
 
   const approve = useMutation({
@@ -160,10 +178,12 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
   }
 
   const showApproveButtons = state === 'factory:prd-review';
+  const isDecomposing = state === 'factory:decomposing';
   const prdApproved =
-    state === 'factory:decomposing' ||
-    state === 'factory:issues-created' ||
-    state === 'factory:done';
+    state != null &&
+    (isDecomposing ||
+      state === 'factory:issues-created' ||
+      PRD_ROUTED_TO_DELIVERY_STATES.has(state));
   const isBusy = approve.isPending || requestChanges.isPending || decline.isPending;
 
   const onSubmitRequestChanges = (e: React.FormEvent) => {
@@ -234,9 +254,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
             <CheckCircle2 size={14} className="text-green-400 shrink-0" />
             <span className="text-[13px] text-green-300 font-medium">PRD approved</span>
             <span className="text-[12px] text-fg-3 ml-1">
-              {state === 'factory:decomposing'
-                ? '— decomposing into vertical slices'
-                : '— issues created'}
+              {isDecomposing ? '— decomposing into vertical slices' : '— routed to delivery'}
             </span>
           </div>
           {childIssueNumbers.length > 0 && (
@@ -263,9 +281,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
         >
           <div className="flex items-center justify-between">
             <div className="text-[13px] font-semibold">PRD review</div>
-            <div className="text-[12px] text-fg-3">
-              Approve to begin decomposing into vertical slices.
-            </div>
+            <div className="text-[12px] text-fg-3">Approve to route into delivery.</div>
           </div>
 
           {errorMsg != null && (

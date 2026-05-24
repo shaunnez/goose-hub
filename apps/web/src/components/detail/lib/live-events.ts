@@ -7,6 +7,11 @@ type StateTransitionPayload = {
   to?: unknown;
 };
 
+type LatestTransitionState = {
+  eventId: number;
+  state: string;
+};
+
 type FetchEventsPage = (
   projectSlug: string,
   issueId: string,
@@ -36,9 +41,19 @@ export function upsertIssueEvent(
 }
 
 export function latestTransitionState(events: AgentEventDto[] | undefined): string | null {
-  const latest = (events ?? []).find((event) => event.kind === 'state.transitioned');
+  return latestStateTransition(events)?.state ?? null;
+}
+
+export function latestStateTransition(
+  events: AgentEventDto[] | undefined,
+): LatestTransitionState | null {
+  const latest = (events ?? [])
+    .filter((event) => event.kind === 'state.transitioned')
+    .sort((left, right) => right.id - left.id)[0];
   const payload = latest?.payload as StateTransitionPayload | null | undefined;
-  return typeof payload?.to === 'string' ? payload.to : null;
+  return latest != null && typeof payload?.to === 'string'
+    ? { eventId: latest.id, state: payload.to }
+    : null;
 }
 
 export function applyLatestEventState<T extends WorkItemDto>(
@@ -56,15 +71,32 @@ export function patchIssueStateFromTransition(
   event: AgentEventDto,
 ): void {
   if (event.kind !== 'state.transitioned') return;
-  const payload = event.payload as StateTransitionPayload | null | undefined;
-  if (typeof payload?.to !== 'string') return;
+  const events = mergeIssueEvents(
+    queryClient.getQueryData<AgentEventDto[]>(['events', projectSlug, issueId]),
+    [event],
+  );
+  patchIssueStateFromLatestTransition(queryClient, projectSlug, issueId, events);
+}
+
+export function patchIssueStateFromLatestTransition(
+  queryClient: QueryClient,
+  projectSlug: string,
+  issueId: string,
+  events: AgentEventDto[] | undefined,
+): void {
+  const latest = latestStateTransition(events);
+  if (latest == null) return;
 
   queryClient.setQueryData<WorkItemDto>(['issue', projectSlug, issueId], (existing) =>
-    existing == null ? existing : { ...existing, state: payload.to as string },
+    existing == null || existing.state === latest.state
+      ? existing
+      : { ...existing, state: latest.state },
   );
   queryClient.setQueryData<WorkItemDto[]>(['issues', projectSlug], (existing) =>
     existing?.map((item) =>
-      item.externalId === issueId ? { ...item, state: payload.to as string } : item,
+      item.externalId === issueId && item.state !== latest.state
+        ? { ...item, state: latest.state }
+        : item,
     ),
   );
 }
@@ -80,7 +112,12 @@ export function applyIssueTimelineEvent(
   upsertIssueEvent(queryClient, projectSlug, issueId, event);
 
   if (event.kind === 'state.transitioned') {
-    patchIssueStateFromTransition(queryClient, projectSlug, issueId, event);
+    patchIssueStateFromLatestTransition(
+      queryClient,
+      projectSlug,
+      issueId,
+      queryClient.getQueryData<AgentEventDto[]>(['events', projectSlug, issueId]),
+    );
     void queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, issueId] });
     void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
     const payload = event.payload as {

@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyIssueTimelineEvent,
   backfillIssueTimelineEvents,
+  mergeIssueEvents,
+  patchIssueStateFromLatestTransition,
   upsertIssueEvent,
 } from './live-events';
 
@@ -132,6 +134,70 @@ describe('applyIssueTimelineEvent', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['acceptance-contract', 'p', '1'],
     });
+  });
+
+  it('does not let an older transition event regress a newer cached state', () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(
+      ['events', 'p', '1'],
+      [makeEvent(5, 'state.transitioned', { to: 'factory:spec-ready' })],
+    );
+    queryClient.setQueryData(['issue', 'p', '1'], {
+      externalId: '1',
+      state: 'factory:spec-ready',
+    } as WorkItemDto);
+    queryClient.setQueryData(
+      ['issues', 'p'],
+      [
+        {
+          externalId: '1',
+          state: 'factory:spec-ready',
+        } as WorkItemDto,
+      ],
+    );
+
+    applyIssueTimelineEvent(
+      queryClient,
+      'p',
+      '1',
+      makeEvent(3, 'state.transitioned', { to: 'factory:dev-ready' }),
+    );
+
+    expect(queryClient.getQueryData<WorkItemDto>(['issue', 'p', '1'])?.state).toBe(
+      'factory:spec-ready',
+    );
+    expect(queryClient.getQueryData<WorkItemDto[]>(['issues', 'p'])?.[0]?.state).toBe(
+      'factory:spec-ready',
+    );
+  });
+});
+
+describe('patchIssueStateFromLatestTransition', () => {
+  it('patches issue caches from merged fetched event pages', () => {
+    const queryClient = new QueryClient();
+    const issue = {
+      externalId: '1',
+      state: 'factory:prd-review',
+    } as WorkItemDto;
+    queryClient.setQueryData(
+      ['events', 'p', '1'],
+      [makeEvent(2, 'state.transitioned', { to: 'factory:prd-review' })],
+    );
+    queryClient.setQueryData(['issue', 'p', '1'], issue);
+    queryClient.setQueryData(['issues', 'p'], [issue]);
+
+    const merged = mergeIssueEvents(queryClient.getQueryData(['events', 'p', '1']), [
+      makeEvent(4, 'state.transitioned', { to: 'factory:dev-ready' }),
+    ]);
+
+    patchIssueStateFromLatestTransition(queryClient, 'p', '1', merged);
+
+    expect(queryClient.getQueryData<WorkItemDto>(['issue', 'p', '1'])?.state).toBe(
+      'factory:dev-ready',
+    );
+    expect(queryClient.getQueryData<WorkItemDto[]>(['issues', 'p'])?.[0]?.state).toBe(
+      'factory:dev-ready',
+    );
   });
 });
 
