@@ -463,7 +463,7 @@ describe('CodexCliRuntime timeout handling', () => {
     );
   });
 
-  it('audits a failed MCP resource read without killing the Codex run', async () => {
+  it('records resources/read failed as a non-fatal advisory event', async () => {
     const child = makeHangingChild();
     mockSpawn.mockReturnValue(child);
 
@@ -483,18 +483,31 @@ describe('CodexCliRuntime timeout handling', () => {
     child.emit('close', 0);
 
     await expect(run).resolves.toMatchObject({ output: { ok: true } });
-    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'agent.tool-call',
-        payload: expect.objectContaining({
-          tool_name: 'resources/read',
-          blocked: true,
-          block_reason: 'blocked-runtime-surface: resources/read failed',
-          status: 'failed',
-        }),
-        personaId: 'test-project/developer/0',
-      }),
+
+    const calls: Parameters<typeof mockEventStore.appendEvent>[0][] =
+      mockEventStore.appendEvent.mock.calls.map((c: unknown[]) => c[0]);
+
+    const advisory = calls.find(
+      (e) =>
+        e.kind === 'agent.runtime-advisory' &&
+        (e.payload as { surface: string }).surface === 'resources/read failed',
     );
+    expect(advisory).toBeDefined();
+    expect((advisory?.payload as { blocked?: unknown }).blocked).toBeUndefined();
+
+    // No agent.run-blocked event for this surface.
+    expect(calls.some((e) => e.kind === 'agent.run-blocked')).toBe(false);
+
+    // No blocked tool-call for resources/read.
+    expect(
+      calls.some(
+        (e) =>
+          e.kind === 'agent.tool-call' &&
+          (e.payload as { tool_name?: string; blocked?: boolean }).tool_name === 'resources/read' &&
+          (e.payload as { blocked?: boolean }).blocked === true,
+      ),
+    ).toBe(false);
+
     expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'agent.run-completed' }),
     );
