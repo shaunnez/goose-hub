@@ -20,6 +20,8 @@ One row per agent run, keyed on `runId`.
 | `modelId` | text | Model used (e.g. `claude-sonnet-4-6`) |
 | `inputTokens` | int | Prompt tokens |
 | `outputTokens` | int | Completion tokens |
+| `cachedInputTokens` | int | Prompt tokens reported as cache hits |
+| `reasoningOutputTokens` | int | Reasoning tokens reported separately from visible output |
 | `costUsd` | real | Dollar figure for this run |
 | `costLabel` | text | `'estimated'` or `'exact'` — see below |
 | `personaId` | text? | Persona that ran (e.g. `goose-hub-self/qa/0`) |
@@ -41,6 +43,12 @@ When a future code path talks to the Anthropic SDK directly (rather than
 spawning the CLI), it should call `costFromApiUsage()` to construct a
 `CostUsage` with `costLabel: 'exact'`. The dashboard surfaces this label
 verbatim — see M9.09 for UI rendering rules (`~$0.04` vs `$0.04`).
+
+Codex OAuth usage is plan-based rather than directly billed per request. For
+those runs, `costUsd` is synthetic telemetry: uncached input uses the model's
+input rate, cached input uses a discounted cache-read rate, and reasoning tokens
+are counted at the output rate. Treat the number as a consistent planning signal,
+not invoice truth.
 
 ## Stage mapping
 
