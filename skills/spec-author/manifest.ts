@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join, posix } from 'node:path';
+import { join, posix, resolve, sep } from 'node:path';
 
 function isDirSync(abs: string): boolean {
   try {
@@ -21,12 +21,17 @@ export function collectScopeManifest(
   repoRoot: string,
   scopeRoots: ReadonlyArray<string>,
 ): ManifestEntry[] {
+  const resolvedRoot = resolve(repoRoot);
   const out: ManifestEntry[] = [];
   for (const scope of scopeRoots) {
     if (out.length >= MANIFEST_CAP) break;
-    const abs = join(repoRoot, scope);
+    // Reject absolute paths and traversals outside repoRoot.
+    const abs = resolve(repoRoot, scope);
+    if (abs !== resolvedRoot && !abs.startsWith(resolvedRoot + sep)) continue;
     if (!existsSync(abs) || !isDirSync(abs)) continue;
-    walk(abs, scope, out);
+    // Derive POSIX-relative path from the resolved root for consistent output.
+    const rel = abs === resolvedRoot ? '.' : abs.slice(resolvedRoot.length + sep.length);
+    walk(abs, rel, out);
   }
   return out.slice(0, MANIFEST_CAP);
 }

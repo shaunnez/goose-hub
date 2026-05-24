@@ -1028,6 +1028,95 @@ describe('runSpecAuthorWorkflow', () => {
       );
     });
 
+    it('derives scopeRoots from investigationSynthesis.keyFiles only (PRD slices have no .path field)', async () => {
+      const { collectScopeManifest } = await import('@goose-hub/skills/spec-author/manifest.js');
+
+      vi.mocked(eventStore.replay).mockImplementation((query?: { kind?: string }) => {
+        if (query?.kind === 'agent.investigation-complete') {
+          return [
+            {
+              id: 1,
+              projectId: 'goose-hub-self',
+              workItemId: 'github:shaunnez/goose-hub#55',
+              kind: 'agent.investigation-complete',
+              payload: {
+                investigationRunId: null,
+                investigate: {
+                  findings: 'Core service needs update.',
+                  keyFiles: [{ path: 'core/service/index.ts' }],
+                  confidence: 'high',
+                  openQuestions: [],
+                },
+              },
+              runId: 'inv-run',
+              createdAt: '2026-05-14T00:00:00Z',
+            },
+          ] as never;
+        }
+        if (query?.kind === 'prd.drafted') {
+          return [
+            {
+              id: 10,
+              projectId: 'goose-hub-self',
+              workItemId: 'github:shaunnez/goose-hub#55',
+              kind: 'prd.drafted',
+              payload: {
+                prd: {
+                  title: 'Some PRD',
+                  problem: 'Problem.',
+                  proposedSolution: 'Solution.',
+                  successCriteria: [],
+                  acceptanceCriteria: [],
+                  journeys: [],
+                  functionalSpec: null,
+                  // verticalSlices have no .path field — title/goal/estimatedSize/journeyRefs only
+                  verticalSlices: [
+                    { title: 'Slice A', goal: 'Do A', estimatedSize: 'S', journeyRefs: [] },
+                  ],
+                  implementationDecisions: [],
+                  testingDecisions: null,
+                },
+              },
+              runId: 'prd-run',
+              personaId: null,
+              createdAt: '2026-05-22T00:00:00.000Z',
+            },
+          ] as never;
+        }
+        return [];
+      });
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(
+        makeWorkItem({ type: 'feature' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      // scopeRoots should be derived from investigationSynthesis.keyFiles only
+      expect(collectScopeManifest).toHaveBeenCalledWith(
+        '/tmp/test-spec-worktree',
+        expect.arrayContaining(['core/service']),
+      );
+      // Should NOT contain anything from PRD verticalSlices (they have no .path)
+      const call = vi.mocked(collectScopeManifest).mock.calls[0];
+      const roots = call?.[1] ?? [];
+      expect(roots).not.toContain('Slice A');
+    });
+
+    it('omits existingFileManifest from context when collectScopeManifest returns []', async () => {
+      // collectScopeManifest is mocked to return [] by default
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockInvokeSkill).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.not.objectContaining({ existingFileManifest: expect.anything() }),
+        }),
+      );
+    });
+
     it('blocks ambiguous package-relative filesOwned before persistence', async () => {
       touchSpecWorktree('apps/web/src/index.ts');
       touchSpecWorktree('apps/server/src/index.ts');

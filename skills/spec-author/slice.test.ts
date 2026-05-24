@@ -945,4 +945,35 @@ describe('self-check-grounded-in-code (per-file)', () => {
     );
     expect(result.ok).toBe(true);
   });
+
+  it('errors when a sensitive missing path triggers grounding error (no sensitive skip)', () => {
+    // Sensitive paths (auth/secret/crypto/session) must also be grounded in the worktree.
+    // Previously these were skipped via sensitivePattern.test(path) — that skip is removed.
+    const result = validateEngineeringSpec(
+      baseSpec({
+        workPackages: [
+          {
+            id: 'WP1',
+            filesOwned: [
+              // Missing sensitive file — should trigger grounding error, not be silently skipped.
+              'apps/web/src/auth/SecretHandler.tsx',
+            ],
+            changes: 'Add secret handler.',
+            dependsOn: [],
+            builderTier: 'haiku',
+          },
+        ],
+        executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+        interfaceContracts: [],
+        riskRegister: [{ id: 'R1', description: 'Secret exposure', mitigation: 'Encrypt at rest' }],
+      }),
+      { repoRoot: tmp },
+    );
+    expect(result.ok).toBe(false);
+    expect(
+      (result as { ok: false; errors: Array<{ rule: string; message: string }> }).errors.some(
+        (e) => e.rule === 'self-check-grounded-in-code' && e.message.includes('SecretHandler.tsx'),
+      ),
+    ).toBe(true);
+  });
 });

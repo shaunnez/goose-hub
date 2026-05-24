@@ -384,7 +384,6 @@ export function validateEngineeringSpec(
         if (status === 'new') continue;
         if (!GROUNDABLE_SCOPE_RE.test(path)) continue;
         if (EXEMPT_SUFFIX_FOR_GROUNDING.test(path)) continue;
-        if (sensitivePattern.test(path)) continue;
         if (existsSync(join(repoRoot, path))) continue;
         errors.push({
           rule: 'self-check-grounded-in-code',

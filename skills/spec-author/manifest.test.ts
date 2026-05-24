@@ -39,4 +39,24 @@ describe('collectScopeManifest', () => {
     const out = collectScopeManifest(root, ['apps/web/src/components/detail']);
     expect(out.every((e) => !e.path.includes('node_modules'))).toBe(true);
   });
+
+  it('rejects absolute scopeRoot paths (security: path traversal)', () => {
+    const root = scratchRepo();
+    // /etc is an absolute path outside repoRoot — must yield no entries
+    const out = collectScopeManifest(root, ['/etc']);
+    expect(out).toEqual([]);
+  });
+
+  it('rejects traversal scopeRoot paths that resolve outside repoRoot', () => {
+    const root = scratchRepo();
+    // ../../etc resolves above repoRoot — must yield no entries
+    const out = collectScopeManifest(root, ['../../etc']);
+    expect(out).toEqual([]);
+  });
+
+  it('accepts an innocuous relative scopeRoot inside repoRoot', () => {
+    const root = scratchRepo();
+    const out = collectScopeManifest(root, ['apps/web/src/components/detail']);
+    expect(out.some((e) => e.kind === 'file')).toBe(true);
+  });
 });

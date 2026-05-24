@@ -252,12 +252,8 @@ function deriveSpecScopeRoots(input: {
     }
   }
 
-  for (const s of input.prdContext?.verticalSlices ?? []) {
-    if (s != null && typeof s === 'object') {
-      const path = (s as { path?: unknown }).path;
-      if (typeof path === 'string' && path.length > 0) roots.add(path);
-    }
-  }
+  // PRD vertical slices have fields title/goal/estimatedSize/journeyRefs — no .path field.
+  // Scope roots are derived solely from investigationSynthesis.keyFiles above.
 
   return Array.from(roots);
 }
@@ -405,7 +401,8 @@ export async function runSpecAuthorWorkflow(
       scoutReports,
       wave2Reports,
       investigationSynthesis,
-      existingFileManifest,
+      // Omit when empty so the prompt's fallback behaviour (keyed on field absence) fires correctly.
+      ...(existingFileManifest.length > 0 && { existingFileManifest }),
     };
 
     if (prdContext != null) {
