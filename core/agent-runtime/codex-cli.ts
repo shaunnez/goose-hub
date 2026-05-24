@@ -75,14 +75,16 @@ const FORBIDDEN_RUNTIME_SURFACE_PATTERNS: Array<{
     re: /(?:full[- ]history.*(?:fork|spawn)|(?:fork|spawn).*full[- ]history).*(?:failed|error)/i,
   },
 ];
-const BLOCKED_RUNTIME_SURFACE_PATTERNS: Array<{
+const ADVISORY_RUNTIME_SURFACE_PATTERNS: Array<{
   surface: string;
   toolName: string;
   re: RegExp;
-}> = [];
-
-const ADVISORY_RUNTIME_SURFACE_PATTERNS: Array<{ surface: string; re: RegExp }> = [
-  { surface: 'resources/read failed', re: /resources\/read\s+failed/i },
+}> = [
+  {
+    surface: 'resources/read failed',
+    toolName: 'resources/read',
+    re: /resources\/read(?:\?path=[^\s]+)?(?:\s+failed|[^\n]*transient stderr)/i,
+  },
 ];
 
 function isPathUnderRoot(path: string, root: string): boolean {
@@ -169,28 +171,59 @@ function handleForbiddenRuntimeSurface(line: string): {
   return detectForbiddenRuntimeSurface(line);
 }
 
-function detectBlockedRuntimeSurface(line: string): {
+function parseRequestedPath(line: string): string | undefined {
+  const match = line.match(/resources\/read\?path=([^\s&]+)/i);
+  if (match == null) return undefined;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+export function detectRuntimeAdvisorySurface(line: string): {
   surface: string;
   toolName: string;
-  blockReason: string;
+  requestedPath?: string;
 } | null {
-  for (const pattern of BLOCKED_RUNTIME_SURFACE_PATTERNS) {
+  for (const pattern of ADVISORY_RUNTIME_SURFACE_PATTERNS) {
     if (pattern.re.test(line)) {
       return {
         surface: pattern.surface,
         toolName: pattern.toolName,
-        blockReason: `blocked-runtime-surface: ${pattern.surface}`,
+        requestedPath: parseRequestedPath(line),
       };
     }
   }
   return null;
 }
 
-function detectAdvisoryRuntimeSurface(line: string): { surface: string } | null {
-  for (const pattern of ADVISORY_RUNTIME_SURFACE_PATTERNS) {
-    if (pattern.re.test(line)) return { surface: pattern.surface };
-  }
-  return null;
+export function appendRuntimeAdvisoryEvent(input: {
+  line: string;
+  projectId: string;
+  workItemId: string | null;
+  runId: string;
+  personaId?: string;
+  skill: string;
+}): boolean {
+  const advisory = detectRuntimeAdvisorySurface(input.line);
+  if (advisory == null) return false;
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'agent.runtime-advisory',
+    payload: {
+      runId: input.runId,
+      skill: input.skill,
+      surface: advisory.surface,
+      stderr: input.line.slice(0, 4000),
+      toolName: advisory.toolName,
+      requestedPath: advisory.requestedPath,
+    },
+    runId: input.runId,
+    personaId: input.personaId,
+  });
+  return true;
 }
 
 function outputSchemaPathForRun(workspaceDir: string, runId: string): string {
@@ -629,21 +662,14 @@ export class CodexCliRuntime implements AgentRuntime {
             failForbiddenRuntimeSurface(violation);
             return;
           }
-          const blocked = detectBlockedRuntimeSurface(line);
-          if (blocked != null) {
-            emitForbiddenRuntimeSurfaceBlocked(blocked);
-          }
-          const advisory = detectAdvisoryRuntimeSurface(line);
-          if (advisory != null) {
-            eventStore.appendEvent({
-              projectId,
-              workItemId,
-              runId,
-              personaId: personaId ?? null,
-              kind: 'agent.runtime-advisory',
-              payload: { surface: advisory.surface, source: 'codex-cli-stderr' },
-            });
-          }
+          appendRuntimeAdvisoryEvent({
+            line,
+            projectId,
+            workItemId,
+            runId,
+            personaId,
+            skill: spec.skill,
+          });
         }
       });
 
@@ -730,21 +756,14 @@ export class CodexCliRuntime implements AgentRuntime {
             reject(new Error(violation.blockReason));
             return;
           }
-          const blocked = detectBlockedRuntimeSurface(stderrLineBuffer);
-          if (blocked != null) {
-            emitForbiddenRuntimeSurfaceBlocked(blocked);
-          }
-          const advisory = detectAdvisoryRuntimeSurface(stderrLineBuffer);
-          if (advisory != null) {
-            eventStore.appendEvent({
-              projectId,
-              workItemId,
-              runId,
-              personaId: personaId ?? null,
-              kind: 'agent.runtime-advisory',
-              payload: { surface: advisory.surface, source: 'codex-cli-stderr' },
-            });
-          }
+          appendRuntimeAdvisoryEvent({
+            line: stderrLineBuffer,
+            projectId,
+            workItemId,
+            runId,
+            personaId,
+            skill: spec.skill,
+          });
         }
 
         const envelope = parseCodexEnvelope(stdout);

@@ -608,6 +608,113 @@ describe('runFixFeedbackWorkflow', () => {
       });
     });
 
+    it('covers the G1 G2 G3 cascade together in a fix-feedback run', async () => {
+      const evidenceSpecPath = 'apps/web/e2e/issue-X.spec.ts';
+      const worktreePath = process.cwd();
+      const investigationEvent = {
+        id: 4,
+        kind: 'agent.investigation-complete' as EventKind,
+        payload: {
+          investigate: {
+            findings: 'Keep task detail view stable after repair',
+            keyFiles: [
+              { path: 'apps/web/src/components/detail/components/DetailPage.tsx' },
+              { path: 'apps/web/src/components/detail/components/CommentsSection.tsx' },
+            ],
+            openQuestions: ['Can the existing issue spec be reused?'],
+          },
+          investigationRunId: 'investigation-1',
+        },
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#42',
+        createdAt: new Date().toISOString(),
+        runId: 'investigation-1',
+      };
+      const workflowEvents = [
+        makePrOpenedEvent(worktreePath),
+        makeQaCompletedEvent(),
+        {
+          id: 3,
+          kind: 'agent.implement-complete' as EventKind,
+          payload: { evidenceSpecPath },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#42',
+          createdAt: new Date().toISOString(),
+          runId: 'run-abc',
+        },
+      ];
+      const { latestInvestigationContext: actualLatestInvestigationContext } =
+        await vi.importActual<
+          typeof import('@goose-hub/core/agent-runtime/investigation-context.js')
+        >('@goose-hub/core/agent-runtime/investigation-context.js');
+      const { appendRuntimeAdvisoryEvent } = await vi.importActual<
+        typeof import('@goose-hub/core/agent-runtime/codex-cli.js')
+      >('@goose-hub/core/agent-runtime/codex-cli.js');
+      mockLatestInvestigationContext.mockImplementation(actualLatestInvestigationContext);
+      vi.mocked(eventStore.replay).mockImplementation((query) => {
+        if (query?.kind === 'agent.investigation-complete') {
+          return [investigationEvent];
+        }
+        return workflowEvents;
+      });
+      mockGetChangedFilesSince.mockReturnValue([
+        'apps/web/src/components/detail/components/DetailPage.tsx',
+        'apps/web/src/components/detail/components/CommentsSection.tsx',
+      ]);
+      const customRun = vi.fn().mockImplementation(async (spec) => {
+        appendRuntimeAdvisoryEvent({
+          line: 'resources/read failed: resources/read?path=foo.ts transient stderr',
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#42',
+          runId: spec.runId,
+          personaId: spec.personaId,
+          skill: spec.skill,
+        });
+        return {
+          output: makeImplementOutput({ evidenceSpecPath }),
+          decisionSummaries: [],
+          events: [],
+        };
+      });
+      const customRuntime: AgentRuntime = { run: customRun };
+
+      await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo', {
+        runtime: customRuntime,
+      });
+
+      const runCall = customRun.mock.calls[0][0];
+      expect(runCall.context.priorEvidenceSpecPath).toBe(evidenceSpecPath);
+      expect(runCall.context.existingFileManifest).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: expect.stringContaining('apps/web/src/components/detail/components/'),
+            kind: 'file',
+          }),
+        ]),
+      );
+      expect(runCall.context.existingFileManifest).not.toHaveLength(0);
+      expect(runCall.contextAllowlist).toEqual(
+        expect.arrayContaining(['priorEvidenceSpecPath', 'existingFileManifest']),
+      );
+
+      const appendedEvents = vi.mocked(eventStore.appendEvent).mock.calls.map(([event]) => event);
+      expect(appendedEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'agent.runtime-advisory',
+            payload: expect.objectContaining({
+              surface: 'resources/read failed',
+              stderr: expect.stringContaining('resources/read?path=foo.ts'),
+            }),
+          }),
+          expect.objectContaining({ kind: 'agent.fix-feedback-complete' }),
+        ]),
+      );
+      expect(appendedEvents).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: 'agent.run-blocked' })]),
+      );
+    });
+
     it('omits priorInvestigation when none recorded', async () => {
       vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent(), makeQaCompletedEvent()]);
       mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });

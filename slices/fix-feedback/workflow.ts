@@ -1,3 +1,6 @@
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { posix as pathPosix } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { getChangedFilesSince } from '@goose-hub/core/agent-runtime/git-intel.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
@@ -91,6 +94,55 @@ function buildPriorInvestigationPayload(investigation: InvestigationContext | un
     openQuestions: investigation.openQuestions,
     investigationRunId: investigation.investigationRunId,
   };
+}
+
+function deriveScopeRootsFromInvestigation(
+  investigation: InvestigationContext | undefined,
+): string[] {
+  const roots = new Set<string>();
+  for (const keyFile of investigation?.keyFiles ?? []) {
+    if (keyFile.path.length === 0) continue;
+    const dir = pathPosix.dirname(keyFile.path);
+    if (dir.length > 0 && dir !== '.') roots.add(dir);
+  }
+  return [...roots];
+}
+
+function collectScopeManifest(
+  worktreePath: string,
+  scopeRoots: string[],
+): Array<{ path: string; kind: 'file' | 'dir' }> {
+  const manifest: Array<{ path: string; kind: 'file' | 'dir' }> = [];
+  const seen = new Set<string>();
+
+  const visit = (absolutePath: string, relativePath: string) => {
+    if (seen.has(relativePath)) return;
+    const entries = readdirSync(absolutePath, { withFileTypes: true });
+    manifest.push({ path: relativePath, kind: 'dir' });
+    seen.add(relativePath);
+    for (const entry of entries) {
+      const nextRelativePath = pathPosix.join(relativePath, entry.name);
+      if (seen.has(nextRelativePath)) continue;
+      if (entry.isDirectory()) {
+        visit(join(absolutePath, entry.name), nextRelativePath);
+        continue;
+      }
+      manifest.push({ path: nextRelativePath, kind: 'file' });
+      seen.add(nextRelativePath);
+    }
+  };
+
+  for (const scopeRoot of scopeRoots) {
+    const absoluteScopeRoot = join(worktreePath, scopeRoot);
+    if (!existsSync(absoluteScopeRoot)) continue;
+    try {
+      visit(absoluteScopeRoot, scopeRoot);
+    } catch {
+      // Ignore inaccessible scope roots and keep collecting the rest.
+    }
+  }
+
+  return manifest;
 }
 
 export interface FixFeedbackDeps {
@@ -415,6 +467,10 @@ export async function runFixFeedbackWorkflow(
     worktreePath,
   });
   const priorInvestigationPayload = buildPriorInvestigationPayload(priorInvestigation);
+  const existingFileManifest = collectScopeManifest(
+    worktreePath,
+    deriveScopeRootsFromInvestigation(priorInvestigation),
+  );
   const priorDevDecisions = collectPriorDevDecisions(events, prLifecycle);
   const priorDevChangedFiles = collectPriorChangedFiles(worktreePath, prLifecycle?.baseBranch);
   const priorEvidenceSpecPath = findPriorEvidenceSpecPath(events) ?? undefined;
@@ -484,10 +540,11 @@ export async function runFixFeedbackWorkflow(
           },
           advisorFeedback: advisorFeedback || undefined,
           revisionPass: 1,
+          priorEvidenceSpecPath,
+          existingFileManifest: existingFileManifest.length > 0 ? existingFileManifest : undefined,
           priorInvestigation: priorInvestigationPayload,
           priorDevDecisions: priorDevDecisions.length > 0 ? priorDevDecisions : undefined,
           priorDevChangedFiles: priorDevChangedFiles.length > 0 ? priorDevChangedFiles : undefined,
-          priorEvidenceSpecPath,
         },
         contextAllowlist: [
           'workItem.title',
@@ -499,12 +556,13 @@ export async function runFixFeedbackWorkflow(
           'stack.typecheckCommand',
           'advisorFeedback',
           'revisionPass',
+          'priorEvidenceSpecPath',
+          'existingFileManifest',
           'priorInvestigation.findings',
           'priorInvestigation.keyFiles',
           'priorInvestigation.openQuestions',
           'priorDevDecisions',
           'priorDevChangedFiles',
-          'priorEvidenceSpecPath',
         ],
         freshContext: false,
         toolBundles: ['dev-tools'],

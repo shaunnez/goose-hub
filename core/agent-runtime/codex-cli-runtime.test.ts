@@ -494,6 +494,11 @@ describe('CodexCliRuntime timeout handling', () => {
     );
     expect(advisory).toBeDefined();
     expect((advisory?.payload as { blocked?: unknown }).blocked).toBeUndefined();
+    expect(advisory?.payload as { stderr?: string; toolName?: string }).toMatchObject({
+      stderr: 'resources/read failed: file://memory',
+      toolName: 'resources/read',
+    });
+    expect(advisory?.personaId).toBe('test-project/developer/0');
 
     // No agent.run-blocked event for this surface.
     expect(calls.some((e) => e.kind === 'agent.run-blocked')).toBe(false);

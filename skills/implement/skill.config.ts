@@ -28,6 +28,21 @@ export const ImplementContextSchema = z.object({
   }),
   advisorFeedback: z.string().optional(),
   revisionPass: z.union([z.literal(0), z.literal(1)]).optional(),
+  priorEvidenceSpecPath: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      'Path to the evidence spec authored or reused by the prior dev/fix-feedback cycle on this work item. Omitted when no prior cycle exists; the call site coerces null → omission.',
+    ),
+  existingFileManifest: z
+    .array(
+      z.object({
+        path: z.string(),
+        kind: z.enum(['file', 'dir']),
+      }),
+    )
+    .optional(),
   evidencePostEnabled: z.boolean().optional(),
   acceptanceContract: z
     .object({
@@ -90,12 +105,6 @@ const config: SkillConfig = {
         doNotSearchFor: z.array(z.string()),
       })
       .optional(),
-    priorEvidenceSpecPath: z
-      .string()
-      .optional()
-      .describe(
-        'Path to the evidence spec authored or reused by the prior dev/fix-feedback cycle on this work item. Omitted when no prior cycle exists; the call site coerces null → omission.',
-      ),
   }),
   outputSchema: ImplementSchema,
   contextAllowlist: [
@@ -111,9 +120,10 @@ const config: SkillConfig = {
     'relatedSurface',
     'advisorFeedback',
     'revisionPass',
+    'priorEvidenceSpecPath',
+    'existingFileManifest',
     'evidencePostEnabled',
     'acceptanceContract',
-    'priorEvidenceSpecPath',
   ],
   /**
    * `dev-tools` bundle — read, search, work-item-read, write, bash, test
