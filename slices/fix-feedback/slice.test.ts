@@ -608,6 +608,90 @@ describe('runFixFeedbackWorkflow', () => {
       });
     });
 
+    it('covers the G1 G2 G3 cascade together in a fix-feedback run', async () => {
+      const evidenceSpecPath = 'apps/web/e2e/issue-X.spec.ts';
+      const existingFileManifest = [
+        { path: 'apps/web/src/components/detail/TaskHeader.tsx', kind: 'file' },
+        { path: 'apps/web/src/components/detail', kind: 'dir' },
+      ];
+      vi.mocked(eventStore.replay).mockReturnValue([
+        makePrOpenedEvent(),
+        makeQaCompletedEvent(),
+        {
+          id: 3,
+          kind: 'agent.implement-complete' as EventKind,
+          payload: { evidenceSpecPath },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#42',
+          createdAt: new Date().toISOString(),
+          runId: 'run-abc',
+        },
+      ]);
+      mockGetChangedFilesSince.mockReturnValue([
+        'apps/web/src/components/detail/TaskHeader.tsx',
+        'apps/web/src/components/detail/TaskBody.tsx',
+      ]);
+      mockLatestInvestigationContext.mockReturnValue({
+        findings: 'Keep task detail view stable after repair',
+        keyFiles: existingFileManifest.map(({ path }) => ({ path })),
+        openQuestions: ['Can the existing issue spec be reused?'],
+        investigationRunId: 'investigation-1',
+      });
+      mockClaudeCliRun.mockImplementation(async ({ spec }) => {
+        vi.mocked(eventStore.appendEvent).mockReturnValue({ id: 1 } as ReturnType<
+          typeof eventStore.appendEvent
+        >);
+        eventStore.appendEvent({
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#42',
+          kind: 'agent.runtime-advisory' as EventKind,
+          payload: {
+            surface: 'resources/read failed',
+            stderr: 'resources/read?path=foo.ts transient stderr',
+            toolName: 'resources/read',
+            requestedPath: 'foo.ts',
+            runId: spec.runId,
+          },
+          runId: spec.runId,
+        });
+        return { output: makeImplementOutput({ evidenceSpecPath }) };
+      });
+
+      await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo');
+
+      const runCall = mockClaudeCliRun.mock.calls[0][0];
+      expect(runCall.context.priorEvidenceSpecPath).toBe(evidenceSpecPath);
+      expect(runCall.context.existingFileManifest).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: expect.stringContaining('apps/web/src/'),
+            kind: 'file',
+          }),
+        ]),
+      );
+      expect(runCall.context.existingFileManifest).not.toHaveLength(0);
+      expect(runCall.contextAllowlist).toEqual(
+        expect.arrayContaining(['priorEvidenceSpecPath', 'existingFileManifest']),
+      );
+
+      const appendedEvents = vi.mocked(eventStore.appendEvent).mock.calls.map(([event]) => event);
+      expect(appendedEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'agent.runtime-advisory',
+            payload: expect.objectContaining({
+              surface: 'resources/read failed',
+              stderr: expect.stringContaining('resources/read?path=foo.ts'),
+            }),
+          }),
+          expect.objectContaining({ kind: 'agent.fix-feedback-complete' }),
+        ]),
+      );
+      expect(appendedEvents).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: 'agent.run-blocked' })]),
+      );
+    });
+
     it('omits priorInvestigation when none recorded', async () => {
       vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent(), makeQaCompletedEvent()]);
       mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
