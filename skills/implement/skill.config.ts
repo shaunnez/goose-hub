@@ -90,6 +90,12 @@ const config: SkillConfig = {
         doNotSearchFor: z.array(z.string()),
       })
       .optional(),
+    priorEvidenceSpecPath: z
+      .string()
+      .optional()
+      .describe(
+        'Path to the evidence spec authored or reused by the prior dev/fix-feedback cycle on this work item. Omitted when no prior cycle exists; the call site coerces null → omission.',
+      ),
   }),
   outputSchema: ImplementSchema,
   contextAllowlist: [
@@ -107,6 +113,7 @@ const config: SkillConfig = {
     'revisionPass',
     'evidencePostEnabled',
     'acceptanceContract',
+    'priorEvidenceSpecPath',
   ],
   /**
    * `dev-tools` bundle — read, search, work-item-read, write, bash, test

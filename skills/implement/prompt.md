@@ -21,6 +21,7 @@ The `<task>` block can include:
 - `<relatedSurface>` — deterministic execution lane from the workflow.
 - `<revisionPass>` — `0` or `1`.
 - `<evidencePostEnabled>` — whether frontend evidence specs should be produced.
+- `<priorEvidenceSpecPath>` — path to the evidence spec authored or reused by the prior dev/fix-feedback cycle on this work item, when present.
 
 `<relatedSurface>` is prescriptive unless stale:
 
@@ -100,6 +101,7 @@ report files that were only read.
 - Implement the smallest slice that satisfies the tests and every criterion in `<acceptanceContract>` when present.
 - Re-run targeted tests only after a real write has occurred, then iterate until green or blocked.
 - For frontend changes with evidence enabled, create/update `apps/web/e2e/issue-<number>.spec.ts` or the provided `relatedSurface.evidenceSpecPath`. Use bounded discovery; if blocked, return `evidenceSpecPath: null` with `TOOL_FAILURE` or `UNCERTAINTY`.
+- If `priorEvidenceSpecPath` is provided and your changes still touch `apps/web/`, reuse it as `evidenceSpecPath` unless the prior spec is now stale for the changed surface. If you cannot reuse it and cannot author a new one, return `evidenceSpecPath: null` with a `SKIP_GATE` decision summary explaining why (e.g., "evidence skipped: type-only handler export, no UI surface changed").
 - If evidence is disabled, return `evidenceSpecPath: null` with a `SKIP_GATE` summary.
 - Emit `[decision] GREEN: Targeted tests pass`.
 
