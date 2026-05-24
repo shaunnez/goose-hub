@@ -85,10 +85,7 @@ import {
   searchTextTool,
 } from './tools/read.js';
 import { repoIntelQueryTool } from './tools/repo-intel.js';
-import {
-  listWorkspaceResources,
-  readWorkspaceResource,
-} from './tools/resources.js';
+import { listWorkspaceResources, readWorkspaceResource } from './tools/resources.js';
 import {
   runLintTool,
   runPackageScriptTool,

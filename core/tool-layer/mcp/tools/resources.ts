@@ -142,11 +142,13 @@ export async function readWorkspaceResource(
         payload: { ...auditBase, status: 'ok' },
       });
       return {
-        contents: [{
-          uri: workspaceRelativeToUri(result.path.path),
-          mimeType: 'application/json',
-          text: JSON.stringify({ exists: result.exists, path: result.path.path }),
-        }],
+        contents: [
+          {
+            uri: workspaceRelativeToUri(result.path.path),
+            mimeType: 'application/json',
+            text: JSON.stringify({ exists: result.exists, path: result.path.path }),
+          },
+        ],
       } satisfies ReadResourceResult;
     }
     const result = await readFileTool(ctx, { path: parsed.path });

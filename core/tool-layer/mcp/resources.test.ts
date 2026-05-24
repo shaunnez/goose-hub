@@ -40,15 +40,24 @@ afterEach(() => {
 
 describe('uriToWorkspaceRelative', () => {
   it('strips factory:// prefix', () => {
-    expect(uriToWorkspaceRelative('factory://src/index.ts')).toEqual({ op: 'read', path: 'src/index.ts' });
+    expect(uriToWorkspaceRelative('factory://src/index.ts')).toEqual({
+      op: 'read',
+      path: 'src/index.ts',
+    });
   });
 
   it('strips file:/// prefix', () => {
-    expect(uriToWorkspaceRelative('file:///src/index.ts')).toEqual({ op: 'read', path: 'src/index.ts' });
+    expect(uriToWorkspaceRelative('file:///src/index.ts')).toEqual({
+      op: 'read',
+      path: 'src/index.ts',
+    });
   });
 
   it('strips file:// prefix (two slashes)', () => {
-    expect(uriToWorkspaceRelative('file://src/index.ts')).toEqual({ op: 'read', path: 'src/index.ts' });
+    expect(uriToWorkspaceRelative('file://src/index.ts')).toEqual({
+      op: 'read',
+      path: 'src/index.ts',
+    });
   });
 
   it('passes bare path through unchanged', () => {
@@ -63,7 +72,11 @@ describe('uriToWorkspaceRelative', () => {
   });
 
   it('handles codex file_exists?path=… URI form', () => {
-    expect(uriToWorkspaceRelative('file_exists?path=apps/web/src/components/chat/components/ChatDock.tsx')).toEqual({
+    expect(
+      uriToWorkspaceRelative(
+        'file_exists?path=apps/web/src/components/chat/components/ChatDock.tsx',
+      ),
+    ).toEqual({
       op: 'exists',
       path: 'apps/web/src/components/chat/components/ChatDock.tsx',
     });
@@ -94,8 +107,14 @@ describe('uriToWorkspaceRelative', () => {
   });
 
   it('keeps bare path / factory:// / file:// forms as read', () => {
-    expect(uriToWorkspaceRelative('factory://core/types.ts')).toEqual({ op: 'read', path: 'core/types.ts' });
-    expect(uriToWorkspaceRelative('file:///core/types.ts')).toEqual({ op: 'read', path: 'core/types.ts' });
+    expect(uriToWorkspaceRelative('factory://core/types.ts')).toEqual({
+      op: 'read',
+      path: 'core/types.ts',
+    });
+    expect(uriToWorkspaceRelative('file:///core/types.ts')).toEqual({
+      op: 'read',
+      path: 'core/types.ts',
+    });
     expect(uriToWorkspaceRelative('core/types.ts')).toEqual({ op: 'read', path: 'core/types.ts' });
   });
 });
@@ -220,7 +239,9 @@ describe('resources/read', () => {
     // The audit event should be marked cached:true on the second read.
     const events = eventStore.replay({ workItemId: ctx.workItemId });
     type ToolCallPayload = { tool_name?: string; cached?: boolean };
-    const last = [...events].reverse().find((e) => (e.payload as ToolCallPayload).tool_name === 'resources/read');
+    const last = [...events]
+      .reverse()
+      .find((e) => (e.payload as ToolCallPayload).tool_name === 'resources/read');
     expect((last?.payload as ToolCallPayload).cached).toBe(true);
     expect(asText(result.contents[0]).text).toBeDefined();
   });
@@ -230,16 +251,19 @@ describe('resources/read', () => {
     const server = buildFactoryMcpServer(ctx);
     // Access the low-level Server's _requestHandlers map to call the handler directly
     type HandlerMap = Map<string, (req: unknown, extra: unknown) => Promise<unknown>>;
-    const handlers = (server.server as unknown as { _requestHandlers: HandlerMap })['_requestHandlers'];
+    const handlers = (server.server as unknown as { _requestHandlers: HandlerMap })
+      ._requestHandlers;
     const handler = handlers.get('resources/read');
     expect(handler).toBeDefined();
-    const response = await handler!(
+    const response = await handler?.(
       {
         method: 'resources/read',
         params: { uri: 'read_file?path=package.json' },
       },
       {},
     );
-    expect((response as { contents: Array<{ text: string }> }).contents[0].text).toContain('"name"');
+    expect((response as { contents: Array<{ text: string }> }).contents[0].text).toContain(
+      '"name"',
+    );
   });
 });
