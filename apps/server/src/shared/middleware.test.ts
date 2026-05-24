@@ -50,4 +50,22 @@ describe('parseBody', () => {
     expect(parsed.error.status).toBe(400);
     await expect(parsed.error.json()).resolves.toEqual({ error: 'invalid request body' });
   });
+
+  it('returns ok:false with 400 response for JSON arrays', async () => {
+    const app = new Hono();
+    let result: unknown;
+    app.post('/test', async (c) => {
+      result = await parseBody<{ name: string }>(c);
+      return c.json({});
+    });
+    await app.request('/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([{ name: 'hello' }]),
+    });
+    expect(result).toMatchObject({ ok: false });
+    const parsed = result as { ok: false; error: Response };
+    expect(parsed.error.status).toBe(400);
+    await expect(parsed.error.json()).resolves.toEqual({ error: 'invalid request body' });
+  });
 });
