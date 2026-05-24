@@ -186,6 +186,25 @@ function nextRepairCycle(events: ReturnType<typeof eventStore.replay>): number {
 }
 
 /**
+ * Scans events backward for the most recent `agent.implement-complete` or
+ * `agent.fix-feedback-complete` event that has a non-empty `evidenceSpecPath`,
+ * and returns it so the repair run can reuse the prior cycle's spec.
+ */
+function findPriorEvidenceSpecPath(events: ReturnType<typeof eventStore.replay>): string | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind !== 'agent.implement-complete' && e.kind !== 'agent.fix-feedback-complete') {
+      continue;
+    }
+    const payload = e.payload as { evidenceSpecPath?: unknown };
+    if (typeof payload.evidenceSpecPath === 'string' && payload.evidenceSpecPath.length > 0) {
+      return payload.evidenceSpecPath;
+    }
+  }
+  return null;
+}
+
+/**
  * Finds the most recent failure from either `qa.completed` (non-pass) or
  * `review.completed` (needs-fix), whichever is later in the event stream,
  * and formats it as advisor feedback for the implement skill.
@@ -398,6 +417,7 @@ export async function runFixFeedbackWorkflow(
   const priorInvestigationPayload = buildPriorInvestigationPayload(priorInvestigation);
   const priorDevDecisions = collectPriorDevDecisions(events, prLifecycle);
   const priorDevChangedFiles = collectPriorChangedFiles(worktreePath, prLifecycle?.baseBranch);
+  const priorEvidenceSpecPath = findPriorEvidenceSpecPath(events) ?? undefined;
 
   await stateSource.transitionState(
     workItem.externalId,
@@ -467,6 +487,7 @@ export async function runFixFeedbackWorkflow(
           priorInvestigation: priorInvestigationPayload,
           priorDevDecisions: priorDevDecisions.length > 0 ? priorDevDecisions : undefined,
           priorDevChangedFiles: priorDevChangedFiles.length > 0 ? priorDevChangedFiles : undefined,
+          priorEvidenceSpecPath,
         },
         contextAllowlist: [
           'workItem.title',
@@ -483,6 +504,7 @@ export async function runFixFeedbackWorkflow(
           'priorInvestigation.openQuestions',
           'priorDevDecisions',
           'priorDevChangedFiles',
+          'priorEvidenceSpecPath',
         ],
         freshContext: false,
         toolBundles: ['dev-tools'],
@@ -524,6 +546,7 @@ export async function runFixFeedbackWorkflow(
         testsWritten: implementOutput.testsWritten.length,
         confidence: implementOutput.confidence,
         testsRun: implementOutput.testsRun,
+        evidenceSpecPath: implementOutput.evidenceSpecPath,
         observedChangedFiles: {
           count: observedChangedFiles.count,
           paths: observedChangedFiles.paths,
