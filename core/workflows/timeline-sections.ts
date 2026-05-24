@@ -134,6 +134,7 @@ export const RUNTIME_INHERIT_TIMELINE_EVENT_KINDS = new Set<string>([
   'agent.verify-command',
   'agent.cancelled',
   'agent.run-aborted',
+  'agent.runtime-advisory',
   'tool.violation',
   'symbol-index.lookup',
   'symbol-index.hints-used',
