@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
+  ListResourceTemplatesRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
@@ -146,6 +147,18 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
   );
   server.server.setRequestHandler(ReadResourceRequestSchema, (req) =>
     readWorkspaceResource(ctx, req.params.uri),
+  );
+  server.server.setRequestHandler(ListResourceTemplatesRequestSchema, () =>
+    Promise.resolve({
+      resourceTemplates: [
+        {
+          uriTemplate: 'factory://{+path}',
+          name: 'workspace-files',
+          description: 'Workspace files relative to the agent run worktree.',
+          mimeType: 'text/plain',
+        },
+      ],
+    }),
   );
 
   server.registerTool(
