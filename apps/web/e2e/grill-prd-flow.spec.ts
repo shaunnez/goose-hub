@@ -65,13 +65,19 @@ const PRD_FIXTURE = {
   ],
   testingDecisions: {
     approach: 'Verify inline error renders on blur with invalid value',
-    modulesToTest: ['slices/grill-prd-ui/slice.test.ts'],
+    modulesToTest: ['apps/web/src/components/detail/components/PRDSection.test.tsx'],
     priorArt: 'apps/web/e2e/grill-prd-flow.spec.ts',
   },
 };
 
-function prdCommentBody(): string {
-  return `<!-- factory:prd -->\n# PRD\n\n\`\`\`json\n${JSON.stringify(PRD_FIXTURE, null, 2)}\n\`\`\``;
+function prdReadModel() {
+  return {
+    prd: PRD_FIXTURE,
+    advisorConcerns: null,
+    source: 'event',
+    createdAt: '2026-05-07T10:00:00Z',
+    runId: 'run-1',
+  };
 }
 
 function buildIssue(state: string, externalId: string) {
@@ -98,7 +104,7 @@ async function stubBaseEndpoints(
   page: import('@playwright/test').Page,
   externalId: string,
   state: string,
-  comments: Array<{ id: number; body: string; authorLogin: string; createdAt: string }>,
+  comments: Array<{ id: number; body: string; authorLogin: string; createdAt: string }> = [],
 ) {
   await page.route('**/api/projects', (route: Route) =>
     route.fulfill({ json: { projects: [{ slug, name: 'Goose Hub (self)' }] } }),
@@ -118,6 +124,9 @@ async function stubBaseEndpoints(
   await page.route(`**/api/projects/${slug}/issues/${externalId}/comments`, (route: Route) =>
     route.fulfill({ json: { comments } }),
   );
+  await page.route(`**/api/projects/${slug}/issues/${externalId}/prd`, (route: Route) =>
+    route.fulfill({ json: { prd: prdReadModel() } }),
+  );
   await page.route(`**/api/projects/${slug}/issues/${externalId}/events`, (route: Route) =>
     route.fulfill({ json: { events: [] } }),
   );
@@ -134,14 +143,7 @@ test.describe('M13 grill + prd UI', () => {
     page,
   }) => {
     const externalId = '7321';
-    await stubBaseEndpoints(page, externalId, 'factory:prd-review', [
-      {
-        id: 1,
-        body: prdCommentBody(),
-        authorLogin: 'factory-bot',
-        createdAt: '2026-05-07T10:00:00Z',
-      },
-    ]);
+    await stubBaseEndpoints(page, externalId, 'factory:prd-review');
 
     let approveCalls = 0;
     await page.route(`**/api/projects/${slug}/issues/${externalId}/approve-prd`, (route: Route) => {
@@ -176,14 +178,7 @@ test.describe('M13 grill + prd UI', () => {
 
   test('PRD tab: Request Changes sends concerns to /revise-prd', async ({ page }) => {
     const externalId = '7323';
-    await stubBaseEndpoints(page, externalId, 'factory:prd-review', [
-      {
-        id: 1,
-        body: prdCommentBody(),
-        authorLogin: 'factory-bot',
-        createdAt: '2026-05-07T10:00:00Z',
-      },
-    ]);
+    await stubBaseEndpoints(page, externalId, 'factory:prd-review');
 
     let reviseCalls = 0;
     let sentConcerns: string[] = [];

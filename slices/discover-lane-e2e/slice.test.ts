@@ -81,18 +81,6 @@ function injectedConfig(perAdvisorMaxUsd = 5) {
   };
 }
 
-/**
- * Inline PRD-comment parser. Avoids importing across the apps/ boundary.
- * Finds the <!-- factory:prd --> marker comment and JSON-parses the fenced block.
- * Stays under 20 lines; see README for the boundary decision.
- */
-function parsePrdFromComment(body: string): unknown {
-  if (!body.startsWith('<!-- factory:prd -->')) return null;
-  const match = body.match(/```json\s*\n([\s\S]*?)\n```/);
-  if (match == null) return null;
-  return JSON.parse(match[1]);
-}
-
 /** Noop worktree deps — prevents real git worktree creation in unit tests. */
 function noopWorktreeDeps() {
   return {
@@ -460,25 +448,28 @@ describe('Discover Lane end-to-end integration', () => {
     const afterPRD = await source.getItem(seeded.externalId);
     expect(afterPRD.state).toBe('factory:prd-review');
 
-    // PRD comment exists and round-trips through inline parser
+    // PRD is persisted as a local event, not a GitHub marker comment.
     const commentsAfterR3 = await source.listComments(seeded.externalId);
-    const prdComment = commentsAfterR3.find((c) => c.body.includes('<!-- factory:prd -->'));
-    expect(prdComment).toBeDefined();
-    const parsedPrd = parsePrdFromComment(prdComment?.body ?? '');
-    expect(parsedPrd).not.toBeNull();
-    const prd = parsedPrd as {
-      title: string;
-      verticalSlices: unknown[];
-      journeys: unknown[];
-      acceptanceCriteria: unknown[];
-    };
-    expect(prd.title).toContain('keyword search relevance');
-    expect(prd.verticalSlices).toHaveLength(2);
-    expect(prd.journeys).toHaveLength(2);
-    expect(prd.acceptanceCriteria).toHaveLength(2);
+    expect(commentsAfterR3.some((c) => c.body.includes('<!-- factory:prd -->'))).toBe(false);
 
     // prd.advisor-skipped event with reason='priority' (medium priority)
     const evsAfterPRD = eventStore.replay({ projectId, workItemId: parentId });
+    const drafted = evsAfterPRD.find((e) => e.kind === 'prd.drafted');
+    expect(drafted).toBeDefined();
+    const prd = (
+      drafted?.payload as {
+        prd?: {
+          title: string;
+          verticalSlices: unknown[];
+          journeys: unknown[];
+          acceptanceCriteria: unknown[];
+        };
+      }
+    ).prd;
+    expect(prd?.title).toContain('keyword search relevance');
+    expect(prd?.verticalSlices).toHaveLength(2);
+    expect(prd?.journeys).toHaveLength(2);
+    expect(prd?.acceptanceCriteria).toHaveLength(2);
     const advisorSkipped = evsAfterPRD.find((e) => e.kind === 'prd.advisor-skipped');
     expect(advisorSkipped).toBeDefined();
     expect((advisorSkipped?.payload as { reason: string }).reason).toBe('priority');
@@ -723,7 +714,7 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
     await source.forceState(seeded.externalId, 'factory:grilling');
 
     // ── Re-grill: build priorReplies the same way dispatch.ts does ──
-    // PRD marker comments are excluded; grill-questions → agent; everything else → user
+    // grill-questions -> agent; everything else -> user
     const allCommentsAfterReject = await source.listComments(seeded.externalId);
     const priorRepliesReGrill = allCommentsAfterReject
       .filter(
@@ -731,19 +722,15 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
           !c.body.startsWith('<!-- factory:system -->') && !c.body.startsWith('## Child issues'),
       )
       .map((c) => ({
-        role:
-          c.body.startsWith('<!-- factory:grill-question -->') ||
-          c.body.startsWith('<!-- factory:prd -->')
-            ? ('agent' as const)
-            : ('user' as const),
+        role: c.body.startsWith('<!-- factory:grill-question -->')
+          ? ('agent' as const)
+          : ('user' as const),
         content: c.body,
       }));
 
-    // Should have: 1 agent (grill Q1) + 1 user (reply) + 1 agent (PRD) + 1 user (rejection) = 4
-    // roundNumber = non-PRD agent count + 1 = 2 (PRD-draft agent entries are excluded per Fix A)
     const agentCount = priorRepliesReGrill.filter((r) => r.role === 'agent').length;
-    expect(agentCount).toBe(2); // grill question + PRD draft
-    expect(priorRepliesReGrill).toHaveLength(4);
+    expect(agentCount).toBe(1);
+    expect(priorRepliesReGrill.some((r) => r.content.includes('<!-- factory:prd -->'))).toBe(false);
 
     // Re-grill round 2: griller asks a follow-up question, NOT readyForPRD
     const reGrillOutput = {

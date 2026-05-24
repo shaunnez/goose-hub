@@ -97,7 +97,7 @@ describe('PRDSection', () => {
     vi.mocked(fetchEvents).mockResolvedValue([]);
   });
 
-  it('renders the empty state when no PRD comment is present', async () => {
+  it('renders the empty state when no PRD event is present', async () => {
     vi.mocked(fetchPRD).mockResolvedValueOnce(null);
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
     await waitFor(() => {
@@ -202,11 +202,11 @@ describe('PRDSection', () => {
     });
   });
 
-  it('renders parse-error state when JSON block is malformed', async () => {
+  it('renders parse-error state when the PRD event has no parsed payload', async () => {
     vi.mocked(fetchPRD).mockResolvedValueOnce({
       prd: null,
       advisorConcerns: null,
-      source: 'legacy-comment',
+      source: 'event',
       createdAt: '2026-05-07T10:00:00Z',
       runId: null,
     });

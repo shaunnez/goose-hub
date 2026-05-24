@@ -73,15 +73,9 @@ future issue. This slice exercises the skill integration (mock runtime →
 `SprintReviewOutputSchema` validation) and creates the artefact issue, but the
 automatic end-of-milestone invocation is deferred.
 
-### PRD comment parser boundary
-The inline PRD parser in `slice.test.ts` (`parsePrdFromComment`) is a local
-helper rather than an import of
-`apps/web/src/components/detail/lib/parse-prd-comment.ts`. The web app lives in
-`apps/web/` which is not a pnpm workspace package that this test can import
-across the monorepo boundary (FACTORY_RULES rule 28a). The helper is under 20
-lines and faithfully reproduces the marker check and JSON-fence extraction; the
-full `parsePRDComment` from `parse-prd-comment.ts` is exercised by
-`slices/grill-prd-ui`.
+### PRD event boundary
+PRDs are persisted as `prd.drafted` events and read through the shared PRD read model.
+The slice asserts the drafted event payload directly instead of parsing GitHub comments.
 
 ## Playwright UI integration test
 The UI-side integration test is already shipped in wave 5:
@@ -101,7 +95,7 @@ presentation layer.
 | 2 | Round 1 grill — not ready; one question posted | Comment with `<!-- factory:grill-question -->` + `Round 1`; state → `factory:gate-pending`; `grill.question-posted` event |
 | 3 | User reply; re-enter `factory:grilling` | Comment posted by non-bot author; state forced back |
 | 4 | Round 2 grill — still not ready | Second question posted; two total `grill.question-posted` events |
-| 5 | Round 3 grill → ready; write-prd; advisor skipped (priority=medium) | `phase=prd-review`; `<!-- factory:prd -->` comment; PRD round-trips via inline parser; `prd.advisor-skipped` reason=priority |
+| 5 | Round 3 grill → ready; write-prd; advisor skipped (priority=medium) | `phase=prd-review`; `prd.drafted` event contains PRD payload; `prd.advisor-skipped` reason=priority |
 | 6 | Human chooses manual legacy decomposition | `transitionState(prd-review → decomposing)` succeeds |
 | 7 | Decompose — 2 child issues; sibling dep resolved | Children created; child 2 body contains `#<child1>`; parent → `factory:done`; `## Child issues` comment; `decompose.completed` event |
 | 8 | Child lifecycle stub | Each child traverses `accepted → … → done`; `factory:done` confirmed |

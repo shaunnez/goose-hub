@@ -363,26 +363,79 @@ describe('grill-and-prd: round 2 reaches PRD (advisor skipped by priority)', () 
     const updated = await source.getItem(item.externalId);
     expect(updated.state).toBe('factory:prd-review');
 
-    // PRD posted as JSON in fenced block; verify shape
+    // PRD is persisted locally, not as a GitHub marker comment.
     const comments = await source.listComments(item.externalId);
-    const prdComment = comments.find((c) => c.body.includes('<!-- factory:prd -->'));
-    expect(prdComment).toBeDefined();
-    const posted = getPostedPrdJson(prdComment?.body ?? '') as { title: string };
-    expect(posted.title).toBe('Inline validation in onboarding');
-    expect(prdComment?.body).not.toContain('## Advisor concerns');
+    expect(comments.some((c) => c.body.includes('<!-- factory:prd -->'))).toBe(false);
 
     // grill.completed and prd.drafted events emitted; advisor skipped with reason 'priority'
     const evs = eventStore.replay({ projectId, workItemId: workItem.id });
     expect(evs.find((e) => e.kind === 'grill.completed')).toBeDefined();
     const drafted = evs.find((e) => e.kind === 'prd.drafted');
     expect(drafted).toBeDefined();
-    expect((drafted?.payload as { displaySkill?: string }).displaySkill).toBe('write-prd');
+    const draftedPayload = drafted?.payload as {
+      displaySkill?: string;
+      prd?: { title?: string };
+      advisorConcerns?: string[] | null;
+    };
+    expect(draftedPayload.displaySkill).toBe('write-prd');
+    expect(draftedPayload.prd?.title).toBe('Inline validation in onboarding');
+    expect(draftedPayload.advisorConcerns).toBeNull();
     const skipped = evs.find((e) => e.kind === 'prd.advisor-skipped');
     expect(skipped).toBeDefined();
     expect((skipped?.payload as { reason: string }).reason).toBe('priority');
 
     // grill-me + write-prd → 2 runtime calls (no advisor)
     expect(runtime.run).toHaveBeenCalledTimes(2);
+  });
+
+  it('moves to needs-human when prd.drafted persistence fails', async () => {
+    const projectId = uniqueProjectId('prd-drafted-fails');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, {
+      state: 'factory:grilling',
+      priority: 'medium',
+    });
+    const workItem = await source.getItem(item.externalId);
+    const runtime = makeQueuedRuntime([validGrillReady(), validPRD()]);
+    const originalAppendEvent = eventStore.appendEvent.bind(eventStore);
+    const appendEvent = vi.spyOn(eventStore, 'appendEvent');
+    appendEvent.mockImplementation((event) => {
+      if (event.kind === 'prd.drafted') {
+        throw new Error('event store unavailable');
+      }
+      return originalAppendEvent(event);
+    });
+
+    try {
+      const result = await runGrillAndPrdWorkflow({
+        workItem,
+        stateSource: source,
+        projectId,
+        priorReplies: [
+          { role: 'agent' as const, content: 'Round 1 question?' },
+          { role: 'user' as const, content: 'Reduce drop-off by 20% within 30 days.' },
+        ],
+        deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+      });
+
+      expect(result.phase).toBe('needs-human');
+      const updated = await source.getItem(item.externalId);
+      expect(updated.state).toBe('factory:needs-human');
+      const stateTransition = eventStore
+        .replay({ projectId, workItemId: workItem.id })
+        .find(
+          (e) =>
+            e.kind === 'state.transitioned' &&
+            (e.payload as { to?: string }).to === 'factory:needs-human',
+        );
+      expect(stateTransition?.payload).toMatchObject({
+        from: 'factory:prd-drafting',
+        to: 'factory:needs-human',
+        reason: 'prd-drafted-emit-failed',
+      });
+    } finally {
+      appendEvent.mockRestore();
+    }
   });
 
   it('reuses the same discoverSessionId across resumed Grill invocations', async () => {
@@ -460,15 +513,18 @@ describe('grill-and-prd: advisor runs and revises sections', () => {
 
     expect(result.phase).toBe('prd-review');
 
-    // The posted PRD comment should reflect the revised `problem` and have
-    // a "## Advisor concerns" section.
+    // The drafted event should reflect the advisor-revised PRD and concerns.
     const comments = await source.listComments(item.externalId);
-    const prdComment = comments.find((c) => c.body.includes('<!-- factory:prd -->'));
-    expect(prdComment).toBeDefined();
-    const posted = getPostedPrdJson(prdComment?.body ?? '') as { problem: string };
-    expect(posted.problem).toContain('38%');
-    expect(prdComment?.body).toContain('## Advisor concerns');
-    expect(prdComment?.body).toContain('quantify the current drop-off rate');
+    expect(comments.some((c) => c.body.includes('<!-- factory:prd -->'))).toBe(false);
+    const drafted = eventStore
+      .replay({ projectId, workItemId: workItem.id })
+      .find((e) => e.kind === 'prd.drafted');
+    const draftedPayload = drafted?.payload as {
+      prd?: { problem?: string };
+      advisorConcerns?: string[] | null;
+    };
+    expect(draftedPayload.prd?.problem).toContain('38%');
+    expect(draftedPayload.advisorConcerns?.[0]).toContain('quantify the current drop-off rate');
 
     // advisor decision-summary event emitted
     const evs = eventStore.replay({ projectId, workItemId: workItem.id });
@@ -565,11 +621,12 @@ describe('grill-and-prd: advisor budget exhausted', () => {
     // Only grill+prd ran (no advisor)
     expect(runtime.run).toHaveBeenCalledTimes(2);
 
-    // PRD comment exists
+    // PRD is persisted locally without a GitHub marker comment.
     const comments = await source.listComments(item.externalId);
-    const prdComment = comments.find((c) => c.body.includes('<!-- factory:prd -->'));
-    expect(prdComment).toBeDefined();
-    expect(prdComment?.body).not.toContain('## Advisor concerns');
+    expect(comments.some((c) => c.body.includes('<!-- factory:prd -->'))).toBe(false);
+    const drafted = evs.find((e) => e.kind === 'prd.drafted');
+    expect(drafted).toBeDefined();
+    expect((drafted?.payload as { advisorConcerns?: string[] | null }).advisorConcerns).toBeNull();
   });
 });
 
@@ -1024,63 +1081,6 @@ describe('grill-and-prd: crystallization', () => {
 });
 
 describe('grill-and-prd: codex review hardening', () => {
-  it('skips PRD-draft agent comments when counting rounds and attaching crystallizations', async () => {
-    const projectId = uniqueProjectId('codex-prd-skip');
-    const source = new InMemoryLabelsSource(projectId, REPO_REF);
-    const item = await seedFeatureItem(source, { state: 'factory:gate-pending' });
-    const workItem = await source.getItem(item.externalId);
-
-    eventStore.appendEvent({
-      projectId,
-      workItemId: workItem.id,
-      kind: 'grill.decision-crystallized',
-      payload: { roundNumber: 1, decision: 'Audience: admins.' },
-    });
-
-    const runtime = makeQueuedRuntime([
-      {
-        questions: [{ text: 'Round 2 question?' }],
-        refinedIntent: 'Refined.',
-        readyForPRD: false,
-        decisionSummaries: [{ kind: 'PLAN', summary: 'Asked next.' }],
-      },
-    ]);
-
-    const priorReplies = [
-      {
-        role: 'agent' as const,
-        content: '<!-- factory:grill-question -->\n**Round 1** — audience?',
-      },
-      { role: 'user' as const, content: 'Admins.' },
-      // A previously-rejected PRD comment that must NOT be counted as a round.
-      {
-        role: 'agent' as const,
-        content: '<!-- factory:prd -->\n# PRD\n```json\n{"title":"draft"}\n```',
-      },
-      { role: 'user' as const, content: 'Reject — try again.' },
-    ];
-
-    await runGrillAndPrdWorkflow({
-      workItem,
-      stateSource: source,
-      projectId,
-      priorReplies,
-      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
-    });
-
-    const runCall = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(runCall.context.roundNumber).toBe(2);
-    const passed = runCall.context.priorReplies as Array<{
-      role: string;
-      content: string;
-      crystallized?: string;
-    }>;
-    // The grill-question agent entry should carry the crystallization.
-    expect(passed[0].crystallized).toBe('Audience: admins.');
-    // The PRD-draft agent entry should NOT carry a crystallization.
-    expect(passed[2].crystallized).toBeUndefined();
-  });
-
   it('forwards crystallized priorReplies in revise mode', async () => {
     const projectId = uniqueProjectId('codex-revise-forward');
     const source = new InMemoryLabelsSource(projectId, REPO_REF);

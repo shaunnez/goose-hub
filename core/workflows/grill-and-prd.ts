@@ -101,7 +101,6 @@ function augmentPriorRepliesWithCrystallizations(
   let agentIdx = 0;
   return priorReplies.map((entry) => {
     if (entry.role !== 'agent') return entry;
-    if (entry.content.startsWith('<!-- factory:prd -->')) return entry;
     agentIdx += 1;
     const decision = byRound.get(agentIdx);
     return decision != null ? { ...entry, crystallized: decision } : entry;
@@ -402,10 +401,7 @@ export async function runGrillAndPrdWorkflow(
       localRepoPath,
       workflowRunId,
       async (worktreePath) => {
-        const roundNumber =
-          augmentedPriorReplies.filter(
-            (r) => r.role === 'agent' && !r.content.startsWith('<!-- factory:prd -->'),
-          ).length + 1;
+        const roundNumber = augmentedPriorReplies.filter((r) => r.role === 'agent').length + 1;
 
         const grillRunId = childRunId('grill-me');
 
@@ -792,14 +788,53 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     );
   }
 
-  const concernsBlock =
-    advisorConcerns != null && advisorConcerns.length > 0
-      ? `\n\n## Advisor concerns\n${advisorConcerns.map((c) => `- ${c}`).join('\n')}`
-      : '';
-  const commentBody = `<!-- factory:prd -->\n# PRD\n\n\`\`\`json\n${JSON.stringify(prdOutput, null, 2)}\n\`\`\`${concernsBlock}`;
+  try {
+    eventStore.appendEvent({
+      kind: 'prd.drafted',
+      projectId,
+      workItemId: workItem.id,
+      runId: workflowRunId,
+      payload: {
+        displaySkill: 'write-prd',
+        workflowRunId,
+        discoverSessionId,
+        prd: prdOutput,
+        advisorConcerns,
+      },
+    });
+  } catch (err) {
+    try {
+      eventStore.appendEvent({
+        kind: 'agent.run-failed',
+        projectId,
+        workItemId: workItem.id,
+        runId: prdRunId,
+        payload: {
+          skill: 'write-prd',
+          workflowRunId,
+          discoverSessionId,
+          error: `prd.drafted emit failed: ${String(err)}`,
+        },
+      });
+    } catch {
+      // The primary durability path is unavailable; still surface the issue state.
+    }
+    await transitionAndEmitState({
+      mode: 'forced',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:prd-drafting',
+      to: 'factory:needs-human',
+      by: 'write-prd',
+      runId: prdRunId,
+      reason: 'prd-drafted-emit-failed',
+    });
+    return { phase: 'needs-human' };
+  }
 
   try {
-    await stateSource.comment(workItem.externalId, commentBody);
     await transitionAndEmitState({
       mode: 'legal',
       source: stateSource,
@@ -829,39 +864,10 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       to: 'factory:needs-human',
       by: 'write-prd',
       runId: prdRunId,
-      reason: 'prd-comment-or-transition-failed',
+      reason: 'prd-transition-failed',
     });
     return { phase: 'needs-human' };
   }
 
-  try {
-    eventStore.appendEvent({
-      kind: 'prd.drafted',
-      projectId,
-      workItemId: workItem.id,
-      runId: workflowRunId,
-      payload: {
-        displaySkill: 'write-prd',
-        workflowRunId,
-        discoverSessionId,
-        prd: prdOutput,
-        advisorConcerns,
-      },
-    });
-  } catch (err) {
-    eventStore.appendEvent({
-      kind: 'agent.run-failed',
-      projectId,
-      workItemId: workItem.id,
-      runId: prdRunId,
-      payload: {
-        skill: 'write-prd',
-        workflowRunId,
-        discoverSessionId,
-        error: `prd.drafted emit failed: ${String(err)}`,
-      },
-    });
-    return { phase: 'needs-human' };
-  }
   return { phase: 'prd-review', prdOutput };
 }

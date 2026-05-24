@@ -72,28 +72,17 @@ The `advise-on-prd` skill runs only when **both** are true:
 1. `workItem.priority === 'high' || 'critical'`
 2. `projectConfig.budgets.perAdvisorMaxUsd > resolvedAdviseOnPrdBudget.maxBudgetUsd`
 
-When skipped, an `prd.advisor-skipped` event is emitted with `reason: 'priority' | 'budget'`. When run, validated `revisedSections` are shallow-merged into the PRD before posting (`{ ...prdOutput, ...revisedSections }`); advisor `concerns` (when non-empty) are appended to the PRD comment under a `## Advisor concerns` heading.
+When skipped, an `prd.advisor-skipped` event is emitted with `reason: 'priority' | 'budget'`. When run, validated `revisedSections` are shallow-merged into the PRD before persistence (`{ ...prdOutput, ...revisedSections }`); advisor `concerns` are stored on the `prd.drafted` event payload.
 
 The advisor cap check uses `perAdvisorMaxUsd` as a simple ceiling. Cumulative spend tracking is M9 territory and is not duplicated here.
 
-## Posted PRD comment shape
+## PRD persistence
 
-When the workflow finishes a round successfully (PRD drafted), it posts a single comment on the parent issue with a deterministic header so the UI / future workflows can find and parse it:
+When the workflow drafts a PRD successfully, it appends a local `prd.drafted`
+event before transitioning the issue from `factory:prd-drafting` to
+`factory:prd-review`. GitHub remains responsible for lifecycle state and human
+conversation comments; the PRD body is no longer stored in a marker comment.
 
-````
-<!-- factory:prd -->
-# PRD
-
-```json
-<JSON encoded PRDOutput>
-```
-
-## Advisor concerns
-- <concern 1>
-- <concern 2>
-````
-
-The `## Advisor concerns` block is omitted when there are no concerns.
 
 ## Surfaces touched
 

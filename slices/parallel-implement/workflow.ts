@@ -297,7 +297,6 @@ export async function runParallelImplementWorkflow(
       ? await resolveLatestPrd({
           projectId,
           workItemId: workItem.id,
-          loadLegacyComments: () => stateSource.listComments(workItem.externalId),
         })
       : null;
   const parentPrdContext =

@@ -1,4 +1,5 @@
 import { registerTestOutcomes } from '@goose-hub/core/agent-runtime/mock-test-registry.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { minePatterns } from '@goose-hub/core/learning/mine.js';
 import { logger } from '@goose-hub/core/logger.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
@@ -209,6 +210,41 @@ if (process.env.MOCK_SOURCE === 'true') {
     }
 
     return c.json({ issueNumber: Number(item.externalId), workItemId: item.id }, 201);
+  });
+
+  router.post('/test/:slug/issues/:id/seed-prd', async (c) => {
+    const slug = c.req.param('slug');
+    const id = c.req.param('id');
+    const body = await parseBody<{
+      prd?: unknown;
+      advisorConcerns?: string[] | string | null;
+      runId?: string;
+    }>(c);
+    if (!body.ok) return body.error;
+    if (body.data.prd == null) return c.json({ error: 'prd is required' }, 400);
+
+    const source = await getSourceForSlug(slug);
+    if (source == null) return c.json({ error: 'project not found' }, 404);
+    if (!(source instanceof InMemoryLabelsSource)) {
+      return c.json({ error: 'MOCK_SOURCE=true required for seed endpoint' }, 400);
+    }
+
+    const item = await source.getItem(id);
+    const runId = body.data.runId ?? `seed-prd:${id}:${Date.now()}`;
+    eventStore.appendEvent({
+      projectId: slug,
+      workItemId: item.id,
+      kind: 'prd.drafted',
+      runId,
+      payload: {
+        displaySkill: 'write-prd',
+        workflowRunId: runId,
+        prd: body.data.prd,
+        advisorConcerns: body.data.advisorConcerns ?? null,
+      },
+    });
+
+    return c.json({ ok: true, workItemId: item.id, runId }, 201);
   });
 }
 

@@ -11,7 +11,7 @@
  *   5. Manual transitions grilling → prd-drafting → prd-review (legal per
  *      core/state-machine/transitions.ts) to bypass the multi-round grill loop —
  *      that loop is already covered by discover-lane.spec.ts.
- *   6. Plant a PRD comment so PRDSection renders content; assert it.
+ *   6. Seed a PRD event so PRDSection renders content; assert it.
  *   7. Click prd-approve-btn. Legacy mock decompose-prd runs synchronously:
  *      parent goes decomposing → issues-created → done and child issues are
  *      created. The spec-first PRD approval path is covered by
@@ -69,6 +69,10 @@ async function seedIssue(opts: {
   return res.json() as Promise<{ issueNumber: number; workItemId: string }>;
 }
 
+async function seedPrd(issueNumber: number, prd: unknown): Promise<void> {
+  await postServer(`/projects/test/${SLUG}/issues/${issueNumber}/seed-prd`, { prd });
+}
+
 async function transition(issueNumber: number, from: string, to: string): Promise<void> {
   await postServer(`/projects/${SLUG}/issues/${issueNumber}/transition`, { from, to });
 }
@@ -95,7 +99,7 @@ function goldenTitle(): string {
   return `${emoji} [GOLDEN-FEATURE] ${iso}`;
 }
 
-function buildMockPrdCommentBody(title: string): string {
+function buildMockPrd(title: string) {
   const prd = {
     title,
     problem: 'Golden-path coverage is missing for the feature flow.',
@@ -144,7 +148,7 @@ function buildMockPrdCommentBody(title: string): string {
     estimatedComplexity: 'small',
     decisionSummaries: [{ kind: 'PLAN', summary: 'Golden PRD fixture.' }],
   };
-  return `<!-- factory:prd -->\n# PRD\n\n\`\`\`json\n${JSON.stringify(prd, null, 2)}\n\`\`\``;
+  return prd;
 }
 
 // Parses `- #123 — title` lines from the parent's `## Child issues` comment.
@@ -219,10 +223,8 @@ test.describe('Golden Feature flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR)', 
     await transition(issueNumber, 'factory:prd-drafting', 'factory:prd-review');
     await expect(statePill).toHaveText('prd-review', { timeout: 15_000 });
 
-    // ── 6. Plant a PRD comment so PRDSection has something to render.
-    await postServer(`/projects/${SLUG}/issues/${issueNumber}/comment`, {
-      body: buildMockPrdCommentBody(title),
-    });
+    // ── 6. Seed a PRD event so PRDSection has something to render.
+    await seedPrd(issueNumber, buildMockPrd(title));
 
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/prd`);
     await expect(page.locator('[data-section-key="prd"]')).toBeVisible();

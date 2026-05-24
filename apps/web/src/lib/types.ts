@@ -138,7 +138,7 @@ export interface IssueCommentDto {
 export interface PrdReadModelDto {
   prd: unknown | null;
   advisorConcerns: string | null;
-  source: 'event' | 'legacy-comment';
+  source: 'event';
   createdAt: string;
   runId: string | null;
 }

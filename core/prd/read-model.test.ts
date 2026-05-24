@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { eventStore } from '../event-stream/store.js';
-import { parseLegacyPrdComment, resolveLatestPrd } from './read-model.js';
+import { resolveLatestPrd } from './read-model.js';
 
 function workItemId(issueNumber: number): string {
   return `github:owner/repo#${issueNumber}`;
@@ -11,8 +11,8 @@ function projectId(label: string): string {
 }
 
 describe('resolveLatestPrd', () => {
-  it('prefers the latest local prd.drafted event over a legacy comment', async () => {
-    const project = projectId('event-first');
+  it('returns the latest local prd.drafted event', async () => {
+    const project = projectId('event-latest');
     const item = workItemId(1);
     eventStore.appendEvent({
       projectId: project,
@@ -32,12 +32,6 @@ describe('resolveLatestPrd', () => {
     const result = await resolveLatestPrd({
       projectId: project,
       workItemId: item,
-      loadLegacyComments: async () => [
-        {
-          body: '<!-- factory:prd -->\n# PRD\n\n```json\n{"title":"Comment PRD"}\n```',
-          createdAt: '2026-05-01T00:00:00.000Z',
-        },
-      ],
     });
 
     expect(result).toMatchObject({
@@ -48,52 +42,36 @@ describe('resolveLatestPrd', () => {
     });
   });
 
-  it('falls back to the latest legacy marker comment', async () => {
-    const result = await resolveLatestPrd({
-      projectId: projectId('comment-fallback'),
-      workItemId: workItemId(2),
-      loadLegacyComments: async () => [
-        {
-          body: '<!-- factory:prd -->\n# PRD\n\n```json\n{"title":"Old comment PRD"}\n```',
-          createdAt: '2026-05-01T00:00:00.000Z',
-        },
-        {
-          body: '<!-- factory:prd -->\n# PRD\n\n```json\n{"title":"New comment PRD"}\n```\n\n## Advisor concerns\n- quantify success',
-          createdAt: '2026-05-02T00:00:00.000Z',
-        },
-      ],
+  it('normalizes advisor concerns from a drafted event', async () => {
+    const project = projectId('advisor-concerns');
+    const item = workItemId(2);
+    eventStore.appendEvent({
+      projectId: project,
+      workItemId: item,
+      kind: 'prd.drafted',
+      runId: 'run-1',
+      payload: {
+        prd: { title: 'PRD with concerns' },
+        advisorConcerns: ['quantify success', 'name the owner'],
+      },
     });
 
+    const result = await resolveLatestPrd({ projectId: project, workItemId: item });
+
     expect(result).toMatchObject({
-      prd: { title: 'New comment PRD' },
-      advisorConcerns: '- quantify success',
-      source: 'legacy-comment',
-      runId: null,
+      prd: { title: 'PRD with concerns' },
+      advisorConcerns: '- quantify success\n- name the owner',
+      source: 'event',
+      runId: 'run-1',
     });
   });
 
-  it('returns a malformed legacy marker as a parse-error result', async () => {
+  it('returns null when no prd.drafted event exists', async () => {
     const result = await resolveLatestPrd({
-      projectId: projectId('malformed-comment'),
+      projectId: projectId('missing'),
       workItemId: workItemId(3),
-      loadLegacyComments: async () => [
-        {
-          body: '<!-- factory:prd -->\n# PRD\n\n```json\nnot-json\n```',
-          createdAt: '2026-05-03T00:00:00.000Z',
-        },
-      ],
     });
 
-    expect(result).toMatchObject({
-      prd: null,
-      advisorConcerns: null,
-      source: 'legacy-comment',
-    });
-  });
-});
-
-describe('parseLegacyPrdComment', () => {
-  it('ignores non-marker comments', () => {
-    expect(parseLegacyPrdComment('hello')).toEqual({ prd: null, advisorConcerns: null });
+    expect(result).toBeNull();
   });
 });
