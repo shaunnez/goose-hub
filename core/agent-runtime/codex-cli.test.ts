@@ -36,6 +36,8 @@ describe('buildCodexArgv', () => {
       'gpt-5.4',
       '--sandbox',
       'danger-full-access',
+      '-c',
+      'features.tool_search_always_defer_mcp_tools=true',
       '<task></task>',
     ]);
   });
@@ -90,6 +92,20 @@ describe('buildCodexArgv', () => {
 
     expect(argv).toContain('-c');
     expect(argv).toContain('features.shell_tool=false');
+  });
+
+  it('asks Codex tool search to defer MCP tools instead of exposing resource handles', () => {
+    const argv = buildCodexArgv({
+      model: 'gpt-5.4',
+      workspaceDir: '/tmp/worktree',
+      prompt: '<task></task>',
+    });
+
+    expect(argv).toContain('-c');
+    expect(argv).toContain('features.tool_search_always_defer_mcp_tools=true');
+    expect(argv.indexOf('features.tool_search_always_defer_mcp_tools=true')).toBeLessThan(
+      argv.length - 1,
+    );
   });
 
   it('passes a per-run output schema path before the prompt', () => {

@@ -307,8 +307,6 @@ export async function runInvestigateWorkflow(
     personaId,
   });
 
-  let investigationSucceeded = false;
-
   try {
     let synthesisScoutDigest: ScoutReportDigestBundle | undefined;
 
@@ -950,7 +948,6 @@ export async function runInvestigateWorkflow(
     });
 
     accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'success' });
-    investigationSucceeded = true;
     await transitionAndEmitState({
       mode: 'legal',
       source: stateSource,
@@ -963,10 +960,6 @@ export async function runInvestigateWorkflow(
       runId,
     });
   } catch (err) {
-    // If agent.investigation-complete was already emitted, don't escalate to needs-human.
-    // The investigation succeeded; only the remote label flip failed.
-    if (investigationSucceeded) return;
-
     accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
 
@@ -991,18 +984,33 @@ export async function runInvestigateWorkflow(
       ),
     );
 
-    await transitionAndEmitState({
-      mode: 'legal',
-      source: stateSource,
-      itemId: workItem.externalId,
-      projectId,
-      workItemId: workItem.id,
-      from: 'factory:investigating',
-      to: 'factory:needs-human',
-      by: 'investigate',
-      runId,
-      extraPayload: { reason: 'workflow-error' },
-    });
+    try {
+      await transitionAndEmitState({
+        mode: 'legal',
+        source: stateSource,
+        itemId: workItem.externalId,
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:investigating',
+        to: 'factory:needs-human',
+        by: 'investigate',
+        runId,
+        extraPayload: { reason: 'workflow-error' },
+      });
+    } catch (transitionErr) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'state.transition-deferred',
+        payload: {
+          to: 'factory:needs-human',
+          by: 'investigate',
+          error: transitionErr instanceof Error ? transitionErr.message : String(transitionErr),
+          runId,
+        },
+        runId,
+      });
+    }
   } finally {
     cleanupWorktree(runId);
   }

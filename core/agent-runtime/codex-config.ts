@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { RuntimeEffort } from '../types.js';
 
 const CODEX_AUTH_PATH = join(homedir(), '.codex', 'auth.json');
+const CODEX_DEFER_MCP_TOOLS_FEATURE = 'features.tool_search_always_defer_mcp_tools=true';
 
 export class CodexBinaryNotFoundError extends Error {
   constructor() {
@@ -216,6 +217,9 @@ export function buildCodexArgv(input: {
   if (input.disableShellTool === true) {
     argv.push('-c', 'features.shell_tool=false');
   }
+  // Prefer explicit MCP tool calls over Codex exposing MCP tools through
+  // resource handles such as `<tool>?args` URIs.
+  argv.push('-c', CODEX_DEFER_MCP_TOOLS_FEATURE);
   if (input.inlineConfig != null && input.inlineConfig.length > 0) {
     argv.push(...input.inlineConfig);
   }
