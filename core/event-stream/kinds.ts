@@ -137,6 +137,7 @@ export const EVENT_KINDS = [
   'agent.bug-enhance-hallucinated',
   'agent.bug-enhance-workspace-empty',
   'agent.run-aborted',
+  'agent.runtime-advisory',
 ] as const;
 
 export type EventKind = (typeof EVENT_KINDS)[number];

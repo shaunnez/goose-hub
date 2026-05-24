@@ -79,8 +79,10 @@ const BLOCKED_RUNTIME_SURFACE_PATTERNS: Array<{
   surface: string;
   toolName: string;
   re: RegExp;
-}> = [
-  { surface: 'resources/read failed', toolName: 'resources/read', re: /resources\/read\s+failed/i },
+}> = [];
+
+const ADVISORY_RUNTIME_SURFACE_PATTERNS: Array<{ surface: string; re: RegExp }> = [
+  { surface: 'resources/read failed', re: /resources\/read\s+failed/i },
 ];
 
 function isPathUnderRoot(path: string, root: string): boolean {
@@ -180,6 +182,13 @@ function detectBlockedRuntimeSurface(line: string): {
         blockReason: `blocked-runtime-surface: ${pattern.surface}`,
       };
     }
+  }
+  return null;
+}
+
+function detectAdvisoryRuntimeSurface(line: string): { surface: string } | null {
+  for (const pattern of ADVISORY_RUNTIME_SURFACE_PATTERNS) {
+    if (pattern.re.test(line)) return { surface: pattern.surface };
   }
   return null;
 }
@@ -624,6 +633,17 @@ export class CodexCliRuntime implements AgentRuntime {
           if (blocked != null) {
             emitForbiddenRuntimeSurfaceBlocked(blocked);
           }
+          const advisory = detectAdvisoryRuntimeSurface(line);
+          if (advisory != null) {
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              runId,
+              personaId: personaId ?? null,
+              kind: 'agent.runtime-advisory',
+              payload: { surface: advisory.surface, source: 'codex-cli-stderr' },
+            });
+          }
         }
       });
 
@@ -713,6 +733,17 @@ export class CodexCliRuntime implements AgentRuntime {
           const blocked = detectBlockedRuntimeSurface(stderrLineBuffer);
           if (blocked != null) {
             emitForbiddenRuntimeSurfaceBlocked(blocked);
+          }
+          const advisory = detectAdvisoryRuntimeSurface(stderrLineBuffer);
+          if (advisory != null) {
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              runId,
+              personaId: personaId ?? null,
+              kind: 'agent.runtime-advisory',
+              payload: { surface: advisory.surface, source: 'codex-cli-stderr' },
+            });
           }
         }
 
