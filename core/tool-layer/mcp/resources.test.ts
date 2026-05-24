@@ -75,6 +75,23 @@ describe('uriToWorkspaceRelative', () => {
     });
   });
 
+  it('does not throw on malformed percent sequences — returns raw capture as fallback', () => {
+    // %GG is not a valid percent-encoded sequence; must not throw
+    expect(() => uriToWorkspaceRelative('read_file?path=foo%GGbar.ts')).not.toThrow();
+    const result = uriToWorkspaceRelative('read_file?path=foo%GGbar.ts');
+    expect(result.op).toBe('read');
+    // fallback: raw encoded string is returned unchanged
+    expect(result.path).toBe('foo%GGbar.ts');
+  });
+
+  it('captures only up to & in tool-shaped URIs (greedy-match guard)', () => {
+    // extra query params must not bleed into path
+    expect(uriToWorkspaceRelative('read_file?path=foo.ts&encoding=utf8')).toEqual({
+      op: 'read',
+      path: 'foo.ts',
+    });
+  });
+
   it('keeps bare path / factory:// / file:// forms as read', () => {
     expect(uriToWorkspaceRelative('factory://core/types.ts')).toEqual({ op: 'read', path: 'core/types.ts' });
     expect(uriToWorkspaceRelative('file:///core/types.ts')).toEqual({ op: 'read', path: 'core/types.ts' });
@@ -184,7 +201,7 @@ describe('resources/read', () => {
   it('routes file_exists?path=… via fileExistsTool and serializes { exists: bool }', async () => {
     const result = await readWorkspaceResource(ctx, 'file_exists?path=README.md');
     expect(result.contents[0].mimeType).toBe('application/json');
-    expect(JSON.parse(result.contents[0].text as string)).toEqual({
+    expect(JSON.parse(asText(result.contents[0]).text)).toEqual({
       exists: true,
       path: 'README.md',
     });
@@ -192,7 +209,7 @@ describe('resources/read', () => {
 
   it('routes file_exists for a missing path and reports exists:false (no throw)', async () => {
     const result = await readWorkspaceResource(ctx, 'file_exists?path=does-not-exist.ts');
-    expect(JSON.parse(result.contents[0].text as string)).toMatchObject({ exists: false });
+    expect(JSON.parse(asText(result.contents[0]).text)).toMatchObject({ exists: false });
   });
 
   it('shares run-cache with read_file for the same canonical path', async () => {
@@ -201,8 +218,9 @@ describe('resources/read', () => {
     const result = await readWorkspaceResource(ctx, 'read_file?path=README.md');
     // The audit event should be marked cached:true on the second read.
     const events = eventStore.replay({ workItemId: ctx.workItemId });
-    const last = events.findLast((e) => (e.payload as any).tool_name === 'resources/read');
-    expect((last?.payload as any).cached).toBe(true);
-    expect(result.contents[0].text).toBeDefined();
+    type ToolCallPayload = { tool_name?: string; cached?: boolean };
+    const last = [...events].reverse().find((e) => (e.payload as ToolCallPayload).tool_name === 'resources/read');
+    expect((last?.payload as ToolCallPayload).cached).toBe(true);
+    expect(asText(result.contents[0]).text).toBeDefined();
   });
 });

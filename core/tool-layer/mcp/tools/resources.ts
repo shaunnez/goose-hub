@@ -10,7 +10,7 @@ import { fileExistsTool, readFileTool } from './read.js';
 export { ResourceTemplate };
 
 const FACTORY_URI_PREFIX = 'factory://';
-const TOOL_URI_RE = /^(read_file|file_exists)\?path=(.+)$/;
+const TOOL_URI_RE = /^(read_file|file_exists)\?path=([^&]+)/;
 
 export type ResourceOp = { op: 'read'; path: string } | { op: 'exists'; path: string };
 
@@ -27,7 +27,14 @@ export function uriToWorkspaceRelative(uri: string): ResourceOp {
   const toolMatch = TOOL_URI_RE.exec(uri);
   if (toolMatch != null) {
     const op = toolMatch[1] === 'file_exists' ? 'exists' : 'read';
-    return { op, path: decodeURIComponent(toolMatch[2]) };
+    let path: string;
+    try {
+      path = decodeURIComponent(toolMatch[2]);
+    } catch {
+      // Malformed percent sequence — fall back to raw capture
+      path = toolMatch[2];
+    }
+    return { op, path };
   }
   if (uri.startsWith(FACTORY_URI_PREFIX)) {
     return { op: 'read', path: uri.slice(FACTORY_URI_PREFIX.length) };
@@ -111,10 +118,11 @@ export async function readWorkspaceResource(
   uri: URL | string,
 ): Promise<ReadResourceResult> {
   const uriStr = typeof uri === 'string' ? uri : uri.toString();
-  const parsed = uriToWorkspaceRelative(uriStr);
-  const auditBase = { tool_name: 'resources/read', uri: uriStr, relativePath: parsed.path, op: parsed.op };
+  const auditBase = { tool_name: 'resources/read', uri: uriStr };
 
   try {
+    const parsed = uriToWorkspaceRelative(uriStr);
+    Object.assign(auditBase, { relativePath: parsed.path, op: parsed.op });
     if (parsed.op === 'exists') {
       const result = await fileExistsTool(ctx, { path: parsed.path });
       eventStore.appendEvent({
@@ -143,7 +151,7 @@ export async function readWorkspaceResource(
       payload: {
         ...auditBase,
         status: 'ok',
-        cached: (result as { cached?: boolean }).cached ?? false,
+        cached: result.cached ?? false,
       },
     });
     const canonicalUri = workspaceRelativeToUri(result.path?.path ?? parsed.path);
