@@ -325,7 +325,7 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'agent.run-completed' }),
     );
-    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'agent.run-failed',
         payload: expect.objectContaining({ reason: 'budget-exceeded' }),

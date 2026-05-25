@@ -410,6 +410,21 @@ export class ClaudeCliRuntime implements AgentRuntime {
           };
           if (spec.budgetPolicy?.onPostRunExceeded === 'return-output') {
             recordRun('failure');
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.run-failed',
+              payload: {
+                runId,
+                skill: spec.skill,
+                reason: 'budget-exceeded',
+                error: `budget exceeded: $${costUsd} > $${spec.budgets.maxBudgetUsd}`,
+                costUsd,
+                budgetUsd: spec.budgets.maxBudgetUsd,
+              },
+              runId,
+              personaId,
+            });
             resolve({
               output: extractResultJson(envelope?.result ?? stdout, runId),
               decisionSummaries: [],

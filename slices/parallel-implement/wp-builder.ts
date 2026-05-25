@@ -110,7 +110,13 @@ function isEditToolCall(event: AgentEvent): boolean {
   if (name == null) return false;
   if (name.includes('edit') || name.includes('write')) return true;
   const command = toolCallInput(event).command;
-  return typeof command === 'string' && /\b(apply_patch|cat|tee|sed -i)\b/.test(command);
+  return (
+    typeof command === 'string' &&
+    (/\bapply_patch\b/.test(command) ||
+      /\bsed\s+-[^;&|]*i/.test(command) ||
+      /\btee\s+(?:-[a-zA-Z]+\s+)*(?!\/dev\/null\b)\S+/.test(command) ||
+      /(^|[^<])>{1,2}\s*\S+/.test(command))
+  );
 }
 
 function isVerificationToolCall(event: AgentEvent): boolean {

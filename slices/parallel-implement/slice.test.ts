@@ -1366,6 +1366,54 @@ describe('parallel-implement durable integration branch persistence', () => {
     expect(events.some((event) => event.kind === 'parallel-implement.wp-persisted')).toBe(false);
   });
 
+  it('does not count read-only shell inspection as edit-test cycles', async () => {
+    const wp = makeWp('WP1', ['core/a.ts']);
+    const scratchWorktree = makeTempRepo(['core/a.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const revertWpChangesFn = vi.fn();
+    const wpRunId = 'run-readonly-loop:wp:WP1:iter:1';
+
+    const result = await runOneWpBuilder({
+      wp,
+      iteration: 1,
+      runId: 'run-readonly-loop',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: async () => ({
+          ...makeOkResult('WP1'),
+          events: [
+            makeToolCallEvent(wpRunId, 'Bash', { command: 'cat core/a.ts' }),
+            makeToolCallEvent(wpRunId, 'Bash', { command: 'pnpm test core/a.test.ts' }),
+            makeToolCallEvent(wpRunId, 'Bash', { command: 'cat core/a.ts' }),
+            makeToolCallEvent(wpRunId, 'Bash', { command: 'pnpm test core/a.test.ts' }),
+          ],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn,
+      recordIterationFn: () => undefined,
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+      implementWpControl: {
+        editTestLoopMaxCycles: 1,
+      },
+    });
+
+    expect(result.status).toBe('built');
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-loop-cap-hit')).toBe(
+      false,
+    );
+    expect(revertWpChangesFn).not.toHaveBeenCalled();
+  });
+
   it('classifies push failure as persistence-failed', async () => {
     const wp1 = makeWp('WP1', ['core/a.ts']);
     const spec = makeSpec([wp1]);
