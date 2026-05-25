@@ -5,7 +5,9 @@ import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import { runDecomposePrdWorkflow } from '@goose-hub/core/workflows/decompose-prd.js';
 import { runGrillAndPrdWorkflow } from '@goose-hub/core/workflows/grill-and-prd.js';
 import type { PRDOutput } from '@goose-hub/skills/write-prd/schema.js';
+import { runFramingWorkflow } from '../../../../slices/framing/workflow.js';
 import { getMaxParallelAgents, withParallelLock } from './dispatch-lock.js';
+import { getProject } from './projects.js';
 import { REPO_ROOT } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
 
@@ -32,6 +34,46 @@ function buildPriorReplies(
       role: c.body.startsWith(GRILL_QUESTION_MARKER) ? ('agent' as const) : ('user' as const),
       content: c.body,
     }));
+}
+
+/**
+ * Run feature framing for vague fresh features. The workflow may continue
+ * directly into PRD drafting or into grill-me with an in-memory augmented body.
+ */
+export async function dispatchFraming(slug: string, issueNumber: number): Promise<void> {
+  await withParallelLock(slug, issueNumber, 'dispatchFraming', dispatchFraming, async () => {
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchFraming: no source for slug', { slug });
+      return;
+    }
+    const item = await source.getItem(issueNumber.toString());
+    if (item.state !== 'factory:framing') {
+      logger.info('dispatchFraming: state already advanced, skipping', {
+        slug,
+        issueNumber,
+        state: item.state,
+      });
+      return;
+    }
+    const comments = await source.listComments(issueNumber.toString());
+    const priorReplies = buildPriorReplies(comments);
+    const projectConfig = await getProject(slug);
+    const mockGrillDeps =
+      process.env.MOCK_AGENTS === 'true'
+        ? {
+            createWorktreeImpl: (_repo: string, _runId: string) => '/mock/worktree',
+            cleanupWorktreeImpl: (_runId: string) => undefined,
+          }
+        : undefined;
+    await runFramingWorkflow({
+      workItem: item,
+      stateSource: source,
+      projectId: slug,
+      priorReplies,
+      deps: { projectConfig, ...(mockGrillDeps ?? {}) },
+    });
+  });
 }
 
 /**

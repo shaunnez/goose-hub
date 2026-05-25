@@ -22,6 +22,7 @@ const mockRunRetroForItem = vi.fn();
 const mockFilterEligibleByDependencies = vi.fn();
 const mockCreateProjectAwareTargetSource = vi.fn();
 const mockRunGrillAndPrdWorkflow = vi.fn();
+const mockRunFramingWorkflow = vi.fn();
 const mockRunDecomposePrdWorkflow = vi.fn();
 const mockGetUseMultiAgentPipeline = vi.fn();
 const mockGetEngineeringSpec = vi.fn();
@@ -96,6 +97,10 @@ vi.mock('@goose-hub/core/workflows/grill-and-prd.js', () => ({
   runGrillAndPrdWorkflow: mockRunGrillAndPrdWorkflow,
 }));
 
+vi.mock('../../../../slices/framing/workflow.js', () => ({
+  runFramingWorkflow: mockRunFramingWorkflow,
+}));
+
 vi.mock('@goose-hub/core/workflows/decompose-prd.js', () => ({
   runDecomposePrdWorkflow: mockRunDecomposePrdWorkflow,
 }));
@@ -126,6 +131,7 @@ beforeEach(() => {
   mockRunQaWorkflow.mockResolvedValue(undefined);
   mockRunRetroForItem.mockResolvedValue(undefined);
   mockRunGrillAndPrdWorkflow.mockResolvedValue(undefined);
+  mockRunFramingWorkflow.mockResolvedValue(undefined);
   mockRunDecomposePrdWorkflow.mockResolvedValue(undefined);
   mockRunParallelImplementWorkflow.mockResolvedValue({ status: 'success' });
   mockGetSourceForSlug.mockResolvedValue(null);
@@ -147,6 +153,50 @@ beforeEach(() => {
     eligible: [],
     blocked: [],
     unregistered: [],
+  });
+});
+
+// ─── dispatchFraming ──────────────────────────────────────────────────────
+
+describe('dispatchFraming', () => {
+  it('passes prior replies from comments and target project config into framing', async () => {
+    const item = { id: 'github:owner/repo#1046', externalId: '1046', state: 'factory:framing' };
+    const source = {
+      getItem: vi.fn().mockResolvedValue(item),
+      listComments: vi
+        .fn()
+        .mockResolvedValue([
+          { body: '<!-- factory:grill-question -->\nWhat users need this first?' },
+          { body: 'Ops admins need it for saved reports.' },
+          { body: '<!-- factory:system -->\nInternal routing note.' },
+        ]),
+    };
+    const projectConfig = {
+      targetRepo: {
+        cloneUrl: 'git@example.com:owner/repo.git',
+        defaultBranch: 'main',
+        localPath: '/target/repo',
+      },
+      budgets: { perAgentMaxUsd: 1 },
+      stack: { runtime: 'node' },
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue(projectConfig);
+
+    const { dispatchFraming } = await import('./dispatch.js');
+    await dispatchFraming('slug', 1046);
+
+    expect(mockRunFramingWorkflow).toHaveBeenCalledOnce();
+    const call = mockRunFramingWorkflow.mock.calls[0][0] as {
+      priorReplies: Array<{ role: string; content: string }>;
+      deps: { projectConfig?: unknown; repoRoot?: string };
+    };
+    expect(call.priorReplies).toEqual([
+      { role: 'agent', content: '<!-- factory:grill-question -->\nWhat users need this first?' },
+      { role: 'user', content: 'Ops admins need it for saved reports.' },
+    ]);
+    expect(call.deps.projectConfig).toBe(projectConfig);
+    expect(call.deps.repoRoot).toBeUndefined();
   });
 });
 

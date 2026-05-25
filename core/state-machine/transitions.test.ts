@@ -15,8 +15,12 @@ describe('isLegalTransition — section 9.1 happy paths', () => {
     expect(isLegalTransition('factory:accepted', 'factory:grilling')).toBe(true));
   it('accepted → framing', () =>
     expect(isLegalTransition('factory:accepted', 'factory:framing')).toBe(true));
-  it('framing has no concrete outbound workflow route yet', () =>
-    expect(legalTargets('factory:framing')).toStrictEqual(['factory:archived']));
+  it('framing can route to grill or PRD drafting', () =>
+    expect(legalTargets('factory:framing')).toStrictEqual([
+      'factory:grilling',
+      'factory:prd-drafting',
+      'factory:archived',
+    ]));
   it('grilling → prd-drafting', () =>
     expect(isLegalTransition('factory:grilling', 'factory:prd-drafting')).toBe(true));
   it('prd-drafting → prd-review', () =>

@@ -13,6 +13,7 @@ import {
 } from './dispatch-dev.js';
 import {
   dispatchDecomposePrd,
+  dispatchFraming,
   dispatchGrillAndPrd,
   dispatchRetryWritePrd,
 } from './dispatch-discover.js';
@@ -110,6 +111,10 @@ export async function dispatchForLabel(
     await dispatchGrillAndPrd(slug, issueNumber);
     return;
   }
+  if (labelName === 'factory:framing') {
+    await dispatchFraming(slug, issueNumber);
+    return;
+  }
   if (labelName === 'factory:decomposing') {
     await dispatchDecomposePrd(slug, issueNumber);
     return;
@@ -178,6 +183,7 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
   'factory:qa-failed': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
   'factory:needs-fix': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
   // Discover lane
+  'factory:framing': { targetState: 'factory:framing', dispatch: dispatchFraming },
   'factory:grilling': { targetState: 'factory:grilling', dispatch: dispatchGrillAndPrd },
   // factory:gate-pending is handled above with lane-origin inspection; it is
   // intentionally absent from this table so the special-case runs first.

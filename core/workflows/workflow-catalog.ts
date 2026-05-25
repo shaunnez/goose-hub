@@ -847,7 +847,7 @@ const featureEntry: WorkflowCatalogEntry = {
     stateNode('framing', 'Framing', 'factory:framing', {
       group: 'grill',
       notes:
-        'Holding state for vague fresh features; outbound workflow is owned by the feature-frame issue.',
+        'Vague fresh features run feature-frame, then either continue to grill-me or skip directly to PRD drafting.',
     }),
     stateNode('grilling', 'Grilling', 'factory:grilling', { group: 'grill' }),
     stateNode('prd-drafting', 'PRD draft', 'factory:prd-drafting', { group: 'prd' }),
@@ -859,6 +859,14 @@ const featureEntry: WorkflowCatalogEntry = {
     skillNode('grill-me-skill', 'grill-me', 'grill-me', 'griller', 'factory:grilling', {
       group: 'grill',
     }),
+    skillNode(
+      'feature-frame-skill',
+      'feature-frame',
+      'feature-frame',
+      'triager',
+      'factory:framing',
+      { group: 'grill' },
+    ),
     skillNode('write-prd-skill', 'write-prd', 'write-prd', 'prd-writer', 'factory:prd-drafting', {
       group: 'prd',
     }),
@@ -885,6 +893,8 @@ const featureEntry: WorkflowCatalogEntry = {
     primary('triaging', 'accepted'),
     primary('accepted', 'grilling'),
     optional('accepted', 'framing', 'Vague fresh feature'),
+    optional('framing', 'grilling', 'Still needs grilling'),
+    optional('framing', 'prd-drafting', 'Framed enough for PRD'),
     primary('grilling', 'prd-drafting'),
     primary('prd-drafting', 'prd-review'),
     primary('prd-review', 'dev-ready'),
@@ -892,6 +902,7 @@ const featureEntry: WorkflowCatalogEntry = {
     optional('decomposing', 'issues-created', 'Legacy child issue creation'),
     optional('issues-created', 'dev-ready', 'Legacy child delivery'),
     optional('issues-created', 'done', 'Parent complete'),
+    summary('framing', 'feature-frame-skill'),
     summary('grilling', 'grill-me-skill'),
     summary('prd-drafting', 'write-prd-skill'),
     summary('prd-review', 'advise-on-prd-skill'),
@@ -919,9 +930,9 @@ const featureEntry: WorkflowCatalogEntry = {
       id: 'grill',
       title: 'Grill',
       description:
-        'Clean fresh feature work enters grill-me; vague fresh feature work can pause in framing until the framing workflow is available.',
+        'Clean fresh feature work enters grill-me; vague fresh feature work first runs feature-frame and either continues to grill-me or skips to PRD drafting.',
       group: 'grill',
-      nodes: ['framing', 'grilling', 'grill-me-skill'],
+      nodes: ['framing', 'feature-frame-skill', 'grilling', 'grill-me-skill'],
     },
     {
       id: 'prd',
