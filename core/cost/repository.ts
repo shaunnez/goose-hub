@@ -157,6 +157,8 @@ export function listCostsForProjectSince(projectId: string, sinceIso: string): C
 export interface ProjectTotals {
   totalUsd: number;
   totalRuns: number;
+  inputTokens: number;
+  cachedInputTokens: number;
   /** True when any contributing row was 'estimated'. UI uses this to qualify the figure. */
   hasEstimated: boolean;
 }
@@ -170,6 +172,8 @@ export function totalsForProjectSince(projectId: string, sinceIso: string): Proj
     .select({
       totalUsd: sql<number>`coalesce(sum(${agentRunCosts.costUsd}), 0)`,
       totalRuns: sql<number>`count(*)`,
+      inputTokens: sql<number>`coalesce(sum(${agentRunCosts.inputTokens}), 0)`,
+      cachedInputTokens: sql<number>`coalesce(sum(${agentRunCosts.cachedInputTokens}), 0)`,
       hasEstimated: sql<number>`max(case when ${agentRunCosts.costLabel} = 'estimated' then 1 else 0 end)`,
     })
     .from(agentRunCosts)
@@ -178,6 +182,8 @@ export function totalsForProjectSince(projectId: string, sinceIso: string): Proj
   return {
     totalUsd: row?.totalUsd ?? 0,
     totalRuns: row?.totalRuns ?? 0,
+    inputTokens: row?.inputTokens ?? 0,
+    cachedInputTokens: row?.cachedInputTokens ?? 0,
     hasEstimated: (row?.hasEstimated ?? 0) === 1,
   };
 }
@@ -188,6 +194,8 @@ export function totalsByStageForProjectSince(projectId: string, sinceIso: string
       stage: agentRunCosts.stage,
       totalUsd: sql<number>`coalesce(sum(${agentRunCosts.costUsd}), 0)`,
       totalRuns: sql<number>`count(*)`,
+      inputTokens: sql<number>`coalesce(sum(${agentRunCosts.inputTokens}), 0)`,
+      cachedInputTokens: sql<number>`coalesce(sum(${agentRunCosts.cachedInputTokens}), 0)`,
       hasEstimated: sql<number>`max(case when ${agentRunCosts.costLabel} = 'estimated' then 1 else 0 end)`,
     })
     .from(agentRunCosts)
@@ -199,6 +207,8 @@ export function totalsByStageForProjectSince(projectId: string, sinceIso: string
     stage: r.stage as Stage,
     totalUsd: r.totalUsd ?? 0,
     totalRuns: r.totalRuns ?? 0,
+    inputTokens: r.inputTokens ?? 0,
+    cachedInputTokens: r.cachedInputTokens ?? 0,
     hasEstimated: (r.hasEstimated ?? 0) === 1,
   }));
 }

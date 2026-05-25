@@ -46,11 +46,37 @@ describe('getCostSummary', () => {
 
   it('returns week, month and per-stage totals', async () => {
     mockTotalsForProject
-      .mockReturnValueOnce({ totalUsd: 1.2, totalRuns: 5, hasEstimated: true }) // week
-      .mockReturnValueOnce({ totalUsd: 4.5, totalRuns: 20, hasEstimated: true }); // month
+      .mockReturnValueOnce({
+        totalUsd: 1.2,
+        totalRuns: 5,
+        hasEstimated: true,
+        inputTokens: 1000,
+        cachedInputTokens: 250,
+      }) // week
+      .mockReturnValueOnce({
+        totalUsd: 4.5,
+        totalRuns: 20,
+        hasEstimated: true,
+        inputTokens: 2000,
+        cachedInputTokens: 400,
+      }); // month
     mockTotalsByStage.mockReturnValue([
-      { stage: 'dev', totalUsd: 3.0, totalRuns: 10, hasEstimated: true },
-      { stage: 'qa', totalUsd: 1.0, totalRuns: 8, hasEstimated: false },
+      {
+        stage: 'dev',
+        totalUsd: 3.0,
+        totalRuns: 10,
+        hasEstimated: true,
+        inputTokens: 1000,
+        cachedInputTokens: 300,
+      },
+      {
+        stage: 'qa',
+        totalUsd: 1.0,
+        totalRuns: 8,
+        hasEstimated: false,
+        inputTokens: 500,
+        cachedInputTokens: 100,
+      },
     ]);
     mockListCostsForProjectSince.mockReturnValue([
       {
@@ -63,6 +89,8 @@ describe('getCostSummary', () => {
         modelId: 'claude-sonnet-4-6',
         inputTokens: 100,
         outputTokens: 50,
+        cachedInputTokens: 25,
+        reasoningOutputTokens: 5,
         costUsd: 1.5,
         costLabel: 'estimated',
         personaId: null,
@@ -78,6 +106,8 @@ describe('getCostSummary', () => {
         modelId: 'gpt-5.4',
         inputTokens: 80,
         outputTokens: 30,
+        cachedInputTokens: 20,
+        reasoningOutputTokens: 4,
         costUsd: 2.0,
         costLabel: 'exact',
         personaId: null,
@@ -89,18 +119,25 @@ describe('getCostSummary', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data.windows.week.totalUsd).toBe(1.2);
+    expect(r.data.windows.week.cacheHitRatio).toBe(0.25);
     expect(r.data.windows.month.totalUsd).toBe(4.5);
+    expect(r.data.windows.month.cachedInputTokens).toBe(400);
     expect(r.data.byStage).toHaveLength(2);
     expect(r.data.byStage[0].stage).toBe('dev');
+    expect(r.data.byStage[0].cacheHitRatio).toBe(0.3);
     expect(r.data.byProvider.claude).toMatchObject({
       totalUsd: 1.5,
       totalRuns: 1,
       hasEstimated: true,
+      cachedInputTokens: 25,
+      cacheHitRatio: 0.25,
     });
     expect(r.data.byProvider.codex).toMatchObject({
       totalUsd: 2.0,
       totalRuns: 1,
       hasEstimated: false,
+      cachedInputTokens: 20,
+      cacheHitRatio: 0.25,
     });
     expect(r.data.symbolIndex).toMatchObject({
       lookupCount: 0,
@@ -158,6 +195,8 @@ describe('getCostSummary', () => {
         modelId: 'gpt-5.4',
         inputTokens: 600,
         outputTokens: 500,
+        cachedInputTokens: 0,
+        reasoningOutputTokens: 0,
         costUsd: 0.12,
         costLabel: 'estimated',
         personaId: null,
@@ -173,6 +212,8 @@ describe('getCostSummary', () => {
         modelId: 'gpt-5.4',
         inputTokens: 900,
         outputTokens: 100,
+        cachedInputTokens: 0,
+        reasoningOutputTokens: 0,
         costUsd: 0.2,
         costLabel: 'estimated',
         personaId: null,
@@ -224,6 +265,8 @@ describe('getCostsForWorkItem', () => {
         modelId: 'claude-sonnet-4-6',
         inputTokens: 100,
         outputTokens: 50,
+        cachedInputTokens: 20,
+        reasoningOutputTokens: 5,
         costUsd: 0.01,
         costLabel: 'estimated',
         personaId: null,
@@ -239,6 +282,8 @@ describe('getCostsForWorkItem', () => {
         modelId: 'claude-sonnet-4-6',
         inputTokens: 80,
         outputTokens: 30,
+        cachedInputTokens: 0,
+        reasoningOutputTokens: 0,
         costUsd: 0.005,
         costLabel: 'exact',
         personaId: null,
@@ -254,6 +299,8 @@ describe('getCostsForWorkItem', () => {
         modelId: 'claude-sonnet-4-6',
         inputTokens: 100,
         outputTokens: 50,
+        cachedInputTokens: 20,
+        reasoningOutputTokens: 5,
         costUsd: 0.01,
         costLabel: 'estimated',
         personaId: null,
@@ -280,6 +327,9 @@ describe('getCostsForWorkItem', () => {
       bytesRead: 4096,
       uniquePathsRead: 2,
       redundantReads: 1,
+      cachedInputTokens: 20,
+      reasoningOutputTokens: 5,
+      cacheHitRatio: 0.2,
     });
     expect(r.data.rows[1]).toMatchObject({
       readCount: 0,
@@ -300,6 +350,8 @@ describe('getToolStatsForWorkItem', () => {
         modelId: 'gpt-5.4',
         inputTokens: 100,
         outputTokens: 20,
+        cachedInputTokens: 0,
+        reasoningOutputTokens: 0,
         costUsd: 0.1,
         costLabel: 'estimated',
         personaId: null,
