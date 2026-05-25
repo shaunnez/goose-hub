@@ -15,6 +15,7 @@ import {
   type DogfoodSeedGitOps,
   applySeed,
   defaultDogfoodSeedGitOps,
+  restoreSeed,
   verifyGreen,
   verifyRed,
 } from './runner.js';
@@ -53,7 +54,7 @@ export interface RunOrchestratorOptions {
   /** Injected git operations (for tests). */
   seedGit?: DogfoodSeedGitOps;
   /** Injected durable event writer (for tests). */
-  appendEvent?: (input: AppendEventInput) => unknown;
+  appendEvent?: (input: AppendEventInput) => unknown | Promise<unknown>;
   /** Console-like sink. */
   logger?: Pick<Console, 'log' | 'warn' | 'error'>;
 }
@@ -120,8 +121,10 @@ export async function runDogfood(opts: RunOrchestratorOptions): Promise<RunOrche
   const progress = newProgress(cfg.workflow);
   let tailReason: RunOrchestratorResult['reason'] = 'aborted';
   let eventCount = 0;
+  let seedApplied = false;
   try {
     await applySeed(seed.id, { repoRoot: opts.repoRoot });
+    seedApplied = true;
     if (!opts.skipVerifyRed) {
       const result = await verifyRed(seed.id, { repoRoot: opts.repoRoot });
       if (!result.truthSignalRed) {
@@ -157,7 +160,7 @@ export async function runDogfood(opts: RunOrchestratorOptions): Promise<RunOrche
     run.baseRef = seedCommit;
     run.seedCommit = seedCommit;
     await store.append(run);
-    appendEvent({
+    await appendEvent({
       projectId: cfg.projectSlug,
       workItemId,
       kind: 'dogfood.seed-applied',
@@ -200,27 +203,42 @@ export async function runDogfood(opts: RunOrchestratorOptions): Promise<RunOrche
 
     log.log(`[5/5] tail ended (${tailResult.reason}); recording outcome`);
     completion = computeCompletion(progress, tailResult.reason);
-    const truthPass =
-      opts.skipVerifyGreen === true || !progress.terminalReached
-        ? undefined
-        : await verifyTruthSignalAgainstFinalCode({
-            repoRoot: opts.repoRoot,
-            seedId: seed.id,
-            seedGit,
-            events: tailResult.events,
-          });
     await store.update(run.runId, {
       completion,
       endedAt: new Date().toISOString(),
-      ...(truthPass == null ? {} : { truthPass }),
     });
 
-    if (truthPass != null) {
-      log.log(`      truth-pass: ${truthPass}`);
+    if (
+      opts.skipVerifyGreen !== true &&
+      opts.restoreOnFinish !== false &&
+      progress.terminalReached
+    ) {
+      const truthPass = await verifyTruthSignalAgainstFinalCode({
+        repoRoot: opts.repoRoot,
+        seedId: seed.id,
+        seedGit,
+        events: tailResult.events,
+      }).catch((err) => {
+        log.warn(
+          `      truth-pass check skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return undefined;
+      });
+      if (truthPass != null) {
+        await store.update(run.runId, { truthPass });
+        log.log(`      truth-pass: ${truthPass}`);
+      }
     }
   } finally {
     if (opts.restoreOnFinish !== false) {
       log.log('      restoring operator branch');
+      if (seedApplied && seedCommit == null) {
+        await restoreSeed(seed.id, { repoRoot: opts.repoRoot }).catch((err) => {
+          log.warn(
+            `      uncommitted seed restore failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+      }
       await seedGit.checkout(opts.repoRoot, originalRef).catch((err) => {
         log.warn(
           `      checkout restore failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -277,11 +295,11 @@ async function verifyTruthSignalAgainstFinalCode(input: {
   seedId: string;
   seedGit: DogfoodSeedGitOps;
   events: AgentEventDto[];
-}): Promise<boolean> {
+}): Promise<boolean | undefined> {
   const prOpened = [...input.events].reverse().find((event) => event.kind === 'pr.opened');
   const payload = prOpened?.payload as { branch?: unknown } | undefined;
   const branch = typeof payload?.branch === 'string' ? payload.branch : undefined;
-  if (branch == null || branch.trim().length === 0) return false;
+  if (branch == null || branch.trim().length === 0) return undefined;
 
   await input.seedGit.fetchBranch(input.repoRoot, branch);
   await input.seedGit.checkout(input.repoRoot, `origin/${branch}`);

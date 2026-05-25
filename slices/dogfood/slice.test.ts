@@ -748,6 +748,33 @@ describe('runDogfood orchestrator', () => {
     );
   });
 
+  it('awaits dogfood.seed-applied persistence before tailing events', async () => {
+    let seedEventPersisted = false;
+    let tailStartedAfterSeedEvent = false;
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+
+    await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: async () => {
+        tailStartedAfterSeedEvent = seedEventPersisted;
+        return { events: [], reason: 'server-closed' as const };
+      },
+      seedGit: makeSeedGit(),
+      appendEvent: async () => {
+        await Promise.resolve();
+        seedEventPersisted = true;
+      },
+      logger: silent,
+      skipVerifyRed: true,
+      skipVerifyGreen: true,
+    });
+
+    expect(tailStartedAfterSeedEvent).toBe(true);
+  });
+
   it('failure path: records `failed:<node>` when an agent.run-failed arrives', async () => {
     const events: AgentEventDto[] = [
       { kind: 'state.transitioned', payload: { to: 'factory:investigating' } },
@@ -791,6 +818,106 @@ describe('runDogfood orchestrator', () => {
     });
     const after = await fs.readFile(targetPath, 'utf8');
     expect(after).toBe(before);
+  });
+
+  it('restores uncommitted seed edits before returning to the operator branch when verify-red fails', async () => {
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    const targetPath = path.join(tmpRepoRoot, 'apps/web/src/lib/logger.ts');
+    const before = await fs.readFile(targetPath, 'utf8');
+    const seedGit = makeSeedGit();
+    seedGit.checkout.mockResolvedValue(undefined);
+
+    await expect(
+      runDogfood({
+        seedId: 'logger-001-drop-meta',
+        repoRoot: tmpRepoRoot,
+        gh: makeGh(),
+        store,
+        tail: makeTail([]),
+        seedGit,
+        logger: silent,
+      }),
+    ).rejects.toThrow(/vitest not found/);
+
+    const after = await fs.readFile(targetPath, 'utf8');
+    expect(after).toBe(before);
+    expect(seedGit.checkout).toHaveBeenCalledWith(tmpRepoRoot, 'main');
+    expect(seedGit.deleteLocalBranch).toHaveBeenCalled();
+  });
+
+  it('records completion even when final truth-signal verification cannot run', async () => {
+    const events: AgentEventDto[] = [
+      { kind: 'pr.opened', payload: { branch: 'factory/fix-4242' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:done' } },
+    ];
+    const logger = { log: () => {}, warn: vi.fn(), error: () => {} } as unknown as Console;
+
+    await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: makeTail(events),
+      seedGit: makeSeedGit(),
+      logger,
+      skipVerifyRed: true,
+    });
+
+    const rows = await store.list();
+    expect(rows[0].completion).toBe('reached-terminal');
+    expect(rows[0].truthPass).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('truth-pass check skipped'));
+  });
+
+  it('leaves truth-pass unknown when no PR branch is available in the tailed events', async () => {
+    const events: AgentEventDto[] = [
+      { kind: 'state.transitioned', payload: { to: 'factory:done' } },
+    ];
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    const seedGit = makeSeedGit();
+
+    await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: makeTail(events),
+      seedGit,
+      logger: silent,
+      skipVerifyRed: true,
+    });
+
+    const rows = await store.list();
+    expect(rows[0].completion).toBe('reached-terminal');
+    expect(rows[0].truthPass).toBeUndefined();
+    expect(seedGit.fetchBranch).not.toHaveBeenCalled();
+  });
+
+  it('honors --no-restore by skipping final checkout-based green verification', async () => {
+    const events: AgentEventDto[] = [
+      { kind: 'pr.opened', payload: { branch: 'factory/fix-4242' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:done' } },
+    ];
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    const seedGit = makeSeedGit();
+
+    await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: makeTail(events),
+      seedGit,
+      logger: silent,
+      skipVerifyRed: true,
+      restoreOnFinish: false,
+    });
+
+    const rows = await store.list();
+    expect(rows[0].completion).toBe('reached-terminal');
+    expect(rows[0].truthPass).toBeUndefined();
+    expect(seedGit.fetchBranch).not.toHaveBeenCalled();
+    expect(seedGit.checkout).not.toHaveBeenCalled();
   });
 
   it('computeCompletion translates timeout + no terminal into `stalled`', () => {
