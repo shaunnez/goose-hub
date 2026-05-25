@@ -76,7 +76,17 @@ Beyond the stated criteria, identify any concerns. For each, record a `ReviewFin
 - **major** — design decisions that will cause meaningful pain; ambiguous public APIs; missing edge-case tests
 - **minor** — style inconsistencies, misleading comments, cosmetic issues
 
-All blocker findings require a `disposition` (fixed / registered / out-of-scope).
+All blocker findings require both `disposition` and `dispositionRef`.
+
+For each blocker finding, set:
+
+| `disposition` | When | `dispositionRef` |
+|---|---|---|
+| `fixed` | The PR already addresses this finding. | The commit SHA where the fix landed. |
+| `registered` | The finding is real but out of scope for this PR; a follow-up issue exists. | The follow-up issue number, e.g. `#234`. |
+| `out-of-scope` | The finding is real but explicitly not in scope for this issue. | A one-sentence rationale. |
+
+A blocker-severity finding without `dispositionRef` fails schema validation.
 
 Emit:
 ```

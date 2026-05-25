@@ -457,6 +457,17 @@ describe('prompt.md — criteriaChecks population requirement', () => {
   });
 });
 
+// ─── prompt.unconstrained.md — blocker disposition contract ──────────────────
+
+describe('prompt.unconstrained.md — blocker disposition contract', () => {
+  const promptMd = readFileSync(join(import.meta.dirname, 'prompt.unconstrained.md'), 'utf-8');
+
+  it('requires blocker findings to include dispositionRef', () => {
+    expect(promptMd).toMatch(/blocker[\s\S]+dispositionRef/);
+    expect(promptMd).toMatch(/without `dispositionRef` fails schema validation/);
+  });
+});
+
 // ─── Review skill config ──────────────────────────────────────────────────────
 
 describe('review skill config', () => {
