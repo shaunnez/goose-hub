@@ -1,5 +1,5 @@
 import type { CostStage } from '@/lib/types';
-import { formatCost } from '@/lib/utils';
+import { formatCost, formatTokens } from '@/lib/utils';
 
 const STAGE_LABEL: Record<CostStage, string> = {
   triage: 'Triage',
@@ -19,9 +19,19 @@ interface Props {
   hasEstimated: boolean;
   totalRuns: number;
   maxUsd: number;
+  cacheHitRatio: number;
+  reasoningOutputTokens: number;
 }
 
-export function StageBar({ stage, totalUsd, hasEstimated, totalRuns, maxUsd }: Props) {
+export function StageBar({
+  stage,
+  totalUsd,
+  hasEstimated,
+  totalRuns,
+  maxUsd,
+  cacheHitRatio,
+  reasoningOutputTokens,
+}: Props) {
   const pct = maxUsd > 0 ? Math.max(2, (totalUsd / maxUsd) * 100) : 0;
   return (
     <div
@@ -47,6 +57,10 @@ export function StageBar({ stage, totalUsd, hasEstimated, totalRuns, maxUsd }: P
         <span className="text-fg-2">
           {totalRuns} run{totalRuns === 1 ? '' : 's'}
         </span>
+        <span className="text-fg-2">·</span>
+        <span className="text-fg-3">{Math.round(cacheHitRatio * 100)}% cache</span>
+        <span className="text-fg-2">·</span>
+        <span className="text-fg-3">r {formatTokens(reasoningOutputTokens)}</span>
       </div>
     </div>
   );

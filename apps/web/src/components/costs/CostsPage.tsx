@@ -1,6 +1,6 @@
 import { fetchCostSummary } from '@/lib/api';
 import type { CostSummaryDto } from '@/lib/types';
-import { formatCost } from '@/lib/utils';
+import { formatCost, formatTokens } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { Coins } from 'lucide-react';
 import { useParams } from 'react-router-dom';
@@ -29,6 +29,10 @@ function StatTile({
 
 function formatMetric(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function formatCacheHitPercent(ratio: number): string {
+  return `${Math.round(ratio * 100)}% cache`;
 }
 
 export function CostsPage() {
@@ -71,7 +75,7 @@ export function CostsPage() {
                 data.windows.week.totalUsd,
                 data.windows.week.hasEstimated ? 'estimated' : 'exact',
               )}
-              sub={`${data.windows.week.totalRuns} runs`}
+              sub={`${data.windows.week.totalRuns} runs · ${formatCacheHitPercent(data.windows.week.cacheHitRatio)} · r ${formatTokens(data.windows.week.reasoningOutputTokens)}`}
             />
             <StatTile
               testId="cost-month"
@@ -80,7 +84,7 @@ export function CostsPage() {
                 data.windows.month.totalUsd,
                 data.windows.month.hasEstimated ? 'estimated' : 'exact',
               )}
-              sub={`${data.windows.month.totalRuns} runs`}
+              sub={`${data.windows.month.totalRuns} runs · ${formatCacheHitPercent(data.windows.month.cacheHitRatio)} · r ${formatTokens(data.windows.month.reasoningOutputTokens)}`}
             />
           </div>
 
@@ -99,7 +103,7 @@ export function CostsPage() {
                   data.byProvider.claude.totalUsd,
                   data.byProvider.claude.hasEstimated ? 'estimated' : 'exact',
                 )}
-                sub={`${data.byProvider.claude.totalRuns} run${data.byProvider.claude.totalRuns === 1 ? '' : 's'}`}
+                sub={`${data.byProvider.claude.totalRuns} run${data.byProvider.claude.totalRuns === 1 ? '' : 's'} · ${formatCacheHitPercent(data.byProvider.claude.cacheHitRatio)} · r ${formatTokens(data.byProvider.claude.reasoningOutputTokens)}`}
               />
               <StatTile
                 testId="cost-provider-codex"
@@ -108,7 +112,7 @@ export function CostsPage() {
                   data.byProvider.codex.totalUsd,
                   data.byProvider.codex.hasEstimated ? 'estimated' : 'exact',
                 )}
-                sub={`${data.byProvider.codex.totalRuns} run${data.byProvider.codex.totalRuns === 1 ? '' : 's'}`}
+                sub={`${data.byProvider.codex.totalRuns} run${data.byProvider.codex.totalRuns === 1 ? '' : 's'} · ${formatCacheHitPercent(data.byProvider.codex.cacheHitRatio)} · r ${formatTokens(data.byProvider.codex.reasoningOutputTokens)}`}
               />
             </div>
           </section>
@@ -198,6 +202,8 @@ export function CostsPage() {
                       hasEstimated={s.hasEstimated}
                       totalRuns={s.totalRuns}
                       maxUsd={max}
+                      cacheHitRatio={s.cacheHitRatio}
+                      reasoningOutputTokens={s.reasoningOutputTokens}
                     />
                   ));
                 })()}

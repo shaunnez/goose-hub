@@ -226,6 +226,8 @@ export function RunGroupWrapper({
                 usd={costRow.costUsd}
                 label={costRow.costLabel}
                 size="sm"
+                cacheHitRatio={costRow.cacheHitRatio}
+                reasoningOutputTokens={costRow.reasoningOutputTokens}
               />
             </span>
           )}

@@ -33,16 +33,28 @@ export function TimelineSectionGroupWrapper({
   const costs = useMemo(() => {
     const runIds = collectRunIdsForTimelineSection(items);
     let tokens = 0;
+    let inputTokens = 0;
+    let cachedInputTokens = 0;
+    let reasoningOutputTokens = 0;
     let usd = 0;
     let estimated = false;
     for (const runId of runIds) {
       const row = context?.runCosts?.get(runId);
       if (row == null) continue;
       tokens += row.inputTokens + row.outputTokens;
+      inputTokens += row.inputTokens;
+      cachedInputTokens += row.cachedInputTokens;
+      reasoningOutputTokens += row.reasoningOutputTokens;
       usd += row.costUsd;
       estimated = estimated || row.costLabel === 'estimated';
     }
-    return { tokens, usd, label: estimated ? ('estimated' as const) : ('exact' as const) };
+    return {
+      tokens,
+      usd,
+      cacheHitRatio: cachedInputTokens / Math.max(inputTokens, 1),
+      reasoningOutputTokens,
+      label: estimated ? ('estimated' as const) : ('exact' as const),
+    };
   }, [items, context?.runCosts]);
 
   const title = SECTION_TITLE.get(section) ?? section;
@@ -75,7 +87,14 @@ export function TimelineSectionGroupWrapper({
           </span>
           {costs.tokens > 0 || costs.usd > 0 ? (
             <span className="shrink-0">
-              <CostBadge tokens={costs.tokens} usd={costs.usd} label={costs.label} size="sm" />
+              <CostBadge
+                tokens={costs.tokens}
+                usd={costs.usd}
+                label={costs.label}
+                size="sm"
+                cacheHitRatio={costs.cacheHitRatio}
+                reasoningOutputTokens={costs.reasoningOutputTokens}
+              />
             </span>
           ) : null}
           <span className="flex-1 min-w-0 truncate text-fg-5 text-[10.5px]">

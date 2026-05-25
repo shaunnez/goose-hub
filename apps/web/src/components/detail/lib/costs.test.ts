@@ -24,9 +24,12 @@ function row(partial: Partial<CostRowDto>): CostRowDto {
     modelId: 'claude-sonnet-4-6',
     provider: 'claude',
     inputTokens: 100,
+    cachedInputTokens: 0,
     outputTokens: 50,
+    reasoningOutputTokens: 0,
     costUsd: 0.01,
     costLabel: 'exact',
+    cacheHitRatio: 0,
     personaId: null,
     createdAt: new Date().toISOString(),
     ...partial,
@@ -54,8 +57,26 @@ describe('useIssueCostsBreakdown', () => {
       totalUsd: 0.36,
       hasEstimated: false,
       rows: [
-        row({ runId: 'r-qa-1', stage: 'qa', costUsd: 0.05, inputTokens: 200, outputTokens: 100 }),
-        row({ runId: 'r-qa-2', stage: 'qa', costUsd: 0.06, inputTokens: 300, outputTokens: 100 }),
+        row({
+          runId: 'r-qa-1',
+          stage: 'qa',
+          costUsd: 0.05,
+          inputTokens: 200,
+          cachedInputTokens: 50,
+          outputTokens: 100,
+          reasoningOutputTokens: 12,
+          cacheHitRatio: 0.25,
+        }),
+        row({
+          runId: 'r-qa-2',
+          stage: 'qa',
+          costUsd: 0.06,
+          inputTokens: 300,
+          cachedInputTokens: 150,
+          outputTokens: 100,
+          reasoningOutputTokens: 8,
+          cacheHitRatio: 0.5,
+        }),
         row({ runId: 'r-dev-1', stage: 'dev', costUsd: 0.25, inputTokens: 800, outputTokens: 400 }),
       ],
     };
@@ -74,6 +95,9 @@ describe('useIssueCostsBreakdown', () => {
     expect(qa?.runCount).toBe(2);
     expect(qa?.usd).toBeCloseTo(0.11, 5);
     expect(qa?.tokens).toBe(700);
+    expect(qa?.cachedInputTokens).toBe(200);
+    expect(qa?.reasoningOutputTokens).toBe(20);
+    expect(qa?.cacheHitRatio).toBeCloseTo(0.4, 5);
 
     const dev = result.current.byStage.get('dev');
     expect(dev?.runCount).toBe(1);

@@ -7,6 +7,10 @@ export type StageBreakdown = {
   stage: CostRowDto['stage'];
   usd: number;
   tokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  reasoningOutputTokens: number;
+  cacheHitRatio: number;
   label: 'estimated' | 'exact';
   runCount: number;
 };
@@ -62,6 +66,10 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
       if (existing) {
         existing.usd += row.costUsd;
         existing.tokens += tokens;
+        existing.inputTokens += row.inputTokens;
+        existing.cachedInputTokens += row.cachedInputTokens;
+        existing.reasoningOutputTokens += row.reasoningOutputTokens;
+        existing.cacheHitRatio = existing.cachedInputTokens / Math.max(existing.inputTokens, 1);
         existing.runCount += 1;
         if (row.costLabel === 'estimated') existing.label = 'estimated';
       } else {
@@ -69,6 +77,10 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
           stage: row.stage,
           usd: row.costUsd,
           tokens,
+          inputTokens: row.inputTokens,
+          cachedInputTokens: row.cachedInputTokens,
+          reasoningOutputTokens: row.reasoningOutputTokens,
+          cacheHitRatio: row.cacheHitRatio,
           label: row.costLabel,
           runCount: 1,
         });

@@ -18,9 +18,12 @@ vi.mock('@/lib/api', () => ({
         modelId: 'gpt-5.4',
         provider: 'codex',
         inputTokens: 1000,
+        cachedInputTokens: 300,
         outputTokens: 500,
+        reasoningOutputTokens: 120,
         costUsd: 0.25,
         costLabel: 'exact',
+        cacheHitRatio: 0.3,
         personaId: null,
         createdAt: '2026-05-23T00:00:00Z',
         readCount: 7,
@@ -60,6 +63,9 @@ describe('CostsSection', () => {
 
     expect(screen.getByText('Reads')).toBeTruthy();
     expect(screen.getByText('Bytes')).toBeTruthy();
+    expect(screen.getByText('Cache hit')).toBeTruthy();
+    expect(screen.getAllByText('cache 30%').length).toBeGreaterThan(0);
+    expect(screen.getByText('r 120')).toBeTruthy();
     expect(screen.getByText('7')).toBeTruthy();
     expect(screen.getByText('8.0 KB')).toBeTruthy();
     expect(screen.getByTitle('this run re-read 2 files it had already loaded.')).toBeTruthy();

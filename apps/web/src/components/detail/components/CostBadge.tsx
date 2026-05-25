@@ -7,6 +7,8 @@ interface CostBadgeProps {
   usd: number;
   label?: 'estimated' | 'exact';
   size?: 'sm' | 'md';
+  cacheHitRatio?: number;
+  reasoningOutputTokens?: number;
   className?: string;
 }
 
@@ -21,6 +23,8 @@ export function CostBadge({
   usd,
   label = 'exact',
   size = 'sm',
+  cacheHitRatio,
+  reasoningOutputTokens = 0,
   className,
 }: CostBadgeProps) {
   if (tokens === 0 && usd === 0) return null;
@@ -30,10 +34,19 @@ export function CostBadge({
   const iconSize = size === 'md' ? 11 : 10;
   const tokenStr = formatTokens(tokens);
   const costStr = formatCost(usd, label);
+  const cachePct =
+    cacheHitRatio != null && cacheHitRatio > 0 ? `${Math.round(cacheHitRatio * 100)}%` : null;
+  const reasoningStr = reasoningOutputTokens > 0 ? formatTokens(reasoningOutputTokens) : null;
+  const details = [
+    `${tokenStr} tokens`,
+    costStr,
+    cachePct != null ? `${cachePct} cache hit` : null,
+    reasoningStr != null ? `${reasoningStr} reasoning tokens` : null,
+  ].filter((part): part is string => part != null);
   const title =
     label === 'estimated'
-      ? `${tokenStr} tokens · ${costStr} (estimated — Claude CLI rollup)`
-      : `${tokenStr} tokens · ${costStr}`;
+      ? `${details.join(' · ')} (estimated — CLI/OAuth synthetic rollup)`
+      : details.join(' · ');
 
   return (
     <span
@@ -51,6 +64,22 @@ export function CostBadge({
         ·
       </span>
       <span className="tnum">{costStr}</span>
+      {cachePct != null && (
+        <>
+          <span aria-hidden className="opacity-40">
+            ·
+          </span>
+          <span className="tnum">cache {cachePct}</span>
+        </>
+      )}
+      {reasoningStr != null && (
+        <>
+          <span aria-hidden className="opacity-40">
+            ·
+          </span>
+          <span className="tnum">r {reasoningStr}</span>
+        </>
+      )}
     </span>
   );
 }

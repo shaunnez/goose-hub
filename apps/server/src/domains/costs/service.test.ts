@@ -52,6 +52,7 @@ describe('getCostSummary', () => {
         hasEstimated: true,
         inputTokens: 1000,
         cachedInputTokens: 250,
+        reasoningOutputTokens: 30,
       }) // week
       .mockReturnValueOnce({
         totalUsd: 4.5,
@@ -59,6 +60,7 @@ describe('getCostSummary', () => {
         hasEstimated: true,
         inputTokens: 2000,
         cachedInputTokens: 400,
+        reasoningOutputTokens: 90,
       }); // month
     mockTotalsByStage.mockReturnValue([
       {
@@ -68,6 +70,7 @@ describe('getCostSummary', () => {
         hasEstimated: true,
         inputTokens: 1000,
         cachedInputTokens: 300,
+        reasoningOutputTokens: 60,
       },
       {
         stage: 'qa',
@@ -76,6 +79,7 @@ describe('getCostSummary', () => {
         hasEstimated: false,
         inputTokens: 500,
         cachedInputTokens: 100,
+        reasoningOutputTokens: 10,
       },
     ]);
     mockListCostsForProjectSince.mockReturnValue([
@@ -120,16 +124,20 @@ describe('getCostSummary', () => {
     if (!r.ok) return;
     expect(r.data.windows.week.totalUsd).toBe(1.2);
     expect(r.data.windows.week.cacheHitRatio).toBe(0.25);
+    expect(r.data.windows.week.reasoningOutputTokens).toBe(30);
     expect(r.data.windows.month.totalUsd).toBe(4.5);
     expect(r.data.windows.month.cachedInputTokens).toBe(400);
+    expect(r.data.windows.month.reasoningOutputTokens).toBe(90);
     expect(r.data.byStage).toHaveLength(2);
     expect(r.data.byStage[0].stage).toBe('dev');
     expect(r.data.byStage[0].cacheHitRatio).toBe(0.3);
+    expect(r.data.byStage[0].reasoningOutputTokens).toBe(60);
     expect(r.data.byProvider.claude).toMatchObject({
       totalUsd: 1.5,
       totalRuns: 1,
       hasEstimated: true,
       cachedInputTokens: 25,
+      reasoningOutputTokens: 5,
       cacheHitRatio: 0.25,
     });
     expect(r.data.byProvider.codex).toMatchObject({
@@ -137,6 +145,7 @@ describe('getCostSummary', () => {
       totalRuns: 1,
       hasEstimated: false,
       cachedInputTokens: 20,
+      reasoningOutputTokens: 4,
       cacheHitRatio: 0.25,
     });
     expect(r.data.symbolIndex).toMatchObject({

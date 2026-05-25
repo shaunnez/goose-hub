@@ -47,6 +47,7 @@ export interface CostTotalDto {
   totalRuns: number;
   inputTokens: number;
   cachedInputTokens: number;
+  reasoningOutputTokens: number;
   cacheHitRatio: number;
   hasEstimated: boolean;
 }
@@ -98,6 +99,7 @@ function toTotalDto(total: ProjectTotals): CostTotalDto {
     totalRuns: total.totalRuns,
     inputTokens: total.inputTokens ?? 0,
     cachedInputTokens: total.cachedInputTokens ?? 0,
+    reasoningOutputTokens: total.reasoningOutputTokens ?? 0,
     cacheHitRatio: cacheHitRatio(total.inputTokens ?? 0, total.cachedInputTokens ?? 0),
     hasEstimated: total.hasEstimated,
   };
@@ -127,11 +129,13 @@ function utcDayWindow(now: Date): { start: string; end: string } {
 function toProviderTotals(rows: CostRow[]): CostTotalDto {
   const inputTokens = rows.reduce((s, r) => s + r.inputTokens, 0);
   const cachedInputTokens = rows.reduce((s, r) => s + r.cachedInputTokens, 0);
+  const reasoningOutputTokens = rows.reduce((s, r) => s + r.reasoningOutputTokens, 0);
   return {
     totalUsd: rows.reduce((s, r) => s + r.costUsd, 0),
     totalRuns: rows.length,
     inputTokens,
     cachedInputTokens,
+    reasoningOutputTokens,
     cacheHitRatio: cacheHitRatio(inputTokens, cachedInputTokens),
     hasEstimated: rows.some((r) => r.costLabel === 'estimated'),
   };

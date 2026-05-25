@@ -159,6 +159,7 @@ export interface ProjectTotals {
   totalRuns: number;
   inputTokens: number;
   cachedInputTokens: number;
+  reasoningOutputTokens: number;
   /** True when any contributing row was 'estimated'. UI uses this to qualify the figure. */
   hasEstimated: boolean;
 }
@@ -174,6 +175,7 @@ export function totalsForProjectSince(projectId: string, sinceIso: string): Proj
       totalRuns: sql<number>`count(*)`,
       inputTokens: sql<number>`coalesce(sum(${agentRunCosts.inputTokens}), 0)`,
       cachedInputTokens: sql<number>`coalesce(sum(${agentRunCosts.cachedInputTokens}), 0)`,
+      reasoningOutputTokens: sql<number>`coalesce(sum(${agentRunCosts.reasoningOutputTokens}), 0)`,
       hasEstimated: sql<number>`max(case when ${agentRunCosts.costLabel} = 'estimated' then 1 else 0 end)`,
     })
     .from(agentRunCosts)
@@ -184,6 +186,7 @@ export function totalsForProjectSince(projectId: string, sinceIso: string): Proj
     totalRuns: row?.totalRuns ?? 0,
     inputTokens: row?.inputTokens ?? 0,
     cachedInputTokens: row?.cachedInputTokens ?? 0,
+    reasoningOutputTokens: row?.reasoningOutputTokens ?? 0,
     hasEstimated: (row?.hasEstimated ?? 0) === 1,
   };
 }
@@ -196,6 +199,7 @@ export function totalsByStageForProjectSince(projectId: string, sinceIso: string
       totalRuns: sql<number>`count(*)`,
       inputTokens: sql<number>`coalesce(sum(${agentRunCosts.inputTokens}), 0)`,
       cachedInputTokens: sql<number>`coalesce(sum(${agentRunCosts.cachedInputTokens}), 0)`,
+      reasoningOutputTokens: sql<number>`coalesce(sum(${agentRunCosts.reasoningOutputTokens}), 0)`,
       hasEstimated: sql<number>`max(case when ${agentRunCosts.costLabel} = 'estimated' then 1 else 0 end)`,
     })
     .from(agentRunCosts)
@@ -209,6 +213,7 @@ export function totalsByStageForProjectSince(projectId: string, sinceIso: string
     totalRuns: r.totalRuns ?? 0,
     inputTokens: r.inputTokens ?? 0,
     cachedInputTokens: r.cachedInputTokens ?? 0,
+    reasoningOutputTokens: r.reasoningOutputTokens ?? 0,
     hasEstimated: (r.hasEstimated ?? 0) === 1,
   }));
 }

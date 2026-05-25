@@ -263,10 +263,10 @@ describe('totalsForProjectSince', () => {
       stage: 'qa',
       skill: 'qa',
       modelId: 'claude-sonnet-4-6',
-      inputTokens: 0,
+      inputTokens: 100,
       outputTokens: 0,
-      cachedInputTokens: 0,
-      reasoningOutputTokens: 0,
+      cachedInputTokens: 20,
+      reasoningOutputTokens: 7,
       costUsd: 0.5,
       costLabel: 'estimated',
       personaId: null,
@@ -278,10 +278,10 @@ describe('totalsForProjectSince', () => {
       stage: 'review',
       skill: 'review',
       modelId: 'claude-sonnet-4-6',
-      inputTokens: 0,
+      inputTokens: 300,
       outputTokens: 0,
-      cachedInputTokens: 0,
-      reasoningOutputTokens: 0,
+      cachedInputTokens: 30,
+      reasoningOutputTokens: 11,
       costUsd: 0.25,
       costLabel: 'exact',
       personaId: null,
@@ -290,6 +290,9 @@ describe('totalsForProjectSince', () => {
     const totals = totalsForProjectSince(PROJECT, '1970-01-01T00:00:00Z');
     expect(totals.totalUsd).toBeCloseTo(0.75);
     expect(totals.totalRuns).toBe(2);
+    expect(totals.inputTokens).toBe(400);
+    expect(totals.cachedInputTokens).toBe(50);
+    expect(totals.reasoningOutputTokens).toBe(18);
     expect(totals.hasEstimated).toBe(true);
   });
 
@@ -385,10 +388,10 @@ describe('totalsByStageForProjectSince', () => {
       stage: 'dev',
       skill: 'implement',
       modelId: 'claude-sonnet-4-6',
-      inputTokens: 0,
+      inputTokens: 100,
       outputTokens: 0,
-      cachedInputTokens: 0,
-      reasoningOutputTokens: 0,
+      cachedInputTokens: 25,
+      reasoningOutputTokens: 12,
       costUsd: 1.0,
       costLabel: 'estimated',
       personaId: null,
@@ -400,10 +403,10 @@ describe('totalsByStageForProjectSince', () => {
       stage: 'qa',
       skill: 'qa',
       modelId: 'claude-sonnet-4-6',
-      inputTokens: 0,
+      inputTokens: 50,
       outputTokens: 0,
-      cachedInputTokens: 0,
-      reasoningOutputTokens: 0,
+      cachedInputTokens: 10,
+      reasoningOutputTokens: 3,
       costUsd: 0.3,
       costLabel: 'estimated',
       personaId: null,
@@ -411,6 +414,9 @@ describe('totalsByStageForProjectSince', () => {
     const stages = totalsByStageForProjectSince(PROJECT, '1970-01-01T00:00:00Z');
     expect(stages.map((s) => s.stage)).toEqual(['dev', 'qa']);
     expect(stages[0].totalUsd).toBeCloseTo(1.0);
+    expect(stages[0].inputTokens).toBe(100);
+    expect(stages[0].cachedInputTokens).toBe(25);
+    expect(stages[0].reasoningOutputTokens).toBe(12);
     expect(stages[1].totalUsd).toBeCloseTo(0.3);
   });
 });
