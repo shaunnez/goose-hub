@@ -201,8 +201,9 @@ function nextRepairCycle(events: ReturnType<typeof eventStore.replay>): number {
 
 /**
  * Scans events backward for the most recent `agent.implement-complete` or
- * `agent.fix-feedback-complete` event that has a non-empty `evidenceSpecPath`,
- * and returns it so the repair run can reuse the prior cycle's spec.
+ * `agent.fix-feedback-complete` event. If that event has a non-empty
+ * `evidenceSpecPath`, returns it so the repair run can reuse the prior cycle's
+ * spec. Otherwise, treats the missing path as an authoritative reset.
  */
 function findPriorEvidenceSpecPath(events: ReturnType<typeof eventStore.replay>): string | null {
   for (let i = events.length - 1; i >= 0; i--) {
@@ -211,9 +212,9 @@ function findPriorEvidenceSpecPath(events: ReturnType<typeof eventStore.replay>)
       continue;
     }
     const payload = e.payload as { evidenceSpecPath?: unknown };
-    if (typeof payload.evidenceSpecPath === 'string' && payload.evidenceSpecPath.length > 0) {
-      return payload.evidenceSpecPath;
-    }
+    return typeof payload.evidenceSpecPath === 'string' && payload.evidenceSpecPath.length > 0
+      ? payload.evidenceSpecPath
+      : null;
   }
   return null;
 }
