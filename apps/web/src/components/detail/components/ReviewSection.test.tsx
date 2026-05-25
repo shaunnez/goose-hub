@@ -139,7 +139,7 @@ describe('ReviewSection', () => {
           {
             severity: 'blocker',
             description: 'Missing slice.test.ts',
-            disposition: 'registered',
+            disposition: 'follow-up',
             dispositionRef: '#234',
           },
           {
@@ -160,7 +160,7 @@ describe('ReviewSection', () => {
     renderSection([REVIEW_WITH_DISPOSITION]);
     const pills = screen.getAllByTestId('review-finding-disposition');
     expect(pills).toHaveLength(3);
-    expect(pills[0].textContent).toContain('registered #234');
+    expect(pills[0].textContent).toContain('follow-up #234');
     expect(pills[1].textContent).toContain('fixed');
     expect(pills[2].textContent).toContain('out-of-scope');
   });

@@ -110,7 +110,7 @@ function makeNeedsFixResult(): AgentResult {
         {
           severity: 'blocker',
           description: 'not implemented',
-          disposition: 'registered',
+          disposition: 'needs-fix',
           dispositionRef: '#999',
         },
       ],
@@ -288,13 +288,13 @@ describe('runReviewWorkflow', () => {
             {
               severity: 'blocker',
               description: 'issue 1',
-              disposition: 'registered',
+              disposition: 'needs-fix',
               dispositionRef: '#1',
             },
             {
               severity: 'blocker',
               description: 'issue 2',
-              disposition: 'registered',
+              disposition: 'needs-fix',
               dispositionRef: '#2',
             },
             { severity: 'major', description: 'issue 3' },
@@ -689,7 +689,7 @@ function makeCriticalResult(description: string): AgentResult {
           description,
           file: 'src/foo.ts',
           line: 1,
-          disposition: 'registered',
+          disposition: 'needs-fix',
           dispositionRef: '#999',
         },
       ],

@@ -65,7 +65,7 @@ describe('QaOutputSchema', () => {
             tier: 'structural',
             severity: 'error',
             description: 'TypeScript error: Type "string" is not assignable to type "number"',
-            disposition: 'registered',
+            disposition: 'follow-up',
             dispositionRef: '#999',
           },
         ],
@@ -255,7 +255,7 @@ describe('FindingSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  // ── #468 — fix-or-register disposition ────────────────────────────────────
+  // ── #468 — explicit finding disposition ───────────────────────────────────
 
   it("accepts an error finding with disposition 'fixed' and a commit SHA dispositionRef (#468)", () => {
     expect(
@@ -269,7 +269,31 @@ describe('FindingSchema', () => {
     ).toBe(true);
   });
 
-  it("accepts an error finding with disposition 'registered' and an issue number (#468)", () => {
+  it("accepts an error finding with disposition 'follow-up' and an issue number (#468)", () => {
+    expect(
+      FindingSchema.safeParse({
+        tier: 'structural',
+        severity: 'error',
+        description: 'Missing slice.test.ts',
+        disposition: 'follow-up',
+        dispositionRef: '#234',
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts an error finding with disposition 'needs-fix' for current-loop repair", () => {
+    expect(
+      FindingSchema.safeParse({
+        tier: 'functional',
+        severity: 'error',
+        description: 'Current PR still fails the user-facing flow',
+        disposition: 'needs-fix',
+        dispositionRef: 'current PR',
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects legacy disposition 'registered' in new QA output", () => {
     expect(
       FindingSchema.safeParse({
         tier: 'structural',
@@ -278,7 +302,7 @@ describe('FindingSchema', () => {
         disposition: 'registered',
         dispositionRef: '#234',
       }).success,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("accepts an error finding with disposition 'out-of-scope' and a rationale (#468)", () => {
@@ -309,7 +333,7 @@ describe('FindingSchema', () => {
         tier: 'functional',
         severity: 'error',
         description: 'broken thing',
-        disposition: 'registered',
+        disposition: 'follow-up',
         dispositionRef: '',
       }).success,
     ).toBe(false);
@@ -775,7 +799,7 @@ describe('QaOutputSchema with cross-checked targeted regressions (#467)', () => 
       file: 'apps/server/src/unrelated/auth.test.ts',
       description:
         'Failure outside dev targeted set (devTestsRun.paths) — high-signal regression dev did not run',
-      disposition: 'registered' as const,
+      disposition: 'follow-up' as const,
       dispositionRef: '#1234',
     };
     const result = QaOutputSchema.safeParse(
@@ -833,6 +857,35 @@ describe('CriteriaResultSchema', () => {
       passed: false,
     });
     expect(result.success).toBe(true);
+  });
+
+  it('accepts structured evidence artifact for a matched Vitest check', () => {
+    const result = CriteriaResultSchema.safeParse({
+      criterionId: 'ac-1',
+      checkId: 'check-1',
+      ac: 'Checkout passes',
+      command: 'pnpm test checkout.test.ts -- --reporter=json',
+      expectedExitCodes: [0],
+      exitCode: 0,
+      actual: '{"success":true}',
+      passed: true,
+      evidenceExpectation: {
+        type: 'vitest-json',
+        suite: 'checkout.test.ts',
+        testName: 'submits checkout',
+        expectedStatus: 'passed',
+      },
+      evidenceArtifact: {
+        type: 'vitest-json',
+        summary: { total: 1, passed: 1, failed: 0, skipped: 0 },
+        matchedSuites: ['checkout.test.ts'],
+        matchedTests: ['submits checkout'],
+        artifactStatus: 'matched',
+      },
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.evidenceArtifact?.matchedTests).toEqual(['submits checkout']);
   });
 
   it('rejects missing ac field', () => {

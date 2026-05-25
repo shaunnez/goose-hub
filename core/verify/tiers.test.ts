@@ -73,12 +73,12 @@ describe('Tier 1 (Structural) — golden test', () => {
 
   afterEach(() => rmSync(worktree, { recursive: true, force: true }));
 
-  it('fails when interface contract export is absent from filesOwned file', () => {
+  it('does not require descriptive interface contract names to be exported', () => {
     const spec = makeSpec({
       workPackages: [makeWp('WP1', ['src/index.ts'])],
       interfaceContracts: [
         {
-          name: 'runVerification',
+          name: 'Verification adapter boundary',
           signature: 'export function runVerification(): void',
           file: 'src/index.ts',
         },
@@ -88,6 +88,42 @@ describe('Tier 1 (Structural) — golden test', () => {
     const result = verifyStructural(spec, '', worktree);
 
     expect(result.tier).toBe(1);
+    expect(result.passed).toBe(true);
+  });
+
+  it('fails when a descriptive interface contract file is missing', () => {
+    const spec = makeSpec({
+      workPackages: [makeWp('WP1', ['src/index.ts'])],
+      interfaceContracts: [
+        {
+          name: 'Verification adapter boundary',
+          signature: 'export function runVerification(): void',
+          file: 'src/missing-contract.ts',
+        },
+      ],
+    });
+
+    const result = verifyStructural(spec, '', worktree);
+
+    expect(result.passed).toBe(false);
+    expect(result.findings.some((f) => f.message.includes('missing-contract.ts'))).toBe(true);
+  });
+
+  it('fails when a required export is absent from its contract file', () => {
+    const spec = makeSpec({
+      workPackages: [makeWp('WP1', ['src/index.ts'])],
+      interfaceContracts: [
+        {
+          name: 'Verification adapter boundary',
+          signature: 'export function runVerification(): void',
+          file: 'src/index.ts',
+          requiredExports: [{ name: 'runVerification' }],
+        },
+      ],
+    });
+
+    const result = verifyStructural(spec, '', worktree);
+
     expect(result.passed).toBe(false);
     const errorFindings = result.findings.filter((f) => f.severity === 'error');
     expect(errorFindings.length).toBeGreaterThanOrEqual(1);
@@ -100,9 +136,10 @@ describe('Tier 1 (Structural) — golden test', () => {
       workPackages: [makeWp('WP1', ['src/index.ts'])],
       interfaceContracts: [
         {
-          name: 'runVerification',
+          name: 'Verification adapter boundary',
           signature: 'export function runVerification(): void',
           file: 'src/index.ts',
+          requiredExports: [{ name: 'runVerification' }],
         },
       ],
     });
@@ -423,6 +460,7 @@ describe('runTier — event emission', () => {
           name: 'missingExport',
           signature: 'export function missingExport(): void',
           file: 'src/a.ts',
+          requiredExports: [{ name: 'missingExport' }],
         },
       ],
     });

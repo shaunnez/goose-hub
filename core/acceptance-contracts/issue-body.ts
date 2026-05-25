@@ -176,6 +176,9 @@ export function acceptanceCriteriaToVerifyCommands(
       command: check.command,
       expectedExitCodes: check.expectedExitCodes ?? [0],
       ...(check.outputExpectation != null ? { outputExpectation: check.outputExpectation } : {}),
+      ...(check.evidenceExpectation != null
+        ? { evidenceExpectation: check.evidenceExpectation }
+        : {}),
       ...(check.timeoutMs != null ? { timeoutMs: check.timeoutMs } : {}),
     })),
   );

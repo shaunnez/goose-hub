@@ -801,10 +801,13 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
   // Orchestrator commits the builder's work before opening the PR (ADR 0031).
   // The implement skill writes files but no longer commits; this call stages
   // all changes and creates a single commit attributed to the workflow run.
-  input.orchestratorCommitFn(
+  const commitResult = input.orchestratorCommitFn(
     worktreePath,
     `fix(#${workItem.externalId}): ${workItem.title.slice(0, 60)}`,
   );
+  if (commitResult.status === 'no-changes') {
+    throw new Error('implement produced no commit changes');
+  }
 
   // Emit implement decision summaries (#206 pattern).
   reconcileDecisionSummaries(

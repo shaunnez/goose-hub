@@ -125,19 +125,20 @@ Use `minor` when:
 
 ## Fix-or-register
 
-Every finding must be classified — fixed in this PR, registered as a follow-up issue, or explicitly out-of-scope-for-this-issue. Never deferred, never "TODO" (#468). Deferred findings are how production drift accumulates.
+Every finding must be classified — fixed in this PR, needing repair in this PR, tracked as a verified follow-up, or explicitly out-of-scope-for-this-issue. Never deferred, never "TODO" (#468).
 
 For each finding, set `disposition` and `dispositionRef`:
 
 | `disposition` | When | `dispositionRef` |
 |---|---|---|
 | `fixed` | The PR already addresses this finding (you observed the fix in the diff). | The commit SHA where the fix landed. |
-| `registered` | The finding is real but out of scope for this PR; a follow-up issue exists. | The follow-up issue number, e.g. `#234`. |
+| `needs-fix` | The finding is in scope for this story/PR and must go to fix-feedback. | A short current-PR rationale, e.g. `current PR`. |
+| `follow-up` | The finding is real but out of scope for this PR; a follow-up issue exists. | The follow-up issue number, e.g. `#234`. |
 | `out-of-scope` | The finding is real but explicitly not in scope for this issue. | A one-sentence rationale. |
 
 **Required when `severity === 'blocker'`.** A blocker-severity finding without a disposition fails schema validation. `major` and `minor` findings may carry a disposition but it's optional.
 
-Review records the finding; Review does not file the follow-up issue itself (holdout discipline). The orchestrator or human reviewer is responsible for filing `disposition: 'registered'` issues.
+Review records the finding; Review does not file the follow-up issue itself (holdout discipline). The orchestrator or human reviewer is responsible for filing `disposition: 'follow-up'` issues.
 
 ## Priority classification
 

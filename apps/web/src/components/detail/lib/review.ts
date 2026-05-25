@@ -4,7 +4,7 @@ export interface CriterionCheck {
   notes?: string;
 }
 
-export type ReviewDisposition = 'fixed' | 'registered' | 'out-of-scope';
+export type ReviewDisposition = 'fixed' | 'needs-fix' | 'out-of-scope' | 'follow-up';
 
 export interface ReviewFinding {
   criterion?: string;
@@ -29,7 +29,8 @@ export interface ReviewPayload {
 
 export const DISPOSITION_COLOR: Record<ReviewDisposition, string> = {
   fixed: 'bg-green-500/15 text-green-400',
-  registered: 'bg-sky-500/15 text-sky-400',
+  'needs-fix': 'bg-red-500/15 text-red-400',
+  'follow-up': 'bg-sky-500/15 text-sky-400',
   'out-of-scope': 'bg-gray-500/15 text-gray-400',
 };
 
@@ -47,8 +48,9 @@ export const VERDICT_LABEL: Record<ReviewVerdict, string> = {
 
 export function formatDisposition(d: ReviewDisposition, ref?: string): string {
   if (d === 'fixed') return 'fixed';
+  if (d === 'needs-fix') return 'needs-fix';
   if (d === 'out-of-scope') return 'out-of-scope';
   return ref != null && ref.length > 0
-    ? `registered ${ref.startsWith('#') ? ref : `#${ref}`}`
-    : 'registered';
+    ? `follow-up ${ref.startsWith('#') ? ref : `#${ref}`}`
+    : 'follow-up';
 }

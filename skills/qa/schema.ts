@@ -76,6 +76,15 @@ export const SuiteResultSchema = z.object({
   skipped: z.number().int().min(0),
   durationMs: z.number().int().min(0),
   status: z.enum(['passed', 'failed', 'skipped']),
+  tests: z
+    .array(
+      z.object({
+        name: z.string(),
+        status: z.enum(['passed', 'failed', 'skipped']),
+        durationMs: z.number().int().min(0),
+      }),
+    )
+    .optional(),
 });
 
 export const TestRunSchema = z.object({
@@ -185,6 +194,31 @@ export const CriteriaResultSchema = z.object({
     .object({
       mode: z.enum(['exact', 'contains', 'regex']),
       value: z.string(),
+    })
+    .optional(),
+  evidenceExpectation: z
+    .discriminatedUnion('type', [
+      z.object({ type: z.literal('exit-code') }),
+      z.object({
+        type: z.literal('vitest-json'),
+        suite: z.string().optional(),
+        testName: z.string().optional(),
+        expectedStatus: z.literal('passed'),
+      }),
+    ])
+    .optional(),
+  evidenceArtifact: z
+    .object({
+      type: z.enum(['vitest-json', 'process']),
+      summary: z.object({
+        total: z.number().int().min(0),
+        passed: z.number().int().min(0),
+        failed: z.number().int().min(0),
+        skipped: z.number().int().min(0),
+      }),
+      matchedSuites: z.array(z.string()),
+      matchedTests: z.array(z.string()),
+      artifactStatus: z.enum(['matched', 'not-found', 'unavailable']),
     })
     .optional(),
   durationMs: z.number().int().min(0).optional(),

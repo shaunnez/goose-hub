@@ -38,7 +38,7 @@ const {
     files: [],
     gitAvailable: true,
   }),
-  mockOrchestratorCommitAll: vi.fn().mockReturnValue('repair-sha'),
+  mockOrchestratorCommitAll: vi.fn().mockReturnValue({ status: 'committed', sha: 'repair-sha' }),
   mockOrchestratorPushBranch: vi.fn(),
 }));
 vi.mock('@goose-hub/core/agent-runtime/investigation-context.js', () => ({
@@ -177,8 +177,8 @@ function makeQaCompletedEvent(passed = false) {
               severity: 'error',
               description: 'capitalize("") returns undefined instead of ""',
               suggestion: 'Handle empty string input',
-              disposition: 'fix',
-              dispositionRef: 'must fix',
+              disposition: 'needs-fix',
+              dispositionRef: 'current PR',
             },
           ],
         },
@@ -198,7 +198,9 @@ describe('runFixFeedbackWorkflow', () => {
   beforeEach(() => {
     stateSource = makeStateSource();
     vi.clearAllMocks();
-    mockOrchestratorCommitAll.mockReset().mockReturnValue('repair-sha');
+    mockOrchestratorCommitAll
+      .mockReset()
+      .mockReturnValue({ status: 'committed', sha: 'repair-sha' });
     mockOrchestratorPushBranch.mockReset();
     mockDeriveObservedChangedFiles.mockReset().mockReturnValue({
       count: 0,
@@ -258,6 +260,47 @@ describe('runFixFeedbackWorkflow', () => {
 
     const runCall = mockClaudeCliRun.mock.calls[0][0];
     expect(runCall.context.advisorFeedback).toContain('capitalize("") returns undefined');
+  });
+
+  it('skips implement when latest QA failure has only non-actionable out-of-scope findings', async () => {
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makePrOpenedEvent(),
+      {
+        ...makeQaCompletedEvent(),
+        payload: {
+          verdict: 'fail',
+          overallScore: 85,
+          threshold: 70,
+          findings: [
+            {
+              tier: 'functional',
+              severity: 'error',
+              description: 'Pre-existing loading state issue',
+              disposition: 'out-of-scope',
+              dispositionRef: 'Not touched by this PR',
+            },
+          ],
+          tierResults: {
+            structural: { passed: true, findings: [] },
+            functional: { passed: true, findings: [] },
+            regression: { passed: true, findings: [] },
+          },
+        },
+      },
+    ]);
+    const workItem = makeWorkItem();
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo');
+
+    expect(mockClaudeCliRun).not.toHaveBeenCalled();
+    expect(stateSource.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-fix',
+      'factory:needs-review',
+    );
+    expect(vi.mocked(eventStore.appendEvent)).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.fix-feedback-skipped' }),
+    );
   });
 
   it('passes existing worktreePath as runtime workspaceDir', async () => {

@@ -83,7 +83,8 @@ For each blocker finding, set:
 | `disposition` | When | `dispositionRef` |
 |---|---|---|
 | `fixed` | The PR already addresses this finding. | The commit SHA where the fix landed. |
-| `registered` | The finding is real but out of scope for this PR; a follow-up issue exists. | The follow-up issue number, e.g. `#234`. |
+| `needs-fix` | The finding is in scope for this story/PR and must go to fix-feedback. | A short current-PR rationale, e.g. `current PR`. |
+| `follow-up` | The finding is real but out of scope for this PR; a follow-up issue exists. | The follow-up issue number, e.g. `#234`. |
 | `out-of-scope` | The finding is real but explicitly not in scope for this issue. | A one-sentence rationale. |
 
 A blocker-severity finding without `dispositionRef` fails schema validation.

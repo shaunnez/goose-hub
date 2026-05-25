@@ -1408,9 +1408,7 @@ describe('parallel-implement durable integration branch persistence', () => {
     });
 
     expect(result.status).toBe('built');
-    expect(events.some((event) => event.kind === 'parallel-implement.wp-loop-cap-hit')).toBe(
-      false,
-    );
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-loop-cap-hit')).toBe(false);
     expect(revertWpChangesFn).not.toHaveBeenCalled();
   });
 
@@ -1564,7 +1562,7 @@ describe('parallel-implement durable integration branch persistence', () => {
         runDevReviewResponseImpl: async () => responseOutput,
         commitDevReviewResponseImpl: () => {
           operations.push('commit-dev-review');
-          return 'sha-dev-review';
+          return { status: 'committed', sha: 'sha-dev-review' };
         },
         createIntegrationWorktreeImpl: () => ({
           worktreePath: '/tmp/issue-wt',
@@ -3199,7 +3197,7 @@ describe('dev-review e2e: maxRevisionTurns=2 → 2 Codex dev-review passes', () 
         },
         commitDevReviewResponseImpl: (_wt, msg) => {
           commitMessages.push(msg);
-          return 'sha-commit';
+          return { status: 'committed', sha: 'sha-commit' };
         },
         createIssueWorktreeImpl: () => '/tmp/issue-wt',
         createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
@@ -3554,7 +3552,7 @@ describe('dev-review cost telemetry: multi-turn produces multiple dev-review.com
             decisionSummaries: [],
           };
         },
-        commitDevReviewResponseImpl: () => 'sha-x',
+        commitDevReviewResponseImpl: () => ({ status: 'committed', sha: 'sha-x' }),
         createIssueWorktreeImpl: () => '/tmp/issue-wt',
         createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
         cleanupWpWorktreesImpl: () => undefined,

@@ -27,6 +27,30 @@ function normalizeOutputExpectation(value: unknown): ExecutableCheck['outputExpe
   return { mode: raw.mode, value: raw.value.trim() };
 }
 
+function normalizeEvidenceExpectation(value: unknown): ExecutableCheck['evidenceExpectation'] {
+  const raw = value as {
+    type?: unknown;
+    suite?: unknown;
+    testName?: unknown;
+    expectedStatus?: unknown;
+  } | null;
+  if (raw == null) return undefined;
+  if (raw.type === 'exit-code') return { type: 'exit-code' };
+  if (raw.type !== 'vitest-json') return undefined;
+  const expectedStatus = raw.expectedStatus === 'passed' ? raw.expectedStatus : undefined;
+  if (expectedStatus == null) return undefined;
+  return {
+    type: 'vitest-json',
+    ...(typeof raw.suite === 'string' && raw.suite.trim().length > 0
+      ? { suite: raw.suite.trim() }
+      : {}),
+    ...(typeof raw.testName === 'string' && raw.testName.trim().length > 0
+      ? { testName: raw.testName.trim() }
+      : {}),
+    expectedStatus,
+  };
+}
+
 function normalizeExecutableChecks(value: unknown, criterionId: string): ExecutableCheck[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((raw, index) => {
@@ -35,6 +59,7 @@ function normalizeExecutableChecks(value: unknown, criterionId: string): Executa
       command?: unknown;
       expectedExitCodes?: unknown;
       outputExpectation?: unknown;
+      evidenceExpectation?: unknown;
       timeoutMs?: unknown;
       kind?: unknown;
     };
@@ -53,6 +78,8 @@ function normalizeExecutableChecks(value: unknown, criterionId: string): Executa
     }
     const outputExpectation = normalizeOutputExpectation(check.outputExpectation);
     if (outputExpectation != null) normalized.outputExpectation = outputExpectation;
+    const evidenceExpectation = normalizeEvidenceExpectation(check.evidenceExpectation);
+    if (evidenceExpectation != null) normalized.evidenceExpectation = evidenceExpectation;
     if (
       typeof check.timeoutMs === 'number' &&
       Number.isInteger(check.timeoutMs) &&

@@ -20,6 +20,9 @@ export interface VerifyCommand {
     mode: 'exact' | 'contains' | 'regex';
     value: string;
   };
+  evidenceExpectation?:
+    | { type: 'exit-code' }
+    | { type: 'vitest-json'; suite?: string; testName?: string; expectedStatus: 'passed' };
   timeoutMs?: number;
 }
 

@@ -50,7 +50,7 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
 3. **`functionalRequirements`** — copied from `<prdContext>` and the PRD functional/acceptance material when present. Each entry has `id` + `statement`.
 4. **`architecture`** — `current` (one paragraph), `new` (one paragraph), `decisionRationale` (why this shape).
 5. **`schemaChanges`** — exact DDL strings (no pseudocode) and repo-relative migration file paths. Empty arrays if no schema change.
-6. **`interfaceContracts`** — paste-ready `signature` (function decl, type alias, or full Zod block) + `file` it lives in. ≥1 entry required when there are ≥2 WPs (cross-WP boundaries need typed contracts).
+6. **`interfaceContracts`** — descriptive `name`, paste-ready `signature` (function decl, type alias, or full Zod block), and `file` it lives in. Use `requiredExports` only for real exported symbols Tier 1 must verify. ≥1 entry required when there are ≥2 WPs (cross-WP boundaries need typed contracts).
 7. **`workPackages`** — see rules below.
 8. **`executionOrder`** — DAG of batches: `[{batch: 0, wpIds: ['WP1', 'WP2']}, {batch: 1, wpIds: ['WP3']}]`. Every WP appears exactly once.
 9. **`verificationTooling`** — required when there are >2 WPs. Each tool: `name`, `command`, `expectedExitCodes`, optional `inputSpec`. `command` must be an executable repo-root command such as `pnpm vitest run apps/web/src/lib/lanes.config.test.ts`; never emit a bare file path. For Playwright specs under `apps/web/e2e`, emit a canonical repo-root command such as `pnpm exec playwright test apps/web/e2e/pipeline/<spec>.spec.ts`; for `chat.spec.ts`, include `--config playwright-chat.config.ts`. The workflow may adapt canonical repo-root commands to package-local execution internally; do not emit package-relative paths like `e2e/<spec>.spec.ts` in `verificationTooling` or `acceptanceCriteria[].executableChecks`.
@@ -242,6 +242,7 @@ Live marker format: `[decision] KIND: <one sentence>`. Example: `[decision] PLAN
       "name": "auditSkillContracts",
       "signature": "export async function auditSkillContracts(repoRoot: string): Promise<SkillContractAudit>",
       "file": "core/agent-runtime/skill-contract-audit.ts",
+      "requiredExports": [{ "name": "auditSkillContracts" }],
       "lineRange": "1-220"
     }
   ],
