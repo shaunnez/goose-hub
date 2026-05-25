@@ -1,4 +1,13 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -12,6 +21,7 @@ import {
 import type { FactoryContext } from './context.js';
 import { FactoryContextError, loadFactoryContext } from './context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from './path-policy.js';
+import { clearRunCache } from './run-cache.js';
 import { buildFactoryMcpServer } from './server.js';
 import {
   listDirTool,
@@ -46,6 +56,11 @@ function makeCtx(overrides: Partial<FactoryContext> = {}): FactoryContext {
     serverPort: 3001,
     ...overrides,
   };
+}
+
+function requireFullOutputPath(result: { fullOutputPath?: string }): string {
+  if (result.fullOutputPath == null) throw new Error('expected fullOutputPath');
+  return result.fullOutputPath;
 }
 
 describe('path-policy', () => {
@@ -98,6 +113,25 @@ describe('path-policy', () => {
     } catch (err) {
       expect((err as PathPolicyViolation).code).toBe(expected);
     }
+  });
+
+  it('allows .factory/run-output only when a read path opts into spill reads', () => {
+    expect(() => resolveWorkspacePath(workspace, '.factory/run-output/run-1-1.log')).toThrow(
+      PathPolicyViolation,
+    );
+
+    const resolved = resolveWorkspacePath(workspace, '.factory/run-output/run-1-1.log', {
+      allowRunOutput: true,
+    });
+    expect(resolved.canonical.path).toBe('.factory/run-output/run-1-1.log');
+    expect(resolved.absolute).toBe(join(workspace, '.factory/run-output/run-1-1.log'));
+
+    expect(() => resolveWorkspacePath(workspace, '.factory/output-schemas/schema.json')).toThrow(
+      PathPolicyViolation,
+    );
+    expect(() => resolveWorkspacePath(workspace, '.factory/run-output/../secret.txt')).toThrow(
+      PathPolicyViolation,
+    );
   });
 
   it('rejects empty path', () => {
@@ -312,6 +346,8 @@ describe('command-policy', () => {
       command: 'node',
       args: ['-e', 'process.stdout.write("hello")'],
       cwd: workspace,
+      runId: 'command-small',
+      displayOutput: true,
       timeoutMs: 5_000,
       env: minimalEnv(),
     });
@@ -319,6 +355,9 @@ describe('command-policy', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe('hello');
     expect(result.truncated).toBe(false);
+    expect(result.displayTruncated).toBe(false);
+    expect(result.fullOutputPath).toBeUndefined();
+    expect(existsSync(join(workspace, '.factory', 'run-output'))).toBe(false);
   });
 
   it('captures non-zero exit codes as failed without throwing', async () => {
@@ -326,6 +365,8 @@ describe('command-policy', () => {
       command: 'node',
       args: ['-e', 'process.exit(2)'],
       cwd: workspace,
+      runId: 'command-failed',
+      displayOutput: true,
       timeoutMs: 5_000,
       env: minimalEnv(),
     });
@@ -338,6 +379,8 @@ describe('command-policy', () => {
       command: 'node',
       args: ['-e', 'process.stdout.write("a".repeat(50))'],
       cwd: workspace,
+      runId: 'command-byte-cap',
+      displayOutput: true,
       timeoutMs: 5_000,
       stdoutLimitBytes: 10,
       env: minimalEnv(),
@@ -351,6 +394,8 @@ describe('command-policy', () => {
       command: 'node',
       args: ['-e', 'setInterval(() => {}, 1000)'],
       cwd: workspace,
+      runId: 'command-timeout',
+      displayOutput: true,
       timeoutMs: 150,
       env: minimalEnv(),
     });
@@ -362,6 +407,8 @@ describe('command-policy', () => {
       command: '/does/not/exist/factory-bin',
       args: [],
       cwd: workspace,
+      runId: 'command-spawn-error',
+      displayOutput: true,
       timeoutMs: 1_000,
       env: minimalEnv(),
     });
@@ -373,6 +420,250 @@ describe('command-policy', () => {
     expect(DEFAULT_STDOUT_LIMIT_BYTES).toBeGreaterThan(0);
     expect(DEFAULT_STDERR_LIMIT_BYTES).toBeGreaterThan(0);
     expect(DEFAULT_STDOUT_LIMIT_BYTES).toBeGreaterThanOrEqual(DEFAULT_STDERR_LIMIT_BYTES);
+  });
+
+  it('display-shapes oversized stdout, preserves small stderr, and writes a readable spill file', async () => {
+    await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("warmup")'],
+      cwd: workspace,
+      runId: 'command-stdout-large',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+
+    const stderr = 'small stderr';
+    const result = await runCommand({
+      command: 'node',
+      args: [
+        '-e',
+        `process.stdout.write("HEAD" + "a".repeat(5000) + "TAIL"); process.stderr.write(${JSON.stringify(
+          stderr,
+        )})`,
+      ],
+      cwd: workspace,
+      runId: 'command-stdout-large',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+
+    expect(result.status).toBe('ok');
+    expect(result.displayTruncated).toBe(true);
+    expect(result.truncated).toBe(false);
+    expect(result.stderr).toBe(stderr);
+    expect(result.stdout).toContain('HEAD');
+    expect(result.stdout).toContain('TAIL');
+    expect(result.stdout).toContain('[factory] stdout display truncated');
+    expect(Buffer.byteLength(result.stdout, 'utf8')).toBeLessThanOrEqual(4096);
+    expect(result.fullOutputPath).toBe('.factory/run-output/command-stdout-large-2.log');
+
+    const fullOutputPath = requireFullOutputPath(result);
+    const spill = await readFileTool(makeCtx({ runId: 'reader' }), {
+      path: fullOutputPath,
+    });
+    expect(spill.content).toContain('===== stdout =====');
+    expect(spill.content).toContain('HEAD');
+    expect(spill.content).toContain('TAIL');
+    expect(spill.content).toContain('===== stderr =====');
+    expect(spill.content).toContain(stderr);
+  });
+
+  it('does not display-shape machine-parsed command output unless explicitly requested', async () => {
+    const result = await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("ROW" + "x".repeat(5000) + "END")'],
+      cwd: workspace,
+      runId: 'command-machine-output',
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+
+    expect(result.displayTruncated).toBe(false);
+    expect(result.stdout).toContain('ROW');
+    expect(result.stdout).toContain('END');
+    expect(result.stdout).not.toContain('[factory] stdout display truncated');
+    expect(result.fullOutputPath).toBeUndefined();
+  });
+
+  it('display-shapes stderr independently when stdout is under threshold', async () => {
+    const stdout = 'tiny stdout';
+    const result = await runCommand({
+      command: 'node',
+      args: [
+        '-e',
+        `process.stdout.write(${JSON.stringify(stdout)}); process.stderr.write("ERR" + "e".repeat(5000) + "TAIL")`,
+      ],
+      cwd: workspace,
+      runId: 'command-stderr-large',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+
+    expect(result.stdout).toBe(stdout);
+    expect(result.stderr).toContain('[factory] stderr display truncated');
+    expect(result.stderr).toContain('ERR');
+    expect(result.stderr).toContain('TAIL');
+    expect(result.displayTruncated).toBe(true);
+    expect(result.fullOutputPath).toBe('.factory/run-output/command-stderr-large-1.log');
+  });
+
+  it('display-shapes stdout and stderr independently into one labeled spill file', async () => {
+    const result = await runCommand({
+      command: 'node',
+      args: [
+        '-e',
+        'process.stdout.write("OUT" + "o".repeat(5000) + "END"); process.stderr.write("ERR" + "e".repeat(5000) + "END")',
+      ],
+      cwd: workspace,
+      runId: 'command-both-large',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+
+    expect(result.stdout).toContain('[factory] stdout display truncated');
+    expect(result.stderr).toContain('[factory] stderr display truncated');
+    expect(result.fullOutputPath).toBe('.factory/run-output/command-both-large-1.log');
+
+    const fullOutputPath = requireFullOutputPath(result);
+    const spill = readFileSync(join(workspace, fullOutputPath), 'utf8');
+    expect(spill).toContain('===== stdout =====');
+    expect(spill).toContain('OUT');
+    expect(spill).toContain('===== stderr =====');
+    expect(spill).toContain('ERR');
+  });
+
+  it('clears per-run invocation counters with the run cache lifecycle', async () => {
+    const first = await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("x".repeat(5000))'],
+      cwd: workspace,
+      runId: 'command-clear-counter',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+    expect(first.fullOutputPath).toBe('.factory/run-output/command-clear-counter-1.log');
+
+    clearRunCache('command-clear-counter');
+    rmSync(join(workspace, requireFullOutputPath(first)));
+
+    const second = await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("y".repeat(5000))'],
+      cwd: workspace,
+      runId: 'command-clear-counter',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+    expect(second.fullOutputPath).toBe('.factory/run-output/command-clear-counter-1.log');
+  });
+
+  it('keeps byte-capture truncation distinct from display truncation', async () => {
+    const result = await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("x".repeat(10000))'],
+      cwd: workspace,
+      runId: 'command-capture-cap',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      stdoutLimitBytes: 4500,
+      env: minimalEnv(),
+    });
+
+    expect(result.truncated).toBe(true);
+    expect(result.displayTruncated).toBe(true);
+    expect(result.stdout).toContain('captured output up to the command-policy byte limit');
+    const fullOutputPath = requireFullOutputPath(result);
+    const spill = readFileSync(join(workspace, fullOutputPath), 'utf8');
+    expect(spill).toContain('===== stdout =====');
+    expect(Buffer.byteLength(spill, 'utf8')).toBeLessThan(10000);
+  });
+
+  it('sanitizes run ids for portable spill filenames', async () => {
+    const result = await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("x".repeat(5000))'],
+      cwd: workspace,
+      runId: 'run:with:colon',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+
+    expect(result.fullOutputPath).toBe('.factory/run-output/run_with_colon-1.log');
+  });
+
+  it('keeps display output capped when spill persistence fails', async () => {
+    mkdirSync(join(workspace, '.factory'), { recursive: true });
+    writeFileSync(join(workspace, '.factory', 'run-output'), 'not a directory');
+
+    const result = await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("x".repeat(5000))'],
+      cwd: workspace,
+      runId: 'command-spill-fails',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+
+    expect(result.displayTruncated).toBe(true);
+    expect(result.fullOutputPath).toBeUndefined();
+    expect(result.stdout).toContain('spill file unavailable');
+    expect(Buffer.byteLength(result.stdout, 'utf8')).toBeLessThanOrEqual(4096);
+  });
+
+  it('does not write spill output through a symlinked run-output directory', async () => {
+    const external = mkdtempSync(join(tmpdir(), 'factory-run-output-external-'));
+    mkdirSync(join(workspace, '.factory'), { recursive: true });
+    symlinkSync(external, join(workspace, '.factory', 'run-output'), 'dir');
+
+    try {
+      const result = await runCommand({
+        command: 'node',
+        args: ['-e', 'process.stdout.write("x".repeat(5000))'],
+        cwd: workspace,
+        runId: 'command-symlink-output',
+        displayOutput: true,
+        timeoutMs: 5_000,
+        env: minimalEnv(),
+      });
+
+      expect(result.displayTruncated).toBe(true);
+      expect(result.fullOutputPath).toBeUndefined();
+      expect(readdirSync(external)).toEqual([]);
+    } finally {
+      rmSync(external, { recursive: true, force: true });
+    }
+  });
+
+  it('handles no-trailing-newline and binary-ish output without inventing tail content', async () => {
+    const result = await runCommand({
+      command: 'node',
+      args: [
+        '-e',
+        'process.stdout.write("START" + "n".repeat(5000) + "END"); process.stderr.write(Buffer.concat([Buffer.from([0, 1, 2, 3]), Buffer.from("b".repeat(5000)), Buffer.from([4, 5])]))',
+      ],
+      cwd: workspace,
+      runId: 'command-binary-ish',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+
+    expect(result.stdout.endsWith('END')).toBe(true);
+    expect(result.stderr).toContain('[factory] stderr display truncated');
+    expect(result.stderr.endsWith('\u0004\u0005')).toBe(true);
+    expect(result.displayTruncated).toBe(true);
+    const fullOutputPath = requireFullOutputPath(result);
+    const spill = readFileSync(join(workspace, fullOutputPath));
+    expect(spill.includes(Buffer.from([0, 1, 2, 3]))).toBe(true);
+    expect(spill.includes(Buffer.from([4, 5]))).toBe(true);
   });
 });
 

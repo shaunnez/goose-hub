@@ -34,6 +34,8 @@ export interface GetPrDiffResult {
   prNumber: number;
   diff: string;
   truncated: boolean;
+  displayTruncated: boolean;
+  fullOutputPath?: string;
 }
 
 export interface RunFullSuiteIfNeededResult extends VerifyResult {
@@ -77,6 +79,7 @@ export async function getPrDiffTool(
       command: 'git',
       args: ['rev-parse', '--verify', ref],
       cwd: ctx.workspaceRoot,
+      runId: ctx.runId,
       timeoutMs: 5_000,
       env: minimalEnv(),
     });
@@ -104,6 +107,8 @@ export async function getPrDiffTool(
     command: 'git',
     args: ['diff', '--no-color', `${baseRef}...${resolvedRef}`],
     cwd: ctx.workspaceRoot,
+    runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: PR_DIFF_TIMEOUT_MS,
     stdoutLimitBytes: PR_DIFF_STDOUT_LIMIT_BYTES,
     env: minimalEnv(),
@@ -124,7 +129,13 @@ export async function getPrDiffTool(
     durationMs: result.durationMs,
     truncated: result.truncated,
   });
-  return { prNumber: input.prNumber, diff: result.stdout, truncated: result.truncated };
+  return {
+    prNumber: input.prNumber,
+    diff: result.stdout,
+    truncated: result.truncated,
+    displayTruncated: result.displayTruncated,
+    ...(result.fullOutputPath != null ? { fullOutputPath: result.fullOutputPath } : {}),
+  };
 }
 
 /**
@@ -202,6 +213,8 @@ export async function runIsolatedTestTool(
     command: argv[0],
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
+    runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: 5 * 60 * 1000,
     env: minimalEnv(),
   });
@@ -220,6 +233,8 @@ export async function runIsolatedTestTool(
     stderr: narrowed.stderr,
     durationMs: narrowed.durationMs,
     truncated: narrowed.truncated,
+    displayTruncated: narrowed.displayTruncated,
+    ...(narrowed.fullOutputPath != null ? { fullOutputPath: narrowed.fullOutputPath } : {}),
     command: argv,
   };
 }

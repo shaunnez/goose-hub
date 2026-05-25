@@ -83,6 +83,7 @@ async function git(
     command: 'git',
     args,
     cwd: ctx.workspaceRoot,
+    runId: ctx.runId,
     timeoutMs: GIT_TIMEOUT_MS,
     stdoutLimitBytes,
     env: minimalEnv(),

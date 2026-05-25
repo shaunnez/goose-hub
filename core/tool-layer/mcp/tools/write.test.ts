@@ -63,6 +63,12 @@ describe('writeFileTool', () => {
     expect(blocked).toBeTruthy();
     expect((blocked?.payload as { reason: string }).reason).toBe('assistant_home');
   });
+
+  it('does not allow agents to overwrite command-output spill files', async () => {
+    await expect(
+      writeFileTool(ctx, { path: '.factory/run-output/run-1-1.log', content: 'tamper' }),
+    ).rejects.toMatchObject({ code: 'factory_internals' });
+  });
 });
 
 describe('canonical RepoRelativePath contract', () => {

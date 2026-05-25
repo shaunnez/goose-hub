@@ -190,6 +190,8 @@ export async function runPlaywrightSpecTool(
     command: argv[0],
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
+    runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: PLAYWRIGHT_TIMEOUT_MS,
     stdoutLimitBytes: PLAYWRIGHT_STDOUT_LIMIT_BYTES,
     env: minimalEnv(extraEnv),
@@ -210,6 +212,8 @@ export async function runPlaywrightSpecTool(
     stderr: result.stderr,
     durationMs: result.durationMs,
     truncated: result.truncated,
+    displayTruncated: result.displayTruncated,
+    ...(result.fullOutputPath != null ? { fullOutputPath: result.fullOutputPath } : {}),
     command: argv,
   };
 }

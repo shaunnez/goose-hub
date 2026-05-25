@@ -63,6 +63,7 @@ async function git(ctx: FactoryContext, args: ReadonlyArray<string>): Promise<Co
     command: 'git',
     args,
     cwd: ctx.workspaceRoot,
+    runId: ctx.runId,
     timeoutMs: GIT_TIMEOUT_MS,
     env: minimalEnv(),
   });

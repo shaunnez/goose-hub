@@ -1,4 +1,9 @@
 import { spawn } from 'node:child_process';
+import {
+  type ShapeCommandOutputResult,
+  shapeCommandOutput,
+  shapeCommandOutputInMemory,
+} from './output-sandbox.js';
 
 export type CommandStatus = 'ok' | 'failed' | 'timed_out';
 
@@ -7,6 +12,8 @@ export interface CommandSpec {
   args: ReadonlyArray<string>;
   cwd: string;
   env?: Readonly<Record<string, string>>;
+  runId?: string;
+  displayOutput?: boolean;
   timeoutMs: number;
   stdoutLimitBytes?: number;
   stderrLimitBytes?: number;
@@ -20,12 +27,25 @@ export interface CommandResult {
   stderr: string;
   durationMs: number;
   truncated: boolean;
+  displayTruncated: boolean;
+  fullOutputPath?: string;
 }
 
 export const DEFAULT_STDOUT_LIMIT_BYTES = 256 * 1024;
 export const DEFAULT_STDERR_LIMIT_BYTES = 64 * 1024;
 
 const FORCE_KILL_GRACE_MS = 2_000;
+const runInvocationCounters = new Map<string, number>();
+
+function nextInvocationForRun(runId: string): number {
+  const next = (runInvocationCounters.get(runId) ?? 0) + 1;
+  runInvocationCounters.set(runId, next);
+  return next;
+}
+
+export function clearRunCommandInvocationCounter(runId: string): void {
+  runInvocationCounters.delete(runId);
+}
 
 /**
  * Sole execution path for MCP tools. `shell: false` is non-negotiable —
@@ -40,6 +60,7 @@ const FORCE_KILL_GRACE_MS = 2_000;
 export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
   const stdoutLimit = spec.stdoutLimitBytes ?? DEFAULT_STDOUT_LIMIT_BYTES;
   const stderrLimit = spec.stderrLimitBytes ?? DEFAULT_STDERR_LIMIT_BYTES;
+  const invocation = spec.runId != null ? nextInvocationForRun(spec.runId) : null;
 
   return new Promise<CommandResult>((resolvePromise) => {
     const startedAt = Date.now();
@@ -57,6 +78,7 @@ export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
     let truncated = false;
     let timedOut = false;
     let exited = false;
+    let settled = false;
     let forceKillTimer: NodeJS.Timeout | null = null;
 
     child.stdout?.on('data', (chunk: Buffer) => {
@@ -102,36 +124,76 @@ export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
       }, FORCE_KILL_GRACE_MS);
     }, spec.timeoutMs);
 
-    const finish = (exitCode: number | null, signal: NodeJS.Signals | null) => {
-      exited = true;
-      clearTimeout(timeoutHandle);
-      if (forceKillTimer) clearTimeout(forceKillTimer);
-      const status: CommandStatus = timedOut ? 'timed_out' : exitCode === 0 ? 'ok' : 'failed';
+    const resolveResult = async (
+      status: CommandStatus,
+      exitCode: number | null,
+      signal: NodeJS.Signals | null,
+    ) => {
+      const stdout = Buffer.concat(stdoutChunks);
+      const stderr = Buffer.concat(stderrChunks);
+      let shaped: ShapeCommandOutputResult = {
+        stdout: stdout.toString('utf8'),
+        stderr: stderr.toString('utf8'),
+        displayTruncated: false,
+      };
+
+      if (spec.displayOutput === true && spec.runId != null && invocation != null) {
+        try {
+          shaped = await shapeCommandOutput({
+            workspaceRoot: spec.cwd,
+            runId: spec.runId,
+            invocation,
+            stdout,
+            stderr,
+            byteCaptureTruncated: truncated,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          shaped = shapeCommandOutputInMemory(
+            {
+              workspaceRoot: spec.cwd,
+              runId: spec.runId,
+              invocation,
+              stdout,
+              stderr,
+              byteCaptureTruncated: truncated,
+            },
+            message,
+          );
+        }
+      }
+
       resolvePromise({
         status,
         exitCode,
         signal,
-        stdout: Buffer.concat(stdoutChunks).toString('utf8'),
-        stderr: Buffer.concat(stderrChunks).toString('utf8'),
+        stdout: shaped.stdout,
+        stderr: shaped.stderr,
         durationMs: Date.now() - startedAt,
         truncated,
+        displayTruncated: shaped.displayTruncated,
+        ...(shaped.fullOutputPath != null ? { fullOutputPath: shaped.fullOutputPath } : {}),
       });
     };
 
+    const finish = (exitCode: number | null, signal: NodeJS.Signals | null) => {
+      if (settled) return;
+      settled = true;
+      exited = true;
+      clearTimeout(timeoutHandle);
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+      const status: CommandStatus = timedOut ? 'timed_out' : exitCode === 0 ? 'ok' : 'failed';
+      void resolveResult(status, exitCode, signal);
+    };
+
     child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
       exited = true;
       clearTimeout(timeoutHandle);
       if (forceKillTimer) clearTimeout(forceKillTimer);
       stderrChunks.push(Buffer.from(`${err.message}\n`, 'utf8'));
-      resolvePromise({
-        status: 'failed',
-        exitCode: null,
-        signal: null,
-        stdout: Buffer.concat(stdoutChunks).toString('utf8'),
-        stderr: Buffer.concat(stderrChunks).toString('utf8'),
-        durationMs: Date.now() - startedAt,
-        truncated,
-      });
+      void resolveResult('failed', null, null);
     });
 
     child.on('close', finish);

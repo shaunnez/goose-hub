@@ -58,6 +58,8 @@ export interface VerifyResult {
   stderr: string;
   durationMs: number;
   truncated: boolean;
+  displayTruncated: boolean;
+  fullOutputPath?: string;
   command: ReadonlyArray<string>;
   rawPaths?: string[];
   paths?: RepoRelativePath[];
@@ -88,7 +90,9 @@ function toVerifyResult(
     stderr: r.stderr,
     durationMs: r.durationMs,
     truncated: r.truncated,
+    displayTruncated: r.displayTruncated ?? false,
     command: argv,
+    ...(r.fullOutputPath != null ? { fullOutputPath: r.fullOutputPath } : {}),
     ...(paths != null && paths.rawPaths.length > 0 ? { rawPaths: paths.rawPaths } : {}),
     ...(paths != null && paths.paths.length > 0 ? { paths: paths.paths } : {}),
   };
@@ -194,6 +198,8 @@ export async function runTestsTool(
     command: argv[0],
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
+    runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: TEST_TIMEOUT_MS,
     env: minimalEnv(),
   });
@@ -240,6 +246,7 @@ function buildRetryCapBlockedResult(
     stderr: `[harness] run_tests retry cap reached (${observed}/${cap} consecutive failures on ${pathLabel}). Edit the failing source or test before invoking run_tests again — read the prior failure output, classify the cause, then make a targeted change.`,
     durationMs: 0,
     truncated: false,
+    displayTruncated: false,
     command: argv,
   };
 }
@@ -269,6 +276,8 @@ export async function runLintTool(
     command: argv[0],
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
+    runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: LINT_TIMEOUT_MS,
     env: minimalEnv(),
   });
@@ -298,6 +307,8 @@ export async function runTypecheckTool(
     command: argv[0],
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
+    runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: TYPECHECK_TIMEOUT_MS,
     env: minimalEnv(),
   });
@@ -341,6 +352,8 @@ export async function runPackageScriptTool(
     command: argv[0],
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
+    runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: PACKAGE_SCRIPT_TIMEOUT_MS,
     env: minimalEnv(),
   });

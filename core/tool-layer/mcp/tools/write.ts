@@ -252,6 +252,7 @@ export async function applyPatchTool(
       command: 'git',
       args: ['apply', '--whitespace=nowarn', patchFile],
       cwd: ctx.workspaceRoot,
+      runId: ctx.runId,
       timeoutMs: APPLY_PATCH_TIMEOUT_MS,
       env: minimalEnv(),
     });
@@ -270,6 +271,7 @@ export async function applyPatchTool(
       command: 'git',
       args: ['apply', '--numstat', '--summary', patchFile],
       cwd: ctx.workspaceRoot,
+      runId: ctx.runId,
       timeoutMs: APPLY_PATCH_TIMEOUT_MS,
       env: minimalEnv(),
     });

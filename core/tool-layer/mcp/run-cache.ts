@@ -1,5 +1,6 @@
 import { eventStore } from '../../event-stream/store.js';
 import { canonicalizeFactoryToolPath } from '../path-contract.js';
+import { clearRunCommandInvocationCounter } from './command-policy.js';
 
 export type CacheableToolName =
   | 'read_file'
@@ -305,6 +306,7 @@ export function clearRunCache(runId: string): void {
   testRetryCounters.delete(runId);
   redundantReadCounters.delete(runId);
   totalReadCounters.delete(runId);
+  clearRunCommandInvocationCounter(runId);
 }
 
 /**
