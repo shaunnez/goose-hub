@@ -864,6 +864,36 @@ export class CodexCliRuntime implements AgentRuntime {
         });
 
         if (exceededBudget) {
+          const budgetExceeded = {
+            costUsd,
+            budgetUsd: spec.budgets.maxBudgetUsd,
+            overByUsd: Number((costUsd - spec.budgets.maxBudgetUsd).toFixed(6)),
+          };
+          if (spec.budgetPolicy?.onPostRunExceeded === 'return-output') {
+            recordRun('failure');
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.run-failed',
+              payload: {
+                runId,
+                skill: spec.skill,
+                reason: 'budget-exceeded',
+                error: `budget exceeded: $${costUsd} > $${spec.budgets.maxBudgetUsd}`,
+                costUsd,
+                budgetUsd: spec.budgets.maxBudgetUsd,
+              },
+              runId,
+              personaId,
+            });
+            resolve({
+              output: extractResultJson(envelope == null ? stdout : (envelope.result ?? ''), runId),
+              decisionSummaries: [],
+              events: eventStore.replay({ runId }),
+              budgetExceeded,
+            });
+            return;
+          }
           recordRun('failure');
           eventStore.appendEvent({
             projectId,

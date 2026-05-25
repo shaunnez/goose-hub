@@ -268,7 +268,32 @@ export async function dispatchResumeIssue(
   if (fromState === 'factory:needs-human') {
     const allEvents = eventStore.replay({ projectId: slug, workItemId });
     const lastRunFailed = [...allEvents].reverse().find((e) => e.kind === 'agent.run-failed');
-    const failedSkill = (lastRunFailed?.payload as { skill?: string } | undefined)?.skill;
+    const failedPayload = lastRunFailed?.payload as
+      | { skill?: string; runDisposition?: string; runId?: string }
+      | undefined;
+    const failedSkill = failedPayload?.skill;
+
+    if (failedSkill === 'parallel-implement' && failedPayload?.runDisposition === 'budget-killed') {
+      logger.info(
+        'dispatchResumeIssue: needs-human from budget-killed parallel-implement, resuming to spec-ready',
+        { slug, issueNumber },
+      );
+      await source.forceState(workItemId, 'factory:spec-ready');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:spec-ready',
+        by: 'resume',
+        extraPayload: {
+          ...interventionEventPayload(options.intervention),
+          resumeReason: 'budget-killed-after-persist',
+          priorRunId: failedPayload.runId ?? '',
+        },
+      });
+      await dispatchParallelImplement(slug, issueNumber);
+      return;
+    }
 
     if (failedSkill === 'spec-author') {
       logger.info(

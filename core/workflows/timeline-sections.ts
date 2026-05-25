@@ -201,6 +201,7 @@ const DIRECT_TIMELINE_EVENT_KINDS = new Set<string>([
   'parallel-implement.wp-started',
   'parallel-implement.wp-committed',
   'parallel-implement.wp-failed',
+  'parallel-implement.wp-loop-cap-hit',
   'parallel-implement.wp-timeout',
   'parallel-implement.wp-commit-failed',
   'parallel-implement.exhausted',
