@@ -41,6 +41,7 @@ export type ValidationRule =
   | 'constraint-source-file-missing'
   | 'constraint-source-symbol-missing'
   | 'wp-dependson-not-found'
+  | 'wp-dependson-order-invalid'
   | 'execution-order-wp-mismatch'
   | 'self-check-journey-coverage'
   | 'self-check-grounded-in-code'
@@ -237,6 +238,27 @@ export function validateEngineeringSpec(
         message: `executionOrder references unknown WP '${id}'`,
         ref: id,
       });
+    }
+  }
+  const batchByWp = new Map<string, number>();
+  for (const order of spec.executionOrder) {
+    for (const wpId of order.wpIds) {
+      batchByWp.set(wpId, order.batch);
+    }
+  }
+  for (const wp of spec.workPackages) {
+    const wpBatch = batchByWp.get(wp.id);
+    if (wpBatch == null) continue;
+    for (const dep of wp.dependsOn) {
+      const depBatch = batchByWp.get(dep);
+      if (depBatch == null) continue;
+      if (depBatch >= wpBatch) {
+        errors.push({
+          rule: 'wp-dependson-order-invalid',
+          message: `WP '${wp.id}' dependsOn '${dep}', but dependencies must appear in an earlier execution batch`,
+          ref: wp.id,
+        });
+      }
     }
   }
 
