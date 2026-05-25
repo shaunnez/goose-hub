@@ -1615,6 +1615,107 @@ describe('dispatchForLabel', () => {
       'factory:needs-human',
     );
   });
+
+  it('resumes needs-human parallel-implement budget-killed work through spec-ready', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#694',
+      externalId: '694',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'parallel implement',
+      body: 'body',
+      state: 'factory:needs-human',
+      priority: 'high',
+      type: 'feature',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi
+        .fn()
+        .mockResolvedValueOnce(item)
+        .mockResolvedValue({ ...item, state: 'factory:spec-ready' }),
+      forceState: vi.fn().mockResolvedValue(undefined),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    const spec = {
+      objective: 'Implement dispatch wiring',
+      userJourneys: [],
+      functionalRequirements: [],
+      architecture: { current: 'stub', new: 'wired', decisionRationale: 'test' },
+      schemaChanges: { ddl: [], migrations: [] },
+      interfaceContracts: [],
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: [
+            'apps/server/src/shared/dispatch.ts',
+            'apps/server/src/shared/dispatch.test.ts',
+          ],
+          changes:
+            'Wire budget-killed parallel implement resume through spec-ready and cover the dispatcher path with a focused regression test.',
+          dependsOn: [],
+          builderTier: 'sonnet',
+        },
+      ],
+      executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+      verificationTooling: [],
+      acceptanceCriteria: [
+        {
+          id: 'AC1',
+          statement: 'Dispatches',
+          crossCutting: true,
+          executableChecks: [{ id: 'AC1-check-1', command: 'pnpm test' }],
+        },
+      ],
+      constraints: [],
+      riskRegister: [],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Test spec' }],
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      budgets: { maxParallelAgents: 1 },
+    });
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockGetEngineeringSpec.mockReturnValue({
+      id: 1,
+      projectId: 'goose-hub-self',
+      workItemId: item.id,
+      pipelineRunId: 'pipeline-run-dispatch',
+      spec,
+      createdAt: '2026-05-10T00:00:00Z',
+      updatedAt: '2026-05-10T00:00:00Z',
+    });
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.run-failed',
+        payload: {
+          skill: 'parallel-implement',
+          runDisposition: 'budget-killed',
+          budgetKilledWpId: 'WP1',
+        },
+      },
+    ]);
+    mockRunParallelImplementWorkflow.mockResolvedValueOnce({
+      status: 'success',
+      devRunId: 'dev-run-456',
+      worktreePath: '/tmp/issue-wt',
+      prNumber: 7,
+      prUrl: 'https://gh/pr/7',
+    });
+
+    const { dispatchResumeIssue } = await import('./dispatch.js');
+    await dispatchResumeIssue('goose-hub-self', 694);
+
+    expect(source.forceState).toHaveBeenCalledWith(item.id, 'factory:spec-ready');
+    expect(mockRunParallelImplementWorkflow).toHaveBeenCalled();
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '694',
+      'factory:spec-ready',
+      'factory:in-progress',
+    );
+  });
 });
 
 // ─── dispatchRetro ────────────────────────────────────────────────────────

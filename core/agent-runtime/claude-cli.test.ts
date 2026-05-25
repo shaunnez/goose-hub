@@ -290,6 +290,49 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     );
   });
 
+  it('can return valid terminal output after post-run budget exceeded when policy opts in', async () => {
+    vi.mocked(costFromCliEnvelope).mockReturnValue({
+      inputTokens: 100,
+      outputTokens: 50,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
+      costUsd: 1.25,
+      costLabel: 'exact',
+    });
+    const envelope = JSON.stringify({
+      is_error: false,
+      result: '{"wpId":"WP1","confidence":"high"}',
+    });
+    mockSpawn.mockReturnValue(makeChild(0, envelope));
+
+    const runtime = new ClaudeCliRuntime();
+    const run = runtime.run(
+      makeSpec({
+        skill: 'implement-wp',
+        budgetPolicy: { onPostRunExceeded: 'return-output' },
+        budgets: { maxTurns: 10, maxBudgetUsd: 1, timeoutMs: 5000 },
+      }),
+    );
+
+    await expect(run).resolves.toMatchObject({
+      output: { wpId: 'WP1', confidence: 'high' },
+      budgetExceeded: { costUsd: 1.25, budgetUsd: 1, overByUsd: 0.25 },
+    });
+
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.budget-exceeded' }),
+    );
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({ reason: 'budget-exceeded' }),
+      }),
+    );
+  });
+
   it('inserts a failure row when CLI reports is_error=true', async () => {
     const envelope = JSON.stringify({ is_error: true, result: 'budget exceeded' });
     mockSpawn.mockReturnValue(makeChild(0, envelope));

@@ -23,6 +23,7 @@ import type { DevReviewOutput } from '@goose-hub/skills/dev-review/schema.js';
 import type { ImplementWpOutput } from '@goose-hub/skills/implement-wp/schema.js';
 import type { EngineeringSpec, WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
 import { runParallelImplementWorkflow } from './workflow.js';
+import { resolveImplementWpBudget } from './wp-budget.js';
 import { runOneWpBuilder } from './wp-builder.js';
 
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
@@ -125,6 +126,27 @@ function makeOkResult(wpId: string): AgentResult {
   return { output, decisionSummaries: [], events: [] };
 }
 
+function makeToolCallEvent(
+  runId: string,
+  toolName: string,
+  toolInput: Record<string, unknown>,
+): AgentEvent {
+  return {
+    id: Math.floor(Math.random() * 100000),
+    projectId: 'goose-hub-self',
+    workItemId: 'wi-560',
+    kind: 'agent.tool-call',
+    payload: {
+      runId,
+      skill: 'implement-wp',
+      tool_name: toolName,
+      tool_input: toolInput,
+    },
+    runId,
+    createdAt: new Date().toISOString(),
+  } as AgentEvent;
+}
+
 function makeRuntime(impls: Record<string, () => Promise<AgentResult>>): AgentRuntime {
   return {
     run: async (spec: AgentSpec): Promise<AgentResult> => {
@@ -149,6 +171,67 @@ function makeAppendEvent(): {
     events,
   };
 }
+
+describe('implement-wp budget sizing', () => {
+  it('derives per-WP budgets from project config and applies global caps', () => {
+    const bug = makeWorkItem({ type: 'bug', priority: 'medium' });
+    const feature = makeWorkItem({ type: 'feature', priority: 'high' });
+    const baseBudget = { maxTurns: 150, maxBudgetUsd: 10, timeoutMs: 900_000 };
+
+    expect(
+      resolveImplementWpBudget({
+        defaultBudgets: baseBudget,
+        workItem: bug,
+        wp: makeWp('WP1', ['core/a.ts']),
+        budgetConfig: {
+          perAgentMaxUsd: 10,
+          perWorkflowMaxUsd: 10,
+          implementWp: {
+            editTestLoopMaxCycles: 3,
+            budgetSizing: {
+              bug: { maxTurns: 70, maxBudgetUsd: 4 },
+              feature: { maxTurns: 100, maxBudgetUsd: 6 },
+              complexAdditions: {
+                highPriorityUsd: 1,
+                manyFilesThreshold: 3,
+                manyFilesUsd: 1,
+                contractKeywords: ['schema', 'migration', 'api'],
+                contractUsd: 1,
+              },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({ maxTurns: 70, maxBudgetUsd: 4 });
+
+    expect(
+      resolveImplementWpBudget({
+        defaultBudgets: baseBudget,
+        workItem: feature,
+        wp: makeWp('WP2', ['a.ts', 'b.ts', 'c.ts', 'd.ts'], 'Update API schema'),
+        budgetConfig: {
+          perAgentMaxUsd: 7,
+          perWorkflowMaxUsd: 10,
+          implementWp: {
+            editTestLoopMaxCycles: 3,
+            budgetSizing: {
+              bug: { maxTurns: 70, maxBudgetUsd: 4 },
+              feature: { maxTurns: 100, maxBudgetUsd: 6 },
+              complex: { maxTurns: 130, maxBudgetUsd: 8 },
+              complexAdditions: {
+                highPriorityUsd: 1,
+                manyFilesThreshold: 3,
+                manyFilesUsd: 1,
+                contractKeywords: ['schema', 'migration', 'api'],
+                contractUsd: 1,
+              },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({ maxTurns: 130, maxBudgetUsd: 7 });
+  });
+});
 
 function makeTempRepo(paths: string[] = []): string {
   const repoPath = mkdtempSync(join(tmpdir(), 'goose-hub-parallel-'));
@@ -1142,6 +1225,145 @@ describe('parallel-implement durable integration branch persistence', () => {
       skill: 'parallel-implement',
       runDisposition: 'completed',
     });
+  });
+
+  it('persists green WP work before stopping a post-run budget-killed workflow', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const wp2 = makeWp('WP2', ['core/b.ts']);
+    const spec = {
+      ...makeSpec([wp1, wp2]),
+      executionOrder: [
+        { batch: 0, wpIds: ['WP1'] },
+        { batch: 1, wpIds: ['WP2'] },
+      ],
+    };
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const startedWpIds: string[] = [];
+    const openPRImpl = vi.fn();
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem(),
+      spec,
+      'pipeline-run-budget-killed',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({
+          WP1: async () => ({
+            ...makeOkResult('WP1'),
+            budgetExceeded: { costUsd: 6.25, budgetUsd: 6, overByUsd: 0.25 },
+          }),
+          WP2: async () => makeOkResult('WP2'),
+        }),
+        createIntegrationWorktreeImpl: () => ({
+          worktreePath: '/tmp/issue-wt',
+          previousHeadSha: 'base-sha',
+        }),
+        createWpWorktreeImpl: (_repo, _runId, wpId) => {
+          startedWpIds.push(wpId);
+          return `/tmp/wp-${wpId}`;
+        },
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha-wp1',
+        pushBranchImpl: () => undefined,
+        resolveRemoteBranchHeadImpl: () => 'sha-wp1',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: () => undefined,
+        getLastStatusImpl: () => null,
+        openPRImpl,
+        appendEvent,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      errorReason: expect.stringContaining('budget exceeded after persisted WP WP1'),
+    });
+    expect(startedWpIds).toEqual(['WP1']);
+    expect(events.find((event) => event.kind === 'parallel-implement.wp-persisted')).toMatchObject({
+      payload: expect.objectContaining({
+        wpId: 'WP1',
+        wpCommitSha: 'sha-wp1',
+        pushedSha: 'sha-wp1',
+      }),
+    });
+    expect(events.find((event) => event.kind === 'agent.run-failed')?.payload).toMatchObject({
+      skill: 'parallel-implement',
+      runDisposition: 'budget-killed',
+      budgetKilledWpId: 'WP1',
+    });
+    expect(openPRImpl).not.toHaveBeenCalled();
+  });
+
+  it('emits a loop-cap diagnosis event and does not persist unverified WP work', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const commitWpImpl = vi.fn();
+    const wpRunId = 'pipeline-run-loop-cap:wp:WP1:iter:1';
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem(),
+      spec,
+      'pipeline-run-loop-cap',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({
+          WP1: async () => ({
+            ...makeOkResult('WP1'),
+            events: [
+              makeToolCallEvent(wpRunId, 'Edit', { file_path: 'core/a.ts' }),
+              makeToolCallEvent(wpRunId, 'Bash', { command: 'pnpm test core/a.test.ts' }),
+              makeToolCallEvent(wpRunId, 'Edit', { file_path: 'core/a.ts' }),
+              makeToolCallEvent(wpRunId, 'Bash', { command: 'pnpm test core/a.test.ts' }),
+            ],
+          }),
+        }),
+        createIntegrationWorktreeImpl: () => ({
+          worktreePath: '/tmp/issue-wt',
+          previousHeadSha: 'base-sha',
+        }),
+        createWpWorktreeImpl: () => '/tmp/wp-WP1',
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: commitWpImpl,
+        pushBranchImpl: () => undefined,
+        resolveRemoteBranchHeadImpl: () => 'sha-wp1',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: () => undefined,
+        getLastStatusImpl: () => null,
+        appendEvent,
+        implementWpControlOverride: {
+          editTestLoopMaxCycles: 1,
+        },
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    expect(commitWpImpl).not.toHaveBeenCalled();
+    expect(
+      events.find((event) => event.kind === 'parallel-implement.wp-loop-cap-hit'),
+    ).toMatchObject({
+      payload: expect.objectContaining({
+        wpId: 'WP1',
+        pipelineRunId: 'pipeline-run-loop-cap',
+        wpRunId: expect.stringContaining(':wp:WP1:iter:1'),
+        cycleCount: 2,
+        maxCycles: 1,
+        diagnosis: 'edit-test-loop-cap-exceeded',
+      }),
+    });
+    expect(events.find((event) => event.kind === 'parallel-implement.wp-failed')).toMatchObject({
+      payload: expect.objectContaining({
+        wpId: 'WP1',
+        errorReason: 'edit-test-loop-cap-exceeded',
+      }),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-persisted')).toBe(false);
   });
 
   it('classifies push failure as persistence-failed', async () => {

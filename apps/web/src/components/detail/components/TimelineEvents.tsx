@@ -418,6 +418,7 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     case 'parallel-implement.wp-committed':
       return <ParallelWpCommittedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-failed':
+    case 'parallel-implement.wp-loop-cap-hit':
     case 'parallel-implement.wp-commit-failed':
       return <ParallelWpFailedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-timeout':

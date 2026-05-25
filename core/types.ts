@@ -151,6 +151,21 @@ export interface BudgetConfig {
       effort?: RuntimeEffort | null;
     }
   >;
+  implementWp?: {
+    editTestLoopMaxCycles?: number;
+    budgetSizing?: {
+      bug?: { maxTurns?: number; maxBudgetUsd?: number };
+      feature?: { maxTurns?: number; maxBudgetUsd?: number };
+      complex?: { maxTurns?: number; maxBudgetUsd?: number };
+      complexAdditions?: {
+        highPriorityUsd?: number;
+        manyFilesThreshold?: number;
+        manyFilesUsd?: number;
+        contractKeywords?: string[];
+        contractUsd?: number;
+      };
+    };
+  };
 }
 
 export interface GovernanceConfig {

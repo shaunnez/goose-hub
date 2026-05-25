@@ -15,6 +15,12 @@ export interface AgentBudgets {
   timeoutMs: number;
 }
 
+export interface BudgetExceededMetadata {
+  costUsd: number;
+  budgetUsd: number;
+  overByUsd: number;
+}
+
 // ─── Role spec (discriminated union for type-level holdout enforcement) ────────
 
 export type HoldoutRoleKind = 'qa' | 'reviewer';
@@ -36,6 +42,13 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
   toolBundles: string[];
   toolExtras: string[];
   budgets: AgentBudgets;
+  budgetPolicy?: {
+    /**
+     * Default is strict rejection. Workflows that can durably persist valid
+     * terminal output before stopping may opt into receiving the output.
+     */
+    onPostRunExceeded?: 'reject' | 'return-output';
+  };
   /** Runtime reasoning effort when the selected backend supports it. Unsupported runtimes ignore it. */
   effort?: RuntimeEffort;
   /** Persona identity for this run. Format: "<projectId>/<role>/<index>". Required. */
@@ -87,6 +100,7 @@ export interface AgentResult {
   output: unknown;
   decisionSummaries: DecisionSummary[];
   events: AgentEvent[];
+  budgetExceeded?: BudgetExceededMetadata;
 }
 
 export interface AgentRuntime {

@@ -60,6 +60,11 @@ import {
   recordWpIteration,
   runWithConcurrencyCap,
 } from './parallel-helpers.js';
+import {
+  type ImplementWpControlConfig,
+  resolveImplementWpBudget,
+  resolveImplementWpControl,
+} from './wp-budget.js';
 import { runOneWpBuilder } from './wp-builder.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -125,6 +130,7 @@ export interface ParallelImplementDeps {
     pr: ExistingPipelinePr;
     token?: string;
   }) => Promise<ExistingPipelinePr>;
+  implementWpControlOverride?: ImplementWpControlConfig;
 }
 
 function uniqueSorted(paths: string[]): string[] {
@@ -601,6 +607,8 @@ export async function runParallelImplementWorkflow(
   const maxParallel = globalSettings.maxParallelAgents ?? 3;
   const maxRetries = globalSettings.maxRetries ?? 2;
   const wpTimeoutMs = 900_000;
+  const implementWpControl =
+    deps.implementWpControlOverride ?? resolveImplementWpControl(projectConfig?.budgets);
   const devReviewCfg =
     deps.devReviewConfigOverride ??
     resolveDevReviewConfig(projectId, projectConfig?.agentConfig?.devReview);
@@ -832,13 +840,19 @@ export async function runParallelImplementWorkflow(
             wp,
             iteration,
             runId,
+            pipelineRunId,
             projectId,
             workItemId: workItem.id,
             workItem,
             scratchWorktreePath: scratchWorktrees.get(wp.id) ?? '/tmp/missing-scratch',
             stack,
             runtime,
-            budgets: implementWpBudget.budgets,
+            budgets: resolveImplementWpBudget({
+              defaultBudgets: implementWpBudget.budgets,
+              workItem,
+              wp,
+              budgetConfig: projectConfig?.budgets,
+            }),
             modelOverride: implementWpBudget.modelOverride,
             personaId,
             wpTimeoutMs,
@@ -851,6 +865,7 @@ export async function runParallelImplementWorkflow(
             acceptanceContract,
             verificationCommands,
             parentPrdContext,
+            implementWpControl,
           }),
         );
 
@@ -1091,6 +1106,39 @@ export async function runParallelImplementWorkflow(
           integrationHeadSha = pushedSha;
           recordFn(runId, wp.id, iteration, 'ok');
           allWpResults.push({ wpId: wp.id, status: 'ok', commitSha, runId: wpRunId });
+          if (buildResult.budgetExceeded != null) {
+            append({
+              projectId,
+              workItemId: workItem.id,
+              kind: 'agent.run-failed',
+              payload: {
+                runId,
+                skill: 'parallel-implement',
+                runDisposition: 'budget-killed',
+                reason: 'budget-exceeded-after-wp-persisted',
+                budgetKilledWpId: wp.id,
+                wpRunId,
+                costUsd: buildResult.budgetExceeded.costUsd,
+                budgetUsd: buildResult.budgetExceeded.budgetUsd,
+                overByUsd: buildResult.budgetExceeded.overByUsd,
+                integrationBranch,
+                persistedSha: pushedSha,
+              },
+              runId,
+            });
+            await stateSource.comment(
+              workItem.externalId,
+              buildAgentComment('Dev', 'Failed', 'Parallel implement stopped by budget', [
+                `${wp.id}: green work persisted at ${pushedSha}`,
+                `Cost $${buildResult.budgetExceeded.costUsd} exceeded budget $${buildResult.budgetExceeded.budgetUsd}`,
+              ]),
+            );
+            return {
+              status: 'failed',
+              devRunId: runId,
+              errorReason: `budget exceeded after persisted WP ${wp.id}`,
+            };
+          }
         }
       }
 

@@ -8,6 +8,7 @@ import type {
   AgentResult,
   AgentRuntime,
   AgentSpec,
+  BudgetExceededMetadata,
 } from '@goose-hub/core/agent-runtime/interface.js';
 import type { InvestigationContext } from '@goose-hub/core/agent-runtime/investigation-context.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
@@ -27,6 +28,7 @@ import type { ImplementWpOutput } from '@goose-hub/skills/implement-wp/schema.js
 import { type WorkPackage, fileOwnedPath } from '@goose-hub/skills/spec-author/schema.js';
 import type { PrdPlanningContext } from '../spec-author/prd-planning-context.js';
 import type { recordWpIteration } from './parallel-helpers.js';
+import type { ImplementWpControlConfig } from './wp-budget.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +41,7 @@ export type WpBuildPhaseResult =
       wpRunId: string;
       commitMsg: string;
       scratchWorktreePath: string;
+      budgetExceeded?: BudgetExceededMetadata;
     }
   | { status: 'failed' | 'timeout'; wpId: string; errorReason?: string; runId: string };
 
@@ -46,6 +49,7 @@ export interface RunOneWpBuilderOptions {
   wp: WorkPackage;
   iteration: number;
   runId: string;
+  pipelineRunId?: string;
   projectId: string;
   workItemId?: string;
   workItem: WorkItem;
@@ -65,6 +69,7 @@ export interface RunOneWpBuilderOptions {
   acceptanceContract?: AcceptanceContract;
   verificationCommands?: ExecutableCheck[];
   parentPrdContext?: PrdPlanningContext;
+  implementWpControl?: ImplementWpControlConfig;
 }
 
 type CodeSnippet = {
@@ -81,6 +86,74 @@ type NormalizedPathField = {
   source: RepoRelativePathNormalization['source'];
   ambiguous?: string[];
 };
+
+function toolCallName(event: AgentEvent): string | null {
+  if (event.kind !== 'agent.tool-call') return null;
+  const payload = event.payload as { tool_name?: unknown; toolName?: unknown };
+  const name = payload.tool_name ?? payload.toolName;
+  return typeof name === 'string' ? name : null;
+}
+
+function toolCallInput(event: AgentEvent): Record<string, unknown> {
+  const payload = event.payload as {
+    tool_input?: unknown;
+    toolInput?: unknown;
+  };
+  const input = payload.tool_input ?? payload.toolInput;
+  return input != null && typeof input === 'object' && !Array.isArray(input)
+    ? (input as Record<string, unknown>)
+    : {};
+}
+
+function isEditToolCall(event: AgentEvent): boolean {
+  const name = toolCallName(event)?.toLowerCase();
+  if (name == null) return false;
+  if (name.includes('edit') || name.includes('write')) return true;
+  const command = toolCallInput(event).command;
+  return typeof command === 'string' && /\b(apply_patch|cat|tee|sed -i)\b/.test(command);
+}
+
+function isVerificationToolCall(event: AgentEvent): boolean {
+  const name = toolCallName(event)?.toLowerCase();
+  if (name == null) return false;
+  if (name.includes('test') || name.includes('lint') || name.includes('typecheck')) return true;
+  const command = toolCallInput(event).command;
+  return (
+    typeof command === 'string' &&
+    /\b(test|vitest|lint|typecheck|tsc|biome|playwright)\b/.test(command)
+  );
+}
+
+function editTestLoopDiagnosis(input: {
+  events: AgentEvent[];
+  maxCycles: number;
+}): { cycleCount: number; recentToolCalls: Array<{ toolName: string; command?: string }> } | null {
+  let editedSinceVerification = false;
+  let cycleCount = 0;
+  const recentToolCalls: Array<{ toolName: string; command?: string }> = [];
+  for (const event of input.events) {
+    const toolName = toolCallName(event);
+    if (toolName == null) continue;
+    const command = toolCallInput(event).command;
+    recentToolCalls.push({
+      toolName,
+      ...(typeof command === 'string' ? { command: command.slice(0, 300) } : {}),
+    });
+    if (recentToolCalls.length > 8) recentToolCalls.shift();
+
+    if (isEditToolCall(event)) {
+      editedSinceVerification = true;
+      continue;
+    }
+    if (editedSinceVerification && isVerificationToolCall(event)) {
+      cycleCount += 1;
+      editedSinceVerification = false;
+    }
+  }
+
+  if (cycleCount <= input.maxCycles) return null;
+  return { cycleCount, recentToolCalls };
+}
 
 function normalizeWpFilesOwned(input: {
   wp: WorkPackage;
@@ -396,6 +469,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     toolBundles: ['dev-tools'],
     toolExtras: [],
     budgets: { ...opts.budgets, timeoutMs: opts.wpTimeoutMs },
+    budgetPolicy: { onPostRunExceeded: 'return-output' },
     modelOverride: opts.modelOverride,
     personaId: opts.personaId,
     outputJsonSchema: opts.implementWpJsonSchema,
@@ -458,6 +532,46 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned.map(fileOwnedPath));
     opts.recordIterationFn(runId, wp.id, iteration, 'failed', errorReason ?? 'unknown');
     return { status: 'failed', wpId: wp.id, errorReason: errorReason ?? 'unknown', runId: wpRunId };
+  }
+
+  const loopDiagnosis = editTestLoopDiagnosis({
+    events: result.events,
+    maxCycles: opts.implementWpControl?.editTestLoopMaxCycles ?? 3,
+  });
+  if (loopDiagnosis != null) {
+    opts.appendEvent({
+      projectId,
+      workItemId: workItemId ?? null,
+      kind: 'parallel-implement.wp-loop-cap-hit',
+      payload: {
+        schemaVersion: 1,
+        pipelineRunId: opts.pipelineRunId ?? runId,
+        devRunId: runId,
+        wpId: wp.id,
+        wpRunId,
+        iteration,
+        cycleCount: loopDiagnosis.cycleCount,
+        maxCycles: opts.implementWpControl?.editTestLoopMaxCycles ?? 3,
+        recentToolCalls: loopDiagnosis.recentToolCalls,
+        diagnosis: 'edit-test-loop-cap-exceeded',
+      },
+      runId: wpRunId,
+    });
+    opts.appendEvent({
+      projectId,
+      workItemId: workItemId ?? null,
+      kind: 'parallel-implement.wp-failed',
+      payload: { wpId: wp.id, wpRunId, errorReason: 'edit-test-loop-cap-exceeded' },
+      runId: wpRunId,
+    });
+    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned.map(fileOwnedPath));
+    opts.recordIterationFn(runId, wp.id, iteration, 'failed', 'edit-test-loop-cap-exceeded');
+    return {
+      status: 'failed',
+      wpId: wp.id,
+      errorReason: 'edit-test-loop-cap-exceeded',
+      runId: wpRunId,
+    };
   }
 
   const parsed = safeParseOutputForSchema(ImplementWpSchema, result.output);
@@ -529,5 +643,6 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     wpRunId,
     commitMsg,
     scratchWorktreePath: opts.scratchWorktreePath,
+    ...(result.budgetExceeded != null ? { budgetExceeded: result.budgetExceeded } : {}),
   };
 }

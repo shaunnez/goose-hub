@@ -125,6 +125,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'parallel-implement.wp-started': 'Work package started',
   'parallel-implement.wp-committed': 'Work package committed',
   'parallel-implement.wp-failed': 'Work package failed',
+  'parallel-implement.wp-loop-cap-hit': 'Work package loop cap hit',
   'parallel-implement.wp-timeout': 'Work package timed out',
   'parallel-implement.wp-commit-failed': 'Work package commit failed',
   'parallel-implement.exhausted': 'Parallel implement exhausted',

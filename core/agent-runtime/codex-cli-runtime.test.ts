@@ -1099,4 +1099,48 @@ describe('CodexCliRuntime timeout handling', () => {
       expect.objectContaining({ kind: 'agent.run-completed' }),
     );
   });
+
+  it('can return valid terminal output after post-run budget exceeded when policy opts in', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(
+      makeSpec({
+        skill: 'implement-wp',
+        budgetPolicy: { onPostRunExceeded: 'return-output' },
+        budgets: { maxTurns: 10, maxBudgetUsd: 0.5, timeoutMs: 5000 },
+      }),
+    );
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        JSON.stringify({
+          result: '{"wpId":"WP1","confidence":"high"}',
+          usage: { input_tokens: 100, output_tokens: 50 },
+          total_cost_usd: 0.75,
+        }),
+      ),
+    );
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({
+      output: { wpId: 'WP1', confidence: 'high' },
+      budgetExceeded: { costUsd: 0.75, budgetUsd: 0.5, overByUsd: 0.25 },
+    });
+
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.budget-exceeded' }),
+    );
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({ reason: 'budget-exceeded' }),
+      }),
+    );
+  });
 });
