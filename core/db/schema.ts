@@ -397,6 +397,8 @@ export const agentRunCosts = sqliteTable(
     modelId: text('model_id').notNull(),
     inputTokens: integer('input_tokens').notNull().default(0),
     outputTokens: integer('output_tokens').notNull().default(0),
+    cachedInputTokens: integer('cached_input_tokens').notNull().default(0),
+    reasoningOutputTokens: integer('reasoning_output_tokens').notNull().default(0),
     costUsd: real('cost_usd').notNull().default(0),
     costLabel: text('cost_label').notNull().default('estimated'), // estimated | exact
     personaId: text('persona_id'),

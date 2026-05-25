@@ -30,6 +30,8 @@ export interface WorkItemToolStatsRow extends AgentRunToolStatsRow {
   modelId: string;
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens: number;
+  reasoningOutputTokens: number;
   costUsd: number;
   costLabel: CostLabel;
   personaId: string | null;
@@ -50,6 +52,8 @@ export function recordCost(record: CostRecord): void {
       modelId: record.modelId,
       inputTokens: record.inputTokens,
       outputTokens: record.outputTokens,
+      cachedInputTokens: record.cachedInputTokens,
+      reasoningOutputTokens: record.reasoningOutputTokens,
       costUsd: record.costUsd,
       costLabel: record.costLabel,
       personaId: record.personaId,
@@ -112,6 +116,8 @@ export function listToolStatsForWorkItem(workItemId: string): WorkItemToolStatsR
       modelId: agentRunCosts.modelId,
       inputTokens: agentRunCosts.inputTokens,
       outputTokens: agentRunCosts.outputTokens,
+      cachedInputTokens: agentRunCosts.cachedInputTokens,
+      reasoningOutputTokens: agentRunCosts.reasoningOutputTokens,
       costUsd: agentRunCosts.costUsd,
       costLabel: agentRunCosts.costLabel,
       personaId: agentRunCosts.personaId,
@@ -130,6 +136,8 @@ export function listToolStatsForWorkItem(workItemId: string): WorkItemToolStatsR
     modelId: row.modelId,
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
+    cachedInputTokens: row.cachedInputTokens,
+    reasoningOutputTokens: row.reasoningOutputTokens,
     costUsd: row.costUsd,
     costLabel: row.costLabel as CostLabel,
     personaId: row.personaId,
@@ -221,6 +229,8 @@ function toRow(r: typeof agentRunCosts.$inferSelect): CostRow {
     modelId: r.modelId,
     inputTokens: r.inputTokens,
     outputTokens: r.outputTokens,
+    cachedInputTokens: r.cachedInputTokens,
+    reasoningOutputTokens: r.reasoningOutputTokens,
     costUsd: r.costUsd,
     costLabel: r.costLabel as CostLabel,
     personaId: r.personaId,

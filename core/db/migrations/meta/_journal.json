@@ -288,6 +288,13 @@
       "when": 1779529448689,
       "tag": "0040_wild_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1779667062306,
+      "tag": "0041_greedy_captain_flint",
+      "breakpoints": true
     }
   ]
 }
