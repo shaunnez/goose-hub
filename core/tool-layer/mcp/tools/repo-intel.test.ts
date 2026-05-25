@@ -379,6 +379,40 @@ describe('repoIntelQueryTool', () => {
     });
   });
 
+  it('audits not-found as ok with noMatches while invalid-args remains failed', async () => {
+    const notFoundCtx = makeCtx({ runId: 'repo-intel-audit-not-found' });
+    await repoIntelQueryTool(
+      notFoundCtx,
+      { intent: 'find-symbol', name: 'Missing' },
+      { lookupSymbol: vi.fn(() => []) },
+    );
+
+    const notFoundEvents = eventStore.replay({
+      runId: notFoundCtx.runId,
+      kind: 'agent.tool-call',
+    });
+    expect(notFoundEvents[0].payload).toMatchObject({
+      tool_name: 'repo_intel.query',
+      repo_intel_intent: 'find-symbol',
+      status: 'ok',
+      noMatches: true,
+    });
+
+    const invalidCtx = makeCtx({ runId: 'repo-intel-audit-invalid-still-failed' });
+    await repoIntelQueryTool(invalidCtx, { intent: 'find-symbol' } as unknown as RepoIntelQuery);
+
+    const invalidEvents = eventStore.replay({
+      runId: invalidCtx.runId,
+      kind: 'agent.tool-call',
+    });
+    expect(invalidEvents[0].payload).toMatchObject({
+      tool_name: 'repo_intel.query',
+      repo_intel_intent: 'find-symbol',
+      status: 'failed',
+      noMatches: false,
+    });
+  });
+
   it('audit event carries inputKeys including all provided fields', async () => {
     const ctx = makeCtx({ runId: 'repo-intel-audit-keys' });
     await repoIntelQueryTool(
