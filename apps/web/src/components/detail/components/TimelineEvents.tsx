@@ -243,6 +243,7 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     case 'coach.dispatch-failed':
     case 'workflow.smoke-failed':
     case 'agent.cancelled':
+    case 'agent.runtime-advisory':
     case 'spec.wp-issues-created':
     case 'merge-decision.completed':
     case 'audit.completed':
