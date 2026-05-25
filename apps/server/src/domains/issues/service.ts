@@ -167,7 +167,7 @@ function projectEngineeringSpec(record: NonNullable<ReturnType<typeof getEnginee
 }
 
 const TYPE_EXCLUDED_LEGAL_TARGETS: Readonly<Record<string, readonly StateName[]>> = {
-  bug: ['factory:grilling', 'factory:research-pending'],
+  bug: ['factory:framing', 'factory:grilling', 'factory:research-pending'],
   feature: ['factory:investigating', 'factory:research-pending'],
 };
 

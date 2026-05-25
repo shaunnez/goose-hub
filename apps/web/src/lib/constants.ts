@@ -5,6 +5,7 @@ export const STATE_LABEL: Record<string, string> = {
   'factory:triaging': 'triaging',
   'factory:accepted': 'accepted',
   'factory:rejected': 'rejected',
+  'factory:framing': 'framing',
   'factory:grilling': 'grilling',
   'factory:prd-drafting': 'prd-drafting',
   'factory:prd-review': 'prd-review',

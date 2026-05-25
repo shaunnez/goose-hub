@@ -13,6 +13,7 @@ import { logger } from '@goose-hub/core/logger.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
 import { targetStateForTriage } from '@goose-hub/core/workflows/triage-routing.js';
+import { type VaguenessScore, scoreVagueness } from '@goose-hub/core/workflows/vagueness-gate.js';
 import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
 import { TriageOutputSchema } from '@goose-hub/skills/triage/schema.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
@@ -50,6 +51,35 @@ function readReposContext(slug: string): string {
   } catch {
     return '';
   }
+}
+
+const VAGUENESS_LABELS = ['vague:high', 'vague:low'] as const;
+const MISSING_LABELS = ['missing:repro', 'missing:criteria'] as const;
+
+async function syncVaguenessLabels(input: {
+  source: StateSource;
+  itemId: string;
+  currentLabels: readonly string[];
+  vagueness: VaguenessScore;
+}): Promise<string[]> {
+  const desired = new Set<string>([
+    `vague:${input.vagueness.tier}`,
+    ...input.vagueness.missingDimensions.map((dimension) => `missing:${dimension}`),
+  ]);
+  const managedLabels = new Set<string>([...VAGUENESS_LABELS, ...MISSING_LABELS]);
+
+  for (const label of input.currentLabels) {
+    if (managedLabels.has(label) && !desired.has(label)) {
+      await input.source.removeLabel(input.itemId, label);
+    }
+  }
+
+  const labelsToAdd = [...desired].filter((label) => !input.currentLabels.includes(label));
+  if (labelsToAdd.length > 0) {
+    await input.source.addLabels(input.itemId, labelsToAdd);
+  }
+
+  return [...input.currentLabels.filter((label) => !managedLabels.has(label)), ...desired];
 }
 
 export async function runTriageBatch(slug: string, source?: StateSource): Promise<void> {
@@ -293,6 +323,13 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       'priority',
       mapPriority(triageOutput.priority),
     );
+    const vagueness = scoreVagueness({ ...item, type: triageOutput.type });
+    const routingLabels = await syncVaguenessLabels({
+      source: stateSource,
+      itemId: item.externalId,
+      currentLabels: itemLabels,
+      vagueness,
+    });
 
     // Post comment
     const comment = buildTriageComment(
@@ -322,7 +359,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       runId,
     });
 
-    const finalState = targetStateForTriage(triageOutput.type, itemLabels);
+    const finalState = targetStateForTriage(triageOutput.type, routingLabels);
     await stateSource.transitionState(item.externalId, 'factory:accepted', finalState);
     emitStateTransitionEvent({
       projectId,

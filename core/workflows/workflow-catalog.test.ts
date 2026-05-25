@@ -59,11 +59,15 @@ describe('workflow catalog', () => {
     expect(targetStateForTriage('bug')).toBe('factory:investigating');
     expect(targetStateForTriage('research')).toBe('factory:research-pending');
     expect(targetStateForTriage('feature')).toBe('factory:grilling');
+    expect(targetStateForTriage('feature', ['vague:high'])).toBe('factory:framing');
     expect(targetStateForTriage('chore')).toBe('factory:dev-ready');
 
     expect(hasEdge(byKind('bug'), 'accepted', targetStateForTriage('bug'))).toBe(true);
     expect(hasEdge(byKind('research'), 'accepted', targetStateForTriage('research'))).toBe(true);
     expect(hasEdge(byKind('feature'), 'accepted', targetStateForTriage('feature'))).toBe(true);
+    expect(
+      hasEdge(byKind('feature'), 'accepted', targetStateForTriage('feature', ['vague:high'])),
+    ).toBe(true);
     expect(hasEdge(byKind('chore'), 'accepted', targetStateForTriage('chore'))).toBe(true);
     expect(targetStateForTriage('feature', ['factory:from-prd'])).toBe('factory:dev-ready');
   });

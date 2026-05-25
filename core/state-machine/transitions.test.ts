@@ -13,6 +13,10 @@ describe('isLegalTransition — section 9.1 happy paths', () => {
   // feature path
   it('accepted → grilling', () =>
     expect(isLegalTransition('factory:accepted', 'factory:grilling')).toBe(true));
+  it('accepted → framing', () =>
+    expect(isLegalTransition('factory:accepted', 'factory:framing')).toBe(true));
+  it('framing has no concrete outbound workflow route yet', () =>
+    expect(legalTargets('factory:framing')).toStrictEqual(['factory:archived']));
   it('grilling → prd-drafting', () =>
     expect(isLegalTransition('factory:grilling', 'factory:prd-drafting')).toBe(true));
   it('prd-drafting → prd-review', () =>
@@ -163,8 +167,7 @@ describe('legalTargets', () => {
       'factory:archived',
     ]));
 
-  it('accepted yields five targets', () =>
-    expect(legalTargets('factory:accepted')).toHaveLength(5));
+  it('accepted yields six targets', () => expect(legalTargets('factory:accepted')).toHaveLength(6));
 
   it('dev-ready yields spec-ready, in-progress, needs-human, and archived', () =>
     expect(legalTargets('factory:dev-ready')).toStrictEqual([
