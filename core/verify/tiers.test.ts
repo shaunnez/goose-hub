@@ -91,6 +91,24 @@ describe('Tier 1 (Structural) — golden test', () => {
     expect(result.passed).toBe(true);
   });
 
+  it('fails when a descriptive interface contract file is missing', () => {
+    const spec = makeSpec({
+      workPackages: [makeWp('WP1', ['src/index.ts'])],
+      interfaceContracts: [
+        {
+          name: 'Verification adapter boundary',
+          signature: 'export function runVerification(): void',
+          file: 'src/missing-contract.ts',
+        },
+      ],
+    });
+
+    const result = verifyStructural(spec, '', worktree);
+
+    expect(result.passed).toBe(false);
+    expect(result.findings.some((f) => f.message.includes('missing-contract.ts'))).toBe(true);
+  });
+
   it('fails when a required export is absent from its contract file', () => {
     const spec = makeSpec({
       workPackages: [makeWp('WP1', ['src/index.ts'])],

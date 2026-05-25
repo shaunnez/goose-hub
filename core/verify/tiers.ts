@@ -94,14 +94,27 @@ export function verifyStructural(
 
   for (const contract of spec.interfaceContracts) {
     const requiredExports = contract.requiredExports ?? [];
+    const contractFullPath = join(worktreePath, contract.file);
+    const contractFileExists = existsSync(contractFullPath);
+    if (!contractFileExists) {
+      findings.push({
+        message: `Interface contract '${contract.name}': file ${contract.file} does not exist`,
+        file: contract.file,
+        severity: 'error',
+      });
+    }
+
     if (requiredExports.length === 0) {
-      evidence.push(`interface-contract-described: ${contract.name} in ${contract.file}`);
+      if (contractFileExists) {
+        evidence.push(`interface-contract-described: ${contract.name} in ${contract.file}`);
+      }
       continue;
     }
 
     for (const requiredExport of requiredExports) {
       const exportFile = requiredExport.file ?? contract.file;
       const fullPath = join(worktreePath, exportFile);
+      if (exportFile === contract.file && !contractFileExists) continue;
       if (!existsSync(fullPath)) {
         findings.push({
           message: `Interface contract '${contract.name}': file ${exportFile} does not exist`,

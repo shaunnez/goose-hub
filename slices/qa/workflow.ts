@@ -98,6 +98,32 @@ async function verifiedFollowUpRefsForQaOutput(
   return refs;
 }
 
+function isVerifiedFollowUp(
+  finding: QaOutput['findings'][number],
+  verifiedRefs: ReadonlySet<string>,
+) {
+  const localId = localIssueRef(finding.dispositionRef);
+  return localId != null && verifiedRefs.has(`#${localId}`);
+}
+
+function isNonBlockingQaFinding(
+  finding: QaOutput['findings'][number],
+  verifiedFollowUpRefs: ReadonlySet<string>,
+): boolean {
+  if (finding.disposition === 'out-of-scope' || finding.disposition === 'fixed') return true;
+  return finding.disposition === 'follow-up' && isVerifiedFollowUp(finding, verifiedFollowUpRefs);
+}
+
+function failVerdictHasOnlyNonBlockingFindings(
+  qaOutput: QaOutput,
+  verifiedFollowUpRefs: ReadonlySet<string>,
+): boolean {
+  return (
+    qaOutput.findings.length > 0 &&
+    qaOutput.findings.every((finding) => isNonBlockingQaFinding(finding, verifiedFollowUpRefs))
+  );
+}
+
 function classifyVerificationInfrastructureFailure(
   result: TierResult | null,
 ): { reason: string; findings: string[] } | null {
@@ -163,6 +189,12 @@ function vitestEvidenceArtifact(
           );
     const suiteMatched = expectation.suite == null || suites.length > 0;
     const testMatched = expectation.testName == null || matchedTests.length > 0;
+    const suiteStatusMatched =
+      expectation.testName != null
+        ? true
+        : expectation.suite == null
+          ? testRun.success
+          : suites.some((suite) => suite.status === expectation.expectedStatus);
     return {
       type: 'vitest-json',
       summary: {
@@ -173,7 +205,7 @@ function vitestEvidenceArtifact(
       },
       matchedSuites: suites.map((suite) => suite.name),
       matchedTests,
-      artifactStatus: suiteMatched && testMatched ? 'matched' : 'not-found',
+      artifactStatus: suiteMatched && testMatched && suiteStatusMatched ? 'matched' : 'not-found',
     };
   } catch {
     return {
@@ -803,7 +835,8 @@ export async function runQaWorkflow(
     const passes =
       actionableQaItems.length === 0 &&
       (verdict === 'pass' ||
-        verdict === 'fail' ||
+        (verdict === 'fail' &&
+          failVerdictHasOnlyNonBlockingFindings(qaOutput, verifiedFollowUpRefs)) ||
         (verdict === 'partial' && qaOutput.overallScore >= qaOutput.threshold));
 
     let nextState: StateName;

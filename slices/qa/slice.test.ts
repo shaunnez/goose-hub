@@ -943,6 +943,30 @@ describe('runQaWorkflow', () => {
         'factory:needs-review',
       );
     });
+
+    it('keeps fail verdicts without non-blocking findings in factory:qa-failed', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce({
+        ...makePassResult(),
+        output: {
+          ...(makePassResult().output as Record<string, unknown>),
+          verdict: 'fail',
+          overallScore: 20,
+          threshold: 70,
+          findings: [],
+        },
+      });
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:qa-failed',
+      );
+    });
   });
 
   describe('error path', () => {
@@ -1385,7 +1409,7 @@ describe('runQaWorkflow', () => {
       });
     });
 
-    it('matches executable check output expectations against full output while storing a bounded tail', async () => {
+    it('preserves deprecated output expectations without enforcing them', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
       const worktree = mkdtempSync(join(tmpdir(), 'qa-executable-checks-output-'));
@@ -1427,6 +1451,84 @@ describe('runQaWorkflow', () => {
         expect(result?.passed).toBe(true);
         expect(result?.actual).toHaveLength(4000);
         expect(result?.actual).not.toContain('needle');
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
+    });
+
+    it('fails suite-only Vitest evidence checks when the matched suite did not pass', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const worktree = mkdtempSync(join(tmpdir(), 'qa-executable-checks-vitest-'));
+      const report = {
+        numTotalTests: 1,
+        numPassedTests: 0,
+        numFailedTests: 1,
+        success: false,
+        testResults: [
+          {
+            name: 'src/failing.test.ts',
+            status: 'failed',
+            assertionResults: [{ title: 'breaks', status: 'failed', duration: 1 }],
+          },
+        ],
+      };
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: {
+            worktreePath: worktree,
+            pipelineRunId: 'pipeline-run-vitest-evidence',
+          },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          executableChecks: [
+            {
+              criterionId: 'AC-1',
+              checkId: 'AC-1-check-1',
+              ac: 'Vitest suite must pass',
+              command: `node -e 'process.stdout.write(${JSON.stringify(JSON.stringify(report))})'`,
+              expectedExitCodes: [0],
+              evidenceExpectation: {
+                type: 'vitest-json',
+                suite: 'failing.test.ts',
+                expectedStatus: 'passed',
+              },
+            },
+          ],
+        });
+
+        const completed = vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.find(([event]) => event.kind === 'qa.completed');
+        const result = (
+          completed?.[0].payload as {
+            criteriaResults?: Array<{
+              passed: boolean;
+              evidenceArtifact?: { artifactStatus: string; matchedSuites: string[] };
+            }>;
+          }
+        ).criteriaResults?.[0];
+        expect(result).toMatchObject({
+          passed: false,
+          evidenceArtifact: {
+            artifactStatus: 'not-found',
+            matchedSuites: ['failing.test.ts'],
+          },
+        });
+        expect(source.transitionState).toHaveBeenCalledWith(
+          '42',
+          'factory:needs-qa',
+          'factory:qa-failed',
+        );
       } finally {
         rmSync(worktree, { recursive: true, force: true });
       }
