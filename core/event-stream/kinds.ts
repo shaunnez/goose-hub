@@ -96,6 +96,7 @@ export const EVENT_KINDS = [
   'parallel-implement.iteration-started',
   'parallel-implement.wp-started',
   'parallel-implement.wp-committed',
+  'parallel-implement.wp-persisted',
   'parallel-implement.wp-failed',
   'parallel-implement.wp-timeout',
   'parallel-implement.wp-commit-failed',

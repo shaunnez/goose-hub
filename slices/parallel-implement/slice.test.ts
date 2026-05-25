@@ -691,6 +691,7 @@ describe('parallel-implement repo-relative path normalization', () => {
     const spec = makeSpec([makeWp('WP1', ['apps/web/src/foo.ts'])]);
     const { fn: appendEvent, events } = makeAppendEvent();
     const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+    let runtimeCalls = 0;
 
     try {
       const result = await runParallelImplementWorkflow(
@@ -703,6 +704,7 @@ describe('parallel-implement repo-relative path normalization', () => {
         {
           runtime: makeRuntime({
             WP1: async () => {
+              runtimeCalls++;
               const output = makeOkResult('WP1').output as ImplementWpOutput;
               return {
                 output: {
@@ -738,6 +740,7 @@ describe('parallel-implement repo-relative path normalization', () => {
       );
 
       expect(result.status).toBe('failed');
+      expect(runtimeCalls).toBe(1);
       const mismatch = events.find((event) => event.kind === 'agent.output-fact-mismatch');
       expect(mismatch?.payload).toMatchObject({
         skill: 'implement-wp',
@@ -1061,6 +1064,374 @@ describe('parallel-implement concurrency: 3 fake builders on disjoint files', ()
 
     // No failures
     expect(iterations.some((i) => i.status === 'failed')).toBe(false);
+  });
+});
+
+describe('parallel-implement durable integration branch persistence', () => {
+  it('pushes and verifies each WP commit before emitting wp-persisted and opening PR without repush', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const iterations: Array<{ wpId: string; status: string }> = [];
+    const pushes: Array<{ worktreePath: string; branchName: string }> = [];
+    const openPrCalls: Array<{ branchName: string; skipPush?: boolean }> = [];
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem(),
+      spec,
+      'pipeline-run-123',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        createIntegrationWorktreeImpl: () => ({
+          worktreePath: '/tmp/issue-wt',
+          previousHeadSha: 'base-sha',
+        }),
+        createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha-wp1',
+        pushBranchImpl: (worktreePath, branchName) => {
+          pushes.push({ worktreePath, branchName });
+        },
+        resolveRemoteBranchHeadImpl: () => 'sha-wp1',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: (_runId, wpId, _iteration, status) => {
+          iterations.push({ wpId, status });
+        },
+        getLastStatusImpl: (_runId, wpId) => {
+          const last = [...iterations].reverse().find((i) => i.wpId === wpId);
+          return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+        },
+        openPRImpl: async (input) => {
+          openPrCalls.push({ branchName: input.branchName, skipPush: input.skipPush });
+          return {
+            prNumber: 1,
+            prUrl: 'https://gh/pr/1',
+            branch: input.branchName,
+            base: input.baseBranch ?? 'main',
+          };
+        },
+        appendEvent,
+      },
+    );
+
+    expect(result.status).toBe('success');
+    expect(pushes).toEqual([
+      { worktreePath: '/tmp/issue-wt', branchName: 'factory/run/pipeline-run-123' },
+    ]);
+    expect(openPrCalls).toEqual([{ branchName: 'factory/run/pipeline-run-123', skipPush: true }]);
+
+    const persisted = events.find((event) => event.kind === 'parallel-implement.wp-persisted');
+    expect(persisted?.payload).toMatchObject({
+      schemaVersion: 1,
+      pipelineRunId: 'pipeline-run-123',
+      wpId: 'WP1',
+      integrationBranch: 'factory/run/pipeline-run-123',
+      baseBranch: 'main',
+      previousHeadSha: 'base-sha',
+      wpCommitSha: 'sha-wp1',
+      pushedSha: 'sha-wp1',
+      filesPersisted: [],
+      persistMode: 'direct-integration-commit',
+    });
+    expect(events.find((event) => event.kind === 'agent.run-completed')?.payload).toMatchObject({
+      skill: 'parallel-implement',
+      runDisposition: 'completed',
+    });
+  });
+
+  it('skips already persisted WPs on resume and continues with the first unpersisted WP', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const wp2 = makeWp('WP2', ['core/b.ts']);
+    const spec = makeSpec([wp1, wp2]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const startedWpIds: string[] = [];
+    const iterations: Array<{ wpId: string; status: string }> = [];
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem(),
+      spec,
+      'pipeline-run-resume',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({
+          WP2: async () => makeOkResult('WP2'),
+        }),
+        replayEventsImpl: () => [
+          {
+            id: 1,
+            projectId: 'goose-hub-self',
+            workItemId: 'wi-560',
+            kind: 'parallel-implement.wp-persisted',
+            payload: {
+              schemaVersion: 1,
+              pipelineRunId: 'pipeline-run-resume',
+              devRunId: 'old-dev-run',
+              wpId: 'WP1',
+              wpRunId: 'old-dev-run:wp:WP1:iter:1',
+              iteration: 1,
+              integrationBranch: 'factory/run/pipeline-run-resume',
+              baseBranch: 'main',
+              previousHeadSha: 'base-sha',
+              wpCommitSha: 'sha-wp1',
+              pushedSha: 'sha-wp1',
+              filesPersisted: ['core/a.ts'],
+              persistMode: 'direct-integration-commit',
+            },
+            runId: 'old-dev-run:wp:WP1:iter:1',
+            createdAt: new Date().toISOString(),
+          } as AgentEvent,
+        ],
+        createIntegrationWorktreeImpl: () => ({
+          worktreePath: '/tmp/issue-wt',
+          previousHeadSha: 'sha-wp1',
+        }),
+        createWpWorktreeImpl: (_repo, _runId, wpId) => {
+          startedWpIds.push(wpId);
+          return `/tmp/wp-${wpId}`;
+        },
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha-wp2',
+        pushBranchImpl: () => undefined,
+        resolveRemoteBranchHeadImpl: () => 'sha-wp2',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: (_runId, wpId, _iteration, status) => {
+          iterations.push({ wpId, status });
+        },
+        getLastStatusImpl: (_runId, wpId) => {
+          const last = [...iterations].reverse().find((i) => i.wpId === wpId);
+          return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+        },
+        openPRImpl: async (input) => ({
+          prNumber: 2,
+          prUrl: 'https://gh/pr/2',
+          branch: input.branchName,
+          base: input.baseBranch ?? 'main',
+        }),
+        appendEvent,
+      },
+    );
+
+    expect(result.status).toBe('success');
+    expect(startedWpIds).toEqual(['WP2']);
+    expect(
+      events.find((event) => event.kind === 'parallel-implement.wp-started')?.payload,
+    ).toMatchObject({
+      wpId: 'WP2',
+    });
+    expect(
+      events.some(
+        (event) =>
+          event.kind === 'parallel-implement.wp-started' &&
+          (event.payload as { wpId?: string }).wpId === 'WP1',
+      ),
+    ).toBe(false);
+  });
+
+  it('creates dependent WP scratch worktrees from the latest persisted integration tip', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const wp2 = { ...makeWp('WP2', ['core/b.ts']), dependsOn: ['WP1'] };
+    const spec = {
+      ...makeSpec([wp1, wp2]),
+      executionOrder: [
+        { batch: 0, wpIds: ['WP1'] },
+        { batch: 1, wpIds: ['WP2'] },
+      ],
+    };
+    const { fn: appendEvent } = makeAppendEvent();
+    const scratchBases: Array<{ wpId: string; baseRef?: string }> = [];
+    const iterations: Array<{ wpId: string; status: string }> = [];
+    const commitShas = ['sha-wp1', 'sha-wp2'];
+    const remoteHeads = ['sha-wp1', 'sha-wp2'];
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem(),
+      spec,
+      'pipeline-run-deps',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({
+          WP1: async () => makeOkResult('WP1'),
+          WP2: async () => makeOkResult('WP2'),
+        }),
+        resolveWorkflowBaseImpl: () => ({
+          branch: 'main',
+          ref: 'origin/main',
+          source: 'configured-default',
+        }),
+        createIntegrationWorktreeImpl: () => ({
+          worktreePath: '/tmp/issue-wt',
+          previousHeadSha: 'base-sha',
+        }),
+        createWpWorktreeImpl: (_repo, _runId, wpId, baseRef) => {
+          scratchBases.push({ wpId, baseRef });
+          return `/tmp/wp-${wpId}`;
+        },
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => commitShas.shift() ?? 'unexpected-sha',
+        pushBranchImpl: () => undefined,
+        resolveRemoteBranchHeadImpl: () => remoteHeads.shift() ?? 'unexpected-sha',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: (_runId, wpId, _iteration, status) => {
+          iterations.push({ wpId, status });
+        },
+        getLastStatusImpl: (_runId, wpId) => {
+          const last = [...iterations].reverse().find((i) => i.wpId === wpId);
+          return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+        },
+        openPRImpl: async (input) => ({
+          prNumber: 3,
+          prUrl: 'https://gh/pr/3',
+          branch: input.branchName,
+          base: input.baseBranch ?? 'main',
+        }),
+        appendEvent,
+      },
+    );
+
+    expect(result.status).toBe('success');
+    expect(scratchBases).toEqual([
+      { wpId: 'WP1', baseRef: 'base-sha' },
+      { wpId: 'WP2', baseRef: 'sha-wp1' },
+    ]);
+  });
+
+  it('hard-stops with persistence-failed when remote branch verification mismatches', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const iterations: Array<{ wpId: string; status: string }> = [];
+    const openPRImpl = vi.fn();
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem(),
+      spec,
+      'pipeline-run-mismatch',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        createIntegrationWorktreeImpl: () => ({
+          worktreePath: '/tmp/issue-wt',
+          previousHeadSha: 'base-sha',
+        }),
+        createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha-local',
+        pushBranchImpl: () => undefined,
+        resolveRemoteBranchHeadImpl: () => 'sha-remote',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: (_runId, wpId, _iteration, status) => {
+          iterations.push({ wpId, status });
+        },
+        getLastStatusImpl: (_runId, wpId) => {
+          const last = [...iterations].reverse().find((i) => i.wpId === wpId);
+          return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+        },
+        openPRImpl,
+        appendEvent,
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    expect(openPRImpl).not.toHaveBeenCalled();
+    const runFailed = events.find((event) => event.kind === 'agent.run-failed');
+    expect(runFailed?.payload).toMatchObject({
+      skill: 'parallel-implement',
+      runDisposition: 'persistence-failed',
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-persisted')).toBe(false);
+  });
+
+  it('does not duplicate an existing PR when resume finds all WPs persisted', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent } = makeAppendEvent();
+    const openPRImpl = vi.fn();
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem(),
+      spec,
+      'pipeline-run-existing-pr',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({}),
+        replayEventsImpl: () => [
+          {
+            id: 1,
+            projectId: 'goose-hub-self',
+            workItemId: 'wi-560',
+            kind: 'parallel-implement.wp-persisted',
+            payload: {
+              schemaVersion: 1,
+              pipelineRunId: 'pipeline-run-existing-pr',
+              devRunId: 'old-dev-run',
+              wpId: 'WP1',
+              wpRunId: 'old-dev-run:wp:WP1:iter:1',
+              iteration: 1,
+              integrationBranch: 'factory/run/pipeline-run-existing-pr',
+              baseBranch: 'main',
+              previousHeadSha: 'base-sha',
+              wpCommitSha: 'sha-wp1',
+              pushedSha: 'sha-wp1',
+              filesPersisted: ['core/a.ts'],
+              persistMode: 'direct-integration-commit',
+            },
+            runId: 'old-dev-run:wp:WP1:iter:1',
+            createdAt: new Date().toISOString(),
+          } as AgentEvent,
+          {
+            id: 2,
+            projectId: 'goose-hub-self',
+            workItemId: 'wi-560',
+            kind: 'pr.opened',
+            payload: {
+              pipelineRunId: 'pipeline-run-existing-pr',
+              prNumber: 44,
+              prUrl: 'https://gh/pr/44',
+              branch: 'factory/run/pipeline-run-existing-pr',
+              baseBranch: 'main',
+              worktreePath: '/tmp/issue-wt',
+              devRunId: 'old-dev-run',
+            },
+            runId: 'old-dev-run',
+            createdAt: new Date().toISOString(),
+          } as AgentEvent,
+        ],
+        createIntegrationWorktreeImpl: () => ({
+          worktreePath: '/tmp/issue-wt',
+          previousHeadSha: 'sha-wp1',
+        }),
+        createWpWorktreeImpl: () => {
+          throw new Error('no WP scratch worktrees should be created');
+        },
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        openPRImpl,
+        appendEvent,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: 'success',
+      prNumber: 44,
+      prUrl: 'https://gh/pr/44',
+      worktreePath: '/tmp/issue-wt',
+    });
+    expect(openPRImpl).not.toHaveBeenCalled();
   });
 });
 

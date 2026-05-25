@@ -80,6 +80,24 @@ describe('openPR (#184)', () => {
     expect(sent.base).toBe('develop');
   });
 
+  it('can open a PR without pushing when the branch was already verified', async () => {
+    const gitExec = vi.fn().mockReturnValue('');
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ number: 2, html_url: 'https://example/2' }), { status: 201 }),
+      ) as unknown as typeof fetch;
+
+    await openPR({ ...baseInput, skipPush: true, gitExec, fetchImpl });
+
+    expect(gitExec).not.toHaveBeenCalled();
+    const sent = JSON.parse(
+      ((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit)
+        .body as string,
+    ) as Record<string, unknown>;
+    expect(sent.head).toBe('factory/run-abc');
+  });
+
   it('rejects empty title', async () => {
     await expect(openPR({ ...baseInput, title: '', gitExec: () => '' })).rejects.toThrow(
       /title must be 1–70 chars/,

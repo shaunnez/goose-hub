@@ -36,10 +36,13 @@ import {
   createWpScratchWorktree,
   orchestratorCommitAll,
   orchestratorCommitWp,
+  orchestratorPushBranch,
+  resolveRemoteBranchHead,
   revertWpChanges,
 } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import {
   type cleanupWorktree,
+  createIntegrationWorktree,
   createWorktree,
   prewarmWorktree,
   resolveWorkflowBase,
@@ -77,9 +80,12 @@ export interface ParallelImplementDeps {
   /** Override dependency prewarm for tests or alternate package managers. */
   prewarmWorktreeImpl?: typeof prewarmWorktree;
   resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
+  createIntegrationWorktreeImpl?: typeof createIntegrationWorktree;
   cleanupWpWorktreesImpl?: typeof cleanupAllWpWorktrees;
   cleanupIssueWorktreeImpl?: typeof cleanupWorktree;
   orchestratorCommitWpImpl?: typeof orchestratorCommitWp;
+  pushBranchImpl?: typeof orchestratorPushBranch;
+  resolveRemoteBranchHeadImpl?: typeof resolveRemoteBranchHead;
   revertWpChangesImpl?: typeof revertWpChanges;
   recordIterationImpl?: typeof recordWpIteration;
   getLastStatusImpl?: typeof getLastWpStatus;
@@ -98,6 +104,8 @@ export interface ParallelImplementDeps {
   selectPersonaImpl?: typeof selectPersona;
   /** Override observed changed-file derivation for tests. */
   deriveObservedChangedFilesImpl?: typeof deriveObservedChangedFiles;
+  /** Override event replay for resume tests. */
+  replayEventsImpl?: typeof eventStore.replay;
 }
 
 function uniqueSorted(paths: string[]): string[] {
@@ -222,6 +230,93 @@ function applyObservedFileToIssueWorktree(input: {
   copyFileSync(sourcePath, destPath);
 }
 
+type PersistedWpCheckpoint = {
+  wpId: string;
+  wpRunId: string;
+  iteration: number;
+  integrationBranch: string;
+  wpCommitSha: string;
+  pushedSha: string;
+  filesPersisted: string[];
+};
+
+type ExistingPipelinePr = {
+  prNumber: number;
+  prUrl: string;
+  branch: string;
+  base: string;
+  worktreePath?: string;
+};
+
+function persistedWpCheckpoints(input: {
+  events: AgentEvent[];
+  pipelineRunId: string;
+  integrationBranch: string;
+}): Map<string, PersistedWpCheckpoint> {
+  const checkpoints = new Map<string, PersistedWpCheckpoint>();
+  for (const event of input.events) {
+    if (event.kind !== 'parallel-implement.wp-persisted') continue;
+    const payload = event.payload as Partial<PersistedWpCheckpoint> & {
+      pipelineRunId?: string;
+      persistMode?: string;
+    };
+    if (payload.pipelineRunId !== input.pipelineRunId) continue;
+    if (payload.integrationBranch !== input.integrationBranch) continue;
+    if (
+      typeof payload.wpId !== 'string' ||
+      typeof payload.wpRunId !== 'string' ||
+      typeof payload.iteration !== 'number' ||
+      typeof payload.wpCommitSha !== 'string' ||
+      typeof payload.pushedSha !== 'string'
+    ) {
+      continue;
+    }
+    checkpoints.set(payload.wpId, {
+      wpId: payload.wpId,
+      wpRunId: payload.wpRunId,
+      iteration: payload.iteration,
+      integrationBranch: payload.integrationBranch,
+      wpCommitSha: payload.wpCommitSha,
+      pushedSha: payload.pushedSha,
+      filesPersisted: Array.isArray(payload.filesPersisted)
+        ? payload.filesPersisted.filter((file): file is string => typeof file === 'string')
+        : [],
+    });
+  }
+  return checkpoints;
+}
+
+function latestPipelinePr(input: {
+  events: AgentEvent[];
+  pipelineRunId: string;
+  integrationBranch: string;
+}): ExistingPipelinePr | null {
+  for (const event of [...input.events].reverse()) {
+    if (event.kind !== 'pr.opened') continue;
+    const payload = event.payload as Partial<ExistingPipelinePr> & {
+      pipelineRunId?: string;
+      baseBranch?: string;
+    };
+    if (payload.pipelineRunId !== input.pipelineRunId) continue;
+    if (payload.branch !== input.integrationBranch) continue;
+    if (
+      typeof payload.prNumber !== 'number' ||
+      typeof payload.prUrl !== 'string' ||
+      typeof payload.branch !== 'string'
+    ) {
+      continue;
+    }
+    return {
+      prNumber: payload.prNumber,
+      prUrl: payload.prUrl,
+      branch: payload.branch,
+      base: typeof payload.base === 'string' ? payload.base : (payload.baseBranch ?? 'main'),
+      worktreePath: typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined,
+    };
+  }
+  return null;
+}
+
 // ─── Main workflow ─────────────────────────────────────────────────────────────
 
 export async function runParallelImplementWorkflow(
@@ -245,6 +340,17 @@ export async function runParallelImplementWorkflow(
   const openPRFn = deps.openPRImpl ?? openPR;
   const createWpFn = deps.createWpWorktreeImpl ?? createWpScratchWorktree;
   const createIssueFn = deps.createIssueWorktreeImpl ?? createWorktree;
+  const createIntegrationFn =
+    deps.createIntegrationWorktreeImpl ??
+    ((repo: string, pipelineId: string, _branchName: string, baseRef?: string) => {
+      if (deps.createIssueWorktreeImpl != null) {
+        return {
+          worktreePath: createIssueFn(repo, pipelineId, baseRef),
+          previousHeadSha: null,
+        };
+      }
+      return createIntegrationWorktree(repo, pipelineId, _branchName, baseRef);
+    });
   const prewarmWtFn =
     deps.prewarmWorktreeImpl ??
     (deps.createIssueWorktreeImpl == null && deps.createWpWorktreeImpl == null
@@ -255,11 +361,20 @@ export async function runParallelImplementWorkflow(
   // cleanupIssueWorktreeImpl is available for test injection but unused in production:
   // the integration worktree persists until PR merge so QA can reuse the same environment.
   const commitWpFn = deps.orchestratorCommitWpImpl ?? orchestratorCommitWp;
+  const pushBranchFn =
+    deps.pushBranchImpl ??
+    (deps.createIssueWorktreeImpl == null ? orchestratorPushBranch : () => undefined);
+  const resolveRemoteBranchHeadFn =
+    deps.resolveRemoteBranchHeadImpl ??
+    (deps.createIssueWorktreeImpl == null
+      ? resolveRemoteBranchHead
+      : (_worktreePath: string, _branchName: string) => undefined);
   const revertFn = deps.revertWpChangesImpl ?? revertWpChanges;
   const recordFn = deps.recordIterationImpl ?? recordWpIteration;
   const getStatusFn = deps.getLastStatusImpl ?? getLastWpStatus;
   const deriveObservedChangedFilesFn =
     deps.deriveObservedChangedFilesImpl ?? deriveObservedChangedFiles;
+  const replayEventsFn = deps.replayEventsImpl ?? ((filter) => eventStore.replay(filter));
 
   const projectConfig = await getProjectBySlug(projectId);
   const workflowBase = resolveWorkflowBaseFn(targetRepo, projectConfig?.targetRepo?.defaultBranch);
@@ -356,6 +471,22 @@ export async function runParallelImplementWorkflow(
   const allWpIds = specForRun.workPackages.map((wp) => wp.id);
   const scratchWorktrees = new Map<string, string>(); // wpId → path
   let issueWorktreePath: string | undefined;
+  const integrationBranch = `factory/run/${pipelineRunId}`;
+  const resumeEvents = replayEventsFn({
+    projectId,
+    workItemId: workItem.id,
+  });
+  const persistedByWp = persistedWpCheckpoints({
+    events: resumeEvents,
+    pipelineRunId,
+    integrationBranch,
+  });
+  const existingPr = latestPipelinePr({
+    events: resumeEvents,
+    pipelineRunId,
+    integrationBranch,
+  });
+  let integrationHeadSha: string | null = null;
 
   try {
     const plannedWpFiles = specForRun.workPackages.flatMap((wp) =>
@@ -390,22 +521,28 @@ export async function runParallelImplementWorkflow(
     }
 
     // Create the integration worktree (all WP commits land here).
-    issueWorktreePath = createIssueFn(targetRepo, runId, workflowBase.ref);
+    const integrationWorktree = createIntegrationFn(
+      targetRepo,
+      pipelineRunId,
+      integrationBranch,
+      workflowBase.ref,
+    );
+    issueWorktreePath = integrationWorktree.worktreePath;
+    const latestPersisted = [...persistedByWp.values()].at(-1);
+    integrationHeadSha = latestPersisted?.pushedSha ?? integrationWorktree.previousHeadSha;
     prewarmWtFn(issueWorktreePath);
 
-    // Create per-WP scratch worktrees. Sandbox is written in runOneWpBuilder
-    // (per-spawn, so retries always get a fresh sandbox with correct opts).
-    for (const wp of specForRun.workPackages) {
-      const wtPath = createWpFn(targetRepo, runId, wp.id, workflowBase.ref);
-      prewarmWtFn(wtPath);
-      scratchWorktrees.set(wp.id, wtPath);
-    }
-
-    const allWpResults: WpDispatchResult[] = [];
+    const allWpResults: WpDispatchResult[] = [...persistedByWp.values()].map((checkpoint) => ({
+      wpId: checkpoint.wpId,
+      status: 'ok',
+      commitSha: checkpoint.wpCommitSha,
+      runId: checkpoint.wpRunId,
+    }));
 
     for (let iteration = 1; iteration <= maxRetries + 1; iteration++) {
       // Carry-forward: skip WPs that are already ok.
       const wpsToRun = specForRun.workPackages.filter((wp) => {
+        if (persistedByWp.has(wp.id)) return false;
         const lastStatus = getStatusFn(runId, wp.id);
         return lastStatus !== 'ok';
       });
@@ -427,6 +564,14 @@ export async function runParallelImplementWorkflow(
       for (const batch of specForRun.executionOrder) {
         const batchWps = wpsToRun.filter((wp) => batch.wpIds.includes(wp.id));
         if (batchWps.length === 0) continue;
+
+        const scratchBaseRef = integrationHeadSha ?? workflowBase.ref;
+        for (const wp of batchWps) {
+          if (scratchWorktrees.has(wp.id)) continue;
+          const wtPath = createWpFn(targetRepo, runId, wp.id, scratchBaseRef);
+          prewarmWtFn(wtPath);
+          scratchWorktrees.set(wp.id, wtPath);
+        }
 
         // Phase 1 — concurrent build (no git writes to integration worktree).
         const buildPhaseResults = await runWithConcurrencyCap(batchWps, maxParallel, (wp) =>
@@ -522,7 +667,17 @@ export async function runParallelImplementWorkflow(
                 errorReason: reason,
                 runId: wpRunId,
               });
-              continue;
+              await stateSource.comment(
+                workItem.externalId,
+                buildAgentComment('Dev', 'Failed', 'Parallel implement stopped on no-op WP', [
+                  `${wp.id}: ${reason}`,
+                ]),
+              );
+              return {
+                status: 'failed',
+                devRunId: runId,
+                errorReason: reason,
+              };
             }
 
             emitWpObservedMismatch({
@@ -619,12 +774,48 @@ export async function runParallelImplementWorkflow(
             payload: { wpId: wp.id, wpRunId, commitSha },
             runId: wpRunId,
           });
+
+          const previousHeadSha = integrationHeadSha;
+          pushBranchFn(issueWt, integrationBranch);
+          const pushedSha = resolveRemoteBranchHeadFn(issueWt, integrationBranch) ?? commitSha;
+          if (pushedSha !== commitSha) {
+            throw new Error(
+              `persistence verification failed for ${wp.id}: remote ${pushedSha} != commit ${commitSha}`,
+            );
+          }
+          append({
+            projectId,
+            workItemId: workItem.id,
+            kind: 'parallel-implement.wp-persisted',
+            payload: {
+              schemaVersion: 1,
+              pipelineRunId,
+              devRunId: runId,
+              wpId: wp.id,
+              wpRunId,
+              iteration,
+              integrationBranch,
+              baseBranch: workflowBase.branch,
+              previousHeadSha,
+              wpCommitSha: commitSha,
+              pushedSha,
+              filesPersisted:
+                observedChangedFiles.gitAvailable && changedPaths.length > 0
+                  ? changedPaths
+                  : modelDeclaredPaths,
+              persistMode: 'direct-integration-commit',
+            },
+            runId: wpRunId,
+          });
+          integrationHeadSha = pushedSha;
           recordFn(runId, wp.id, iteration, 'ok');
           allWpResults.push({ wpId: wp.id, status: 'ok', commitSha, runId: wpRunId });
         }
       }
 
-      const stillFailed = allWpIds.filter((id) => getStatusFn(runId, id) !== 'ok');
+      const stillFailed = allWpIds.filter(
+        (id) => !persistedByWp.has(id) && getStatusFn(runId, id) !== 'ok',
+      );
 
       if (stillFailed.length === 0) break;
 
@@ -652,6 +843,30 @@ export async function runParallelImplementWorkflow(
           errorReason: `Parallel implement exhausted ${maxRetries + 1} iterations`,
         };
       }
+    }
+
+    if (persistedByWp.size === allWpIds.length && existingPr != null) {
+      append({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.run-completed',
+        payload: {
+          runId,
+          skill: 'parallel-implement',
+          runDisposition: 'completed',
+          prNumber: existingPr.prNumber,
+          branch: existingPr.branch,
+          baseBranch: existingPr.base,
+        },
+        runId,
+      });
+      return {
+        status: 'success',
+        devRunId: runId,
+        worktreePath: existingPr.worktreePath ?? issueWorktreePath ?? '',
+        prNumber: existingPr.prNumber,
+        prUrl: existingPr.prUrl,
+      };
     }
 
     // ── Dev-review advisor step with maxRevisionTurns loop (M19.25) ─────────
@@ -746,7 +961,7 @@ export async function runParallelImplementWorkflow(
       throw new Error('GITHUB_TOKEN env var is required to open PR');
     }
 
-    const branchName = `factory/${runId}`;
+    const branchName = integrationBranch;
     const title = `M19.XX: ${workItem.title.slice(0, 50)}`;
     const body = buildParallelPrBody({ workItem, spec: specForRun, wpResults: allWpResults });
 
@@ -759,6 +974,7 @@ export async function runParallelImplementWorkflow(
       branchName,
       baseBranch: workflowBase.branch,
       token,
+      skipPush: true,
     });
 
     append({
@@ -772,6 +988,21 @@ export async function runParallelImplementWorkflow(
         baseBranch: prResult.base,
         worktreePath: issueWorktreePath ?? '',
         devRunId: runId,
+      },
+      runId,
+    });
+
+    append({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.run-completed',
+      payload: {
+        runId,
+        skill: 'parallel-implement',
+        runDisposition: 'completed',
+        prNumber: prResult.prNumber,
+        branch: prResult.branch,
+        baseBranch: prResult.base,
       },
       runId,
     });
@@ -795,11 +1026,19 @@ export async function runParallelImplementWorkflow(
     };
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
+    const runDisposition = error.message.includes('persistence verification failed')
+      ? 'persistence-failed'
+      : undefined;
     append({
       projectId,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
-      payload: { runId, error: error.message },
+      payload: {
+        runId,
+        skill: 'parallel-implement',
+        error: error.message,
+        ...(runDisposition != null ? { runDisposition } : {}),
+      },
       runId,
     });
     await stateSource.comment(

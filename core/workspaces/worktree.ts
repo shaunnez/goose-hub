@@ -16,6 +16,11 @@ export type WorkflowBase = {
   source: WorkflowBaseSource;
 };
 
+export type IntegrationWorktree = {
+  worktreePath: string;
+  previousHeadSha: string;
+};
+
 /**
  * Resolves the worktree path for a given runId.
  * Pattern: ~/.factory/workspaces/<runId>/
@@ -102,6 +107,61 @@ export function createWorktree(repo: string, runId: string, baseRef?: string): s
   });
 
   return wtPath;
+}
+
+/**
+ * Creates or reattaches the durable per-pipeline integration worktree.
+ *
+ * The parent repo checkout is used only as the `git worktree add` source. Branch
+ * checkout/reset happens inside the integration worktree so the operator's
+ * current checkout is not mutated.
+ */
+export function createIntegrationWorktree(
+  repo: string,
+  pipelineRunId: string,
+  branchName: string,
+  baseRef?: string,
+): IntegrationWorktree {
+  const wtPath = worktreePath(pipelineRunId);
+  mkdirSync(WORKSPACES_DIR, { recursive: true });
+
+  if (!existsSync(wtPath)) {
+    const args = ['worktree', 'add', '--detach', wtPath];
+    if (baseRef != null && baseRef.length > 0) {
+      args.push(baseRef);
+    }
+    execFileSync('git', args, {
+      cwd: repo,
+      stdio: 'pipe',
+      env: GIT_ENV,
+    });
+  }
+
+  try {
+    execFileSync('git', ['checkout', branchName], {
+      cwd: wtPath,
+      stdio: 'pipe',
+      env: GIT_ENV,
+    });
+  } catch {
+    const args = ['checkout', '-B', branchName];
+    if (baseRef != null && baseRef.length > 0) {
+      args.push(baseRef);
+    }
+    execFileSync('git', args, {
+      cwd: wtPath,
+      stdio: 'pipe',
+      env: GIT_ENV,
+    });
+  }
+
+  const previousHeadSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: wtPath,
+    encoding: 'utf8',
+    env: GIT_ENV,
+  }).trim();
+
+  return { worktreePath: wtPath, previousHeadSha };
 }
 
 /**
