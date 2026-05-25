@@ -4,6 +4,7 @@ import {
   cleanupWorktree,
   createIntegrationWorktree,
   createWorktree,
+  reattachIntegrationWorktreeAtRemoteTip,
   resolveWorkflowBase,
 } from './worktree.js';
 
@@ -213,6 +214,74 @@ describe('createIntegrationWorktree', () => {
     expect(vi.mocked(execFileSync)).not.toHaveBeenCalledWith(
       'git',
       ['checkout', '-B', 'factory/run/run-abc-123', 'main'],
+      expect.any(Object),
+    );
+  });
+});
+
+describe('reattachIntegrationWorktreeAtRemoteTip', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(mkdirSync).mockReturnValue(undefined);
+    vi.mocked(execFileSync).mockReturnValue(Buffer.from(''));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reattaches and resets a clean integration worktree to the verified remote tip', () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'status') return '';
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'ls-remote') {
+        return 'remote-tip\trefs/heads/factory/run/run-abc-123\n';
+      }
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'rev-parse') return 'remote-tip\n';
+      return Buffer.from('');
+    });
+
+    expect(
+      reattachIntegrationWorktreeAtRemoteTip(
+        '/repo/path',
+        'run-abc-123',
+        'factory/run/run-abc-123',
+        'remote-tip',
+        'main',
+      ),
+    ).toEqual({
+      worktreePath: WT('run-abc-123'),
+      previousHeadSha: 'remote-tip',
+    });
+
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'git',
+      ['reset', '--hard', 'remote-tip'],
+      expect.objectContaining({ cwd: WT('run-abc-123') }),
+    );
+  });
+
+  it('refuses to reset a dirty integration worktree', () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'status') return ' M core/a.ts\n';
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'rev-parse') return 'local-tip\n';
+      return Buffer.from('');
+    });
+
+    expect(() =>
+      reattachIntegrationWorktreeAtRemoteTip(
+        '/repo/path',
+        'run-abc-123',
+        'factory/run/run-abc-123',
+        'remote-tip',
+        'main',
+      ),
+    ).toThrow('integration worktree is dirty');
+
+    expect(vi.mocked(execFileSync)).not.toHaveBeenCalledWith(
+      'git',
+      ['reset', '--hard', expect.any(String)],
       expect.any(Object),
     );
   });

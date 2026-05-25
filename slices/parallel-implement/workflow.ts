@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
@@ -45,6 +46,7 @@ import {
   createIntegrationWorktree,
   createWorktree,
   prewarmWorktree,
+  reattachIntegrationWorktreeAtRemoteTip,
   resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
@@ -81,6 +83,7 @@ export interface ParallelImplementDeps {
   prewarmWorktreeImpl?: typeof prewarmWorktree;
   resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
   createIntegrationWorktreeImpl?: typeof createIntegrationWorktree;
+  reattachIntegrationWorktreeAtRemoteTipImpl?: typeof reattachIntegrationWorktreeAtRemoteTip;
   cleanupWpWorktreesImpl?: typeof cleanupAllWpWorktrees;
   cleanupIssueWorktreeImpl?: typeof cleanupWorktree;
   orchestratorCommitWpImpl?: typeof orchestratorCommitWp;
@@ -104,6 +107,16 @@ export interface ParallelImplementDeps {
   selectPersonaImpl?: typeof selectPersona;
   /** Override observed changed-file derivation for tests. */
   deriveObservedChangedFilesImpl?: typeof deriveObservedChangedFiles;
+  /** Override integration clean check for durability tests. */
+  isIntegrationWorktreeCleanImpl?: (worktreePath: string) => boolean;
+  /** Override integration HEAD resolution for durability tests. */
+  resolveIntegrationHeadImpl?: (worktreePath: string) => string;
+  /** Override per-path integration drift detection for durability tests. */
+  hasIntegrationChangedPathSinceImpl?: (
+    worktreePath: string,
+    baseRef: string,
+    path: string,
+  ) => boolean;
   /** Override event replay for resume tests. */
   replayEventsImpl?: typeof eventStore.replay;
 }
@@ -245,8 +258,141 @@ type ExistingPipelinePr = {
   prUrl: string;
   branch: string;
   base: string;
+  headSha?: string;
+  state?: string;
   worktreePath?: string;
 };
+
+type WorkflowIntegrationWorktree = {
+  worktreePath: string;
+  previousHeadSha: string | null;
+};
+
+type PersistenceFailureReason =
+  | 'push-failed'
+  | 'missing-remote-branch'
+  | 'remote-head-mismatch'
+  | 'dirty-integration-worktree'
+  | 'direct-integration-overwrite'
+  | 'final-pre-pr-verification-failed'
+  | 'pr-metadata-mismatch';
+
+export class PersistenceFailureError extends Error {
+  readonly reason: PersistenceFailureReason;
+  readonly causeValue?: unknown;
+
+  constructor(reason: PersistenceFailureReason, message: string, causeValue?: unknown) {
+    super(message);
+    this.name = 'PersistenceFailureError';
+    this.reason = reason;
+    this.causeValue = causeValue;
+  }
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function verifyPersistedBranch(input: {
+  worktreePath: string;
+  integrationBranch: string;
+  expectedCommitSha: string;
+  pushBranch: (worktreePath: string, branchName: string) => void;
+  resolveRemoteBranchHead: (worktreePath: string, branchName: string) => string | undefined;
+  context: string;
+  failureReason?: PersistenceFailureReason;
+  allowUnverifiedTestPersistence?: boolean;
+}): string {
+  try {
+    input.pushBranch(input.worktreePath, input.integrationBranch);
+  } catch (err) {
+    throw new PersistenceFailureError(
+      'push-failed',
+      `${input.context}: push failed: ${errorMessage(err)}`,
+      err,
+    );
+  }
+
+  let remoteHead: string | undefined;
+  try {
+    remoteHead = input.resolveRemoteBranchHead(input.worktreePath, input.integrationBranch);
+  } catch (err) {
+    throw new PersistenceFailureError(
+      'missing-remote-branch',
+      `${input.context}: remote branch missing after push: ${errorMessage(err)}`,
+      err,
+    );
+  }
+
+  if (remoteHead == null || remoteHead.length === 0) {
+    if (input.allowUnverifiedTestPersistence === true) {
+      return input.expectedCommitSha;
+    }
+    throw new PersistenceFailureError(
+      'missing-remote-branch',
+      `${input.context}: remote branch missing after push`,
+    );
+  }
+
+  if (remoteHead !== input.expectedCommitSha) {
+    throw new PersistenceFailureError(
+      input.failureReason ?? 'remote-head-mismatch',
+      `${input.context}: remote ${remoteHead} != expected ${input.expectedCommitSha}`,
+    );
+  }
+
+  return remoteHead;
+}
+
+function isIntegrationWorktreeClean(worktreePath: string): boolean {
+  const status = execFileSync('git', ['status', '--porcelain'], {
+    cwd: worktreePath,
+    encoding: 'utf8',
+  });
+  return status.trim().length === 0;
+}
+
+function resolveIntegrationHead(worktreePath: string): string {
+  return execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: worktreePath,
+    encoding: 'utf8',
+  }).trim();
+}
+
+function hasIntegrationChangedPathSince(
+  worktreePath: string,
+  baseRef: string,
+  path: string,
+): boolean {
+  try {
+    execFileSync('git', ['diff', '--quiet', baseRef, '--', path], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+    });
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+function verifyExistingPrMetadata(input: {
+  pr: ExistingPipelinePr;
+  expectedBranch: string;
+  expectedHeadSha: string;
+  expectedBaseBranch: string;
+}): void {
+  if (
+    input.pr.branch !== input.expectedBranch ||
+    input.pr.base !== input.expectedBaseBranch ||
+    input.pr.headSha !== input.expectedHeadSha ||
+    input.pr.state !== 'open'
+  ) {
+    throw new PersistenceFailureError(
+      'pr-metadata-mismatch',
+      `existing PR metadata mismatch for ${input.expectedBranch}`,
+    );
+  }
+}
 
 function persistedWpCheckpoints(input: {
   events: AgentEvent[];
@@ -311,6 +457,8 @@ function latestPipelinePr(input: {
       prUrl: payload.prUrl,
       branch: payload.branch,
       base: typeof payload.base === 'string' ? payload.base : (payload.baseBranch ?? 'main'),
+      headSha: typeof payload.headSha === 'string' ? payload.headSha : undefined,
+      state: typeof payload.state === 'string' ? payload.state : undefined,
       worktreePath: typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined,
     };
   }
@@ -340,6 +488,8 @@ export async function runParallelImplementWorkflow(
   const openPRFn = deps.openPRImpl ?? openPR;
   const createWpFn = deps.createWpWorktreeImpl ?? createWpScratchWorktree;
   const createIssueFn = deps.createIssueWorktreeImpl ?? createWorktree;
+  const usesInjectedWorkflowWorktree =
+    deps.createIssueWorktreeImpl != null || deps.createIntegrationWorktreeImpl != null;
   const createIntegrationFn =
     deps.createIntegrationWorktreeImpl ??
     ((repo: string, pipelineId: string, _branchName: string, baseRef?: string) => {
@@ -351,6 +501,8 @@ export async function runParallelImplementWorkflow(
       }
       return createIntegrationWorktree(repo, pipelineId, _branchName, baseRef);
     });
+  const reattachIntegrationFn =
+    deps.reattachIntegrationWorktreeAtRemoteTipImpl ?? reattachIntegrationWorktreeAtRemoteTip;
   const prewarmWtFn =
     deps.prewarmWorktreeImpl ??
     (deps.createIssueWorktreeImpl == null && deps.createWpWorktreeImpl == null
@@ -363,17 +515,28 @@ export async function runParallelImplementWorkflow(
   const commitWpFn = deps.orchestratorCommitWpImpl ?? orchestratorCommitWp;
   const pushBranchFn =
     deps.pushBranchImpl ??
-    (deps.createIssueWorktreeImpl == null ? orchestratorPushBranch : () => undefined);
+    (usesInjectedWorkflowWorktree ? () => undefined : orchestratorPushBranch);
   const resolveRemoteBranchHeadFn =
     deps.resolveRemoteBranchHeadImpl ??
-    (deps.createIssueWorktreeImpl == null
-      ? resolveRemoteBranchHead
-      : (_worktreePath: string, _branchName: string) => undefined);
+    (usesInjectedWorkflowWorktree
+      ? (_worktreePath: string, _branchName: string) => undefined
+      : resolveRemoteBranchHead);
+  const allowUnverifiedTestPersistence =
+    usesInjectedWorkflowWorktree && deps.resolveRemoteBranchHeadImpl == null;
   const revertFn = deps.revertWpChangesImpl ?? revertWpChanges;
   const recordFn = deps.recordIterationImpl ?? recordWpIteration;
   const getStatusFn = deps.getLastStatusImpl ?? getLastWpStatus;
   const deriveObservedChangedFilesFn =
     deps.deriveObservedChangedFilesImpl ?? deriveObservedChangedFiles;
+  const shouldEnforceIntegrationMergeGuard =
+    deps.isIntegrationWorktreeCleanImpl != null ||
+    deps.resolveIntegrationHeadImpl != null ||
+    deps.hasIntegrationChangedPathSinceImpl != null ||
+    (deps.createIssueWorktreeImpl == null && deps.createIntegrationWorktreeImpl == null);
+  const isIntegrationCleanFn = deps.isIntegrationWorktreeCleanImpl ?? isIntegrationWorktreeClean;
+  const resolveIntegrationHeadFn = deps.resolveIntegrationHeadImpl ?? resolveIntegrationHead;
+  const hasIntegrationChangedPathSinceFn =
+    deps.hasIntegrationChangedPathSinceImpl ?? hasIntegrationChangedPathSince;
   const replayEventsFn = deps.replayEventsImpl ?? ((filter) => eventStore.replay(filter));
 
   const projectConfig = await getProjectBySlug(projectId);
@@ -520,15 +683,56 @@ export async function runParallelImplementWorkflow(
       };
     }
 
-    // Create the integration worktree (all WP commits land here).
-    const integrationWorktree = createIntegrationFn(
-      targetRepo,
-      pipelineRunId,
-      integrationBranch,
-      workflowBase.ref,
-    );
-    issueWorktreePath = integrationWorktree.worktreePath;
     const latestPersisted = [...persistedByWp.values()].at(-1);
+    let integrationWorktree: WorkflowIntegrationWorktree;
+    if (latestPersisted != null) {
+      let remoteHead: string | undefined;
+      try {
+        remoteHead = resolveRemoteBranchHeadFn(targetRepo, integrationBranch);
+      } catch (err) {
+        throw new PersistenceFailureError(
+          'missing-remote-branch',
+          `resume remote branch verification failed: ${errorMessage(err)}`,
+          err,
+        );
+      }
+      if (remoteHead == null || remoteHead.length === 0) {
+        throw new PersistenceFailureError(
+          'missing-remote-branch',
+          `resume remote branch missing: ${integrationBranch}`,
+        );
+      }
+      if (remoteHead !== latestPersisted.pushedSha) {
+        throw new PersistenceFailureError(
+          'remote-head-mismatch',
+          `resume remote ${remoteHead} != latest persisted ${latestPersisted.pushedSha}`,
+        );
+      }
+      try {
+        integrationWorktree = reattachIntegrationFn(
+          targetRepo,
+          pipelineRunId,
+          integrationBranch,
+          latestPersisted.pushedSha,
+          workflowBase.ref,
+        );
+      } catch (err) {
+        throw new PersistenceFailureError(
+          'dirty-integration-worktree',
+          `resume integration worktree reset failed: ${errorMessage(err)}`,
+          err,
+        );
+      }
+    } else {
+      // Create the integration worktree (all WP commits land here).
+      integrationWorktree = createIntegrationFn(
+        targetRepo,
+        pipelineRunId,
+        integrationBranch,
+        workflowBase.ref,
+      );
+    }
+    issueWorktreePath = integrationWorktree.worktreePath;
     integrationHeadSha = latestPersisted?.pushedSha ?? integrationWorktree.previousHeadSha;
     prewarmWtFn(issueWorktreePath);
 
@@ -731,6 +935,32 @@ export async function runParallelImplementWorkflow(
               continue;
             }
 
+            if (shouldEnforceIntegrationMergeGuard && !isIntegrationCleanFn(issueWt)) {
+              throw new PersistenceFailureError(
+                'dirty-integration-worktree',
+                `integration worktree is dirty before merging ${wp.id}`,
+              );
+            }
+            if (shouldEnforceIntegrationMergeGuard) {
+              const actualIntegrationHead = resolveIntegrationHeadFn(issueWt);
+              if (integrationHeadSha != null && actualIntegrationHead !== integrationHeadSha) {
+                throw new PersistenceFailureError(
+                  'direct-integration-overwrite',
+                  `integration HEAD moved before merging ${wp.id}: expected ${integrationHeadSha}, got ${actualIntegrationHead}`,
+                );
+              }
+            }
+            if (shouldEnforceIntegrationMergeGuard) {
+              for (const changedPath of changedPaths) {
+                if (hasIntegrationChangedPathSinceFn(issueWt, scratchBaseRef, changedPath)) {
+                  throw new PersistenceFailureError(
+                    'direct-integration-overwrite',
+                    `integration changed ${changedPath} since scratch base ${scratchBaseRef}`,
+                  );
+                }
+              }
+            }
+
             for (const observedFile of filteredObservedFiles) {
               applyObservedFileToIssueWorktree({
                 issueWorktreePath: issueWt,
@@ -776,13 +1006,15 @@ export async function runParallelImplementWorkflow(
           });
 
           const previousHeadSha = integrationHeadSha;
-          pushBranchFn(issueWt, integrationBranch);
-          const pushedSha = resolveRemoteBranchHeadFn(issueWt, integrationBranch) ?? commitSha;
-          if (pushedSha !== commitSha) {
-            throw new Error(
-              `persistence verification failed for ${wp.id}: remote ${pushedSha} != commit ${commitSha}`,
-            );
-          }
+          const pushedSha = verifyPersistedBranch({
+            worktreePath: issueWt,
+            integrationBranch,
+            expectedCommitSha: commitSha,
+            pushBranch: pushBranchFn,
+            resolveRemoteBranchHead: resolveRemoteBranchHeadFn,
+            context: `persisting ${wp.id}`,
+            allowUnverifiedTestPersistence,
+          });
           append({
             projectId,
             workItemId: workItem.id,
@@ -846,6 +1078,28 @@ export async function runParallelImplementWorkflow(
     }
 
     if (persistedByWp.size === allWpIds.length && existingPr != null) {
+      if (integrationHeadSha == null) {
+        throw new PersistenceFailureError(
+          'pr-metadata-mismatch',
+          'existing PR verification failed: no persisted integration head',
+        );
+      }
+      const remoteHead = resolveRemoteBranchHeadFn(
+        issueWorktreePath ?? targetRepo,
+        integrationBranch,
+      );
+      if (remoteHead !== integrationHeadSha) {
+        throw new PersistenceFailureError(
+          'remote-head-mismatch',
+          `existing PR remote ${remoteHead ?? 'missing'} != persisted ${integrationHeadSha}`,
+        );
+      }
+      verifyExistingPrMetadata({
+        pr: existingPr,
+        expectedBranch: integrationBranch,
+        expectedHeadSha: integrationHeadSha,
+        expectedBaseBranch: workflowBase.branch,
+      });
       append({
         projectId,
         workItemId: workItem.id,
@@ -957,15 +1211,15 @@ export async function runParallelImplementWorkflow(
     }
 
     if (devReviewResponseCommitSha != null && issueWorktreePath != null) {
-      pushBranchFn(issueWorktreePath, integrationBranch);
-      const pushedSha =
-        resolveRemoteBranchHeadFn(issueWorktreePath, integrationBranch) ??
-        devReviewResponseCommitSha;
-      if (pushedSha !== devReviewResponseCommitSha) {
-        throw new Error(
-          `persistence verification failed for dev-review response: remote ${pushedSha} != commit ${devReviewResponseCommitSha}`,
-        );
-      }
+      const pushedSha = verifyPersistedBranch({
+        worktreePath: issueWorktreePath,
+        integrationBranch,
+        expectedCommitSha: devReviewResponseCommitSha,
+        pushBranch: pushBranchFn,
+        resolveRemoteBranchHead: resolveRemoteBranchHeadFn,
+        context: 'persisting dev-review response',
+        allowUnverifiedTestPersistence,
+      });
       integrationHeadSha = pushedSha;
     }
 
@@ -978,6 +1232,23 @@ export async function runParallelImplementWorkflow(
     const branchName = integrationBranch;
     const title = `M19.XX: ${workItem.title.slice(0, 50)}`;
     const body = buildParallelPrBody({ workItem, spec: specForRun, wpResults: allWpResults });
+    const expectedRemoteHead = devReviewResponseCommitSha ?? integrationHeadSha;
+    if (expectedRemoteHead == null) {
+      throw new PersistenceFailureError(
+        'final-pre-pr-verification-failed',
+        'final pre-PR verification failed: no expected integration commit',
+      );
+    }
+    verifyPersistedBranch({
+      worktreePath: issueWorktreePath ?? '',
+      integrationBranch,
+      expectedCommitSha: expectedRemoteHead,
+      pushBranch: pushBranchFn,
+      resolveRemoteBranchHead: resolveRemoteBranchHeadFn,
+      context: 'final pre-PR verification',
+      failureReason: 'final-pre-pr-verification-failed',
+      allowUnverifiedTestPersistence,
+    });
 
     const prResult = await openPRFn({
       worktreePath: issueWorktreePath ?? '',
@@ -1000,6 +1271,8 @@ export async function runParallelImplementWorkflow(
         prUrl: prResult.prUrl,
         branch: prResult.branch,
         baseBranch: prResult.base,
+        headSha: expectedRemoteHead,
+        state: 'open',
         worktreePath: issueWorktreePath ?? '',
         devRunId: runId,
       },
@@ -1040,9 +1313,10 @@ export async function runParallelImplementWorkflow(
     };
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
-    const runDisposition = error.message.includes('persistence verification failed')
-      ? 'persistence-failed'
-      : undefined;
+    const persistenceFailure =
+      error instanceof PersistenceFailureError
+        ? { runDisposition: 'persistence-failed', persistenceFailureReason: error.reason }
+        : undefined;
     append({
       projectId,
       workItemId: workItem.id,
@@ -1051,7 +1325,7 @@ export async function runParallelImplementWorkflow(
         runId,
         skill: 'parallel-implement',
         error: error.message,
-        ...(runDisposition != null ? { runDisposition } : {}),
+        ...(persistenceFailure ?? {}),
       },
       runId,
     });

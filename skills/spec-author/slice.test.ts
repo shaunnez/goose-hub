@@ -460,6 +460,59 @@ describe('validateEngineeringSpec — hard rules', () => {
     expect(result.errors.some((e) => e.rule === 'wp-dependson-not-found')).toBe(true);
   });
 
+  it('rejects dependency in the same execution batch', () => {
+    const wp1 = baseSpec().workPackages[0];
+    const wp2 = { ...baseSpec().workPackages[1], dependsOn: ['WP1'] };
+    const spec = baseSpec({
+      workPackages: [wp1, wp2],
+      executionOrder: [{ batch: 0, wpIds: ['WP1', 'WP2'] }],
+    });
+
+    const result = validateEngineeringSpec(spec);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          rule: 'wp-dependson-order-invalid',
+          ref: 'WP2',
+        }),
+      ]),
+    );
+  });
+
+  it('rejects dependency in a later execution batch', () => {
+    const wp1 = { ...baseSpec().workPackages[0], dependsOn: ['WP2'] };
+    const wp2 = baseSpec().workPackages[1];
+    const spec = baseSpec({
+      workPackages: [wp1, wp2],
+      executionOrder: [
+        { batch: 0, wpIds: ['WP1'] },
+        { batch: 1, wpIds: ['WP2'] },
+      ],
+    });
+
+    const result = validateEngineeringSpec(spec);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          rule: 'wp-dependson-order-invalid',
+          ref: 'WP1',
+        }),
+      ]),
+    );
+  });
+
+  it('accepts dependency in an earlier execution batch', () => {
+    const result = validateEngineeringSpec(baseSpec());
+
+    expect(result.ok).toBe(true);
+  });
+
   it('rejects execution-order-wp-mismatch when WP missing from executionOrder', () => {
     const spec = baseSpec({
       executionOrder: [{ batch: 0, wpIds: ['WP1'] }], // WP2 is missing

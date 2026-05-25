@@ -177,6 +177,67 @@ export function createIntegrationWorktree(
   return { worktreePath: wtPath, previousHeadSha };
 }
 
+function worktreeIsClean(wtPath: string): boolean {
+  const status = execFileSync('git', ['status', '--porcelain'], {
+    cwd: wtPath,
+    encoding: 'utf8',
+    env: GIT_ENV,
+  });
+  return status.trim().length === 0;
+}
+
+function resolveRemoteHead(worktreePath: string, branchName: string): string {
+  const output = execFileSync('git', ['ls-remote', 'origin', `refs/heads/${branchName}`], {
+    cwd: worktreePath,
+    encoding: 'utf8',
+    env: GIT_ENV,
+  }).trim();
+  const [sha] = output.split(/\s+/);
+  if (sha == null || sha.length === 0) {
+    throw new Error(`remote branch not found: ${branchName}`);
+  }
+  return sha;
+}
+
+/**
+ * Reattaches the durable per-pipeline integration worktree and resets it to a
+ * remote tip that has already been identified from persisted workflow state.
+ *
+ * A dirty worktree is a hard stop: automatic cleanup would hide exactly the
+ * overwrite condition the durability flow is trying to detect.
+ */
+export function reattachIntegrationWorktreeAtRemoteTip(
+  repo: string,
+  pipelineRunId: string,
+  branchName: string,
+  expectedRemoteSha: string,
+  baseRef?: string,
+): IntegrationWorktree {
+  const integrationWorktree = createIntegrationWorktree(repo, pipelineRunId, branchName, baseRef);
+
+  if (!worktreeIsClean(integrationWorktree.worktreePath)) {
+    throw new Error('integration worktree is dirty; refusing to reset to remote tip');
+  }
+
+  const remoteHead = resolveRemoteHead(integrationWorktree.worktreePath, branchName);
+  if (remoteHead !== expectedRemoteSha) {
+    throw new Error(
+      `remote branch head mismatch for ${branchName}: expected ${expectedRemoteSha}, got ${remoteHead}`,
+    );
+  }
+
+  execFileSync('git', ['reset', '--hard', expectedRemoteSha], {
+    cwd: integrationWorktree.worktreePath,
+    stdio: 'pipe',
+    env: GIT_ENV,
+  });
+
+  return {
+    worktreePath: integrationWorktree.worktreePath,
+    previousHeadSha: expectedRemoteSha,
+  };
+}
+
 /**
  * Runs `pnpm install --frozen-lockfile` in the worktree to warm node_modules before the agent
  * starts. Eliminates the first wasted turn where the agent discovers and installs dependencies.
