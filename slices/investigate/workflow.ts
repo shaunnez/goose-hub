@@ -55,11 +55,11 @@ import {
   shapeSymbolIndexHintsForScout,
 } from '@goose-hub/core/symbol-index/lookup.js';
 import type { RuntimeEffort } from '@goose-hub/core/types.js';
+import { resolveWorkflowBaseForWorkItem } from '@goose-hub/core/workspaces/workflow-base.js';
 import {
   cleanupWorktree,
   createWorktree,
   prewarmWorktree,
-  resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
 import type { InvestigateSchema } from '@goose-hub/skills/investigate/schema.js';
 import {
@@ -170,7 +170,7 @@ function runtimeNameForModel(modelId: string): 'codex-cli' | 'claude-cli' {
 export interface InvestigateWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
   prewarmWorktreeImpl?: typeof prewarmWorktree;
-  resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
+  resolveWorkflowBaseImpl?: typeof resolveWorkflowBaseForWorkItem;
   runtime?: AgentRuntime;
   playwrightEvidenceRunner?: typeof runPlaywrightReproPlan;
 }
@@ -212,7 +212,7 @@ export async function runInvestigateWorkflow(
 ): Promise<void> {
   const createWtFn = deps.createWorktreeImpl ?? createWorktree;
   const prewarmWtFn = deps.prewarmWorktreeImpl ?? prewarmWorktree;
-  const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBase;
+  const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBaseForWorkItem;
 
   const runId = crypto.randomUUID();
   const { personaId } = selectPersona(projectId, 'investigator');
@@ -245,7 +245,12 @@ export async function runInvestigateWorkflow(
       model: investigatorModelOverride,
       skillProvider: forcedRuntimeProvider ?? investigateBudget.provider,
     });
-  const workflowBase = resolveWorkflowBaseFn(targetRepo, projectConfig?.targetRepo?.defaultBranch);
+  const workflowBase = resolveWorkflowBaseFn(
+    projectId,
+    workItem.id,
+    targetRepo,
+    projectConfig?.targetRepo?.defaultBranch,
+  );
   const worktreePath = createWtFn(targetRepo, runId, workflowBase.ref);
 
   if (workItem.type === 'bug') {

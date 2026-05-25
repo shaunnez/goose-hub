@@ -88,6 +88,9 @@ vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   prewarmWorktree: (...args: unknown[]) => mockPrewarmWorktree(...args),
   resolveWorkflowBase: (...args: unknown[]) => mockResolveWorkflowBase(...args),
 }));
+vi.mock('@goose-hub/core/workspaces/workflow-base.js', () => ({
+  resolveWorkflowBaseForWorkItem: (...args: unknown[]) => mockResolveWorkflowBase(...args),
+}));
 vi.mock('@goose-hub/core/workspaces/orchestrator-git.js', () => ({
   orchestratorCommitAll: vi.fn().mockReturnValue('fake-sha'),
 }));
@@ -275,6 +278,34 @@ describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () =
     expect(mockOpenPR).toHaveBeenCalled();
     // worktree persists until merge — NOT cleaned up after PR open
     expect(mockCleanupWorktree).not.toHaveBeenCalled();
+  });
+
+  it('creates the implementation worktree from a dogfood seed base ref when metadata exists', async () => {
+    mockResolveWorkflowBase.mockReturnValueOnce({
+      branch: 'dogfood/run/logger-001-drop-meta',
+      ref: 'seed-commit-sha',
+      source: 'dogfood-seed',
+    });
+    const item = makeWorkItem({
+      id: 'github:owner/repo#123',
+      externalId: '123',
+      priority: 'medium',
+    });
+    const source = makeStateSource();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo');
+
+    expect(mockResolveWorkflowBase).toHaveBeenCalledWith(
+      'proj',
+      'github:owner/repo#123',
+      '/repo',
+      undefined,
+    );
+    expect(mockCreateWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'seed-commit-sha');
+    expect(mockOpenPR).toHaveBeenCalledWith(
+      expect.objectContaining({ baseBranch: 'dogfood/run/logger-001-drop-meta' }),
+    );
   });
 });
 

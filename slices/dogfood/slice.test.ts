@@ -637,6 +637,22 @@ describe('runDogfood orchestrator', () => {
     };
   }
 
+  function makeSeedGit() {
+    return {
+      assertClean: vi.fn().mockResolvedValue(undefined),
+      currentRef: vi.fn().mockResolvedValue('main'),
+      createBranch: vi.fn().mockResolvedValue(undefined),
+      commitAll: vi.fn().mockResolvedValue('seed-commit-sha'),
+      pushBranch: vi.fn().mockResolvedValue(undefined),
+      fetchBranch: vi.fn().mockResolvedValue(undefined),
+      checkout: vi.fn(async () => {
+        await restoreSeed('logger-001-drop-meta', { repoRoot: tmpRepoRoot }).catch(() => {});
+      }),
+      deleteLocalBranch: vi.fn().mockResolvedValue(undefined),
+      deleteRemoteBranch: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
   it('happy-path: applies seed, files issue, tails to terminal, records reached-terminal', async () => {
     const events: AgentEventDto[] = [
       { kind: 'state.transitioned', payload: { to: 'factory:investigating' } },
@@ -647,14 +663,17 @@ describe('runDogfood orchestrator', () => {
       { kind: 'state.transitioned', payload: { to: 'factory:done' } },
     ];
     const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    const seedGit = makeSeedGit();
     const result = await runDogfood({
       seedId: 'logger-001-drop-meta',
       repoRoot: tmpRepoRoot,
       gh: makeGh(),
       store,
       tail: makeTail(events),
+      seedGit,
       logger: silent,
       skipVerifyRed: true,
+      skipVerifyGreen: true,
     });
 
     expect(result.issue.number).toBe(4242);
@@ -665,7 +684,95 @@ describe('runDogfood orchestrator', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].completion).toBe('reached-terminal');
     expect(rows[0].issue?.number).toBe(4242);
+    expect(rows[0].baseBranch).toMatch(/^dogfood\/dogfood-/);
+    expect(rows[0].baseRef).toBe('seed-commit-sha');
+    expect(rows[0].seedCommit).toBe('seed-commit-sha');
     expect(rows[0].endedAt).toBeDefined();
+  });
+
+  it('tails the canonical repo-qualified GitHub work item id', async () => {
+    let tailedWorkItemId: unknown;
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repo: 'owner/repo',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: async (opts) => {
+        tailedWorkItemId = opts.workItemId;
+        return { events: [], reason: 'server-closed' as const };
+      },
+      seedGit: makeSeedGit(),
+      appendEvent: () => {},
+      logger: silent,
+      skipVerifyRed: true,
+      skipVerifyGreen: true,
+    });
+
+    expect(tailedWorkItemId).toBe('github:owner/repo#4242');
+  });
+
+  it('emits dogfood.seed-applied with base ref metadata', async () => {
+    const appendEvent = vi.fn();
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repo: 'owner/repo',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: makeTail([]),
+      seedGit: makeSeedGit(),
+      appendEvent,
+      logger: silent,
+      skipVerifyRed: true,
+      skipVerifyGreen: true,
+    });
+
+    expect(appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'goose-hub-self',
+        workItemId: 'github:owner/repo#4242',
+        kind: 'dogfood.seed-applied',
+        payload: expect.objectContaining({
+          seedId: 'logger-001-drop-meta',
+          baseBranch: expect.stringMatching(/^dogfood\/dogfood-/),
+          baseRef: 'seed-commit-sha',
+          seedCommit: 'seed-commit-sha',
+          truthSignal: expect.objectContaining({
+            testFile: 'apps/web/src/lib/logger.test.ts',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('awaits dogfood.seed-applied persistence before tailing events', async () => {
+    let seedEventPersisted = false;
+    let tailStartedAfterSeedEvent = false;
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+
+    await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: async () => {
+        tailStartedAfterSeedEvent = seedEventPersisted;
+        return { events: [], reason: 'server-closed' as const };
+      },
+      seedGit: makeSeedGit(),
+      appendEvent: async () => {
+        await Promise.resolve();
+        seedEventPersisted = true;
+      },
+      logger: silent,
+      skipVerifyRed: true,
+      skipVerifyGreen: true,
+    });
+
+    expect(tailStartedAfterSeedEvent).toBe(true);
   });
 
   it('failure path: records `failed:<node>` when an agent.run-failed arrives', async () => {
@@ -674,14 +781,17 @@ describe('runDogfood orchestrator', () => {
       { kind: 'agent.run-failed', payload: { skill: 'qa', reason: 'timeout' } },
     ];
     const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    const seedGit = makeSeedGit();
     const result = await runDogfood({
       seedId: 'logger-001-drop-meta',
       repoRoot: tmpRepoRoot,
       gh: makeGh(),
       store,
       tail: makeTail(events),
+      seedGit,
       logger: silent,
       skipVerifyRed: true,
+      skipVerifyGreen: true,
     });
     expect(typeof result.completion).toBe('object');
     if (typeof result.completion !== 'object') throw new Error('expected failed-object');
@@ -701,11 +811,113 @@ describe('runDogfood orchestrator', () => {
       gh: makeGh(),
       store,
       tail: makeTail(events),
+      seedGit: makeSeedGit(),
       logger: silent,
       skipVerifyRed: true,
+      skipVerifyGreen: true,
     });
     const after = await fs.readFile(targetPath, 'utf8');
     expect(after).toBe(before);
+  });
+
+  it('restores uncommitted seed edits before returning to the operator branch when verify-red fails', async () => {
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    const targetPath = path.join(tmpRepoRoot, 'apps/web/src/lib/logger.ts');
+    const before = await fs.readFile(targetPath, 'utf8');
+    const seedGit = makeSeedGit();
+    seedGit.checkout.mockResolvedValue(undefined);
+
+    await expect(
+      runDogfood({
+        seedId: 'logger-001-drop-meta',
+        repoRoot: tmpRepoRoot,
+        gh: makeGh(),
+        store,
+        tail: makeTail([]),
+        seedGit,
+        logger: silent,
+      }),
+    ).rejects.toThrow(/vitest not found/);
+
+    const after = await fs.readFile(targetPath, 'utf8');
+    expect(after).toBe(before);
+    expect(seedGit.checkout).toHaveBeenCalledWith(tmpRepoRoot, 'main');
+    expect(seedGit.deleteLocalBranch).toHaveBeenCalled();
+  });
+
+  it('records completion even when final truth-signal verification cannot run', async () => {
+    const events: AgentEventDto[] = [
+      { kind: 'pr.opened', payload: { branch: 'factory/fix-4242' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:done' } },
+    ];
+    const logger = { log: () => {}, warn: vi.fn(), error: () => {} } as unknown as Console;
+
+    await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: makeTail(events),
+      seedGit: makeSeedGit(),
+      logger,
+      skipVerifyRed: true,
+    });
+
+    const rows = await store.list();
+    expect(rows[0].completion).toBe('reached-terminal');
+    expect(rows[0].truthPass).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('truth-pass check skipped'));
+  });
+
+  it('leaves truth-pass unknown when no PR branch is available in the tailed events', async () => {
+    const events: AgentEventDto[] = [
+      { kind: 'state.transitioned', payload: { to: 'factory:done' } },
+    ];
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    const seedGit = makeSeedGit();
+
+    await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: makeTail(events),
+      seedGit,
+      logger: silent,
+      skipVerifyRed: true,
+    });
+
+    const rows = await store.list();
+    expect(rows[0].completion).toBe('reached-terminal');
+    expect(rows[0].truthPass).toBeUndefined();
+    expect(seedGit.fetchBranch).not.toHaveBeenCalled();
+  });
+
+  it('honors --no-restore by skipping final checkout-based green verification', async () => {
+    const events: AgentEventDto[] = [
+      { kind: 'pr.opened', payload: { branch: 'factory/fix-4242' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:done' } },
+    ];
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    const seedGit = makeSeedGit();
+
+    await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: makeTail(events),
+      seedGit,
+      logger: silent,
+      skipVerifyRed: true,
+      restoreOnFinish: false,
+    });
+
+    const rows = await store.list();
+    expect(rows[0].completion).toBe('reached-terminal');
+    expect(rows[0].truthPass).toBeUndefined();
+    expect(seedGit.fetchBranch).not.toHaveBeenCalled();
+    expect(seedGit.checkout).not.toHaveBeenCalled();
   });
 
   it('computeCompletion translates timeout + no terminal into `stalled`', () => {

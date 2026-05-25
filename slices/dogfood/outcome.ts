@@ -16,6 +16,9 @@ export interface DogfoodRun {
     number: number;
     url: string;
   };
+  baseBranch?: string;
+  baseRef?: string;
+  seedCommit?: string;
   completion: Completion;
   truthPass?: boolean;
   qaCorrect?: boolean;

@@ -1,5 +1,6 @@
 export const EVENT_KINDS = [
   'state.transitioned',
+  'dogfood.seed-applied',
   'milestone.activated',
   'agent.spawned',
   'agent.decision-summary',
