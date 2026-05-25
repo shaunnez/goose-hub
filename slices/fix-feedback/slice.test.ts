@@ -860,6 +860,37 @@ describe('runFixFeedbackWorkflow', () => {
       expect(runCall.context.priorEvidenceSpecPath).toBe('apps/web/e2e/new.spec.ts');
     });
 
+    it('treats null evidenceSpecPath on the most recent completion as authoritative', async () => {
+      vi.mocked(eventStore.replay).mockReturnValue([
+        makePrOpenedEvent(),
+        {
+          id: 4,
+          kind: 'agent.implement-complete' as EventKind,
+          payload: { runId: 'dev-1', evidenceSpecPath: 'apps/web/e2e/old.spec.ts' },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#42',
+          createdAt: new Date(Date.now() - 60_000).toISOString(),
+          runId: 'dev-1',
+        },
+        makeQaCompletedEvent(),
+        {
+          id: 6,
+          kind: 'agent.fix-feedback-complete' as EventKind,
+          payload: { repairCycle: 1, evidenceSpecPath: null },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#42',
+          createdAt: new Date().toISOString(),
+          runId: 'fix-1',
+        },
+      ]);
+      mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
+
+      await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo');
+
+      const runCall = mockClaudeCliRun.mock.calls[0][0];
+      expect(runCall.context.priorEvidenceSpecPath).toBeUndefined();
+    });
+
     it('omits priorEvidenceSpecPath when no relevant event exists', async () => {
       vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent(), makeQaCompletedEvent()]);
       mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
