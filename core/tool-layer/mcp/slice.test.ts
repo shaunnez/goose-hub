@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -12,6 +21,7 @@ import {
 import type { FactoryContext } from './context.js';
 import { FactoryContextError, loadFactoryContext } from './context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from './path-policy.js';
+import { clearRunCache } from './run-cache.js';
 import { buildFactoryMcpServer } from './server.js';
 import {
   listDirTool,
@@ -105,8 +115,14 @@ describe('path-policy', () => {
     }
   });
 
-  it('allows only the .factory/run-output spill directory under Factory internals', () => {
-    const resolved = resolveWorkspacePath(workspace, '.factory/run-output/run-1-1.log');
+  it('allows .factory/run-output only when a read path opts into spill reads', () => {
+    expect(() => resolveWorkspacePath(workspace, '.factory/run-output/run-1-1.log')).toThrow(
+      PathPolicyViolation,
+    );
+
+    const resolved = resolveWorkspacePath(workspace, '.factory/run-output/run-1-1.log', {
+      allowRunOutput: true,
+    });
     expect(resolved.canonical.path).toBe('.factory/run-output/run-1-1.log');
     expect(resolved.absolute).toBe(join(workspace, '.factory/run-output/run-1-1.log'));
 
@@ -331,6 +347,7 @@ describe('command-policy', () => {
       args: ['-e', 'process.stdout.write("hello")'],
       cwd: workspace,
       runId: 'command-small',
+      displayOutput: true,
       timeoutMs: 5_000,
       env: minimalEnv(),
     });
@@ -349,6 +366,7 @@ describe('command-policy', () => {
       args: ['-e', 'process.exit(2)'],
       cwd: workspace,
       runId: 'command-failed',
+      displayOutput: true,
       timeoutMs: 5_000,
       env: minimalEnv(),
     });
@@ -362,6 +380,7 @@ describe('command-policy', () => {
       args: ['-e', 'process.stdout.write("a".repeat(50))'],
       cwd: workspace,
       runId: 'command-byte-cap',
+      displayOutput: true,
       timeoutMs: 5_000,
       stdoutLimitBytes: 10,
       env: minimalEnv(),
@@ -376,6 +395,7 @@ describe('command-policy', () => {
       args: ['-e', 'setInterval(() => {}, 1000)'],
       cwd: workspace,
       runId: 'command-timeout',
+      displayOutput: true,
       timeoutMs: 150,
       env: minimalEnv(),
     });
@@ -388,6 +408,7 @@ describe('command-policy', () => {
       args: [],
       cwd: workspace,
       runId: 'command-spawn-error',
+      displayOutput: true,
       timeoutMs: 1_000,
       env: minimalEnv(),
     });
@@ -407,6 +428,7 @@ describe('command-policy', () => {
       args: ['-e', 'process.stdout.write("warmup")'],
       cwd: workspace,
       runId: 'command-stdout-large',
+      displayOutput: true,
       timeoutMs: 5_000,
       env: minimalEnv(),
     });
@@ -422,6 +444,7 @@ describe('command-policy', () => {
       ],
       cwd: workspace,
       runId: 'command-stdout-large',
+      displayOutput: true,
       timeoutMs: 5_000,
       env: minimalEnv(),
     });
@@ -447,6 +470,23 @@ describe('command-policy', () => {
     expect(spill.content).toContain(stderr);
   });
 
+  it('does not display-shape machine-parsed command output unless explicitly requested', async () => {
+    const result = await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("ROW" + "x".repeat(5000) + "END")'],
+      cwd: workspace,
+      runId: 'command-machine-output',
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+
+    expect(result.displayTruncated).toBe(false);
+    expect(result.stdout).toContain('ROW');
+    expect(result.stdout).toContain('END');
+    expect(result.stdout).not.toContain('[factory] stdout display truncated');
+    expect(result.fullOutputPath).toBeUndefined();
+  });
+
   it('display-shapes stderr independently when stdout is under threshold', async () => {
     const stdout = 'tiny stdout';
     const result = await runCommand({
@@ -457,6 +497,7 @@ describe('command-policy', () => {
       ],
       cwd: workspace,
       runId: 'command-stderr-large',
+      displayOutput: true,
       timeoutMs: 5_000,
       env: minimalEnv(),
     });
@@ -478,6 +519,7 @@ describe('command-policy', () => {
       ],
       cwd: workspace,
       runId: 'command-both-large',
+      displayOutput: true,
       timeoutMs: 5_000,
       env: minimalEnv(),
     });
@@ -494,12 +536,40 @@ describe('command-policy', () => {
     expect(spill).toContain('ERR');
   });
 
+  it('clears per-run invocation counters with the run cache lifecycle', async () => {
+    const first = await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("x".repeat(5000))'],
+      cwd: workspace,
+      runId: 'command-clear-counter',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+    expect(first.fullOutputPath).toBe('.factory/run-output/command-clear-counter-1.log');
+
+    clearRunCache('command-clear-counter');
+    rmSync(join(workspace, requireFullOutputPath(first)));
+
+    const second = await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("y".repeat(5000))'],
+      cwd: workspace,
+      runId: 'command-clear-counter',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+    expect(second.fullOutputPath).toBe('.factory/run-output/command-clear-counter-1.log');
+  });
+
   it('keeps byte-capture truncation distinct from display truncation', async () => {
     const result = await runCommand({
       command: 'node',
       args: ['-e', 'process.stdout.write("x".repeat(10000))'],
       cwd: workspace,
       runId: 'command-capture-cap',
+      displayOutput: true,
       timeoutMs: 5_000,
       stdoutLimitBytes: 4500,
       env: minimalEnv(),
@@ -514,6 +584,64 @@ describe('command-policy', () => {
     expect(Buffer.byteLength(spill, 'utf8')).toBeLessThan(10000);
   });
 
+  it('sanitizes run ids for portable spill filenames', async () => {
+    const result = await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("x".repeat(5000))'],
+      cwd: workspace,
+      runId: 'run:with:colon',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+
+    expect(result.fullOutputPath).toBe('.factory/run-output/run_with_colon-1.log');
+  });
+
+  it('keeps display output capped when spill persistence fails', async () => {
+    mkdirSync(join(workspace, '.factory'), { recursive: true });
+    writeFileSync(join(workspace, '.factory', 'run-output'), 'not a directory');
+
+    const result = await runCommand({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("x".repeat(5000))'],
+      cwd: workspace,
+      runId: 'command-spill-fails',
+      displayOutput: true,
+      timeoutMs: 5_000,
+      env: minimalEnv(),
+    });
+
+    expect(result.displayTruncated).toBe(true);
+    expect(result.fullOutputPath).toBeUndefined();
+    expect(result.stdout).toContain('spill file unavailable');
+    expect(Buffer.byteLength(result.stdout, 'utf8')).toBeLessThanOrEqual(4096);
+  });
+
+  it('does not write spill output through a symlinked run-output directory', async () => {
+    const external = mkdtempSync(join(tmpdir(), 'factory-run-output-external-'));
+    mkdirSync(join(workspace, '.factory'), { recursive: true });
+    symlinkSync(external, join(workspace, '.factory', 'run-output'), 'dir');
+
+    try {
+      const result = await runCommand({
+        command: 'node',
+        args: ['-e', 'process.stdout.write("x".repeat(5000))'],
+        cwd: workspace,
+        runId: 'command-symlink-output',
+        displayOutput: true,
+        timeoutMs: 5_000,
+        env: minimalEnv(),
+      });
+
+      expect(result.displayTruncated).toBe(true);
+      expect(result.fullOutputPath).toBeUndefined();
+      expect(readdirSync(external)).toEqual([]);
+    } finally {
+      rmSync(external, { recursive: true, force: true });
+    }
+  });
+
   it('handles no-trailing-newline and binary-ish output without inventing tail content', async () => {
     const result = await runCommand({
       command: 'node',
@@ -523,6 +651,7 @@ describe('command-policy', () => {
       ],
       cwd: workspace,
       runId: 'command-binary-ish',
+      displayOutput: true,
       timeoutMs: 5_000,
       env: minimalEnv(),
     });

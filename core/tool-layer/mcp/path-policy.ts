@@ -31,6 +31,10 @@ const DENIED_SEGMENTS: ReadonlyArray<{ segment: string; reason: PathPolicyReason
   { segment: '.factory', reason: 'factory_internals' },
 ];
 
+export interface ResolveWorkspacePathOptions {
+  allowRunOutput?: boolean;
+}
+
 function isRunOutputPath(segments: ReadonlyArray<string>): boolean {
   return segments[0] === '.factory' && segments[1] === 'run-output' && segments.length >= 3;
 }
@@ -52,7 +56,11 @@ export interface ResolvedPath {
  * `path-contract.ts`, which normalizes package-relative and absolute-worktree
  * paths and returns the structured `RepoRelativePath` shape.
  */
-export function resolveWorkspacePath(workspaceRoot: string, requested: string): ResolvedPath {
+export function resolveWorkspacePath(
+  workspaceRoot: string,
+  requested: string,
+  options: ResolveWorkspacePathOptions = {},
+): ResolvedPath {
   if (typeof requested !== 'string' || requested.trim().length === 0) {
     throw new PathPolicyViolation('empty_path', requested, 'Path is empty.');
   }
@@ -84,7 +92,10 @@ export function resolveWorkspacePath(workspaceRoot: string, requested: string): 
   }
 
   for (const denied of DENIED_SEGMENTS) {
-    if (segments.includes(denied.segment) && !isRunOutputPath(segments)) {
+    if (
+      segments.includes(denied.segment) &&
+      !(options.allowRunOutput === true && isRunOutputPath(segments))
+    ) {
       throw new PathPolicyViolation(
         denied.reason,
         requested,
@@ -109,7 +120,10 @@ export function resolveWorkspacePath(workspaceRoot: string, requested: string): 
   // passed the raw-segment check above cannot smuggle a denied segment through.
   const canonicalSegments = result.path.path.split('/').filter((s) => s.length > 0);
   for (const denied of DENIED_SEGMENTS) {
-    if (canonicalSegments.includes(denied.segment) && !isRunOutputPath(canonicalSegments)) {
+    if (
+      canonicalSegments.includes(denied.segment) &&
+      !(options.allowRunOutput === true && isRunOutputPath(canonicalSegments))
+    ) {
       throw new PathPolicyViolation(
         denied.reason,
         requested,

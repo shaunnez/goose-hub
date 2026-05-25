@@ -191,6 +191,7 @@ export async function runPlaywrightSpecTool(
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
     runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: PLAYWRIGHT_TIMEOUT_MS,
     stdoutLimitBytes: PLAYWRIGHT_STDOUT_LIMIT_BYTES,
     env: minimalEnv(extraEnv),

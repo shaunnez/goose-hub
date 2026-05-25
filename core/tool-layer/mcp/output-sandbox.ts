@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, realpath } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 
 export const DISPLAY_OUTPUT_LIMIT_BYTES = 4 * 1024;
@@ -22,28 +22,72 @@ export interface ShapeCommandOutputResult {
 }
 
 function safeRunId(runId: string): string {
-  return runId.replace(/[^A-Za-z0-9._:-]/g, '_');
+  return runId.replace(/[^A-Za-z0-9._-]/g, '_');
 }
 
-function assertInsideWorkspace(workspaceRoot: string, absolutePath: string): void {
-  const root = resolve(workspaceRoot);
-  const target = resolve(absolutePath);
-  if (target !== root && !target.startsWith(`${root}${sep}`)) {
+function isInside(root: string, target: string): boolean {
+  return target === root || target.startsWith(`${root}${sep}`);
+}
+
+function assertInsideWorkspace(root: string, target: string): void {
+  if (!isInside(root, target)) {
     throw new Error(`run output path escaped workspace: ${target}`);
   }
 }
 
-function banner(stream: 'stdout' | 'stderr', input: ShapeCommandOutputInput, path: string): string {
+async function assertNotSymlink(path: string): Promise<void> {
+  try {
+    const stats = await lstat(path);
+    if (stats.isSymbolicLink()) {
+      throw new Error(`run output path must not be a symlink: ${path}`);
+    }
+    if (!stats.isDirectory()) {
+      throw new Error(`run output path is not a directory: ${path}`);
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+}
+
+async function ensureRunOutputDir(workspaceRoot: string): Promise<string> {
+  const root = await realpath(workspaceRoot);
+  const factoryDir = join(root, '.factory');
+  const outputDir = join(root, RUN_OUTPUT_DIR);
+
+  await assertNotSymlink(factoryDir);
+  await mkdir(factoryDir, { recursive: true });
+  await assertNotSymlink(factoryDir);
+
+  await assertNotSymlink(outputDir);
+  await mkdir(outputDir, { recursive: true });
+  await assertNotSymlink(outputDir);
+
+  const outputReal = await realpath(outputDir);
+  assertInsideWorkspace(root, outputReal);
+  return outputDir;
+}
+
+function banner(
+  stream: 'stdout' | 'stderr',
+  input: ShapeCommandOutputInput,
+  path: string | null,
+  spillError?: string,
+): string {
   const capNote = input.byteCaptureTruncated
     ? '; spill contains captured output up to the command-policy byte limit'
     : '';
-  return `[factory] ${stream} display truncated; full captured output: ${path}${capNote}`;
+  const outputNote =
+    path == null
+      ? `spill file unavailable${spillError != null ? `: ${spillError}` : ''}`
+      : `full captured output: ${path}`;
+  return `[factory] ${stream} display truncated; ${outputNote}${capNote}`;
 }
 
 function shapeStream(
   stream: 'stdout' | 'stderr',
   input: ShapeCommandOutputInput,
-  path: string,
+  path: string | null,
+  spillError?: string,
 ): { text: string; truncated: boolean } {
   const limit = input.displayLimitBytes ?? DISPLAY_OUTPUT_LIMIT_BYTES;
   const value = input[stream];
@@ -51,7 +95,7 @@ function shapeStream(
     return { text: value.toString('utf8'), truncated: false };
   }
 
-  const marker = Buffer.from(`\n${banner(stream, input, path)}\n`, 'utf8');
+  const marker = Buffer.from(`\n${banner(stream, input, path, spillError)}\n`, 'utf8');
   const remaining = Math.max(0, limit - marker.byteLength);
   const headBytes = Math.floor(remaining / 2);
   const tailBytes = remaining - headBytes;
@@ -87,11 +131,16 @@ export async function shapeCommandOutput(
   }
 
   const fullOutputPath = `${RUN_OUTPUT_DIR}/${safeRunId(input.runId)}-${input.invocation}.log`;
-  const outputDir = join(input.workspaceRoot, RUN_OUTPUT_DIR);
-  const absolutePath = join(input.workspaceRoot, fullOutputPath);
-  assertInsideWorkspace(input.workspaceRoot, absolutePath);
-  await mkdir(outputDir, { recursive: true });
-  await writeFile(absolutePath, spillFileBytes(input.stdout, input.stderr));
+  const root = await realpath(input.workspaceRoot);
+  await ensureRunOutputDir(root);
+  const absolutePath = join(root, fullOutputPath);
+  assertInsideWorkspace(root, resolve(absolutePath));
+  const handle = await open(absolutePath, 'wx');
+  try {
+    await handle.writeFile(spillFileBytes(input.stdout, input.stderr));
+  } finally {
+    await handle.close();
+  }
 
   const stdout = shapeStream('stdout', input, fullOutputPath);
   const stderr = shapeStream('stderr', input, fullOutputPath);
@@ -101,5 +150,18 @@ export async function shapeCommandOutput(
     stderr: stderr.text,
     displayTruncated: stdout.truncated || stderr.truncated,
     fullOutputPath,
+  };
+}
+
+export function shapeCommandOutputInMemory(
+  input: ShapeCommandOutputInput,
+  spillError: string,
+): ShapeCommandOutputResult {
+  const stdout = shapeStream('stdout', input, null, spillError);
+  const stderr = shapeStream('stderr', input, null, spillError);
+  return {
+    stdout: stdout.text,
+    stderr: stderr.text,
+    displayTruncated: stdout.truncated || stderr.truncated,
   };
 }

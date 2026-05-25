@@ -199,6 +199,7 @@ export async function runTestsTool(
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
     runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: TEST_TIMEOUT_MS,
     env: minimalEnv(),
   });
@@ -276,6 +277,7 @@ export async function runLintTool(
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
     runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: LINT_TIMEOUT_MS,
     env: minimalEnv(),
   });
@@ -306,6 +308,7 @@ export async function runTypecheckTool(
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
     runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: TYPECHECK_TIMEOUT_MS,
     env: minimalEnv(),
   });
@@ -350,6 +353,7 @@ export async function runPackageScriptTool(
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
     runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: PACKAGE_SCRIPT_TIMEOUT_MS,
     env: minimalEnv(),
   });

@@ -108,6 +108,7 @@ export async function getPrDiffTool(
     args: ['diff', '--no-color', `${baseRef}...${resolvedRef}`],
     cwd: ctx.workspaceRoot,
     runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: PR_DIFF_TIMEOUT_MS,
     stdoutLimitBytes: PR_DIFF_STDOUT_LIMIT_BYTES,
     env: minimalEnv(),
@@ -213,6 +214,7 @@ export async function runIsolatedTestTool(
     args: argv.slice(1),
     cwd: ctx.workspaceRoot,
     runId: ctx.runId,
+    displayOutput: true,
     timeoutMs: 5 * 60 * 1000,
     env: minimalEnv(),
   });

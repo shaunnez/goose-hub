@@ -1,5 +1,9 @@
 import { spawn } from 'node:child_process';
-import { type ShapeCommandOutputResult, shapeCommandOutput } from './output-sandbox.js';
+import {
+  type ShapeCommandOutputResult,
+  shapeCommandOutput,
+  shapeCommandOutputInMemory,
+} from './output-sandbox.js';
 
 export type CommandStatus = 'ok' | 'failed' | 'timed_out';
 
@@ -9,6 +13,7 @@ export interface CommandSpec {
   cwd: string;
   env?: Readonly<Record<string, string>>;
   runId?: string;
+  displayOutput?: boolean;
   timeoutMs: number;
   stdoutLimitBytes?: number;
   stderrLimitBytes?: number;
@@ -36,6 +41,10 @@ function nextInvocationForRun(runId: string): number {
   const next = (runInvocationCounters.get(runId) ?? 0) + 1;
   runInvocationCounters.set(runId, next);
   return next;
+}
+
+export function clearRunCommandInvocationCounter(runId: string): void {
+  runInvocationCounters.delete(runId);
 }
 
 /**
@@ -128,7 +137,7 @@ export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
         displayTruncated: false,
       };
 
-      if (spec.runId != null && invocation != null) {
+      if (spec.displayOutput === true && spec.runId != null && invocation != null) {
         try {
           shaped = await shapeCommandOutput({
             workspaceRoot: spec.cwd,
@@ -140,7 +149,17 @@ export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
           });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          shaped.stderr = `${shaped.stderr}${shaped.stderr.length > 0 ? '\n' : ''}[factory] failed to write command output spill file: ${message}`;
+          shaped = shapeCommandOutputInMemory(
+            {
+              workspaceRoot: spec.cwd,
+              runId: spec.runId,
+              invocation,
+              stdout,
+              stderr,
+              byteCaptureTruncated: truncated,
+            },
+            message,
+          );
         }
       }
 

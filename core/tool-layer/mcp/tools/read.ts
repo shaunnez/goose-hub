@@ -300,7 +300,7 @@ export async function readFileTool(
 ): Promise<ReadFileResult> {
   let resolved: ReturnType<typeof resolveWorkspacePath>;
   try {
-    resolved = resolveWorkspacePath(ctx.workspaceRoot, input.path);
+    resolved = resolveWorkspacePath(ctx.workspaceRoot, input.path, { allowRunOutput: true });
   } catch (err) {
     if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'read_file', err, { ...input });
     throw err;
