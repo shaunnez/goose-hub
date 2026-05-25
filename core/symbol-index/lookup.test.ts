@@ -4,10 +4,11 @@ import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildIndex } from './builder.js';
-import { openIndexDb } from './db.js';
+import { defaultDbPath, openIndexDb, symbolIndexDbPathForWorktree } from './db.js';
 import {
   extractIdentifiers,
   lookupChangedExportImpact,
+  lookupSymbol,
   lookupWorkItemSymbols,
   shapeSymbolIndexHintsForScout,
   symbolHintsToKeyFiles,
@@ -17,6 +18,10 @@ function writeFile(root: string, rel: string, content: string): void {
   const abs = path.join(root, rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, content, 'utf8');
+}
+
+function fileMtime(pathValue: string): number | null {
+  return fs.existsSync(pathValue) ? fs.statSync(pathValue).mtimeMs : null;
 }
 
 describe('extractIdentifiers', () => {
@@ -198,6 +203,79 @@ describe('lookupWorkItemSymbols', () => {
     });
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('AuthService');
+  });
+
+  it('uses a per-worktree DB for symbol lookup when worktreePath is provided without dbPath', () => {
+    writeFile(tmp, 'core/auth.ts', 'export function AuthService() {}');
+
+    const result = lookupSymbol('AuthService', { worktreePath: tmp });
+
+    expect(result).toMatchObject([
+      {
+        name: 'AuthService',
+        filePath: 'core/auth.ts',
+        kind: 'function',
+        exported: true,
+      },
+    ]);
+    expect(fs.existsSync(symbolIndexDbPathForWorktree(tmp))).toBe(true);
+  });
+
+  it('uses a per-worktree DB for work item symbol hints when worktreePath is provided without dbPath', () => {
+    writeFile(tmp, 'core/auth.ts', 'export function AuthService() {}');
+
+    const result = lookupWorkItemSymbols('Fix AuthService', '', { worktreePath: tmp });
+
+    expect(result).toMatchObject([
+      {
+        name: 'AuthService',
+        definedIn: 'core/auth.ts',
+      },
+    ]);
+    expect(fs.existsSync(symbolIndexDbPathForWorktree(tmp))).toBe(true);
+  });
+
+  it('lazily rebuilds a stale per-worktree symbol DB', () => {
+    writeFile(tmp, 'core/auth.ts', 'export function AuthService() {}');
+    expect(lookupSymbol('AuthService', { worktreePath: tmp })).toHaveLength(1);
+
+    writeFile(tmp, 'core/session.ts', 'export function SessionService() {}');
+    const future = new Date(Date.now() + 5_000);
+    fs.utimesSync(path.join(tmp, 'core/session.ts'), future, future);
+
+    const result = lookupSymbol('SessionService', { worktreePath: tmp });
+
+    expect(result).toMatchObject([
+      {
+        name: 'SessionService',
+        filePath: 'core/session.ts',
+      },
+    ]);
+  });
+
+  it('isolates per-worktree symbol indexes and does not touch the global symbol DB', () => {
+    const globalBefore = fileMtime(defaultDbPath());
+    const worktreeA = path.join(tmp, 'worktree-a');
+    const worktreeB = path.join(tmp, 'worktree-b');
+    writeFile(worktreeA, 'core/a.ts', 'export function AlphaService() {}');
+    writeFile(worktreeB, 'core/b.ts', 'export function BetaService() {}');
+
+    expect(lookupSymbol('AlphaService', { worktreePath: worktreeA })).toMatchObject([
+      { name: 'AlphaService', filePath: 'core/a.ts' },
+    ]);
+    expect(lookupSymbol('BetaService', { worktreePath: worktreeA })).toEqual([]);
+    expect(lookupSymbol('BetaService', { worktreePath: worktreeB })).toMatchObject([
+      { name: 'BetaService', filePath: 'core/b.ts' },
+    ]);
+    expect(lookupSymbol('AlphaService', { worktreePath: worktreeB })).toEqual([]);
+    expect(fileMtime(defaultDbPath())).toBe(globalBefore);
+  });
+
+  it('returns [] without throwing when the per-worktree symbol DB cannot be rebuilt', () => {
+    writeFile(tmp, 'core/auth.ts', 'export function AuthService() {}');
+    fs.writeFileSync(path.join(tmp, '.factory'), 'not a directory', 'utf8');
+
+    expect(lookupSymbol('AuthService', { worktreePath: tmp })).toEqual([]);
   });
 
   it('returns empty callers when same name exported from multiple files', () => {

@@ -1473,7 +1473,7 @@ describe('runInvestigateWorkflow', () => {
       await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
       expect(mockEnsureSymbolIndexFresh).toHaveBeenCalledWith(
-        expect.objectContaining({ repoRoot: expect.any(String) }),
+        expect.objectContaining({ repoRoot: '/tmp/test-worktree' }),
       );
       expect(mockDispatchWave).toHaveBeenCalled();
     });

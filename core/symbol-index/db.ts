@@ -50,3 +50,7 @@ export function openIndexDb(dbPath?: string): Database.Database {
 export function defaultDbPath(): string {
   return path.join(os.homedir(), '.factory', 'symbol-index.db');
 }
+
+export function symbolIndexDbPathForWorktree(worktreePath: string): string {
+  return path.join(worktreePath, '.factory', 'symbol-index.db');
+}

@@ -1,5 +1,5 @@
 export type { ImportRow, SymbolKind, SymbolRow } from './types.js';
-export { defaultDbPath, openIndexDb } from './db.js';
+export { defaultDbPath, openIndexDb, symbolIndexDbPathForWorktree } from './db.js';
 export { DEFAULT_INCLUDE_DIRS, buildIndex, extractFromSource, walkTsFiles } from './builder.js';
 export type { BuildOptions, BuildResult } from './builder.js';
 export { assessSymbolIndexFreshness, ensureSymbolIndexFresh } from './freshness.js';

@@ -1,5 +1,5 @@
 import { buildRouteIndex } from './builder.js';
-import { openRouteIndexDb } from './db.js';
+import { openRouteIndexDb, routeIndexDbPathForWorktree } from './db.js';
 import { ensureRouteIndexFresh } from './freshness.js';
 import type { ComponentUsageRow, RouteRow } from './types.js';
 
@@ -38,17 +38,20 @@ function withFreshDb<T>(
   options: LookupOptions,
   query: (db: ReturnType<typeof openRouteIndexDb>) => T,
 ): T | null {
+  const dbPath =
+    options.dbPath ??
+    (options.worktreePath != null ? routeIndexDbPathForWorktree(options.worktreePath) : undefined);
   if (options.worktreePath != null) {
     const freshness = ensureRouteIndexFresh({
       repoRoot: options.worktreePath,
-      dbPath: options.dbPath,
+      dbPath,
       rebuild: (repoRoot, dbPath) => buildRouteIndex({ repoRoot, dbPath }),
     });
     if (freshness.missing || freshness.stale || freshness.corrupt) return null;
   }
   let db: ReturnType<typeof openRouteIndexDb>;
   try {
-    db = openRouteIndexDb(options.dbPath);
+    db = openRouteIndexDb(dbPath);
   } catch {
     return null;
   }

@@ -325,7 +325,7 @@ export async function runInvestigateWorkflow(
 
       // Pre-fetch symbol index hints for scout-code-path. Freshness and lookup are best-effort:
       // a missing, stale, or corrupt index must never block investigation.
-      const symbolIndexFreshness = ensureSymbolIndexFresh({ repoRoot: process.cwd() });
+      const symbolIndexFreshness = ensureSymbolIndexFresh({ repoRoot: worktreePath });
       const symbolIdentifiers = extractIdentifiers(`${workItem.title} ${workItem.body}`);
 
       if (symbolIndexFreshness.error != null) {

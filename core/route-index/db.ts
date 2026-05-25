@@ -40,3 +40,7 @@ export function openRouteIndexDb(dbPath?: string): Database.Database {
 export function defaultRouteIndexDbPath(): string {
   return path.join(os.homedir(), '.factory', 'route-index.db');
 }
+
+export function routeIndexDbPathForWorktree(worktreePath: string): string {
+  return path.join(worktreePath, '.factory', 'route-index.db');
+}

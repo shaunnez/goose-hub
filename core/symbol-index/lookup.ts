@@ -1,7 +1,8 @@
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
-import { defaultDbPath, openIndexDb } from './db.js';
+import { defaultDbPath, openIndexDb, symbolIndexDbPathForWorktree } from './db.js';
+import { ensureSymbolIndexFresh } from './freshness.js';
 import { findCallers, findCallersOfExport, findSymbol, listExportsOf } from './query.js';
 import type { SymbolKind, SymbolRow } from './types.js';
 
@@ -130,6 +131,40 @@ const MAX_IMPORTERS_PER_IMPACT = 5;
 const SCHEMA_SYMBOL_NAME_RE =
   /(schema|table|payload|contract|settings|config|state|event|input|output|row|record|entity|definition|defs)$/i;
 const SCHEMA_SYMBOL_KINDS = new Set(['interface', 'type', 'enum']);
+
+function resolveDbPath(options: LookupOptions | undefined): {
+  dbPath: string;
+  shouldEnsureWorktreeFresh: boolean;
+} {
+  if (options?.dbPath != null) return { dbPath: options.dbPath, shouldEnsureWorktreeFresh: false };
+  if (options?.worktreePath != null) {
+    return {
+      dbPath: symbolIndexDbPathForWorktree(options.worktreePath),
+      shouldEnsureWorktreeFresh: true,
+    };
+  }
+  return { dbPath: defaultDbPath(), shouldEnsureWorktreeFresh: false };
+}
+
+function prepareReadableDbPath(options: LookupOptions | undefined): string | null {
+  const resolved = resolveDbPath(options);
+  if (resolved.shouldEnsureWorktreeFresh) {
+    if (options?.worktreePath == null) return null;
+    try {
+      const freshness = ensureSymbolIndexFresh({
+        repoRoot: options.worktreePath,
+        dbPath: resolved.dbPath,
+      });
+      if (freshness.missing || freshness.stale || freshness.corrupt || freshness.error != null) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+    return resolved.dbPath;
+  }
+  return existsSync(resolved.dbPath) ? resolved.dbPath : null;
+}
 
 export function extractIdentifiers(text: string): string[] {
   // Backtick spans are high-confidence code references — extract identifier tokens from them first
@@ -276,8 +311,8 @@ export function lookupChangedExportImpact(
   changedFiles: string[],
   options?: LookupOptions & { maxImpacts?: number },
 ): SymbolImpact[] {
-  const resolved = options?.dbPath ?? defaultDbPath();
-  if (!existsSync(resolved)) return [];
+  const resolved = prepareReadableDbPath(options);
+  if (resolved == null) return [];
 
   let db: Database.Database | null = null;
   try {
@@ -314,8 +349,8 @@ export function lookupChangedExportImpact(
 }
 
 export function lookupSymbol(name: string, options?: LookupSymbolOptions): SymbolRow[] {
-  const resolved = options?.dbPath ?? defaultDbPath();
-  if (!existsSync(resolved)) return [];
+  const resolved = prepareReadableDbPath(options);
+  if (resolved == null) return [];
 
   let db: Database.Database | null = null;
   try {
@@ -331,8 +366,8 @@ export function lookupSymbol(name: string, options?: LookupSymbolOptions): Symbo
 }
 
 export function findCallersOfSymbol(symbol: string, options?: LookupOptions): string[] {
-  const resolved = options?.dbPath ?? defaultDbPath();
-  if (!existsSync(resolved)) return [];
+  const resolved = prepareReadableDbPath(options);
+  if (resolved == null) return [];
 
   let db: Database.Database | null = null;
   try {
@@ -365,8 +400,8 @@ export function lookupWorkItemSymbols(
   body: string,
   options?: LookupOptions,
 ): SymbolHint[] {
-  const resolved = options?.dbPath ?? defaultDbPath();
-  if (!existsSync(resolved)) return [];
+  const resolved = prepareReadableDbPath(options);
+  if (resolved == null) return [];
 
   let db: Database.Database | null = null;
   try {

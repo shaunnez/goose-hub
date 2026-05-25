@@ -511,17 +511,29 @@ git commit -m "fix(repo-intel): log not-found as successful empty query, not a f
 > **Read before coding:** `apps/server/src/shared/dispatch-dev.ts` (full — `dispatchParallelImplement`, `dispatchFixIssue`, `openPRImpl`/`orchestratorCommitWpImpl` wiring at `:546-567`), `core/connectors/github/open-pr.ts`, the parallel-implement orchestrator (search `parallel-implement.wp-committed` emitters), and `core/workspaces/orchestrator-git.ts` (read — done).
 
 > **Implementation gate:** do not implement WS3 directly from this section. Split it into a standalone plan/issue after reading the files above. The plan must answer branch naming, parent-worktree checkout state, push timing, cherry-pick/merge conflict behavior, resume idempotency, and what happens when a persisted WP later fails verification.
+>
+> **F12 prerequisite:** before implementation, define the small event-contract subset WS3 needs: `parallel-implement.wp-persisted`, terminal `runDisposition`, and `openPR` skip-push semantics. WS6 can own timeline presentation later, but WS3 must stamp the durable facts now.
 
 **Confirmed anchors:** `orchestrator-git.ts:31` (`--detach`), `:89` `orchestratorCommitWp`, `:143` `orchestratorPushBranch`, `dispatch-routing.ts:161-186` (`RESUME_WORKFLOWS`), `:201` `dispatchResumeIssue`.
 
-**F4 approach:** create a named branch `factory/run/<runId>` at implement start; after each `orchestratorCommitWp`, fast-forward/cherry-pick the WP commit onto that branch in the parent worktree and `orchestratorPushBranch` immediately. Emit the F12 prerequisite event `parallel-implement.wp-persisted` recording branch + pushed SHA. openPR targets this branch.
+**F4 approach:** create or reattach to a named integration branch `factory/run/<pipelineRunId>` at implement start. Do not check out or mutate the parent target repo branch; the parent checkout is only used to resolve the workflow base. Create the issue integration worktree from the base ref, check out/create the integration branch inside that worktree, commit each WP there, push `HEAD:refs/heads/factory/run/<pipelineRunId>` immediately after each WP commit, verify the remote head equals the WP commit SHA, then emit `parallel-implement.wp-persisted`. `openPR` targets this already-pushed branch and uses a skip-push/split-open path after final branch-head verification.
 
-**F1 approach:** in `RESUME_WORKFLOWS`, for `factory:spec-ready`/`factory:in-progress`, before re-dispatching, read `wp-persisted` events for the issue; pass already-persisted WP IDs to `dispatchParallelImplement` so it skips them and resumes from the first unpersisted WP.
+**F1 approach:** in `RESUME_WORKFLOWS`, for `factory:spec-ready`/`factory:in-progress`, before re-dispatching, read `wp-persisted` events for the issue and current `pipelineRunId`; pass already-persisted WP IDs plus the latest pushed integration-branch SHA to `dispatchParallelImplement`. The workflow must skip persisted WPs, reattach/recreate the issue integration worktree at the branch tip, and resume from the first unpersisted dependency-ready WP. If all WPs are persisted and no PR exists, resume opens the PR automatically. If a PR already exists, resume verifies branch/PR state and no-ops or advances to QA without duplicating the PR.
 
 **F5 approach:** topo-sort WPs by spec-declared deps; run independent WPs in parallel from the integration branch tip; run dependent WPs sequentially, each `createWpScratchWorktree(repo, runId, wpId, integrationBranchTip)` so they branch off the branch that already contains prerequisite commits. Replace the hard retry on `no observed changed files` with a single diagnosis + stop.
 
+**Cherry-pick/merge approach:** primary behavior is direct commits in the integration worktree after copying observed scratch changes; no merge commits. Only use cherry-pick if WS3 changes the implementation to commit in scratch worktrees first. On cherry-pick conflict, push verification mismatch, or `--force-with-lease` rejection, hard-stop the remaining WPs, keep the integration worktree/branch for inspection, emit `runDisposition: "persistence-failed"`, and route to `needs-human`.
+
+**Persisted-but-later-failed approach:** `wp-persisted` means durable checkpoint, not quality approval. If dev-review, QA, or human verification later rejects the work, keep the persisted checkpoint and append corrective commits on the same integration branch/PR. Do not add `wp-invalidated` until a future workflow deliberately reopens the WP scheduler and reruns already-persisted WPs.
+
+**Minimal F12 event contract:**
+
+- `parallel-implement.wp-persisted` is emitted only after push verification succeeds. Payload: `{ schemaVersion: 1, pipelineRunId, devRunId, wpId, wpRunId, iteration, integrationBranch, baseBranch, previousHeadSha, wpCommitSha, pushedSha, filesPersisted, persistMode: "direct-integration-commit" }`. `integrationBranch` is `factory/run/<pipelineRunId>`. `pushedSha` must equal the verified remote branch head and normally equals `wpCommitSha`.
+- `runDisposition` is an optional terminal field on WS3-owned `agent.run-completed` / `agent.run-failed` payloads. Minimal enum for WS3: `completed | persistence-failed | orphaned-restart | blocked-gate`.
+- `openPR` gains a skip-push or split-open mode. Parallel implement uses push-per-WP for durability, verifies the final remote branch head, then opens the final PR without pushing again.
+
 - [ ] Read the files above; expand this section into its own dated plan with full code + TDD steps.
-- [ ] Tasks: (a) integration-branch helper + push-per-WP; (b) `wp-persisted` event + persistence verification; (c) resume skip-persisted-WPs; (d) dep-aware WP ordering off integration tip; (e) no-op-WP hard stop.
+- [ ] Tasks: (a) minimal F12 event-contract subset; (b) integration-branch helper keyed by `pipelineRunId`; (c) push-per-WP + remote-head verification; (d) `wp-persisted` event; (e) resume skip-persisted-WPs + all-persisted PR recovery; (f) dep-aware WP ordering off integration tip; (g) no-op-WP hard stop; (h) persistence-failure rollback/escalation behavior.
 
 ---
 
