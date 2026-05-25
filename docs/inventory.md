@@ -14,7 +14,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `server` | yes | API + SSE host for the Goose Hub web UI. Stands up the server process the UI talks to. Closes M2.01 (#26). |
 | `web` | yes | Vite + React 19 + Tailwind 4 + React Router v6. Closes M2.02 (#27). |
 
-## core/ (35 entries, 4 missing README)
+## core/ (36 entries, 4 missing README)
 
 | Name | README | Summary |
 |---|---|---|
@@ -38,6 +38,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `persona` | yes | Persona stats accumulation. Updates `persona_stats` after every agent run. |
 | `prd` | **missing** | _(no README)_ |
 | `projects` | yes | Project registration loader for Goose Hub's multi-project orchestration. |
+| `qa` | yes | Shared QA routing helpers. |
 | `quality-score` | yes | Per-run QualityScore (0–100) with components and convergence detection. |
 | `retrospective` | yes | Shared Zod schemas for retrospective skill outputs. The three retro skills (`retrospective-light`, `retrospective-deep`, `retrospective-cross-run`) all conform to these shapes so downstream consumers (improvement-candidate filer, playbook builder) can treat their outputs uniformly. |
 | `retry` | yes | Retry counters for QA and Review failures. Counts are derived from the event stream — no separate retry table. |
