@@ -109,6 +109,19 @@ export function createWorktree(repo: string, runId: string, baseRef?: string): s
   return wtPath;
 }
 
+function localBranchExists(worktreePath: string, branchName: string): boolean {
+  try {
+    execFileSync('git', ['show-ref', '--verify', `refs/heads/${branchName}`], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+      env: GIT_ENV,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Creates or reattaches the durable per-pipeline integration worktree.
  *
@@ -137,13 +150,13 @@ export function createIntegrationWorktree(
     });
   }
 
-  try {
+  if (localBranchExists(wtPath, branchName)) {
     execFileSync('git', ['checkout', branchName], {
       cwd: wtPath,
       stdio: 'pipe',
       env: GIT_ENV,
     });
-  } catch {
+  } else {
     const args = ['checkout', '-B', branchName];
     if (baseRef != null && baseRef.length > 0) {
       args.push(baseRef);

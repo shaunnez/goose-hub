@@ -872,6 +872,7 @@ export async function runParallelImplementWorkflow(
     // ── Dev-review advisor step with maxRevisionTurns loop (M19.25) ─────────
     // Runs after all WPs are committed, before the PR is opened.
     // Budget guard: skip if perCycleMaxUsd <= 0.
+    let devReviewResponseCommitSha: string | undefined;
     if (
       devReviewCfg.enabled &&
       shouldRunDevReview(devReviewCfg.triggerOn, workItem.priority) &&
@@ -935,7 +936,7 @@ export async function runParallelImplementWorkflow(
             });
             // Commit response edits so the next iteration's Codex diff is current.
             // orchestratorCommitAll uses --allow-empty, so no-ops when nothing changed.
-            commitDevReviewFn(
+            devReviewResponseCommitSha = commitDevReviewFn(
               issueWorktreePath,
               `chore: dev-review-response turn-${turns} addressing/dismissing findings`,
             );
@@ -953,6 +954,19 @@ export async function runParallelImplementWorkflow(
           });
         }
       }
+    }
+
+    if (devReviewResponseCommitSha != null && issueWorktreePath != null) {
+      pushBranchFn(issueWorktreePath, integrationBranch);
+      const pushedSha =
+        resolveRemoteBranchHeadFn(issueWorktreePath, integrationBranch) ??
+        devReviewResponseCommitSha;
+      if (pushedSha !== devReviewResponseCommitSha) {
+        throw new Error(
+          `persistence verification failed for dev-review response: remote ${pushedSha} != commit ${devReviewResponseCommitSha}`,
+        );
+      }
+      integrationHeadSha = pushedSha;
     }
 
     // All WPs committed — open PR.

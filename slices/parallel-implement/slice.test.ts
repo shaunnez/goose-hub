@@ -1143,6 +1143,105 @@ describe('parallel-implement durable integration branch persistence', () => {
     });
   });
 
+  it('pushes dev-review response commits before opening the PR without repush', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent } = makeAppendEvent();
+    const operations: string[] = [];
+    const iterations: Array<{ wpId: string; status: string }> = [];
+    const remoteHeads = ['sha-wp1', 'sha-dev-review'];
+
+    const devReviewOutput: DevReviewOutput = {
+      verdict: 'blockers-found',
+      findings: [
+        {
+          severity: 'P1',
+          category: 'correctness',
+          file: 'core/a.ts',
+          line: 12,
+          summary: 'Missing durable push',
+          suggestion: 'Push after committing the response',
+        },
+      ],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Found one blocker' }],
+    };
+    const responseOutput: DevReviewResponseOutput = {
+      findingDispositions: [
+        {
+          findingRef: 'core/a.ts:12',
+          severity: 'P1',
+          disposition: 'addressed',
+          reason: 'Added the missing push',
+        },
+      ],
+      decisionSummaries: [{ kind: 'DEV_REVIEW_ADDRESSED', summary: 'Pushed response commit' }],
+    };
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem({ priority: 'high' }),
+      spec,
+      'pipeline-run-dev-review-push',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        devReviewConfigOverride: {
+          enabled: true,
+          triggerOn: 'all',
+          maxRevisionTurns: 1,
+          perCycleMaxUsd: 2.0,
+          timeoutMs: 180_000,
+        },
+        runDevReviewImpl: async () => devReviewOutput,
+        runDevReviewResponseImpl: async () => responseOutput,
+        commitDevReviewResponseImpl: () => {
+          operations.push('commit-dev-review');
+          return 'sha-dev-review';
+        },
+        createIntegrationWorktreeImpl: () => ({
+          worktreePath: '/tmp/issue-wt',
+          previousHeadSha: 'base-sha',
+        }),
+        createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha-wp1',
+        pushBranchImpl: (_worktreePath, branchName) => {
+          operations.push(`push:${branchName}`);
+        },
+        resolveRemoteBranchHeadImpl: () => remoteHeads.shift() ?? 'unexpected-sha',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: (_runId, wpId, _iteration, status) => {
+          iterations.push({ wpId, status });
+        },
+        getLastStatusImpl: (_runId, wpId) => {
+          const last = [...iterations].reverse().find((i) => i.wpId === wpId);
+          return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+        },
+        openPRImpl: async (input) => {
+          operations.push(`open-pr:skipPush=${String(input.skipPush)}`);
+          return {
+            prNumber: 12,
+            prUrl: 'https://gh/pr/12',
+            branch: input.branchName,
+            base: input.baseBranch ?? 'main',
+          };
+        },
+        getDiffImpl: () => 'diff --git a/core/a.ts b/core/a.ts\n+durable push',
+        appendEvent,
+      },
+    );
+
+    expect(result.status).toBe('success');
+    expect(operations).toEqual([
+      'push:factory/run/pipeline-run-dev-review-push',
+      'commit-dev-review',
+      'push:factory/run/pipeline-run-dev-review-push',
+      'open-pr:skipPush=true',
+    ]);
+  });
+
   it('skips already persisted WPs on resume and continues with the first unpersisted WP', async () => {
     const wp1 = makeWp('WP1', ['core/a.ts']);
     const wp2 = makeWp('WP2', ['core/b.ts']);
