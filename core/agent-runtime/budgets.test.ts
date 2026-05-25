@@ -7,6 +7,7 @@ describe('SKILL_BUDGETS', () => {
       'triage',
       'repo-match',
       'bug-enhance',
+      'feature-frame',
       'evidence-post',
       'implement',
       'qa',
@@ -119,7 +120,7 @@ describe('resolveBudgets', () => {
   });
 
   it('sonnet skills resolve to sonnet model IDs', () => {
-    for (const skill of ['investigate', 'qa', 'review', 'retrospective-deep']) {
+    for (const skill of ['feature-frame', 'investigate', 'qa', 'review', 'retrospective-deep']) {
       const { modelOverride } = resolveBudgets(skill);
       expect(modelOverride, `${skill} should use sonnet`).toContain('sonnet');
     }

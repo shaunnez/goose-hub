@@ -14,6 +14,7 @@ export {
   dispatchNeedsFix,
 } from './dispatch-qa-review.js';
 export {
+  dispatchFraming,
   dispatchGrillAndPrd,
   dispatchRetryWritePrd,
   dispatchRevisePrd,
