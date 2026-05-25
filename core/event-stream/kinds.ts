@@ -68,6 +68,7 @@ export const EVENT_KINDS = [
   'agent.verify-command',
   'project.budget-exceeded',
   'agent.fix-feedback-complete',
+  'agent.fix-feedback-skipped',
   'coach.completed',
   'coach.dispatch-triggered',
   'coach.skipped-forbidden-target',

@@ -8,17 +8,20 @@ interface QaFindingRowProps {
 
 function dispositionLabel(disposition: Disposition, dispositionRef?: string): string {
   if (disposition === 'fixed') return 'fixed';
+  if (disposition === 'needs-fix') return 'needs-fix';
   if (disposition === 'out-of-scope') return 'out-of-scope';
-  // registered
+  // follow-up
   return dispositionRef != null && dispositionRef.length > 0
-    ? `registered ${dispositionRef.startsWith('#') ? dispositionRef : `#${dispositionRef}`}`
-    : 'registered';
+    ? `follow-up ${dispositionRef.startsWith('#') ? dispositionRef : `#${dispositionRef}`}`
+    : 'follow-up';
 }
 
 function dispositionTone(disposition: Disposition): { fg: string; bg: string } {
   if (disposition === 'fixed')
     return { fg: 'var(--success)', bg: 'oklch(from var(--success) l c h / 0.12)' };
-  if (disposition === 'registered')
+  if (disposition === 'needs-fix')
+    return { fg: 'var(--danger)', bg: 'oklch(from var(--danger) l c h / 0.12)' };
+  if (disposition === 'follow-up')
     return { fg: 'var(--info)', bg: 'oklch(from var(--info) l c h / 0.12)' };
   // out-of-scope
   return { fg: 'var(--fg-3)', bg: 'var(--bg-elev-2)' };

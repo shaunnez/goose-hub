@@ -19,9 +19,11 @@ import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-tra
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
+import { collectActionableQaItems } from '@goose-hub/core/qa/actionability.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateQa } from '@goose-hub/core/retry/retry-counter.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { parseVitestJson } from '@goose-hub/core/test-runner/parse-vitest-json.js';
 import type { RegressionPolicy, TierResult } from '@goose-hub/core/verify/tiers.js';
 import { runTier as defaultRunTier } from '@goose-hub/core/verify/tiers.js';
 import {
@@ -72,6 +74,30 @@ export interface QaWorkflowDeps {
 const DEFAULT_TEST_COMMAND = 'pnpm test --reporter=json';
 const EXECUTABLE_CHECK_OUTPUT_LIMIT = 4_000;
 
+function localIssueRef(ref: string | undefined): string | null {
+  const match = ref?.trim().match(/^#?(\d+)$/);
+  return match?.[1] != null ? match[1] : null;
+}
+
+async function verifiedFollowUpRefsForQaOutput(
+  qaOutput: QaOutput,
+  stateSource: StateSource,
+): Promise<Set<string>> {
+  const refs = new Set<string>();
+  for (const finding of qaOutput.findings) {
+    if (finding.disposition !== 'follow-up') continue;
+    const localId = localIssueRef(finding.dispositionRef);
+    if (localId == null) continue;
+    try {
+      await stateSource.getItem(localId);
+      refs.add(`#${localId}`);
+    } catch {
+      // Invalid follow-up refs remain unverified and become actionable.
+    }
+  }
+  return refs;
+}
+
 function classifyVerificationInfrastructureFailure(
   result: TierResult | null,
 ): { reason: string; findings: string[] } | null {
@@ -98,19 +124,79 @@ function classifyVerificationInfrastructureFailure(
   };
 }
 
-function matchesOutputExpectation(
-  actual: string,
-  expectation: VerifyCommand['outputExpectation'],
-): boolean {
-  if (expectation == null) return true;
-  const trimmed = actual.trim();
-  if (expectation.mode === 'exact') return trimmed === expectation.value.trim();
-  if (expectation.mode === 'contains') return actual.includes(expectation.value);
+type CriteriaEvidenceArtifact = NonNullable<CriteriaResult['evidenceArtifact']>;
+
+function processEvidenceArtifact(): CriteriaEvidenceArtifact {
+  return {
+    type: 'process',
+    summary: { total: 0, passed: 0, failed: 0, skipped: 0 },
+    matchedSuites: [],
+    matchedTests: [],
+    artifactStatus: 'unavailable',
+  };
+}
+
+function vitestEvidenceArtifact(
+  rawOutput: string,
+  expectation: Extract<VerifyCommand['evidenceExpectation'], { type: 'vitest-json' }>,
+): CriteriaEvidenceArtifact {
   try {
-    return new RegExp(expectation.value).test(actual);
+    const testRun = parseVitestJson(JSON.parse(rawOutput.trim()));
+    const suites =
+      expectation.suite == null
+        ? testRun.suites
+        : testRun.suites.filter(
+            (suite) =>
+              suite.name === expectation.suite ||
+              suite.filePath.endsWith(expectation.suite ?? '__never__'),
+          );
+    const matchedTests =
+      expectation.testName == null
+        ? []
+        : suites.flatMap((suite) =>
+            (suite.tests ?? [])
+              .filter(
+                (test) =>
+                  test.name === expectation.testName && test.status === expectation.expectedStatus,
+              )
+              .map((test) => test.name),
+          );
+    const suiteMatched = expectation.suite == null || suites.length > 0;
+    const testMatched = expectation.testName == null || matchedTests.length > 0;
+    return {
+      type: 'vitest-json',
+      summary: {
+        total: testRun.total,
+        passed: testRun.passed,
+        failed: testRun.failed,
+        skipped: testRun.skipped,
+      },
+      matchedSuites: suites.map((suite) => suite.name),
+      matchedTests,
+      artifactStatus: suiteMatched && testMatched ? 'matched' : 'not-found',
+    };
   } catch {
-    return false;
+    return {
+      type: 'vitest-json',
+      summary: { total: 0, passed: 0, failed: 0, skipped: 0 },
+      matchedSuites: [],
+      matchedTests: [],
+      artifactStatus: 'unavailable',
+    };
   }
+}
+
+function evidenceArtifactFor(
+  actual: string,
+  expectation: VerifyCommand['evidenceExpectation'],
+): CriteriaEvidenceArtifact {
+  if (expectation?.type === 'vitest-json') return vitestEvidenceArtifact(actual, expectation);
+  return processEvidenceArtifact();
+}
+
+function evidenceExpectationPassed(artifact: CriteriaEvidenceArtifact): boolean {
+  if (artifact.type === 'vitest-json') return artifact.artifactStatus === 'matched';
+  return true;
 }
 
 async function runExecutableCheck(input: {
@@ -153,6 +239,7 @@ async function runExecutableCheck(input: {
         exitCode: null,
         actual: actualOutput(),
         passed: false,
+        evidenceArtifact: processEvidenceArtifact(),
         ...(input.check.outputExpectation != null
           ? { outputExpectation: input.check.outputExpectation }
           : {}),
@@ -175,6 +262,7 @@ async function runExecutableCheck(input: {
         exitCode: null,
         actual: actualOutput(),
         passed: false,
+        evidenceArtifact: processEvidenceArtifact(),
         ...(input.check.outputExpectation != null
           ? { outputExpectation: input.check.outputExpectation }
           : {}),
@@ -183,6 +271,8 @@ async function runExecutableCheck(input: {
     });
     child.on('close', (code) => {
       const exitCode = code ?? 1;
+      const evidenceArtifact = evidenceArtifactFor(fullOutput, input.check.evidenceExpectation);
+      const exitCodePassed = expectedExitCodes.includes(exitCode);
       finish({
         criterionId: input.check.criterionId,
         checkId: input.check.checkId,
@@ -191,12 +281,14 @@ async function runExecutableCheck(input: {
         expectedExitCodes,
         exitCode,
         actual: actualOutput(),
-        passed:
-          expectedExitCodes.includes(exitCode) &&
-          matchesOutputExpectation(fullOutput, input.check.outputExpectation),
+        passed: exitCodePassed && evidenceExpectationPassed(evidenceArtifact),
         ...(input.check.outputExpectation != null
           ? { outputExpectation: input.check.outputExpectation }
           : {}),
+        ...(input.check.evidenceExpectation != null
+          ? { evidenceExpectation: input.check.evidenceExpectation }
+          : {}),
+        evidenceArtifact,
       });
     });
   });
@@ -219,6 +311,7 @@ async function runExecutableChecks(input: {
       exitCode: null,
       actual: '',
       passed: false,
+      evidenceArtifact: processEvidenceArtifact(),
       ...(check.outputExpectation != null ? { outputExpectation: check.outputExpectation } : {}),
       error: 'workspaceDir unavailable; executable check was not run',
     }));
@@ -655,6 +748,15 @@ export async function runQaWorkflow(
     const executableChecksPassed =
       criteriaResults.length === 0 || criteriaResults.every((result) => result.passed);
     const verdict = executableChecksPassed ? qaOutput.verdict : 'fail';
+    const verifiedFollowUpRefs = await verifiedFollowUpRefsForQaOutput(qaOutput, stateSource);
+    const actionableQaItems = collectActionableQaItems(
+      {
+        findings: qaOutput.findings,
+        criteriaResults,
+        tierResults: groundTruthTierResults,
+      },
+      { verifiedFollowUpRefs },
+    );
 
     eventStore.appendEvent({
       projectId: projectSlug,
@@ -699,7 +801,10 @@ export async function runQaWorkflow(
     // Determine next state. Use priorEvents (snapshotted before this run) so the
     // retry count reflects completed prior failures, not the current one.
     const passes =
-      verdict === 'pass' || (verdict === 'partial' && qaOutput.overallScore >= qaOutput.threshold);
+      actionableQaItems.length === 0 &&
+      (verdict === 'pass' ||
+        verdict === 'fail' ||
+        (verdict === 'partial' && qaOutput.overallScore >= qaOutput.threshold));
 
     let nextState: StateName;
     if (passes) {

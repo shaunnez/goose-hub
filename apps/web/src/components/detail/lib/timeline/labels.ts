@@ -54,6 +54,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'symbol-index.hints-used': 'Symbol hints used',
   'agent.implement-complete': 'Implement complete',
   'agent.fix-feedback-complete': 'Fix feedback complete',
+  'agent.fix-feedback-skipped': 'Fix feedback skipped',
   'agent.retry-escalated': 'Retry escalated',
   'pr.opened': 'PR opened',
   'pr.merged': 'PR merged',

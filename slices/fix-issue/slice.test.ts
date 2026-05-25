@@ -92,7 +92,7 @@ vi.mock('@goose-hub/core/workspaces/workflow-base.js', () => ({
   resolveWorkflowBaseForWorkItem: (...args: unknown[]) => mockResolveWorkflowBase(...args),
 }));
 vi.mock('@goose-hub/core/workspaces/orchestrator-git.js', () => ({
-  orchestratorCommitAll: vi.fn().mockReturnValue('fake-sha'),
+  orchestratorCommitAll: vi.fn().mockReturnValue({ status: 'committed', sha: 'fake-sha' }),
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';

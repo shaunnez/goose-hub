@@ -19,17 +19,17 @@ const sample = {
       name: '/repo/src/cart.test.ts',
       status: 'passed',
       assertionResults: [
-        { status: 'passed', duration: 12 },
-        { status: 'passed', duration: 18.4 },
-        { status: 'pending', duration: 0 },
+        { title: 'adds cart item', status: 'passed', duration: 12 },
+        { title: 'removes cart item', status: 'passed', duration: 18.4 },
+        { title: 'updates quantity', status: 'pending', duration: 0 },
       ],
     },
     {
       name: '/repo/src/funnel.test.ts',
       status: 'failed',
       assertionResults: [
-        { status: 'passed', duration: 7 },
-        { status: 'failed', duration: 41 },
+        { title: 'opens the funnel', status: 'passed', duration: 7 },
+        { title: 'submits the funnel', status: 'failed', duration: 41 },
       ],
     },
   ],
@@ -55,6 +55,11 @@ describe('parseVitestJson', () => {
     expect(cart.skipped).toBe(1);
     expect(cart.durationMs).toBe(30); // 12 + 18.4 -> rounded
     expect(cart.status).toBe('passed');
+    expect(cart.tests).toEqual([
+      { name: 'adds cart item', status: 'passed', durationMs: 12 },
+      { name: 'removes cart item', status: 'passed', durationMs: 18 },
+      { name: 'updates quantity', status: 'skipped', durationMs: 0 },
+    ]);
 
     const funnel = run.suites[1];
     expect(funnel.status).toBe('failed');

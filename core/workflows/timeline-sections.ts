@@ -75,6 +75,7 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'spec.wp-issues-created': 'delivery-router',
   'agent.implement-complete': 'implementation',
   'agent.fix-feedback-complete': 'implementation',
+  'agent.fix-feedback-skipped': 'implementation',
   'pr.opened': 'implementation',
   'decompose.completed': 'decompose',
   'evidence.no-spec-declared': 'dev-review',

@@ -237,6 +237,39 @@ export function QASection({ projectSlug, id }: QASectionProps) {
                   </span>
                 </div>
                 <div className="text-fg-2 mb-1">{r.ac}</div>
+                {r.evidenceArtifact != null && (
+                  <div className="mt-2 rounded bg-bg px-2 py-2 text-[11px] text-fg-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="mono">{r.evidenceArtifact.type}</span>
+                      <span>{r.evidenceArtifact.artifactStatus}</span>
+                      <span className="mono">
+                        {r.evidenceArtifact.summary.passed}/{r.evidenceArtifact.summary.total}{' '}
+                        passed
+                      </span>
+                    </div>
+                    {(r.evidenceArtifact.matchedSuites.length > 0 ||
+                      r.evidenceArtifact.matchedTests.length > 0) && (
+                      <div className="mt-1 space-y-1">
+                        {r.evidenceArtifact.matchedSuites.length > 0 && (
+                          <div>
+                            <span className="text-fg-2">suites: </span>
+                            <span className="mono">
+                              {r.evidenceArtifact.matchedSuites.join(', ')}
+                            </span>
+                          </div>
+                        )}
+                        {r.evidenceArtifact.matchedTests.length > 0 && (
+                          <div>
+                            <span className="text-fg-2">tests: </span>
+                            <span className="mono">
+                              {r.evidenceArtifact.matchedTests.join(', ')}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {!r.passed && (
                   <details className="text-[11.5px] text-fg-3">
                     <summary className="cursor-pointer">expected vs actual</summary>

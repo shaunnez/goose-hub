@@ -143,21 +143,22 @@ Rules:
 
 Executable check results are not Review coverage. They prove commands passed or failed; they do not replace your judgement on non-executable criteria.
 
-## Fix-or-register
+## Finding Disposition
 
-Every finding must be classified — fixed in this PR, registered as a follow-up issue, or explicitly out-of-scope-for-this-issue. Never deferred, never "TODO". Deferred findings are how production drift accumulates; the fix-or-register rule is the primary safety mechanism (#468).
+Every finding must be classified — fixed in this PR, needing repair in this PR, tracked as a verified follow-up, or explicitly out-of-scope-for-this-issue. Never deferred, never "TODO".
 
 For each finding, set `disposition` and `dispositionRef`:
 
 | `disposition` | When | `dispositionRef` |
 |---|---|---|
 | `fixed` | The PR already addresses this finding (you observed the fix in the diff). | The commit SHA where the fix landed (short or full). |
-| `registered` | The finding is real but out of scope for this PR; a follow-up issue exists. | The follow-up issue number, e.g. `#234`. |
+| `needs-fix` | The finding is in scope for this story/PR and must go to fix-feedback. | A short current-PR rationale, e.g. `current PR`. |
+| `follow-up` | The finding is real but out of scope for this PR; a follow-up issue exists. | The follow-up issue number, e.g. `#234`. |
 | `out-of-scope` | The finding is real but explicitly not in scope for this issue. | A one-sentence rationale explaining why it doesn't belong in this PR. |
 
 **Required when `severity === 'error'`.** An error-severity finding without a disposition is a schema-validation failure — the agent's output is rejected. Warning- and info-severity findings may carry a disposition but it's optional (informational findings can stand alone).
 
-QA records the finding; QA does not file the follow-up issue itself (holdout discipline). The orchestrator or the human reviewer is responsible for actually filing `disposition: 'registered'` issues.
+QA records the finding; QA does not file the follow-up issue itself (holdout discipline). The orchestrator or the human reviewer is responsible for actually filing `disposition: 'follow-up'` issues.
 
 ## Priority classification
 
@@ -262,7 +263,7 @@ Are functions and methods simple? Low cyclomatic complexity means fewer branches
 Set `verdict` based on the following rules, in order:
 
 1. **fail** — if any of the following are true:
-   - Any `error`-severity finding exists in any tier (and reaches schema validation — meaning it has a `disposition` per fix-or-register, #468)
+   - Any actionable `error`-severity finding exists in any tier (and reaches schema validation — meaning it has a `disposition`, #468)
    - Any acceptance criterion from `workItem.body` is not satisfied
    - Any `criteriaResults[].passed === false`
    - `overallScore < threshold` (default threshold: 70)
@@ -344,8 +345,8 @@ Return a JSON object conforming exactly to this structure:
           "description": "Type error in apps/web/src/foo.ts: Property 'x' does not exist on type 'Bar'",
           "file": "apps/web/src/foo.ts",
           "line": 12,
-          "disposition": "registered",
-          "dispositionRef": "type error must be fixed before approval"
+          "disposition": "needs-fix",
+          "dispositionRef": "current PR"
         }
       ],
       "command": "pnpm biome check .",
@@ -379,8 +380,8 @@ Return a JSON object conforming exactly to this structure:
       "description": "Type error in apps/web/src/foo.ts: Property 'x' does not exist on type 'Bar'",
       "file": "apps/web/src/foo.ts",
       "line": 12,
-      "disposition": "registered",
-      "dispositionRef": "type error must be fixed before approval"
+      "disposition": "needs-fix",
+      "dispositionRef": "current PR"
     },
     { "tier": "functional", "severity": "warning", "description": "Acceptance criterion 3 not covered by any test" }
   ],

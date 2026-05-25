@@ -16,6 +16,10 @@ import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-tra
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
+import {
+  actionableQaItemsToFeedback,
+  collectActionableQaItems,
+} from '@goose-hub/core/qa/actionability.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { deriveObservedChangedFiles } from '@goose-hub/core/workspaces/observed-changes.js';
 import {
@@ -156,6 +160,24 @@ type QaPayload = {
   verdict?: string;
   overallScore?: number;
   threshold?: number;
+  findings?: Array<{
+    tier?: string;
+    severity?: string;
+    description: string;
+    suggestion?: string;
+    disposition?: 'fixed' | 'needs-fix' | 'out-of-scope' | 'follow-up';
+    dispositionRef?: string;
+  }>;
+  criteriaResults?: Array<{
+    criterionId: string;
+    checkId: string;
+    ac: string;
+    command: string;
+    passed: boolean;
+    exitCode?: number | null;
+    actual?: string;
+    error?: string;
+  }>;
   tierResults?: {
     structural?: TierResult;
     functional?: TierResult;
@@ -182,6 +204,7 @@ type SourceFailure = {
   kind: 'qa' | 'review';
   runId?: string;
   feedback: string;
+  actionable: boolean;
 };
 
 function compactPayload(payload: Record<string, unknown>): Record<string, unknown> {
@@ -227,9 +250,34 @@ function findPriorEvidenceSpecPath(events: ReturnType<typeof eventStore.replay>)
  * Skips QA passes so a qa-fail → fix → qa-pass → review-fail cycle correctly
  * surfaces the review findings rather than the superseded QA pass.
  */
-function findLatestSourceFailure(
+function localIssueRef(ref: string | undefined): string | null {
+  const match = ref?.trim().match(/^#?(\d+)$/);
+  return match?.[1] != null ? match[1] : null;
+}
+
+async function verifiedFollowUpRefsForPayload(
+  payload: QaPayload,
+  stateSource: StateSource,
+): Promise<Set<string>> {
+  const refs = new Set<string>();
+  for (const finding of payload.findings ?? []) {
+    if (finding.disposition !== 'follow-up') continue;
+    const localId = localIssueRef(finding.dispositionRef);
+    if (localId == null) continue;
+    try {
+      await stateSource.getItem(localId);
+      refs.add(`#${localId}`);
+    } catch {
+      // Keep invalid follow-up refs actionable.
+    }
+  }
+  return refs;
+}
+
+async function findLatestSourceFailure(
   events: ReturnType<typeof eventStore.replay>,
-): SourceFailure | null {
+  stateSource: StateSource,
+): Promise<SourceFailure | null> {
   let qaIdx = -1;
   let qaEvent: (typeof events)[number] | null = null;
   for (let i = events.length - 1; i >= 0; i--) {
@@ -259,29 +307,32 @@ function findLatestSourceFailure(
     for (const f of findings) {
       lines.push(`- [${f.severity}] ${f.description}`);
     }
-    return { kind: 'review', runId: sourceRunId(reviewEvent), feedback: lines.join('\n') };
+    return {
+      kind: 'review',
+      runId: sourceRunId(reviewEvent),
+      feedback: lines.join('\n'),
+      actionable: true,
+    };
   }
 
   if (qaEvent != null) {
     const payload = qaEvent.payload as QaPayload;
-    const { verdict = 'fail', overallScore = 0, threshold = 70, tierResults = {} } = payload;
-    const lines: string[] = [
-      `QA verdict: ${verdict} (score ${overallScore}/${threshold})`,
-      '',
-      'Findings to address:',
-    ];
-    for (const [tier, result] of Object.entries(tierResults) as [
-      string,
-      TierResult | undefined,
-    ][]) {
-      if (result == null || result.passed) continue;
-      for (const f of result.findings) {
-        lines.push(
-          `- [${tier}/${f.severity}] ${f.description}${f.suggestion ? ` — ${f.suggestion}` : ''}`,
-        );
-      }
-    }
-    return { kind: 'qa', runId: sourceRunId(qaEvent), feedback: lines.join('\n') };
+    const { verdict = 'fail', overallScore = 0, threshold = 70 } = payload;
+    const verifiedFollowUpRefs = await verifiedFollowUpRefsForPayload(payload, stateSource);
+    const actionableItems = collectActionableQaItems(payload, { verifiedFollowUpRefs });
+    return {
+      kind: 'qa',
+      runId: sourceRunId(qaEvent),
+      feedback:
+        actionableItems.length > 0
+          ? [
+              `QA verdict: ${verdict} (score ${overallScore}/${threshold})`,
+              '',
+              actionableQaItemsToFeedback(actionableItems),
+            ].join('\n')
+          : '',
+      actionable: actionableItems.length > 0,
+    };
   }
 
   return null;
@@ -317,7 +368,7 @@ export async function runFixFeedbackWorkflow(
   const attemptId = crypto.randomUUID();
   const events = eventStore.replay({ workItemId: workItem.id });
   const prLifecycle = findPrLifecycle(events);
-  const sourceFailure = findLatestSourceFailure(events);
+  const sourceFailure = await findLatestSourceFailure(events, stateSource);
   const repairCycle = nextRepairCycle(events);
   const repairPayload = compactPayload({
     pipelineRunId: prLifecycle?.pipelineRunId,
@@ -423,6 +474,39 @@ export async function runFixFeedbackWorkflow(
   const implementJsonSchema = toJsonSchema(ImplementSchema);
   const { personaId } = selectPersona(projectId, 'developer');
   const advisorFeedback = sourceFailure?.feedback ?? '';
+
+  if (sourceFailure?.kind === 'qa' && !sourceFailure.actionable) {
+    await stateSource.comment(
+      workItem.externalId,
+      buildAgentComment(
+        'Dev',
+        'Complete',
+        'No actionable QA findings remain — skipping fix-feedback and transitioning to needs-review',
+      ),
+    );
+    await stateSource.transitionState(
+      workItem.externalId,
+      'factory:needs-fix',
+      'factory:needs-review',
+    );
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:needs-fix',
+      to: 'factory:needs-review',
+      by: 'fix-feedback',
+      runId,
+      extraPayload: repairPayload,
+    });
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.fix-feedback-skipped',
+      payload: { ...repairPayload, reason: 'no-actionable-qa-findings' },
+      runId,
+    });
+    return;
+  }
 
   const priorInvestigation = latestInvestigationContext({
     projectId,
@@ -542,10 +626,46 @@ export async function runFixFeedbackWorkflow(
     });
 
     const observedChangedFiles = deriveObservedChangedFiles(worktreePath);
-    const commitSha = commitAllFn(
+    const commitResult = commitAllFn(
       worktreePath,
       `fix(#${workItem.externalId}): address feedback cycle ${repairCycle}`,
     );
+    if (commitResult.status === 'no-changes') {
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.run-failed',
+        payload: {
+          runId,
+          error: 'fix-feedback: implement produced no commit changes',
+          ...repairPayload,
+        },
+        runId,
+      });
+      await stateSource.comment(
+        workItem.externalId,
+        buildAgentComment(
+          'Dev',
+          'Failed',
+          'Fix-feedback produced no changes — escalating to needs-human',
+        ),
+      );
+      await stateSource.transitionState(
+        workItem.externalId,
+        'factory:in-progress',
+        'factory:needs-human',
+      );
+      emitStateTransitionEvent({
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:in-progress',
+        to: 'factory:needs-human',
+        by: 'fix-feedback',
+        runId,
+        extraPayload: repairPayload,
+      });
+      return;
+    }
     pushBranchFn(worktreePath, branch);
 
     reconcileDecisionSummaries(
@@ -562,7 +682,7 @@ export async function runFixFeedbackWorkflow(
       kind: 'agent.fix-feedback-complete',
       payload: {
         ...repairPayload,
-        commitSha,
+        commitSha: commitResult.sha,
         filesWritten: implementOutput.filesWritten.length,
         testsWritten: implementOutput.testsWritten.length,
         confidence: implementOutput.confidence,

@@ -61,6 +61,7 @@ export interface InterfaceContractDto {
   name: string;
   signature: string;
   file: string;
+  requiredExports?: Array<{ name: string; file?: string }>;
   lineRange?: string | null;
 }
 
@@ -100,6 +101,9 @@ export interface ExecutableCheckDto {
     mode: 'exact' | 'contains' | 'regex';
     value: string;
   };
+  evidenceExpectation?:
+    | { type: 'exit-code' }
+    | { type: 'vitest-json'; suite?: string; testName?: string; expectedStatus: 'passed' };
   timeoutMs?: number;
   kind?: 'unit' | 'integration' | 'e2e' | 'api' | 'lint' | 'typecheck' | 'custom';
 }

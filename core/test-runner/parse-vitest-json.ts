@@ -10,6 +10,9 @@ import type { SuiteResult, TestRun } from '@goose-hub/skills/qa/schema.js';
 type SuiteStatus = SuiteResult['status'];
 
 interface VitestAssertion {
+  title?: string;
+  fullName?: string;
+  name?: string;
   status: string;
   duration?: number | null;
 }
@@ -39,6 +42,12 @@ function classifySuite(passed: number, failed: number, total: number): SuiteStat
   return 'passed';
 }
 
+function classifyTestStatus(status: string): 'passed' | 'failed' | 'skipped' {
+  if (status === 'passed') return 'passed';
+  if (status === 'failed') return 'failed';
+  return 'skipped';
+}
+
 /** Parse a vitest `--reporter=json` payload into the canonical TestRun shape. */
 export function parseVitestJson(raw: unknown, now: number = Date.now()): TestRun {
   if (raw == null || typeof raw !== 'object') {
@@ -65,6 +74,11 @@ export function parseVitestJson(raw: unknown, now: number = Date.now()): TestRun
       skipped,
       durationMs: Math.round(durationMs),
       status: classifySuite(passed, failed, total),
+      tests: assertions.map((a, index) => ({
+        name: a.title ?? a.fullName ?? a.name ?? `test ${index + 1}`,
+        status: classifyTestStatus(a.status),
+        durationMs: Math.round(a.duration ?? 0),
+      })),
     };
   });
 

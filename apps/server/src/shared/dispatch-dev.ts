@@ -448,7 +448,10 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
             prewarmWorktreeImpl: () => undefined,
             cleanupWorktreeImpl: () => undefined,
             resolveWorktreeHeadShaImpl: () => 'mock-sha-abc123',
-            orchestratorCommitAllImpl: () => 'mock-commit-sha',
+            orchestratorCommitAllImpl: () => ({
+              status: 'committed',
+              sha: 'mock-commit-sha',
+            }),
           }
         : undefined;
 
@@ -588,7 +591,10 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
               orchestratorCommitWpImpl: () => 'mock-commit-sha',
               revertWpChangesImpl: () => {},
               getDiffImpl: () => '',
-              commitDevReviewResponseImpl: () => 'mock-dr-commit-sha',
+              commitDevReviewResponseImpl: () => ({
+                status: 'committed',
+                sha: 'mock-dr-commit-sha',
+              }),
             }
           : {};
 

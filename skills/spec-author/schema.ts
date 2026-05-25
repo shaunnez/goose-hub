@@ -69,6 +69,15 @@ export const InterfaceContractSchema = z.object({
   signature: z.string().min(1),
   /** Repo-root/worktree-root relative file the signature lives in (or will live in). */
   file: z.string().min(1).describe(RepoRelativePathDescription),
+  /** Explicit exports that Tier 1 must verify. `name` remains descriptive. */
+  requiredExports: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        file: z.string().min(1).describe(RepoRelativePathDescription).optional(),
+      }),
+    )
+    .optional(),
   /** Optional `start-end` line range as a string, e.g. "12-34". */
   lineRange: optionalAiString,
 });

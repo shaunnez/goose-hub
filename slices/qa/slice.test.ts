@@ -154,8 +154,8 @@ function makeFailResult(): AgentResult {
               tier: 'structural',
               severity: 'error',
               description: 'lint error',
-              disposition: 'fixed',
-              dispositionRef: 'abc1234',
+              disposition: 'needs-fix',
+              dispositionRef: 'current PR',
             },
           ],
         },
@@ -912,6 +912,36 @@ describe('runQaWorkflow', () => {
         outcome: 'failure',
         qualityScore: expect.any(Number),
       });
+    });
+
+    it('routes fail verdict with only out-of-scope findings to factory:needs-review', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce({
+        ...makePassResult(),
+        output: {
+          ...(makePassResult().output as Record<string, unknown>),
+          verdict: 'fail',
+          findings: [
+            {
+              tier: 'functional',
+              severity: 'error',
+              description: 'Pre-existing visual issue',
+              disposition: 'out-of-scope',
+              dispositionRef: 'Not touched by this issue',
+            },
+          ],
+        },
+      });
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:needs-review',
+      );
     });
   });
 
@@ -2560,10 +2590,9 @@ describe('runQaWorkflow', () => {
       expect(parsed.success).toBe(true);
       expect(synthetic.verdict).toBe('fail');
       expect(synthetic.overallScore).toBe(0);
-      // Synthetic error finding carries a registered disposition so it passes
-      // QA schema validation under fix-or-register (#468).
+      // Synthetic error finding carries needs-fix so fix-feedback can repair it.
       const errorFinding = synthetic.findings.find((f) => f.severity === 'error');
-      expect(errorFinding?.disposition).toBe('registered');
+      expect(errorFinding?.disposition).toBe('needs-fix');
       expect(errorFinding?.dispositionRef).toBe('deterministic-verification');
     });
 

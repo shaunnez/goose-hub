@@ -245,6 +245,19 @@ export function SpecDetails({
                       {contract.file}
                       {contract.lineRange != null ? `:${contract.lineRange}` : ''}
                     </div>
+                    {contract.requiredExports != null && contract.requiredExports.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {contract.requiredExports.map((requiredExport) => (
+                          <span
+                            key={`${requiredExport.file ?? contract.file}:${requiredExport.name}`}
+                            className="rounded bg-bg px-1.5 py-0.5 font-mono text-[10px] text-fg-3"
+                          >
+                            export {requiredExport.name}
+                            {requiredExport.file != null ? ` @ ${requiredExport.file}` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <pre className="mt-2 whitespace-pre-wrap break-words rounded bg-bg px-2 py-2 text-[10.5px] text-fg-3">
                       {contract.signature}
                     </pre>

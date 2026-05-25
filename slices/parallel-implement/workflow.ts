@@ -107,7 +107,7 @@ export interface ParallelImplementDeps {
   /** Override runDevReviewResponse for testing (avoids hitting DB/FS/Claude). */
   runDevReviewResponseImpl?: typeof runDevReviewResponse;
   /** Override the orchestrator commit-all for dev-review-response edits (for testing). */
-  commitDevReviewResponseImpl?: (worktreePath: string, msg: string) => string;
+  commitDevReviewResponseImpl?: typeof orchestratorCommitAll;
   /** Override persona selection for tests that should not touch SQLite routing state. */
   selectPersonaImpl?: typeof selectPersona;
   /** Override observed changed-file derivation for tests. */
@@ -1300,11 +1300,13 @@ export async function runParallelImplementWorkflow(
               appendEvent: append,
             });
             // Commit response edits so the next iteration's Codex diff is current.
-            // orchestratorCommitAll uses --allow-empty, so no-ops when nothing changed.
-            devReviewResponseCommitSha = commitDevReviewFn(
+            const devReviewCommitResult = commitDevReviewFn(
               issueWorktreePath,
               `chore: dev-review-response turn-${turns} addressing/dismissing findings`,
             );
+            if (devReviewCommitResult.status === 'committed') {
+              devReviewResponseCommitSha = devReviewCommitResult.sha;
+            }
             turns++;
           }
         } catch (devReviewErr) {

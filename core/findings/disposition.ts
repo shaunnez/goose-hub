@@ -8,18 +8,19 @@ import { z } from 'zod';
  * cannot drift; both skills' `FindingSchema` re-export and apply
  * `requireDispositionWhen` for their highest-severity tier.
  *
- * - `fixed`: addressed in this PR. `dispositionRef` is a commit SHA.
- * - `registered`: filed as a follow-up issue. `dispositionRef` is the issue
- *   number (e.g. `"#234"`).
- * - `out-of-scope`: not in scope for this issue. `dispositionRef` is a
- *   one-sentence rationale.
+ * - `fixed`: already addressed in this PR. `dispositionRef` is a commit SHA.
+ * - `needs-fix`: in scope for this story/PR and must enter the repair loop.
+ * - `out-of-scope`: real observation, but not in scope for this issue.
+ *   `dispositionRef` is a one-sentence rationale.
+ * - `follow-up`: real observation intentionally outside this PR.
+ *   `dispositionRef` is the follow-up issue number (e.g. `"#234"`).
  *
  * Holdout note: holdouts (QA, Review) only *record* the finding and chosen
  * disposition. They do not file the follow-up issue themselves — the
  * orchestrator or the human reviewer is responsible for actually filing
- * `registered` issues.
+ * follow-up issues.
  */
-export const DispositionSchema = z.enum(['fixed', 'registered', 'out-of-scope']);
+export const DispositionSchema = z.enum(['fixed', 'needs-fix', 'out-of-scope', 'follow-up']);
 
 export type Disposition = z.infer<typeof DispositionSchema>;
 

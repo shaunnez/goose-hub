@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -117,20 +117,37 @@ export function orchestratorCommitWp(
  *
  * @param worktreePath - Absolute path to the worktree.
  * @param commitMsg    - Commit message.
- * @returns The resulting commit SHA (40 chars).
+ * @returns Commit result. `no-changes` means no commit was created.
  */
-export function orchestratorCommitAll(worktreePath: string, commitMsg: string): string {
+export type OrchestratorCommitAllResult =
+  | { status: 'committed'; sha: string }
+  | { status: 'no-changes' };
+
+export function orchestratorCommitAll(
+  worktreePath: string,
+  commitMsg: string,
+): OrchestratorCommitAllResult {
   execFileSync('git', ['add', '-A'], { cwd: worktreePath, stdio: 'pipe', env: GIT_ENV });
-  execFileSync('git', ['commit', '--allow-empty', '-m', commitMsg], {
+  const stagedDiff = spawnSync('git', ['diff', '--cached', '--quiet'], {
     cwd: worktreePath,
     stdio: 'pipe',
     env: GIT_ENV,
   });
-  return execFileSync('git', ['rev-parse', 'HEAD'], {
+  if (stagedDiff.status === 0) return { status: 'no-changes' };
+  if (stagedDiff.status !== 1) {
+    throw new Error(`git diff --cached --quiet failed with status ${stagedDiff.status}`);
+  }
+  execFileSync('git', ['commit', '-m', commitMsg], {
+    cwd: worktreePath,
+    stdio: 'pipe',
+    env: GIT_ENV,
+  });
+  const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
     cwd: worktreePath,
     encoding: 'utf8',
     env: GIT_ENV,
   }).trim();
+  return { status: 'committed', sha };
 }
 
 /**

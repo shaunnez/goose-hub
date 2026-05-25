@@ -93,34 +93,43 @@ export function verifyStructural(
   }
 
   for (const contract of spec.interfaceContracts) {
-    const fullPath = join(worktreePath, contract.file);
-    if (!existsSync(fullPath)) {
-      findings.push({
-        message: `Interface contract '${contract.name}': file ${contract.file} does not exist`,
-        file: contract.file,
-        severity: 'error',
-      });
+    const requiredExports = contract.requiredExports ?? [];
+    if (requiredExports.length === 0) {
+      evidence.push(`interface-contract-described: ${contract.name} in ${contract.file}`);
       continue;
     }
 
-    const content = readFileSync(fullPath, 'utf8');
-    // Matches: export [async] function|const|class|type|interface|let|var <name>
-    const exportPattern = new RegExp(
-      `export\\s+(?:async\\s+)?(?:function|const|class|type|interface|let|var)\\s+${escapeRegex(contract.name)}\\b`,
-    );
-    // Also matches: export { <name> } re-exports
-    const reExportPattern = new RegExp(
-      `export\\s+\\{[^}]*\\b${escapeRegex(contract.name)}\\b[^}]*\\}`,
-    );
+    for (const requiredExport of requiredExports) {
+      const exportFile = requiredExport.file ?? contract.file;
+      const fullPath = join(worktreePath, exportFile);
+      if (!existsSync(fullPath)) {
+        findings.push({
+          message: `Interface contract '${contract.name}': file ${exportFile} does not exist`,
+          file: exportFile,
+          severity: 'error',
+        });
+        continue;
+      }
 
-    if (exportPattern.test(content) || reExportPattern.test(content)) {
-      evidence.push(`export-found: ${contract.name} in ${contract.file}`);
-    } else {
-      findings.push({
-        message: `Interface contract '${contract.name}' is not exported from ${contract.file}`,
-        file: contract.file,
-        severity: 'error',
-      });
+      const content = readFileSync(fullPath, 'utf8');
+      // Matches: export [async] function|const|class|type|interface|let|var <name>
+      const exportPattern = new RegExp(
+        `export\\s+(?:async\\s+)?(?:function|const|class|type|interface|let|var)\\s+${escapeRegex(requiredExport.name)}\\b`,
+      );
+      // Also matches: export { <name> } re-exports
+      const reExportPattern = new RegExp(
+        `export\\s+\\{[^}]*\\b${escapeRegex(requiredExport.name)}\\b[^}]*\\}`,
+      );
+
+      if (exportPattern.test(content) || reExportPattern.test(content)) {
+        evidence.push(`export-found: ${requiredExport.name} in ${exportFile}`);
+      } else {
+        findings.push({
+          message: `Interface contract '${contract.name}' requires export '${requiredExport.name}' from ${exportFile}`,
+          file: exportFile,
+          severity: 'error',
+        });
+      }
     }
   }
 

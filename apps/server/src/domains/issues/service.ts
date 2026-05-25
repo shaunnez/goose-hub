@@ -76,6 +76,23 @@ function projectExecutableChecks(value: unknown) {
           },
         }
       : {}),
+    ...(isObject(check.evidenceExpectation)
+      ? {
+          evidenceExpectation:
+            check.evidenceExpectation.type === 'vitest-json'
+              ? {
+                  type: 'vitest-json' as const,
+                  ...(typeof check.evidenceExpectation.suite === 'string'
+                    ? { suite: check.evidenceExpectation.suite }
+                    : {}),
+                  ...(typeof check.evidenceExpectation.testName === 'string'
+                    ? { testName: check.evidenceExpectation.testName }
+                    : {}),
+                  expectedStatus: 'passed' as const,
+                }
+              : { type: 'exit-code' as const },
+        }
+      : {}),
     ...(typeof check.timeoutMs === 'number' ? { timeoutMs: check.timeoutMs } : {}),
     ...(typeof check.kind === 'string'
       ? {
@@ -150,6 +167,10 @@ function projectEngineeringSpec(record: NonNullable<ReturnType<typeof getEnginee
       name: stringValue(contract.name),
       signature: stringValue(contract.signature),
       file: stringValue(contract.file),
+      requiredExports: objectArray(contract.requiredExports).map((requiredExport) => ({
+        name: stringValue(requiredExport.name),
+        ...(requiredExport.file != null ? { file: stringValue(requiredExport.file) } : {}),
+      })),
       ...(contract.lineRange != null ? { lineRange: contract.lineRange as string | null } : {}),
     })),
     ...(schemaChanges != null ? { schemaChanges } : {}),
@@ -315,6 +336,7 @@ export async function getIssueSpec(
         name: string;
         signature: string;
         file: string;
+        requiredExports: Array<{ name: string; file?: string }>;
         lineRange?: string | null;
       }>;
       schemaChanges?: { ddl: string[]; migrations: string[] };

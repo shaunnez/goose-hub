@@ -22,6 +22,9 @@ type VerifyCommand = {
     mode: 'exact' | 'contains' | 'regex';
     value: string;
   };
+  evidenceExpectation?:
+    | { type: 'exit-code' }
+    | { type: 'vitest-json'; suite?: string; testName?: string; expectedStatus: 'passed' };
   timeoutMs?: number;
 };
 
@@ -35,6 +38,7 @@ function mergeVerifyCommands(...groups: VerifyCommand[][]): VerifyCommand[] {
       command: command.command,
       expectedExitCodes: command.expectedExitCodes,
       outputExpectation: command.outputExpectation,
+      evidenceExpectation: command.evidenceExpectation,
       timeoutMs: command.timeoutMs,
     });
     if (!merged.has(key)) merged.set(key, command);

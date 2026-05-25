@@ -138,7 +138,7 @@ describe('QASection', () => {
                 tier: 'functional',
                 severity: 'error',
                 description: 'AC 2 fails — boundary case',
-                disposition: 'registered',
+                disposition: 'follow-up',
                 dispositionRef: '#345',
               },
               {
@@ -166,7 +166,7 @@ describe('QASection', () => {
       const pills = screen.getAllByTestId('qa-finding-disposition');
       expect(pills.length).toBeGreaterThanOrEqual(3);
       const text = pills.map((p) => p.textContent ?? '').join('\n');
-      expect(text).toContain('registered #345');
+      expect(text).toContain('follow-up #345');
       expect(text).toContain('fixed');
       expect(text).toContain('out-of-scope');
     });

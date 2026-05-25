@@ -28,9 +28,9 @@ function makeNeedsFixOutput(overrides = {}) {
       {
         severity: 'blocker',
         description: 'Missing slice.test.ts required by FACTORY_RULES',
-        // #468 — every blocker carries a disposition. Here it's `registered`
+        // #468 — every blocker carries a disposition. Here it's `follow-up`
         // because slice.test.ts gap is being filed as a follow-up.
-        disposition: 'registered',
+        disposition: 'follow-up',
         dispositionRef: '#999',
       },
     ],
@@ -249,7 +249,7 @@ describe('ReviewFindingSchema', () => {
     const result = ReviewFindingSchema.safeParse({
       severity: 'blocker',
       description: 'Acceptance criterion unmet: slice.test.ts missing',
-      disposition: 'registered',
+      disposition: 'follow-up',
       dispositionRef: '#345',
     });
     expect(result.success).toBe(true);
@@ -302,7 +302,7 @@ describe('ReviewFindingSchema', () => {
   it('rejects missing description', () => {
     const result = ReviewFindingSchema.safeParse({
       severity: 'blocker',
-      disposition: 'registered',
+      disposition: 'follow-up',
       dispositionRef: '#1',
     });
     expect(result.success).toBe(false);
@@ -355,7 +355,7 @@ describe('ReviewFindingSchema', () => {
       ReviewFindingSchema.safeParse({
         severity: 'blocker',
         description: 'Missing README',
-        disposition: 'registered',
+        disposition: 'follow-up',
         dispositionRef: '',
       }).success,
     ).toBe(false);
@@ -387,7 +387,7 @@ describe('ReviewFindingSchema', () => {
     const result = ReviewFindingSchema.safeParse({
       severity: 'blocker',
       description: 'missing required file',
-      disposition: 'registered',
+      disposition: 'follow-up',
       dispositionRef: '#123',
       priority: 'P0',
     });

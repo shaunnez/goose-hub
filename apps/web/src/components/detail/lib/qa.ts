@@ -1,4 +1,4 @@
-export type Disposition = 'fixed' | 'registered' | 'out-of-scope';
+export type Disposition = 'fixed' | 'needs-fix' | 'out-of-scope' | 'follow-up';
 
 export interface Finding {
   tier: 'structural' | 'functional' | 'regression';
@@ -27,6 +27,7 @@ export interface SuiteResult {
   skipped: number;
   durationMs: number;
   status: 'passed' | 'failed' | 'skipped';
+  tests?: Array<{ name: string; status: 'passed' | 'failed' | 'skipped'; durationMs: number }>;
 }
 
 export interface TestRun {
@@ -52,6 +53,16 @@ export interface CriteriaResult {
     mode: 'exact' | 'contains' | 'regex';
     value: string;
   };
+  evidenceExpectation?:
+    | { type: 'exit-code' }
+    | { type: 'vitest-json'; suite?: string; testName?: string; expectedStatus: 'passed' };
+  evidenceArtifact?: {
+    type: 'vitest-json' | 'process';
+    summary: { total: number; passed: number; failed: number; skipped: number };
+    matchedSuites: string[];
+    matchedTests: string[];
+    artifactStatus: 'matched' | 'not-found' | 'unavailable';
+  };
   durationMs?: number;
   error?: string;
 }
@@ -65,6 +76,7 @@ export interface QaPayload {
     functional: TierResult;
     regression: TierResult;
   };
+  findings?: Finding[];
   criteriaResults?: CriteriaResult[];
   testRun?: TestRun;
 }

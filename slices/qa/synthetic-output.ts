@@ -34,13 +34,13 @@ function mapVerifyFinding(tier: 1 | 2 | 3, vf: VerifyTierResult['findings'][numb
     description: vf.message,
     ...(vf.file != null ? { file: vf.file } : {}),
     ...(vf.line != null ? { line: vf.line } : {}),
-    // Required when severity === 'error' (#468 fix-or-register). The
+    // Required when severity === 'error' (#468 finding disposition). The
     // deterministic verifier IS the disposition for synthetic findings:
     // the failure is recorded, the agent is intentionally skipped, and the
     // retry-counter routes to fix-feedback (which gets the chance to fix it).
     ...(vf.severity === 'error'
       ? {
-          disposition: 'registered' as const,
+          disposition: 'needs-fix' as const,
           dispositionRef: 'deterministic-verification',
         }
       : {}),
