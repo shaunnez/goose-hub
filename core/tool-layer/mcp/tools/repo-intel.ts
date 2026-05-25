@@ -188,11 +188,12 @@ export async function repoIntelQueryTool(
   }
 
   const result = await dispatchRepoIntel(ctx, normalized, deps);
+  const isMiss = !result.ok && result.reason === 'not-found';
   emitToolCall(ctx, {
     tool: 'repo_intel.query',
     input: auditInput(input),
-    status: result.ok ? 'ok' : 'failed',
-    noMatches: !result.ok && result.reason === 'not-found',
+    status: result.ok || isMiss ? 'ok' : 'failed',
+    noMatches: isMiss,
     repo_intel_intent: input.intent,
     inputKeys,
     ...duplicateAuditFields(duplicate),
