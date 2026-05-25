@@ -59,6 +59,7 @@ import {
   buildCodexMcpInlineArgs,
   codexMcpEnabledToolsForServer,
 } from './codex-config.js';
+import { estimateCostUsd } from './models.js';
 
 function makeSpec(overrides: Record<string, unknown> = {}) {
   return {
@@ -404,6 +405,68 @@ describe('CodexCliRuntime timeout handling', () => {
         payload: expect.objectContaining({
           modelId: 'gpt-5.4-mini',
           runtime: 'codex-cli',
+        }),
+      }),
+    );
+  });
+
+  it('records cached and reasoning tokens with discounted estimated Codex cost', async () => {
+    vi.mocked(estimateCostUsd).mockReturnValueOnce(3.55);
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(
+      makeSpec({
+        modelOverride: 'gpt-5.4',
+        budgets: { maxTurns: 10, maxBudgetUsd: 10, timeoutMs: 5000 },
+      }),
+    );
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        JSON.stringify({
+          result: '{"ok":true}',
+          usage: {
+            input_tokens: 1000,
+            cached_input_tokens: 400,
+            output_tokens: 100,
+            reasoning_output_tokens: 20,
+          },
+        }),
+      ),
+    );
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+
+    expect(estimateCostUsd).toHaveBeenCalledWith('gpt-5.4', 1000, 100, {
+      cachedInputTokens: 400,
+      reasoningOutputTokens: 20,
+    });
+    expect(mockRecordCost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-codex',
+        modelId: 'gpt-5.4',
+        inputTokens: 1000,
+        outputTokens: 100,
+        cachedInputTokens: 400,
+        reasoningOutputTokens: 20,
+        costUsd: 3.55,
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-completed',
+        payload: expect.objectContaining({
+          cost: expect.objectContaining({
+            usd: 3.55,
+            inputTokens: 1000,
+            outputTokens: 100,
+            cachedInputTokens: 400,
+            reasoningOutputTokens: 20,
+          }),
         }),
       }),
     );

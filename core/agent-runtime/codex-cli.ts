@@ -802,8 +802,15 @@ export class CodexCliRuntime implements AgentRuntime {
 
         const usageInputTokens = envelope?.usage.inputTokens ?? 0;
         const usageOutputTokens = envelope?.usage.outputTokens ?? 0;
+        const usageCachedInputTokens = envelope?.usage.cachedInputTokens ?? 0;
+        const usageReasoningOutputTokens = envelope?.usage.reasoningOutputTokens ?? 0;
         const rawCostUsd = envelope?.usage.costUsd ?? null;
-        const costUsd = rawCostUsd ?? estimateCostUsd(model, usageInputTokens, usageOutputTokens);
+        const costUsd =
+          rawCostUsd ??
+          estimateCostUsd(model, usageInputTokens, usageOutputTokens, {
+            cachedInputTokens: usageCachedInputTokens,
+            reasoningOutputTokens: usageReasoningOutputTokens,
+          });
         const costLabel: 'estimated' | 'exact' = 'estimated';
 
         recordCost({
@@ -815,6 +822,8 @@ export class CodexCliRuntime implements AgentRuntime {
           modelId: model,
           inputTokens: usageInputTokens,
           outputTokens: usageOutputTokens,
+          cachedInputTokens: usageCachedInputTokens,
+          reasoningOutputTokens: usageReasoningOutputTokens,
           costUsd,
           costLabel,
           personaId: personaId ?? null,
@@ -888,6 +897,8 @@ export class CodexCliRuntime implements AgentRuntime {
               usd: costUsd,
               inputTokens: usageInputTokens,
               outputTokens: usageOutputTokens,
+              cachedInputTokens: usageCachedInputTokens,
+              reasoningOutputTokens: usageReasoningOutputTokens,
               label: costLabel,
             },
             turns: {

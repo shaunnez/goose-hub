@@ -4,7 +4,13 @@ export interface CodexEnvelope {
   result: string | null;
   isError: boolean;
   errorDetail: string | null;
-  usage: { inputTokens: number; outputTokens: number; costUsd: number | null };
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cachedInputTokens: number;
+    reasoningOutputTokens: number;
+    costUsd: number | null;
+  };
   numTurns: number | null;
 }
 
@@ -176,6 +182,8 @@ export function parseCodexEnvelope(stdout: string): CodexEnvelope | null {
     usage: {
       inputTokens: rawCost?.inputTokens ?? 0,
       outputTokens: rawCost?.outputTokens ?? 0,
+      cachedInputTokens: rawCost?.cachedInputTokens ?? 0,
+      reasoningOutputTokens: rawCost?.reasoningOutputTokens ?? 0,
       costUsd: resolvedCostUsd,
     },
     numTurns,
