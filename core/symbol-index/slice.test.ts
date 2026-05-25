@@ -4,7 +4,7 @@ import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildIndex } from './builder.js';
-import { openIndexDb } from './db.js';
+import { openIndexDb, symbolIndexDbPathForWorktree } from './db.js';
 import { assessSymbolIndexFreshness, ensureSymbolIndexFresh } from './freshness.js';
 import {
   findCallers,
@@ -235,5 +235,15 @@ export const X = 1;`,
     } finally {
       rebuilt.close();
     }
+  });
+
+  it('defaults freshness rebuilds to the repo-local per-worktree DB path', () => {
+    writeFile(tmp, 'core/freshness/a.ts', 'export const FreshnessA = 1;');
+
+    const result = ensureSymbolIndexFresh({ repoRoot: tmp, includeDirs: ['core'] });
+
+    expect(result.dbPath).toBe(symbolIndexDbPathForWorktree(tmp));
+    expect(result.rebuilt).toBe(true);
+    expect(fs.existsSync(symbolIndexDbPathForWorktree(tmp))).toBe(true);
   });
 });

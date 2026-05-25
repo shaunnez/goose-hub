@@ -240,8 +240,8 @@ describe('lookupWorkItemSymbols', () => {
     expect(lookupSymbol('AuthService', { worktreePath: tmp })).toHaveLength(1);
 
     writeFile(tmp, 'core/session.ts', 'export function SessionService() {}');
-    const future = new Date(Date.now() + 5_000);
-    fs.utimesSync(path.join(tmp, 'core/session.ts'), future, future);
+    const past = new Date(Date.now() - 10_000);
+    fs.utimesSync(symbolIndexDbPathForWorktree(tmp), past, past);
 
     const result = lookupSymbol('SessionService', { worktreePath: tmp });
 

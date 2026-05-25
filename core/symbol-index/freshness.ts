@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULT_INCLUDE_DIRS, buildIndex, walkTsFiles } from './builder.js';
-import { defaultDbPath, openIndexDb } from './db.js';
+import { openIndexDb, symbolIndexDbPathForWorktree } from './db.js';
 
 export interface SymbolIndexFreshnessOptions {
   repoRoot: string;
@@ -53,7 +53,7 @@ function assertReadableIndex(dbPath: string): void {
 export function assessSymbolIndexFreshness(
   options: SymbolIndexFreshnessOptions,
 ): SymbolIndexFreshness {
-  const dbPath = options.dbPath ?? defaultDbPath();
+  const dbPath = options.dbPath ?? symbolIndexDbPathForWorktree(options.repoRoot);
   const includeDirs = options.includeDirs ?? DEFAULT_INCLUDE_DIRS;
   const newestSourceMtimeMs = newestIndexedSourceMtimeMs(options.repoRoot, includeDirs);
 
