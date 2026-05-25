@@ -22,6 +22,8 @@ describe('costFromCliEnvelope', () => {
     expect(costFromCliEnvelope(envelope)).toEqual({
       inputTokens: 1234,
       outputTokens: 567,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0.0421,
       costLabel: 'estimated',
     });
@@ -35,6 +37,8 @@ describe('costFromCliEnvelope', () => {
     expect(costFromCliEnvelope(envelope)).toEqual({
       inputTokens: 10,
       outputTokens: 20,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0.1,
       costLabel: 'estimated',
     });
@@ -44,6 +48,8 @@ describe('costFromCliEnvelope', () => {
     expect(costFromCliEnvelope({ cost: 0.5 })).toEqual({
       inputTokens: 0,
       outputTokens: 0,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0.5,
       costLabel: 'estimated',
     });
@@ -56,9 +62,36 @@ describe('costFromCliEnvelope', () => {
     expect(costFromCliEnvelope(envelope)).toEqual({
       inputTokens: 500,
       outputTokens: 200,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0,
       costLabel: 'estimated',
     });
+  });
+
+  it('extracts cached_input_tokens and reasoning_output_tokens from codex usage', () => {
+    const envelope = {
+      usage: {
+        input_tokens: 15_497,
+        cached_input_tokens: 3456,
+        output_tokens: 20,
+        reasoning_output_tokens: 13,
+      },
+    };
+    const result = costFromCliEnvelope(envelope);
+    expect(result).not.toBeNull();
+    expect(result?.inputTokens).toBe(15_497);
+    expect(result?.cachedInputTokens).toBe(3456);
+    expect(result?.outputTokens).toBe(20);
+    expect(result?.reasoningOutputTokens).toBe(13);
+  });
+
+  it('defaults cached and reasoning tokens to 0 when absent', () => {
+    const result = costFromCliEnvelope({
+      usage: { input_tokens: 100, output_tokens: 5 },
+    });
+    expect(result?.cachedInputTokens).toBe(0);
+    expect(result?.reasoningOutputTokens).toBe(0);
   });
 });
 
@@ -67,6 +100,8 @@ describe('costFromApiUsage', () => {
     expect(costFromApiUsage({ inputTokens: 1, outputTokens: 2, costUsd: 0.003 })).toEqual({
       inputTokens: 1,
       outputTokens: 2,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0.003,
       costLabel: 'exact',
     });

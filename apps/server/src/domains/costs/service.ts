@@ -8,6 +8,8 @@ import {
 import type { Result } from '#shared/middleware.js';
 import {
   type CostRow,
+  type ProjectTotals,
+  type StageTotal,
   type WorkItemToolStatsRow,
   listCostsForProjectSince,
   listCostsForWorkItem,
@@ -25,20 +27,29 @@ export interface CostSummaryDto {
   resetsAtUtc: string;
   lastExceededAt: string | null;
   windows: {
-    week: { totalUsd: number; totalRuns: number; hasEstimated: boolean };
-    month: { totalUsd: number; totalRuns: number; hasEstimated: boolean };
+    week: CostTotalDto;
+    month: CostTotalDto;
   };
-  byStage: Array<{
-    stage: Stage;
-    totalUsd: number;
-    totalRuns: number;
-    hasEstimated: boolean;
-  }>;
+  byStage: Array<
+    {
+      stage: Stage;
+    } & CostTotalDto
+  >;
   byProvider: {
-    claude: { totalUsd: number; totalRuns: number; hasEstimated: boolean };
-    codex: { totalUsd: number; totalRuns: number; hasEstimated: boolean };
+    claude: CostTotalDto;
+    codex: CostTotalDto;
   };
   symbolIndex: SymbolIndexLookupReport;
+}
+
+export interface CostTotalDto {
+  totalUsd: number;
+  totalRuns: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  reasoningOutputTokens: number;
+  cacheHitRatio: number;
+  hasEstimated: boolean;
 }
 
 export interface CostRowDto {
@@ -50,6 +61,9 @@ export interface CostRowDto {
   provider: 'claude' | 'codex';
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens: number;
+  reasoningOutputTokens: number;
+  cacheHitRatio: number;
   costUsd: number;
   costLabel: CostLabel;
   personaId: string | null;
@@ -75,6 +89,29 @@ export interface WorkItemToolStatsDto {
   rows: CostRowDto[];
 }
 
+function cacheHitRatio(inputTokens: number, cachedInputTokens: number): number {
+  return cachedInputTokens / Math.max(inputTokens, 1);
+}
+
+function toTotalDto(total: ProjectTotals): CostTotalDto {
+  return {
+    totalUsd: total.totalUsd,
+    totalRuns: total.totalRuns,
+    inputTokens: total.inputTokens ?? 0,
+    cachedInputTokens: total.cachedInputTokens ?? 0,
+    reasoningOutputTokens: total.reasoningOutputTokens ?? 0,
+    cacheHitRatio: cacheHitRatio(total.inputTokens ?? 0, total.cachedInputTokens ?? 0),
+    hasEstimated: total.hasEstimated,
+  };
+}
+
+function toStageTotalDto(total: StageTotal): { stage: Stage } & CostTotalDto {
+  return {
+    stage: total.stage,
+    ...toTotalDto(total),
+  };
+}
+
 function isoDaysAgo(days: number, now: Date = new Date()): string {
   const d = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   return d.toISOString();
@@ -89,14 +126,17 @@ function utcDayWindow(now: Date): { start: string; end: string } {
   };
 }
 
-function toProviderTotals(rows: CostRow[]): {
-  totalUsd: number;
-  totalRuns: number;
-  hasEstimated: boolean;
-} {
+function toProviderTotals(rows: CostRow[]): CostTotalDto {
+  const inputTokens = rows.reduce((s, r) => s + r.inputTokens, 0);
+  const cachedInputTokens = rows.reduce((s, r) => s + r.cachedInputTokens, 0);
+  const reasoningOutputTokens = rows.reduce((s, r) => s + r.reasoningOutputTokens, 0);
   return {
     totalUsd: rows.reduce((s, r) => s + r.costUsd, 0),
     totalRuns: rows.length,
+    inputTokens,
+    cachedInputTokens,
+    reasoningOutputTokens,
+    cacheHitRatio: cacheHitRatio(inputTokens, cachedInputTokens),
     hasEstimated: rows.some((r) => r.costLabel === 'estimated'),
   };
 }
@@ -142,8 +182,8 @@ export async function getCostSummary(
       dailyBudgetExceeded: dailyTokensLimit > 0 && dailyTokensUsed >= dailyTokensLimit,
       resetsAtUtc: today.end,
       lastExceededAt: lastBudgetExceeded?.createdAt ?? null,
-      windows: { week, month },
-      byStage,
+      windows: { week: toTotalDto(week), month: toTotalDto(month) },
+      byStage: byStage.map(toStageTotalDto),
       byProvider: {
         claude: toProviderTotals(claudeRows),
         codex: toProviderTotals(codexRows),
@@ -199,6 +239,9 @@ function toRowDto(r: CostRow | WorkItemToolStatsRow, stats?: WorkItemToolStatsRo
     provider: tryProviderOf(r.modelId),
     inputTokens: r.inputTokens,
     outputTokens: r.outputTokens,
+    cachedInputTokens: r.cachedInputTokens,
+    reasoningOutputTokens: r.reasoningOutputTokens,
+    cacheHitRatio: cacheHitRatio(r.inputTokens, r.cachedInputTokens),
     costUsd: r.costUsd,
     costLabel: r.costLabel,
     personaId: r.personaId,

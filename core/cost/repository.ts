@@ -30,6 +30,8 @@ export interface WorkItemToolStatsRow extends AgentRunToolStatsRow {
   modelId: string;
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens: number;
+  reasoningOutputTokens: number;
   costUsd: number;
   costLabel: CostLabel;
   personaId: string | null;
@@ -50,6 +52,8 @@ export function recordCost(record: CostRecord): void {
       modelId: record.modelId,
       inputTokens: record.inputTokens,
       outputTokens: record.outputTokens,
+      cachedInputTokens: record.cachedInputTokens,
+      reasoningOutputTokens: record.reasoningOutputTokens,
       costUsd: record.costUsd,
       costLabel: record.costLabel,
       personaId: record.personaId,
@@ -112,6 +116,8 @@ export function listToolStatsForWorkItem(workItemId: string): WorkItemToolStatsR
       modelId: agentRunCosts.modelId,
       inputTokens: agentRunCosts.inputTokens,
       outputTokens: agentRunCosts.outputTokens,
+      cachedInputTokens: agentRunCosts.cachedInputTokens,
+      reasoningOutputTokens: agentRunCosts.reasoningOutputTokens,
       costUsd: agentRunCosts.costUsd,
       costLabel: agentRunCosts.costLabel,
       personaId: agentRunCosts.personaId,
@@ -130,6 +136,8 @@ export function listToolStatsForWorkItem(workItemId: string): WorkItemToolStatsR
     modelId: row.modelId,
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
+    cachedInputTokens: row.cachedInputTokens,
+    reasoningOutputTokens: row.reasoningOutputTokens,
     costUsd: row.costUsd,
     costLabel: row.costLabel as CostLabel,
     personaId: row.personaId,
@@ -149,6 +157,9 @@ export function listCostsForProjectSince(projectId: string, sinceIso: string): C
 export interface ProjectTotals {
   totalUsd: number;
   totalRuns: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  reasoningOutputTokens: number;
   /** True when any contributing row was 'estimated'. UI uses this to qualify the figure. */
   hasEstimated: boolean;
 }
@@ -162,6 +173,9 @@ export function totalsForProjectSince(projectId: string, sinceIso: string): Proj
     .select({
       totalUsd: sql<number>`coalesce(sum(${agentRunCosts.costUsd}), 0)`,
       totalRuns: sql<number>`count(*)`,
+      inputTokens: sql<number>`coalesce(sum(${agentRunCosts.inputTokens}), 0)`,
+      cachedInputTokens: sql<number>`coalesce(sum(${agentRunCosts.cachedInputTokens}), 0)`,
+      reasoningOutputTokens: sql<number>`coalesce(sum(${agentRunCosts.reasoningOutputTokens}), 0)`,
       hasEstimated: sql<number>`max(case when ${agentRunCosts.costLabel} = 'estimated' then 1 else 0 end)`,
     })
     .from(agentRunCosts)
@@ -170,6 +184,9 @@ export function totalsForProjectSince(projectId: string, sinceIso: string): Proj
   return {
     totalUsd: row?.totalUsd ?? 0,
     totalRuns: row?.totalRuns ?? 0,
+    inputTokens: row?.inputTokens ?? 0,
+    cachedInputTokens: row?.cachedInputTokens ?? 0,
+    reasoningOutputTokens: row?.reasoningOutputTokens ?? 0,
     hasEstimated: (row?.hasEstimated ?? 0) === 1,
   };
 }
@@ -180,6 +197,9 @@ export function totalsByStageForProjectSince(projectId: string, sinceIso: string
       stage: agentRunCosts.stage,
       totalUsd: sql<number>`coalesce(sum(${agentRunCosts.costUsd}), 0)`,
       totalRuns: sql<number>`count(*)`,
+      inputTokens: sql<number>`coalesce(sum(${agentRunCosts.inputTokens}), 0)`,
+      cachedInputTokens: sql<number>`coalesce(sum(${agentRunCosts.cachedInputTokens}), 0)`,
+      reasoningOutputTokens: sql<number>`coalesce(sum(${agentRunCosts.reasoningOutputTokens}), 0)`,
       hasEstimated: sql<number>`max(case when ${agentRunCosts.costLabel} = 'estimated' then 1 else 0 end)`,
     })
     .from(agentRunCosts)
@@ -191,6 +211,9 @@ export function totalsByStageForProjectSince(projectId: string, sinceIso: string
     stage: r.stage as Stage,
     totalUsd: r.totalUsd ?? 0,
     totalRuns: r.totalRuns ?? 0,
+    inputTokens: r.inputTokens ?? 0,
+    cachedInputTokens: r.cachedInputTokens ?? 0,
+    reasoningOutputTokens: r.reasoningOutputTokens ?? 0,
     hasEstimated: (r.hasEstimated ?? 0) === 1,
   }));
 }
@@ -221,6 +244,8 @@ function toRow(r: typeof agentRunCosts.$inferSelect): CostRow {
     modelId: r.modelId,
     inputTokens: r.inputTokens,
     outputTokens: r.outputTokens,
+    cachedInputTokens: r.cachedInputTokens,
+    reasoningOutputTokens: r.reasoningOutputTokens,
     costUsd: r.costUsd,
     costLabel: r.costLabel as CostLabel,
     personaId: r.personaId,

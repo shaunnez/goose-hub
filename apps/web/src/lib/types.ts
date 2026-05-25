@@ -366,9 +366,12 @@ export interface CostRowDto {
   modelId: string;
   provider: 'claude' | 'codex';
   inputTokens: number;
+  cachedInputTokens: number;
   outputTokens: number;
+  reasoningOutputTokens: number;
   costUsd: number;
   costLabel: CostLabel;
+  cacheHitRatio: number;
   personaId: string | null;
   createdAt: string;
   readCount?: number;
@@ -384,6 +387,10 @@ export interface CostWindowTotals {
   totalUsd: number;
   totalRuns: number;
   hasEstimated: boolean;
+  inputTokens: number;
+  cachedInputTokens: number;
+  reasoningOutputTokens: number;
+  cacheHitRatio: number;
 }
 
 export interface CostStageTotal extends CostWindowTotals {

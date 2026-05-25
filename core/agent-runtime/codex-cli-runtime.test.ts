@@ -1,12 +1,14 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockEventStore, mockRecordCost, mockRecordToolStatsForRun, mockSpawn } = vi.hoisted(() => ({
-  mockEventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
-  mockRecordCost: vi.fn(),
-  mockRecordToolStatsForRun: vi.fn(),
-  mockSpawn: vi.fn(),
-}));
+const { mockEventStore, mockRecordAgentRun, mockRecordCost, mockRecordToolStatsForRun, mockSpawn } =
+  vi.hoisted(() => ({
+    mockEventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
+    mockRecordAgentRun: vi.fn(),
+    mockRecordCost: vi.fn(),
+    mockRecordToolStatsForRun: vi.fn(),
+    mockSpawn: vi.fn(),
+  }));
 
 vi.mock('../cost/repository.js', () => ({
   recordCost: mockRecordCost,
@@ -31,6 +33,7 @@ vi.mock('./models.js', () => ({
   defaultModelForTierAndProvider: vi.fn().mockReturnValue('gpt-5.3-codex'),
   estimateCostUsd: vi.fn().mockReturnValue(0),
 }));
+vi.mock('./run-record.js', () => ({ recordAgentRun: mockRecordAgentRun }));
 vi.mock('./codex-config.js', () => ({
   CodexBinaryNotFoundError: class CodexBinaryNotFoundError extends Error {},
   CodexNotAuthenticatedError: class CodexNotAuthenticatedError extends Error {},
@@ -59,6 +62,7 @@ import {
   buildCodexMcpInlineArgs,
   codexMcpEnabledToolsForServer,
 } from './codex-config.js';
+import { estimateCostUsd } from './models.js';
 
 function makeSpec(overrides: Record<string, unknown> = {}) {
   return {
@@ -404,6 +408,77 @@ describe('CodexCliRuntime timeout handling', () => {
         payload: expect.objectContaining({
           modelId: 'gpt-5.4-mini',
           runtime: 'codex-cli',
+        }),
+      }),
+    );
+  });
+
+  it('records cached and reasoning tokens with discounted estimated Codex cost', async () => {
+    vi.mocked(estimateCostUsd).mockReturnValueOnce(3.55);
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(
+      makeSpec({
+        modelOverride: 'gpt-5.4',
+        budgets: { maxTurns: 10, maxBudgetUsd: 10, timeoutMs: 5000 },
+      }),
+    );
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        JSON.stringify({
+          result: '{"ok":true}',
+          usage: {
+            input_tokens: 1000,
+            cached_input_tokens: 400,
+            output_tokens: 100,
+            reasoning_output_tokens: 20,
+          },
+        }),
+      ),
+    );
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+
+    expect(estimateCostUsd).toHaveBeenCalledWith('gpt-5.4', 1000, 100, {
+      cachedInputTokens: 400,
+      reasoningOutputTokens: 20,
+    });
+    expect(mockRecordCost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-codex',
+        modelId: 'gpt-5.4',
+        inputTokens: 1000,
+        outputTokens: 100,
+        cachedInputTokens: 400,
+        reasoningOutputTokens: 20,
+        costUsd: 3.55,
+      }),
+    );
+    expect(mockRecordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-codex',
+        outcome: 'success',
+        projectId: 'test-project',
+        role: 'developer',
+        skill: 'fix-issue',
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-completed',
+        payload: expect.objectContaining({
+          cost: expect.objectContaining({
+            usd: 3.55,
+            inputTokens: 1000,
+            outputTokens: 100,
+            cachedInputTokens: 400,
+            reasoningOutputTokens: 20,
+          }),
         }),
       }),
     );
@@ -876,6 +951,43 @@ describe('CodexCliRuntime timeout handling', () => {
       expect.objectContaining({ kind: 'agent.run-completed' }),
     );
     processKill.mockRestore();
+  });
+
+  it('records a failed agent run when the Codex child process emits an error', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.emit('error', new Error('spawn ENOENT'));
+
+    await expect(run).rejects.toThrow('spawn ENOENT');
+    expect(mockRecordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-codex',
+        outcome: 'failure',
+        projectId: 'test-project',
+        role: 'developer',
+        skill: 'fix-issue',
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({
+          runId: 'run-codex',
+          skill: 'fix-issue',
+          reason: 'spawn-error',
+          error: 'spawn ENOENT',
+        }),
+      }),
+    );
+
+    child.emit('close', 0);
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
   });
 
   it('kills and rejects when streamed tool calls exceed maxTurns', async () => {

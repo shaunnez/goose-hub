@@ -26,6 +26,8 @@ beforeAll(() => {
     model_id TEXT NOT NULL,
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
+    cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+    reasoning_output_tokens INTEGER NOT NULL DEFAULT 0,
     cost_usd REAL NOT NULL DEFAULT 0,
     cost_label TEXT NOT NULL DEFAULT 'estimated',
     persona_id TEXT,
@@ -75,6 +77,8 @@ describe('recordCost', () => {
       modelId: 'claude-sonnet-4-6',
       inputTokens: 1000,
       outputTokens: 500,
+      cachedInputTokens: 250,
+      reasoningOutputTokens: 50,
       costUsd: 0.012,
       costLabel: 'estimated',
       personaId: 'p1',
@@ -86,6 +90,10 @@ describe('recordCost', () => {
       runId: `run-1-${PROJECT}`,
       stage: 'qa',
       skill: 'qa',
+      inputTokens: 1000,
+      outputTokens: 500,
+      cachedInputTokens: 250,
+      reasoningOutputTokens: 50,
       costUsd: 0.012,
       costLabel: 'estimated',
     });
@@ -102,6 +110,8 @@ describe('recordCost', () => {
       modelId: 'claude-sonnet-4-6',
       inputTokens: 100,
       outputTokens: 50,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0.001,
       costLabel: 'estimated' as const,
       personaId: null,
@@ -127,6 +137,8 @@ describe('recordToolStatsForRun', () => {
       modelId: 'claude-sonnet-4-6',
       inputTokens: 100,
       outputTokens: 10,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0.2,
       costLabel: 'estimated',
       personaId: null,
@@ -173,6 +185,8 @@ describe('recordToolStatsForRun', () => {
       modelId: 'gpt-5.4',
       inputTokens: 100,
       outputTokens: 10,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0.2,
       costLabel: 'estimated',
       personaId: null,
@@ -197,6 +211,8 @@ describe('recordToolStatsForRun', () => {
       modelId: 'gpt-5.4',
       inputTokens: 100,
       outputTokens: 10,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0.2,
       costLabel: 'estimated',
       personaId: null,
@@ -215,6 +231,8 @@ describe('recordToolStatsForRun', () => {
       modelId: 'gpt-5.4',
       inputTokens: 100,
       outputTokens: 10,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0.2,
       costLabel: 'estimated',
       personaId: null,
@@ -245,8 +263,10 @@ describe('totalsForProjectSince', () => {
       stage: 'qa',
       skill: 'qa',
       modelId: 'claude-sonnet-4-6',
-      inputTokens: 0,
+      inputTokens: 100,
       outputTokens: 0,
+      cachedInputTokens: 20,
+      reasoningOutputTokens: 7,
       costUsd: 0.5,
       costLabel: 'estimated',
       personaId: null,
@@ -258,8 +278,10 @@ describe('totalsForProjectSince', () => {
       stage: 'review',
       skill: 'review',
       modelId: 'claude-sonnet-4-6',
-      inputTokens: 0,
+      inputTokens: 300,
       outputTokens: 0,
+      cachedInputTokens: 30,
+      reasoningOutputTokens: 11,
       costUsd: 0.25,
       costLabel: 'exact',
       personaId: null,
@@ -268,6 +290,9 @@ describe('totalsForProjectSince', () => {
     const totals = totalsForProjectSince(PROJECT, '1970-01-01T00:00:00Z');
     expect(totals.totalUsd).toBeCloseTo(0.75);
     expect(totals.totalRuns).toBe(2);
+    expect(totals.inputTokens).toBe(400);
+    expect(totals.cachedInputTokens).toBe(50);
+    expect(totals.reasoningOutputTokens).toBe(18);
     expect(totals.hasEstimated).toBe(true);
   });
 
@@ -281,6 +306,8 @@ describe('totalsForProjectSince', () => {
       modelId: 'claude-sonnet-4-6',
       inputTokens: 0,
       outputTokens: 0,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0.5,
       costLabel: 'exact',
       personaId: null,
@@ -306,6 +333,8 @@ describe('totalSpendForSkill', () => {
       modelId: 'claude-opus-4-5',
       inputTokens: 0,
       outputTokens: 0,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 0.5,
       costLabel: 'exact',
       personaId: null,
@@ -319,6 +348,8 @@ describe('totalSpendForSkill', () => {
       modelId: 'claude-opus-4-5',
       inputTokens: 0,
       outputTokens: 0,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 1.0,
       costLabel: 'exact',
       personaId: null,
@@ -337,6 +368,8 @@ describe('totalSpendForSkill', () => {
       modelId: 'claude-opus-4-5',
       inputTokens: 0,
       outputTokens: 0,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
       costUsd: 2.0,
       costLabel: 'exact',
       personaId: null,
@@ -355,8 +388,10 @@ describe('totalsByStageForProjectSince', () => {
       stage: 'dev',
       skill: 'implement',
       modelId: 'claude-sonnet-4-6',
-      inputTokens: 0,
+      inputTokens: 100,
       outputTokens: 0,
+      cachedInputTokens: 25,
+      reasoningOutputTokens: 12,
       costUsd: 1.0,
       costLabel: 'estimated',
       personaId: null,
@@ -368,8 +403,10 @@ describe('totalsByStageForProjectSince', () => {
       stage: 'qa',
       skill: 'qa',
       modelId: 'claude-sonnet-4-6',
-      inputTokens: 0,
+      inputTokens: 50,
       outputTokens: 0,
+      cachedInputTokens: 10,
+      reasoningOutputTokens: 3,
       costUsd: 0.3,
       costLabel: 'estimated',
       personaId: null,
@@ -377,6 +414,9 @@ describe('totalsByStageForProjectSince', () => {
     const stages = totalsByStageForProjectSince(PROJECT, '1970-01-01T00:00:00Z');
     expect(stages.map((s) => s.stage)).toEqual(['dev', 'qa']);
     expect(stages[0].totalUsd).toBeCloseTo(1.0);
+    expect(stages[0].inputTokens).toBe(100);
+    expect(stages[0].cachedInputTokens).toBe(25);
+    expect(stages[0].reasoningOutputTokens).toBe(12);
     expect(stages[1].totalUsd).toBeCloseTo(0.3);
   });
 });

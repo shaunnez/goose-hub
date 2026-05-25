@@ -28,6 +28,22 @@ describe('estimateCostUsd', () => {
     const result = estimateCostUsd('gpt-5.4-mini', 100, 0);
     expect(result).toBeCloseTo(0.000075, 8);
   });
+
+  it('bills cached input at the cached rate and reasoning at output rate', () => {
+    // gpt-5.4: inputPer1M 2.5, cachedInputPer1M 0.625, outputPer1M 15
+    const cost = estimateCostUsd('gpt-5.4', 1_000_000, 100_000, {
+      cachedInputTokens: 400_000,
+      reasoningOutputTokens: 20_000,
+    });
+    // input: 600k*2.5 + 400k*0.625 = 1.5 + 0.25 = 1.75
+    // output: (100k+20k)*15 = 1.8
+    expect(cost).toBeCloseTo(1.75 + 1.8, 6);
+  });
+
+  it('is backwards compatible without opts', () => {
+    const cost = estimateCostUsd('gpt-5.4', 1_000_000, 0);
+    expect(cost).toBeCloseTo(2.5, 6);
+  });
 });
 
 describe('tryProviderOf', () => {

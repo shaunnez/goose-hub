@@ -33,6 +33,8 @@ export interface CostRecord {
   modelId: string;
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens: number;
+  reasoningOutputTokens: number;
   costUsd: number;
   costLabel: CostLabel;
   personaId: string | null;
@@ -41,6 +43,8 @@ export interface CostRecord {
 export interface CostUsage {
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens: number;
+  reasoningOutputTokens: number;
   costUsd: number;
   costLabel: CostLabel;
 }

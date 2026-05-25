@@ -43,6 +43,10 @@ function StatTile({
   );
 }
 
+function formatCacheHitPercent(ratio: number): string {
+  return `${Math.round(ratio * 100)}%`;
+}
+
 export function CostsSection({ projectSlug, id }: CostsSectionProps) {
   const personaMap = usePersonaMap();
 
@@ -105,6 +109,10 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
 
   const totalLabel = data.hasEstimated ? 'estimated' : 'exact';
   const totalTokens = data.rows.reduce((s, r) => s + r.inputTokens + r.outputTokens, 0);
+  const totalInputTokens = data.rows.reduce((s, r) => s + r.inputTokens, 0);
+  const totalCachedInputTokens = data.rows.reduce((s, r) => s + r.cachedInputTokens, 0);
+  const totalReasoningTokens = data.rows.reduce((s, r) => s + r.reasoningOutputTokens, 0);
+  const cacheHitRatio = totalCachedInputTokens / Math.max(totalInputTokens, 1);
   const maxPersonaToks = Math.max(...personaSummaries.map((p) => p.toks), 1);
   const maxPersonaCost = Math.max(...personaSummaries.map((p) => p.cost), 0.0001);
 
@@ -148,6 +156,16 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
           sub={`${data.rows.length} run${data.rows.length === 1 ? '' : 's'}`}
         />
         <StatTile label="Tokens" value={formatTokens(totalTokens)} sub="across all runs" />
+        <StatTile
+          label="Cache hit"
+          value={formatCacheHitPercent(cacheHitRatio)}
+          sub={`${formatTokens(totalCachedInputTokens)} cached input`}
+        />
+        <StatTile
+          label="Reasoning"
+          value={formatTokens(totalReasoningTokens)}
+          sub="output reasoning tokens"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -247,7 +265,10 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
                 </span>
                 <span className="font-mono text-fg-3 text-[11.5px] pr-4 truncate">{r.skill}</span>
                 <span className="font-mono text-fg-2 text-[11.5px] pr-4">
-                  {formatTokens(r.inputTokens + r.outputTokens)}
+                  <span className="block">{formatTokens(r.inputTokens + r.outputTokens)}</span>
+                  <span className="block text-[10px] text-fg-4">
+                    cache {formatCacheHitPercent(r.cacheHitRatio)}
+                  </span>
                 </span>
                 <span
                   className={`font-mono text-[11.5px] pr-4 ${
@@ -260,7 +281,12 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
                   {formatByteCount(r.bytesRead ?? 0)}
                 </span>
                 <span className="font-mono text-fg-2 text-[11.5px]">
-                  {formatCost(r.costUsd, r.costLabel)}
+                  <span className="block">{formatCost(r.costUsd, r.costLabel)}</span>
+                  {r.reasoningOutputTokens > 0 && (
+                    <span className="block text-[10px] text-fg-4">
+                      r {formatTokens(r.reasoningOutputTokens)}
+                    </span>
+                  )}
                 </span>
               </div>
             );

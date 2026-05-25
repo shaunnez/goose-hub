@@ -12,8 +12,8 @@ export function CostLegend() {
     >
       <Info size={12} />
       <span>
-        <span className="font-mono">~$</span> = estimated (Claude CLI). Unprefixed = exact (API
-        usage metadata).
+        <span className="font-mono">~$</span> = estimated CLI/OAuth synthetic cost. Unprefixed =
+        exact API usage metadata. Cache % uses reported cached input tokens.
       </span>
     </div>
   );
