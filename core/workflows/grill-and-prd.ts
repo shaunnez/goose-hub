@@ -155,8 +155,11 @@ export interface RunGrillAndPrdInput {
   /** Concerns from the human to address during revision */
   humanConcerns?: string[];
   /** When true: skip grill-me entirely and go straight to write-prd.
-   * Recovers refinedIntent from the last grill.completed event in the event store. */
+   * Uses explicit refinedIntent when provided, otherwise recovers it from the
+   * last grill.completed event in the event store. */
   skipGrill?: boolean;
+  /** Explicit intent supplied by pre-PRD framing workflows. */
+  refinedIntent?: string;
   deps?: {
     runtime?: AgentRuntime;
     /**
@@ -311,6 +314,7 @@ export async function runGrillAndPrdWorkflow(
     const allEvents = eventStore.replay({ projectId, workItemId: workItem.id });
     const grillCompleted = [...allEvents].reverse().find((e) => e.kind === 'grill.completed');
     const refinedIntent =
+      input.refinedIntent ??
       (grillCompleted?.payload as { refinedIntent?: string } | null)?.refinedIntent ??
       workItem.title;
     return runWritePrdStep({

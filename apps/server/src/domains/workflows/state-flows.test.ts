@@ -291,8 +291,8 @@ beforeEach(() => {
 // ─── Layer A: Triage ─────────────────────────────────────────────────────────
 
 describe('Layer A: Triage state paths', () => {
-  it('routes fresh feature (no factory:from-prd) to factory:grilling via factory:accepted', async () => {
-    // Fresh features (no factory:from-prd) enter the Discover Lane via grilling.
+  it('routes vague fresh feature (no factory:from-prd) to factory:framing via factory:accepted', async () => {
+    // Vague fresh features enter the framing lane before grill/PRD routing.
     // listLabels returns [] by default (no factory:from-prd).
     const item = makeWorkItem({ state: 'factory:triaging', type: 'feature' });
     const source = makeMockSource();
@@ -314,7 +314,7 @@ describe('Layer A: Triage state paths', () => {
       2,
       '42',
       'factory:accepted',
-      'factory:grilling',
+      'factory:framing',
     );
     expect(source.transitionState).toHaveBeenCalledTimes(2);
   });
@@ -641,8 +641,8 @@ describe('Layer A: Investigate state paths', () => {
 // without floating-Promise interference with the mockRun queue.
 
 describe('Layer B: Full dispatch chain (dispatchForLabel → workflow → state)', () => {
-  it('dispatchForLabel triaging → triage batch → factory:grilling (fresh feature)', async () => {
-    // Fresh features route to grilling, not dev-ready.
+  it('dispatchForLabel triaging → triage batch → factory:framing (vague fresh feature)', async () => {
+    // Vague fresh features route to framing, not directly to dev-ready.
     const { dispatchForLabel } = await import('../../shared/dispatch.js');
     const item = makeWorkItem({ state: 'factory:triaging', type: 'feature' });
     const source = makeMockSource();
@@ -664,7 +664,7 @@ describe('Layer B: Full dispatch chain (dispatchForLabel → workflow → state)
       2,
       '42',
       'factory:accepted',
-      'factory:grilling',
+      'factory:framing',
     );
     expect(source.transitionState).toHaveBeenCalledTimes(2);
   });
