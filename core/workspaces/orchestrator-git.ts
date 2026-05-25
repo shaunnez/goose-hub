@@ -151,6 +151,22 @@ export function orchestratorPushBranch(worktreePath: string, branchName: string)
   });
 }
 
+export function resolveRemoteBranchHead(worktreePath: string, branchName: string): string {
+  if (branchName.trim().length === 0) {
+    throw new Error('branchName is required to verify remote branch head');
+  }
+  const output = execFileSync('git', ['ls-remote', 'origin', `refs/heads/${branchName}`], {
+    cwd: worktreePath,
+    encoding: 'utf8',
+    env: GIT_ENV,
+  }).trim();
+  const [sha] = output.split(/\s+/);
+  if (sha == null || sha.length === 0) {
+    throw new Error(`remote branch not found after push: ${branchName}`);
+  }
+  return sha;
+}
+
 /**
  * Reverts a WP builder's file changes in the scratch worktree.
  *

@@ -33,6 +33,8 @@ export interface OpenPrInput {
   fetchImpl?: typeof fetch;
   /** Optional override of the git invocation — used by tests. */
   gitExec?: (args: string[], cwd: string) => string;
+  /** Skip the git push when the caller already pushed and verified the branch. */
+  skipPush?: boolean;
 }
 
 export interface OpenPrResult {
@@ -75,6 +77,7 @@ export async function openPR(input: OpenPrInput): Promise<OpenPrResult> {
     token,
     fetchImpl = fetch,
     gitExec = defaultGitExec,
+    skipPush = false,
   } = input;
 
   if (title.length === 0 || title.length > 70) {
@@ -86,7 +89,12 @@ export async function openPR(input: OpenPrInput): Promise<OpenPrResult> {
   // `--force-with-lease` is intentional: replays of the same workflow run
   // (after retry) push the same logical change to the same branch. Forcing
   // without lease would clobber upstream commits — refused by callers.
-  gitExec(['push', '--force-with-lease', 'origin', `HEAD:refs/heads/${branchName}`], worktreePath);
+  if (!skipPush) {
+    gitExec(
+      ['push', '--force-with-lease', 'origin', `HEAD:refs/heads/${branchName}`],
+      worktreePath,
+    );
+  }
 
   // 2. Open the PR via REST.
   const url = `https://api.github.com/repos/${repo}/pulls`;

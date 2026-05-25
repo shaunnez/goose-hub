@@ -1,6 +1,11 @@
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanupWorktree, createWorktree, resolveWorkflowBase } from './worktree.js';
+import {
+  cleanupWorktree,
+  createIntegrationWorktree,
+  createWorktree,
+  resolveWorkflowBase,
+} from './worktree.js';
 
 const WT = (runId: string) => join('/mock-home', '.factory', 'workspaces', runId);
 const WORKSPACES_DIR = join('/mock-home', '.factory', 'workspaces');
@@ -124,6 +129,92 @@ describe('resolveWorkflowBase', () => {
       ref: 'origin/main',
       source: 'fallback-main',
     });
+  });
+});
+
+describe('createIntegrationWorktree', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(mkdirSync).mockReturnValue(undefined);
+    vi.mocked(execFileSync).mockReturnValue(Buffer.from(''));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reattaches an existing local branch without resetting it to the base ref', () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'rev-parse') {
+        return 'branch-tip\n';
+      }
+      return Buffer.from('');
+    });
+
+    expect(
+      createIntegrationWorktree('/repo/path', 'run-abc-123', 'factory/run/run-abc-123', 'main'),
+    ).toEqual({
+      worktreePath: WT('run-abc-123'),
+      previousHeadSha: 'branch-tip',
+    });
+
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'git',
+      ['show-ref', '--verify', 'refs/heads/factory/run/run-abc-123'],
+      expect.objectContaining({ cwd: WT('run-abc-123') }),
+    );
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'git',
+      ['checkout', 'factory/run/run-abc-123'],
+      expect.objectContaining({ cwd: WT('run-abc-123') }),
+    );
+    expect(vi.mocked(execFileSync)).not.toHaveBeenCalledWith(
+      'git',
+      ['checkout', '-B', 'factory/run/run-abc-123', 'main'],
+      expect.any(Object),
+    );
+  });
+
+  it('creates the integration branch from the base ref only when no local branch exists', () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'show-ref') {
+        throw new Error('missing branch');
+      }
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'rev-parse') {
+        return 'base-tip\n';
+      }
+      return Buffer.from('');
+    });
+
+    createIntegrationWorktree('/repo/path', 'run-abc-123', 'factory/run/run-abc-123', 'main');
+
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'git',
+      ['checkout', '-B', 'factory/run/run-abc-123', 'main'],
+      expect.objectContaining({ cwd: WT('run-abc-123') }),
+    );
+  });
+
+  it('does not reset an existing integration branch when checkout fails', () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'checkout') {
+        throw new Error('checkout conflicts');
+      }
+      return Buffer.from('');
+    });
+
+    expect(() =>
+      createIntegrationWorktree('/repo/path', 'run-abc-123', 'factory/run/run-abc-123', 'main'),
+    ).toThrow('checkout conflicts');
+
+    expect(vi.mocked(execFileSync)).not.toHaveBeenCalledWith(
+      'git',
+      ['checkout', '-B', 'factory/run/run-abc-123', 'main'],
+      expect.any(Object),
+    );
   });
 });
 
