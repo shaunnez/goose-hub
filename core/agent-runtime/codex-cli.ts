@@ -38,6 +38,7 @@ import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
 import { defaultModelForTierAndProvider, estimateCostUsd } from './models.js';
 import { killProcessGroupOrChild } from './process-kill.js';
+import { recordAgentRun } from './run-record.js';
 import { withFactoryRuntimeInstructions } from './runtime-instructions.js';
 
 export { CodexBinaryNotFoundError, CodexNotAuthenticatedError } from './codex-config.js';
@@ -248,6 +249,17 @@ export class CodexCliRuntime implements AgentRuntime {
     const projectId = (spec.context.projectId as string) ?? 'unknown';
     const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
     const { personaId } = spec;
+    const recordRun = (outcome: 'success' | 'failure') => {
+      recordAgentRun({
+        runId,
+        personaId,
+        workItemId: spec.workItemId ?? workItemId ?? null,
+        projectId,
+        role: spec.role,
+        skill: spec.skill,
+        outcome,
+      });
+    };
     const allowedTools = computeAllowlist(spec);
     // Per-run MCP config (ADR 0045). For Claude we pass `--mcp-config`; for
     // Codex we pass each MCP server entry as `-c mcp_servers.<n>.command=...`
@@ -467,6 +479,7 @@ export class CodexCliRuntime implements AgentRuntime {
         settled = true;
         clearTimeout(timeout);
         emitForbiddenRuntimeSurfaceBlocked(violation);
+        recordRun('failure');
         eventStore.appendEvent({
           projectId,
           workItemId,
@@ -549,6 +562,7 @@ export class CodexCliRuntime implements AgentRuntime {
               personaId,
             });
             killProcessGroupOrChild(child);
+            recordRun('failure');
             eventStore.appendEvent({
               projectId,
               workItemId,
@@ -590,6 +604,7 @@ export class CodexCliRuntime implements AgentRuntime {
               personaId,
             });
             killProcessGroupOrChild(child);
+            recordRun('failure');
             eventStore.appendEvent({
               projectId,
               workItemId,
@@ -624,6 +639,7 @@ export class CodexCliRuntime implements AgentRuntime {
             settled = true;
             clearTimeout(timeout);
             killProcessGroupOrChild(child);
+            recordRun('failure');
             eventStore.appendEvent({
               projectId,
               workItemId,
@@ -706,6 +722,7 @@ export class CodexCliRuntime implements AgentRuntime {
         if (settled) return;
         settled = true;
         killProcessGroupOrChild(child);
+        recordRun('failure');
         eventStore.appendEvent({
           projectId,
           workItemId,
@@ -740,6 +757,7 @@ export class CodexCliRuntime implements AgentRuntime {
           const violation = handleForbiddenRuntimeSurface(stderrLineBuffer);
           if (violation != null) {
             emitForbiddenRuntimeSurfaceBlocked(violation);
+            recordRun('failure');
             eventStore.appendEvent({
               projectId,
               workItemId,
@@ -770,6 +788,7 @@ export class CodexCliRuntime implements AgentRuntime {
 
         if (code !== 0 && envelope == null) {
           if (stderrIncludesNativePatchRejection(stderr)) emitNativePatchBlocked();
+          recordRun('failure');
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -786,6 +805,7 @@ export class CodexCliRuntime implements AgentRuntime {
 
         if (envelope?.isError) {
           if (stderrIncludesNativePatchRejection(stderr)) emitNativePatchBlocked();
+          recordRun('failure');
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -844,6 +864,7 @@ export class CodexCliRuntime implements AgentRuntime {
         });
 
         if (exceededBudget) {
+          recordRun('failure');
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -913,6 +934,7 @@ export class CodexCliRuntime implements AgentRuntime {
           personaId,
         });
 
+        recordRun('success');
         resolve({
           output: extractResultJson(envelope == null ? stdout : (envelope.result ?? ''), runId),
           decisionSummaries: [],

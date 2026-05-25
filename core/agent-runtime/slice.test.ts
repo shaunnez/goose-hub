@@ -971,9 +971,12 @@ const { mockRouterDb } = vi.hoisted(() => {
     (chain as Record<string, unknown>)[m] = vi.fn().mockReturnValue(chain);
   }
   chain.all = vi.fn().mockReturnValue([]);
-  // Support insert().values().run() called by ClaudeCliRuntime after each agent run
+  // Support insert().values().onConflictDoNothing().run() called by run-record.
   chain.insert = vi.fn().mockReturnValue({
-    values: vi.fn().mockReturnValue({ run: vi.fn() }),
+    values: vi.fn().mockReturnValue({
+      onConflictDoNothing: vi.fn().mockReturnValue({ run: vi.fn() }),
+      run: vi.fn(),
+    }),
   });
   return { mockRouterDb: chain };
 });

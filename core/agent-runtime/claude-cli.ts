@@ -5,9 +5,7 @@ import { dirname, join } from 'node:path';
 import { costFromCliEnvelope } from '../cost/extract.js';
 import { recordCost, recordToolStatsForRun } from '../cost/repository.js';
 import { stageForSkill } from '../cost/skill-stage.js';
-import { db } from '../db/db.js';
 import { getRecordDecisionTool } from '../db/repositories/project-settings.js';
-import { agentRuns } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.js';
@@ -20,6 +18,7 @@ import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
 import { defaultModelForTier } from './models.js';
 import { killProcessGroupOrChild } from './process-kill.js';
+import { recordAgentRun } from './run-record.js';
 import { withFactoryRuntimeInstructions } from './runtime-instructions.js';
 import type { JsonSchema } from './schema-bridge.js';
 
@@ -188,6 +187,17 @@ export class ClaudeCliRuntime implements AgentRuntime {
       argv.push('--json-schema', JSON.stringify(jsonSchema));
     }
     const { personaId } = spec;
+    const recordRun = (outcome: 'success' | 'failure') => {
+      recordAgentRun({
+        runId,
+        personaId,
+        workItemId: spec.workItemId ?? workItemId ?? null,
+        projectId,
+        role: spec.role,
+        skill: spec.skill,
+        outcome,
+      });
+    };
 
     return new Promise((resolve, reject) => {
       // Security rule: minimal explicit env, no parent process.env passthrough.
@@ -276,17 +286,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
         if (settled) return;
         settled = true;
         killProcessGroupOrChild(child);
-        db.insert(agentRuns)
-          .values({
-            runId,
-            personaId,
-            workItemId: spec.workItemId ?? workItemId ?? null,
-            projectId,
-            role: spec.role,
-            skill: spec.skill,
-            outcome: 'failure',
-          })
-          .run();
+        recordRun('failure');
         eventStore.appendEvent({
           projectId,
           workItemId,
@@ -328,17 +328,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
         }
 
         if (code !== 0 && envelope == null) {
-          db.insert(agentRuns)
-            .values({
-              runId,
-              personaId,
-              workItemId: spec.workItemId ?? workItemId ?? null,
-              projectId,
-              role: spec.role,
-              skill: spec.skill,
-              outcome: 'failure',
-            })
-            .run();
+          recordRun('failure');
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -354,17 +344,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
         }
 
         if (envelope?.is_error) {
-          db.insert(agentRuns)
-            .values({
-              runId,
-              personaId,
-              workItemId: spec.workItemId ?? workItemId ?? null,
-              projectId,
-              role: spec.role,
-              skill: spec.skill,
-              outcome: 'failure',
-            })
-            .run();
+          recordRun('failure');
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -397,6 +377,8 @@ export class ClaudeCliRuntime implements AgentRuntime {
           modelId: model,
           inputTokens: usage?.inputTokens ?? 0,
           outputTokens: usage?.outputTokens ?? 0,
+          cachedInputTokens: usage?.cachedInputTokens ?? 0,
+          reasoningOutputTokens: usage?.reasoningOutputTokens ?? 0,
           costUsd: usage?.costUsd ?? 0,
           // No CLI usage data → still 'estimated', just zeroed.
           costLabel: usage?.costLabel ?? 'estimated',
@@ -421,17 +403,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
         });
 
         if (exceededBudget) {
-          db.insert(agentRuns)
-            .values({
-              runId,
-              personaId,
-              workItemId: spec.workItemId ?? workItemId ?? null,
-              projectId,
-              role: spec.role,
-              skill: spec.skill,
-              outcome: 'failure',
-            })
-            .run();
+          recordRun('failure');
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -488,6 +460,8 @@ export class ClaudeCliRuntime implements AgentRuntime {
               usd: usage?.costUsd ?? 0,
               inputTokens: usage?.inputTokens ?? 0,
               outputTokens: usage?.outputTokens ?? 0,
+              cachedInputTokens: usage?.cachedInputTokens ?? 0,
+              reasoningOutputTokens: usage?.reasoningOutputTokens ?? 0,
               label: usage?.costLabel ?? 'estimated',
             },
             turns: {
@@ -502,17 +476,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
           personaId,
         });
 
-        db.insert(agentRuns)
-          .values({
-            runId,
-            personaId,
-            workItemId: spec.workItemId ?? workItemId ?? null,
-            projectId,
-            role: spec.role,
-            skill: spec.skill,
-            outcome: 'success',
-          })
-          .run();
+        recordRun('success');
 
         resolve({
           output: extractResultJson(envelope?.result ?? stdout, runId),

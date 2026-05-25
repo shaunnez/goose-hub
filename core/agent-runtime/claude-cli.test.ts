@@ -2,16 +2,14 @@ import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  mockDbInsert,
+  mockRecordAgentRun,
   mockRecordCost,
   mockRecordToolStatsForRun,
   mockEventStore,
   mockExecFileSync,
   mockSpawn,
 } = vi.hoisted(() => ({
-  mockDbInsert: vi.fn().mockImplementation(() => ({
-    values: vi.fn().mockReturnValue({ run: vi.fn() }),
-  })),
+  mockRecordAgentRun: vi.fn(),
   mockRecordCost: vi.fn(),
   mockRecordToolStatsForRun: vi.fn(),
   mockEventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
@@ -19,7 +17,6 @@ const {
   mockSpawn: vi.fn(),
 }));
 
-vi.mock('../db/db.js', () => ({ db: { insert: mockDbInsert } }));
 vi.mock('../cost/repository.js', () => ({
   recordCost: mockRecordCost,
   recordToolStatsForRun: mockRecordToolStatsForRun,
@@ -39,6 +36,7 @@ vi.mock('./context-assembly.js', () => ({
 vi.mock('./models.js', () => ({
   defaultModelForTier: vi.fn().mockReturnValue('claude-sonnet-4-6'),
 }));
+vi.mock('./run-record.js', () => ({ recordAgentRun: mockRecordAgentRun }));
 vi.mock('node:fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),
   mkdirSync: vi.fn(),
@@ -105,9 +103,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockExecFileSync.mockReturnValue('/usr/local/bin/claude\n');
   vi.mocked(costFromCliEnvelope).mockReturnValue(null);
-  mockDbInsert.mockImplementation(() => ({
-    values: vi.fn().mockReturnValue({ run: vi.fn() }),
-  }));
   mockEventStore.replay.mockReturnValue([]);
 });
 
@@ -152,31 +147,29 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
   });
 
   it('inserts a success row when CLI exits with valid envelope', async () => {
-    const valuesRun = vi.fn();
-    const values = vi.fn().mockReturnValue({ run: valuesRun });
-    mockDbInsert.mockReturnValue({ values });
-
     const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
     mockSpawn.mockReturnValue(makeChild(0, envelope));
 
     const runtime = new ClaudeCliRuntime();
     await runtime.run(makeSpec());
 
-    expect(mockDbInsert).toHaveBeenCalled();
-    const row = values.mock.calls[0][0];
-    expect(row.runId).toBe('run-abc');
-    expect(row.personaId).toBe('test-project/developer/0');
-    expect(row.outcome).toBe('success');
-    expect(row.projectId).toBe('test-project');
-    expect(row.role).toBe('developer');
-    expect(row.skill).toBe('fix-issue');
-    expect(row.workItemId).toBe('github:owner/repo#1');
+    expect(mockRecordAgentRun).toHaveBeenCalledWith({
+      runId: 'run-abc',
+      personaId: 'test-project/developer/0',
+      outcome: 'success',
+      projectId: 'test-project',
+      role: 'developer',
+      skill: 'fix-issue',
+      workItemId: 'github:owner/repo#1',
+    });
   });
 
   it('emits run-completed on an under-budget successful run', async () => {
     vi.mocked(costFromCliEnvelope).mockReturnValue({
       inputTokens: 20,
       outputTokens: 10,
+      cachedInputTokens: 5,
+      reasoningOutputTokens: 2,
       costUsd: 0.25,
       costLabel: 'estimated',
     });
@@ -246,6 +239,8 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     vi.mocked(costFromCliEnvelope).mockReturnValue({
       inputTokens: 100,
       outputTokens: 50,
+      cachedInputTokens: 10,
+      reasoningOutputTokens: 5,
       costUsd: 1.25,
       costLabel: 'estimated',
     });
@@ -263,6 +258,8 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
         costUsd: 1.25,
         inputTokens: 100,
         outputTokens: 50,
+        cachedInputTokens: 10,
+        reasoningOutputTokens: 5,
       }),
     );
     expect(mockRecordToolStatsForRun).toHaveBeenCalledWith('run-abc');
@@ -294,34 +291,22 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
   });
 
   it('inserts a failure row when CLI reports is_error=true', async () => {
-    const valuesRun = vi.fn();
-    const values = vi.fn().mockReturnValue({ run: valuesRun });
-    mockDbInsert.mockReturnValue({ values });
-
     const envelope = JSON.stringify({ is_error: true, result: 'budget exceeded' });
     mockSpawn.mockReturnValue(makeChild(0, envelope));
 
     const runtime = new ClaudeCliRuntime();
     await runtime.run(makeSpec()).catch(() => {});
 
-    expect(mockDbInsert).toHaveBeenCalled();
-    const row = values.mock.calls[0][0];
-    expect(row.outcome).toBe('failure');
+    expect(mockRecordAgentRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failure' }));
   });
 
   it('inserts a failure row when CLI exits non-zero with no envelope', async () => {
-    const valuesRun = vi.fn();
-    const values = vi.fn().mockReturnValue({ run: valuesRun });
-    mockDbInsert.mockReturnValue({ values });
-
     mockSpawn.mockReturnValue(makeChild(1, 'not json'));
 
     const runtime = new ClaudeCliRuntime();
     await runtime.run(makeSpec()).catch(() => {});
 
-    expect(mockDbInsert).toHaveBeenCalled();
-    const row = values.mock.calls[0][0];
-    expect(row.outcome).toBe('failure');
+    expect(mockRecordAgentRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failure' }));
   });
 
   it('timeout emits failure events, kills the process group, rejects, and ignores late close', async () => {

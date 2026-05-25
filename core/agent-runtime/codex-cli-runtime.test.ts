@@ -1,12 +1,14 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockEventStore, mockRecordCost, mockRecordToolStatsForRun, mockSpawn } = vi.hoisted(() => ({
-  mockEventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
-  mockRecordCost: vi.fn(),
-  mockRecordToolStatsForRun: vi.fn(),
-  mockSpawn: vi.fn(),
-}));
+const { mockEventStore, mockRecordAgentRun, mockRecordCost, mockRecordToolStatsForRun, mockSpawn } =
+  vi.hoisted(() => ({
+    mockEventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
+    mockRecordAgentRun: vi.fn(),
+    mockRecordCost: vi.fn(),
+    mockRecordToolStatsForRun: vi.fn(),
+    mockSpawn: vi.fn(),
+  }));
 
 vi.mock('../cost/repository.js', () => ({
   recordCost: mockRecordCost,
@@ -31,6 +33,7 @@ vi.mock('./models.js', () => ({
   defaultModelForTierAndProvider: vi.fn().mockReturnValue('gpt-5.3-codex'),
   estimateCostUsd: vi.fn().mockReturnValue(0),
 }));
+vi.mock('./run-record.js', () => ({ recordAgentRun: mockRecordAgentRun }));
 vi.mock('./codex-config.js', () => ({
   CodexBinaryNotFoundError: class CodexBinaryNotFoundError extends Error {},
   CodexNotAuthenticatedError: class CodexNotAuthenticatedError extends Error {},
@@ -454,6 +457,15 @@ describe('CodexCliRuntime timeout handling', () => {
         cachedInputTokens: 400,
         reasoningOutputTokens: 20,
         costUsd: 3.55,
+      }),
+    );
+    expect(mockRecordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-codex',
+        outcome: 'success',
+        projectId: 'test-project',
+        role: 'developer',
+        skill: 'fix-issue',
       }),
     );
     expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
