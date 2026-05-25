@@ -12,6 +12,7 @@ import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dep
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js';
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
+import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.js';
 import { withParallelLock } from './dispatch-lock.js';
 import { dispatchRetro } from './dispatch-qa-review.js';
 import { getProject } from './projects.js';
@@ -525,6 +526,29 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
         await source.comment(
           item.externalId,
           'parallel-implement: persisted engineering spec failed schema validation. Escalating to needs-human.',
+        );
+        await source.transitionState(item.externalId, 'factory:spec-ready', 'factory:needs-human');
+        emitStateTransitionEvent({
+          projectId: slug,
+          workItemId: item.id,
+          from: 'factory:spec-ready',
+          to: 'factory:needs-human',
+          by: 'parallel-implement',
+        });
+        return;
+      }
+
+      const structuralValidation = validateEngineeringSpec(parsedSpec.data, {
+        issueType: item.type === 'bug' ? 'bug' : 'feature',
+        repoRoot: REPO_ROOT,
+      });
+      if (!structuralValidation.ok) {
+        const errors = structuralValidation.errors
+          .map((error) => `${error.rule}: ${error.message}`)
+          .join('; ');
+        await source.comment(
+          item.externalId,
+          `parallel-implement: persisted engineering spec failed structural validation. Escalating to needs-human.\n\nErrors: ${errors}`,
         );
         await source.transitionState(item.externalId, 'factory:spec-ready', 'factory:needs-human');
         emitStateTransitionEvent({

@@ -1323,8 +1323,12 @@ describe('dispatchForLabel', () => {
       workPackages: [
         {
           id: 'WP1',
-          filesOwned: ['apps/server/src/shared/dispatch.ts'],
-          changes: 'Wire it',
+          filesOwned: [
+            'apps/server/src/shared/dispatch.ts',
+            'apps/server/src/shared/dispatch-harness.test.ts',
+          ],
+          changes:
+            'Wire spec-ready dispatch into the parallel implement workflow with a focused regression test.',
           dependsOn: [],
           builderTier: 'sonnet',
         },
@@ -1428,6 +1432,100 @@ describe('dispatchForLabel', () => {
     );
   });
 
+  it('escalates factory:spec-ready when persisted engineering spec dependency order is invalid', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#694',
+      externalId: '694',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'parallel implement',
+      body: 'body',
+      state: 'factory:spec-ready',
+      priority: 'high',
+      type: 'feature',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    const spec = {
+      objective: 'Implement dispatch wiring',
+      userJourneys: [],
+      functionalRequirements: [],
+      architecture: { current: 'stub', new: 'wired', decisionRationale: 'test' },
+      schemaChanges: { ddl: [], migrations: [] },
+      interfaceContracts: [],
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: [
+            'apps/server/src/shared/dispatch.ts',
+            'apps/server/src/shared/dispatch-harness.test.ts',
+          ],
+          changes:
+            'Wire spec-ready dispatch into the parallel implement workflow with a focused regression test.',
+          dependsOn: [],
+          builderTier: 'sonnet',
+        },
+        {
+          id: 'WP2',
+          filesOwned: ['apps/server/src/shared/dispatch.test.ts'],
+          changes: 'Add dispatch regression coverage for parallel implement dependency ordering.',
+          dependsOn: ['WP1'],
+          builderTier: 'sonnet',
+        },
+      ],
+      executionOrder: [{ batch: 0, wpIds: ['WP1', 'WP2'] }],
+      verificationTooling: [],
+      acceptanceCriteria: [
+        {
+          id: 'AC1',
+          statement: 'Dispatches',
+          crossCutting: true,
+          executableChecks: [{ id: 'AC1-check-1', command: 'pnpm test' }],
+        },
+      ],
+      constraints: [],
+      riskRegister: [],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Test spec' }],
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      budgets: { maxParallelAgents: 1 },
+    });
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockGetEngineeringSpec.mockReturnValue({
+      id: 1,
+      projectId: 'goose-hub-self',
+      workItemId: item.id,
+      pipelineRunId: 'pipeline-run-dispatch',
+      spec,
+      createdAt: '2026-05-10T00:00:00Z',
+      updatedAt: '2026-05-10T00:00:00Z',
+    });
+
+    const { dispatchForLabel } = await import('./dispatch.js');
+    await dispatchForLabel('goose-hub-self', 694, 'factory:spec-ready');
+
+    expect(mockRunParallelImplementWorkflow).not.toHaveBeenCalled();
+    expect(source.comment).toHaveBeenCalledWith(
+      '694',
+      expect.stringContaining('persisted engineering spec failed structural validation'),
+    );
+    expect(source.comment).toHaveBeenCalledWith(
+      '694',
+      expect.stringContaining('wp-dependson-order-invalid'),
+    );
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '694',
+      'factory:spec-ready',
+      'factory:needs-human',
+    );
+  });
+
   it('transitions in-progress to needs-human when parallel-implement returns failed', async () => {
     const item = {
       id: 'github:shaunnez/goose-hub#694',
@@ -1456,8 +1554,12 @@ describe('dispatchForLabel', () => {
       workPackages: [
         {
           id: 'WP1',
-          filesOwned: ['apps/server/src/shared/dispatch.ts'],
-          changes: 'Wire it',
+          filesOwned: [
+            'apps/server/src/shared/dispatch.ts',
+            'apps/server/src/shared/dispatch-harness.test.ts',
+          ],
+          changes:
+            'Wire spec-ready dispatch into the parallel implement workflow with a focused regression test.',
           dependsOn: [],
           builderTier: 'sonnet',
         },

@@ -119,6 +119,12 @@ export interface ParallelImplementDeps {
   ) => boolean;
   /** Override event replay for resume tests. */
   replayEventsImpl?: typeof eventStore.replay;
+  /** Override live PR state verification for all-persisted resume tests. */
+  verifyExistingPrImpl?: (input: {
+    repo: string;
+    pr: ExistingPipelinePr;
+    token?: string;
+  }) => Promise<ExistingPipelinePr>;
 }
 
 function uniqueSorted(paths: string[]): string[] {
@@ -394,6 +400,48 @@ function verifyExistingPrMetadata(input: {
   }
 }
 
+async function verifyExistingPrState(input: {
+  repo: string;
+  pr: ExistingPipelinePr;
+  token?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<ExistingPipelinePr> {
+  const fetchFn = input.fetchImpl ?? fetch;
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  if (input.token != null && input.token.length > 0) {
+    headers.Authorization = `Bearer ${input.token}`;
+  }
+  const response = await fetchFn(
+    `https://api.github.com/repos/${input.repo}/pulls/${input.pr.prNumber}`,
+    { headers },
+  );
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '<no body>');
+    throw new Error(
+      `GitHub PR verification failed: ${response.status} ${response.statusText} - ${detail}`,
+    );
+  }
+  const json = (await response.json()) as {
+    number: number;
+    html_url: string;
+    state: string;
+    head?: { ref?: string; sha?: string };
+    base?: { ref?: string };
+  };
+  return {
+    prNumber: json.number,
+    prUrl: json.html_url,
+    branch: json.head?.ref ?? '',
+    base: json.base?.ref ?? '',
+    headSha: json.head?.sha,
+    state: json.state === 'open' ? 'open' : 'closed',
+    worktreePath: input.pr.worktreePath,
+  };
+}
+
 function persistedWpCheckpoints(input: {
   events: AgentEvent[];
   pipelineRunId: string;
@@ -538,6 +586,7 @@ export async function runParallelImplementWorkflow(
   const hasIntegrationChangedPathSinceFn =
     deps.hasIntegrationChangedPathSinceImpl ?? hasIntegrationChangedPathSince;
   const replayEventsFn = deps.replayEventsImpl ?? ((filter) => eventStore.replay(filter));
+  const verifyExistingPrFn = deps.verifyExistingPrImpl ?? verifyExistingPrState;
 
   const projectConfig = await getProjectBySlug(projectId);
   const workflowBase = resolveWorkflowBaseFn(targetRepo, projectConfig?.targetRepo?.defaultBranch);
@@ -1094,8 +1143,22 @@ export async function runParallelImplementWorkflow(
           `existing PR remote ${remoteHead ?? 'missing'} != persisted ${integrationHeadSha}`,
         );
       }
+      let livePr: ExistingPipelinePr;
+      try {
+        livePr = await verifyExistingPrFn({
+          repo: stateSource.repoRef,
+          pr: existingPr,
+          token: process.env.GITHUB_TOKEN ?? '',
+        });
+      } catch (err) {
+        throw new PersistenceFailureError(
+          'pr-metadata-mismatch',
+          `existing PR live verification failed: ${errorMessage(err)}`,
+          err,
+        );
+      }
       verifyExistingPrMetadata({
-        pr: existingPr,
+        pr: livePr,
         expectedBranch: integrationBranch,
         expectedHeadSha: integrationHeadSha,
         expectedBaseBranch: workflowBase.branch,
@@ -1108,18 +1171,18 @@ export async function runParallelImplementWorkflow(
           runId,
           skill: 'parallel-implement',
           runDisposition: 'completed',
-          prNumber: existingPr.prNumber,
-          branch: existingPr.branch,
-          baseBranch: existingPr.base,
+          prNumber: livePr.prNumber,
+          branch: livePr.branch,
+          baseBranch: livePr.base,
         },
         runId,
       });
       return {
         status: 'success',
         devRunId: runId,
-        worktreePath: existingPr.worktreePath ?? issueWorktreePath ?? '',
-        prNumber: existingPr.prNumber,
-        prUrl: existingPr.prUrl,
+        worktreePath: livePr.worktreePath ?? issueWorktreePath ?? '',
+        prNumber: livePr.prNumber,
+        prUrl: livePr.prUrl,
       };
     }
 

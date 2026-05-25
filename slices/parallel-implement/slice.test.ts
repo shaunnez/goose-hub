@@ -1767,6 +1767,15 @@ describe('parallel-implement durable integration branch persistence', () => {
         cleanupIssueWorktreeImpl: () => undefined,
         prewarmWorktreeImpl: () => undefined,
         resolveRemoteBranchHeadImpl: () => 'sha-wp1',
+        verifyExistingPrImpl: async () => ({
+          prNumber: 44,
+          prUrl: 'https://gh/pr/44',
+          branch: 'factory/run/pipeline-run-existing-pr',
+          base: 'main',
+          headSha: 'sha-wp1',
+          state: 'open',
+          worktreePath: '/tmp/issue-wt',
+        }),
         openPRImpl,
         appendEvent,
       },
@@ -1779,6 +1788,94 @@ describe('parallel-implement durable integration branch persistence', () => {
       worktreePath: '/tmp/issue-wt',
     });
     expect(openPRImpl).not.toHaveBeenCalled();
+  });
+
+  it('all-persisted resume fails when the live PR is no longer open', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const openPRImpl = vi.fn();
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem(),
+      spec,
+      'pipeline-run-closed-pr',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({}),
+        replayEventsImpl: () => [
+          {
+            id: 1,
+            projectId: 'goose-hub-self',
+            workItemId: 'wi-560',
+            kind: 'parallel-implement.wp-persisted',
+            payload: {
+              schemaVersion: 1,
+              pipelineRunId: 'pipeline-run-closed-pr',
+              devRunId: 'old-dev-run',
+              wpId: 'WP1',
+              wpRunId: 'old-dev-run:wp:WP1:iter:1',
+              iteration: 1,
+              integrationBranch: 'factory/run/pipeline-run-closed-pr',
+              baseBranch: 'main',
+              previousHeadSha: 'base-sha',
+              wpCommitSha: 'sha-wp1',
+              pushedSha: 'sha-wp1',
+              filesPersisted: ['core/a.ts'],
+              persistMode: 'direct-integration-commit',
+            },
+            runId: 'old-dev-run:wp:WP1:iter:1',
+            createdAt: new Date().toISOString(),
+          } as AgentEvent,
+          {
+            id: 2,
+            projectId: 'goose-hub-self',
+            workItemId: 'wi-560',
+            kind: 'pr.opened',
+            payload: {
+              pipelineRunId: 'pipeline-run-closed-pr',
+              prNumber: 47,
+              prUrl: 'https://gh/pr/47',
+              branch: 'factory/run/pipeline-run-closed-pr',
+              baseBranch: 'main',
+              headSha: 'sha-wp1',
+              state: 'open',
+              worktreePath: '/tmp/issue-wt',
+            },
+            runId: 'old-dev-run',
+            createdAt: new Date().toISOString(),
+          } as AgentEvent,
+        ],
+        reattachIntegrationWorktreeAtRemoteTipImpl: () => ({
+          worktreePath: '/tmp/issue-wt',
+          previousHeadSha: 'sha-wp1',
+        }),
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        prewarmWorktreeImpl: () => undefined,
+        resolveRemoteBranchHeadImpl: () => 'sha-wp1',
+        verifyExistingPrImpl: async () => ({
+          prNumber: 47,
+          prUrl: 'https://gh/pr/47',
+          branch: 'factory/run/pipeline-run-closed-pr',
+          base: 'main',
+          headSha: 'sha-wp1',
+          state: 'closed',
+          worktreePath: '/tmp/issue-wt',
+        }),
+        openPRImpl,
+        appendEvent,
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    expect(openPRImpl).not.toHaveBeenCalled();
+    expect(events.find((event) => event.kind === 'agent.run-failed')?.payload).toMatchObject({
+      runDisposition: 'persistence-failed',
+      persistenceFailureReason: 'pr-metadata-mismatch',
+    });
   });
 
   it('all-persisted resume with no PR opens PR after verification', async () => {
@@ -1926,6 +2023,15 @@ describe('parallel-implement durable integration branch persistence', () => {
         cleanupIssueWorktreeImpl: () => undefined,
         prewarmWorktreeImpl: () => undefined,
         resolveRemoteBranchHeadImpl: () => 'sha-wp1',
+        verifyExistingPrImpl: async () => ({
+          prNumber: 46,
+          prUrl: 'https://gh/pr/46',
+          branch: 'factory/run/pipeline-run-pr-mismatch',
+          base: 'release',
+          headSha: 'sha-wp1',
+          state: 'open',
+          worktreePath: '/tmp/issue-wt',
+        }),
         openPRImpl,
         appendEvent,
       },
