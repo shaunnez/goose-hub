@@ -290,6 +290,30 @@ describe('Misc timeline events', () => {
     expect(rendered).not.toContain('raw-value');
   });
 
+  it('renders agent.runtime-advisory as a compact warning instead of raw JSON', () => {
+    const event = makeEvent('agent.runtime-advisory', {
+      runId: '706dcce3-efc7-409e-9f85-6b892b27f092',
+      skill: 'bug-enhance',
+      surface: 'resources/read failed',
+      stderr:
+        "2026-05-24T23:17:27.555260Z ERROR codex_core::tools::router: error=resources/read failed: resources/read failed for `factory-tools` (factory://core/agent-runtime/logger.ts): Mcp error: -32603: ENOENT: no such file or directory, open '/Users/shaunnesbitt/.factory/workspaces/388033da-91c0-4b27-bf19-83c02f667308/core/agent-runtime/logger.ts'",
+      toolName: 'resources/read',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Runtime advisory')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('bug-enhance');
+    expect(rendered).toContain('resources/read');
+    expect(rendered).toContain('resources/read failed');
+    expect(rendered).toContain('factory://core/agent-runtime/logger.ts');
+    expect(rendered).toContain('706dcce3-efc7-409e-9f85-6b892b27f092');
+    expect(rendered).toContain('Runtime surfaced a tool access warning');
+    expect(rendered).not.toContain('"stderr"');
+    expect(rendered).not.toContain('codex_core::tools::router');
+  });
+
   it('renders agent.investigation-context-injected as summary text instead of raw JSON', () => {
     const event = makeEvent('agent.investigation-context-injected', {
       skill: 'implement-wp',

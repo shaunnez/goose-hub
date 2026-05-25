@@ -198,6 +198,10 @@ function payloadNumber(payload: CompactOperationalPayload | null, key: string): 
   return typeof value === 'number' ? value : null;
 }
 
+function factoryResourceFromStderr(stderr: string | null): string | null {
+  return stderr?.match(/factory:\/\/[^\s)]+/)?.[0] ?? null;
+}
+
 export function ManualActionEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as { action?: string } | null;
   const action = p?.action ?? getPayloadStr(event.payload);
@@ -739,6 +743,19 @@ function compactOperationalEventDetails(event: AgentEventDto): {
       push(payloadString(p, 'reason'));
       if (payloadNumber(p, 'elapsedMs') != null) facts.push(`${payloadNumber(p, 'elapsedMs')} ms`);
       break;
+    case 'agent.runtime-advisory': {
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'skill'));
+      push(payloadString(p, 'toolName'));
+      push(payloadString(p, 'surface'));
+      push(
+        payloadString(p, 'requestedPath') ?? factoryResourceFromStderr(payloadString(p, 'stderr')),
+      );
+      push(payloadString(p, 'runId') ?? formatShortId(event.runId ?? undefined));
+      detail = 'Runtime surfaced a tool access warning; the agent run may still continue.';
+      break;
+    }
     case 'spec.wp-issues-created':
       tone = 'success';
       push(payloadString(p, 'pipelineRunId') ?? formatShortId(event.runId ?? undefined));
