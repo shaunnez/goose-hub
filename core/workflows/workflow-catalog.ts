@@ -844,6 +844,11 @@ const featureEntry: WorkflowCatalogEntry = {
     'Fresh feature work enters discovery, turns into an approved PRD, then the parent issue moves through spec-author, implementation, QA, review, and retro. Child issues are optional tracking projections after the Engineering Spec.',
   nodes: [
     ...triageNodes,
+    stateNode('framing', 'Framing', 'factory:framing', {
+      group: 'grill',
+      notes:
+        'Holding state for vague fresh features; outbound workflow is owned by the feature-frame issue.',
+    }),
     stateNode('grilling', 'Grilling', 'factory:grilling', { group: 'grill' }),
     stateNode('prd-drafting', 'PRD draft', 'factory:prd-drafting', { group: 'prd' }),
     stateNode('prd-review', 'PRD review', 'factory:prd-review', { group: 'prd' }),
@@ -879,6 +884,7 @@ const featureEntry: WorkflowCatalogEntry = {
     summary('triage-skill', 'repo-match-skill'),
     primary('triaging', 'accepted'),
     primary('accepted', 'grilling'),
+    optional('accepted', 'framing', 'Vague fresh feature'),
     primary('grilling', 'prd-drafting'),
     primary('prd-drafting', 'prd-review'),
     primary('prd-review', 'dev-ready'),
@@ -912,9 +918,10 @@ const featureEntry: WorkflowCatalogEntry = {
     {
       id: 'grill',
       title: 'Grill',
-      description: 'Fresh feature work is clarified through operator questions and answers.',
+      description:
+        'Clean fresh feature work enters grill-me; vague fresh feature work can pause in framing until the framing workflow is available.',
       group: 'grill',
-      nodes: ['grilling', 'grill-me-skill'],
+      nodes: ['framing', 'grilling', 'grill-me-skill'],
     },
     {
       id: 'prd',

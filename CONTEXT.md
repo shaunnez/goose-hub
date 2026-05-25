@@ -161,6 +161,16 @@ type AdvisorVerdict =
 
 **Authorization:** deferred (single-user, v0). ADR when contributor support lands.
 
+## Triage Vagueness Gate
+
+**Purpose:** Triage classifies work-item vagueness deterministically before routing so vague intake is visible at zero model cost. `core/workflows/vagueness-gate.ts` is a pure helper: no LLM calls, no I/O, no event emission, and no state mutation.
+
+**Issue-label ownership:** Triage owns `vague:high` / `vague:low` and recomputes them on every triage pass. A triaged issue must have exactly one current `vague:*` label. Triage also owns `missing:repro` and `missing:criteria`, and those are the only persisted `missing:*` labels; other heuristics such as length, hedging, and missing file/component hints affect only the numeric score.
+
+**Routing contract:** `targetStateForTriage()` routes from classified type plus the current vagueness labels. Bugs continue to enter `factory:investigating`; high-vagueness bugs are enriched by the existing pre-investigation bug-enhance path when no grounded seed exists. Fresh features with `vague:low` keep the existing `factory:grilling` route. Fresh features with `vague:high` route to `factory:framing`, which is a holding state only until the follow-up feature-frame workflow lands. Chores route to `factory:dev-ready`; research routes to `factory:research-pending`.
+
+**PRD override:** `factory:from-prd` remains authoritative for `type:feature`: PRD-derived feature work routes directly to `factory:dev-ready` even when the deterministic gate scores it `vague:high`. The parent PRD path already performed framing, so triage must not send those children back through framing or grilling.
+
 ## Operator Intervention Control Plane
 
 **Purpose:** Durable operator interventions explain and resolve stuck work-item

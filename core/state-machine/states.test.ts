@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { STATES } from './states.js';
 
 describe('STATES', () => {
-  it('has exactly 26 canonical states', () => {
-    expect(STATES).toHaveLength(26);
+  it('has exactly 27 canonical states', () => {
+    expect(STATES).toHaveLength(27);
   });
 
   it('contains all canonical factory:* states in order', () => {
@@ -11,6 +11,7 @@ describe('STATES', () => {
       'factory:triaging',
       'factory:accepted',
       'factory:rejected',
+      'factory:framing',
       'factory:grilling',
       'factory:prd-drafting',
       'factory:prd-review',

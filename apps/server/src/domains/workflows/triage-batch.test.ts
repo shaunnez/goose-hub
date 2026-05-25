@@ -242,6 +242,84 @@ describe('runTriageBatch', () => {
     expect(source.setLabelInGroup).toHaveBeenCalledWith('42', 'priority', 'high');
   });
 
+  it('recomputes vagueness metadata labels and removes stale values on the issue', async () => {
+    const item = makeWorkItem({
+      type: 'bug',
+      title: 'Dashboard broken',
+      body: 'Something is weird. Maybe fix it.',
+    });
+    const source = makeMockSource([item]);
+    if (source.listLabels == null) throw new Error('mock source must define listLabels');
+    vi.mocked(source.listLabels).mockResolvedValue([
+      'factory:triaging',
+      'vague:low',
+      'missing:criteria',
+      'missing:repro',
+    ]);
+
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(source.removeLabel).toHaveBeenCalledWith('42', 'vague:low');
+    expect(source.addLabels).toHaveBeenCalledWith('42', ['vague:high']);
+    expect(source.removeLabel).not.toHaveBeenCalledWith('42', 'missing:criteria');
+    expect(source.removeLabel).not.toHaveBeenCalledWith('42', 'missing:repro');
+  });
+
+  it('removes missing labels that no longer match the current gate result', async () => {
+    const item = makeWorkItem({
+      type: 'feature',
+      title: 'Show active milestone filter on board',
+      body: [
+        'Route: /projects/goose-hub-self/board',
+        'Component: BoardToolbar',
+        'Acceptance criteria:',
+        '- The board shows a milestone dropdown populated from /active-milestone.',
+        '- Selecting a milestone refetches issue cards for that milestone.',
+      ].join('\n'),
+    });
+    const source = makeMockSource([item]);
+    if (source.listLabels == null) throw new Error('mock source must define listLabels');
+    vi.mocked(source.listLabels).mockResolvedValue([
+      'factory:triaging',
+      'vague:high',
+      'missing:criteria',
+      'missing:repro',
+    ]);
+
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: { ...makeTriageOutput(), type: 'feature' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(source.removeLabel).toHaveBeenCalledWith('42', 'vague:high');
+    expect(source.removeLabel).toHaveBeenCalledWith('42', 'missing:criteria');
+    expect(source.removeLabel).toHaveBeenCalledWith('42', 'missing:repro');
+    expect(source.addLabels).toHaveBeenCalledWith('42', ['vague:low']);
+  });
+
   it('does not replace an existing type label', async () => {
     const item = makeWorkItem({ type: 'feature' });
     const source = makeMockSource([item]);
@@ -693,7 +771,18 @@ describe('runTriageBatch onward routing after accept', () => {
   });
 
   it('routes fresh type:feature (no factory:from-prd) to factory:grilling after accepting', async () => {
-    const source = makeMockSource([makeWorkItem()]);
+    const source = makeMockSource([
+      makeWorkItem({
+        title: 'Show active milestone filter on board',
+        body: [
+          'Route: /projects/goose-hub-self/board',
+          'Component: BoardToolbar',
+          'Acceptance criteria:',
+          '- The board shows a milestone dropdown populated from /active-milestone.',
+          '- Selecting a milestone refetches issue cards for that milestone.',
+        ].join('\n'),
+      }),
+    ]);
     // No factory:from-prd label — default mock returns []
     mockRuntime.run
       .mockResolvedValueOnce({

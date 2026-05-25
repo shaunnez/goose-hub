@@ -16,6 +16,11 @@ export const FACTORY_LABELS: Label[] = [
   { name: 'factory:triaging', color: 'fbca04', description: 'Awaiting triage decision' },
   { name: 'factory:accepted', color: '0e8a16', description: 'Accepted by triage' },
   { name: 'factory:rejected', color: 'e6e6e6', description: 'Rejected by triage' },
+  {
+    name: 'factory:framing',
+    color: '8b5cf6',
+    description: 'Holding state for vague fresh features',
+  },
   { name: 'factory:grilling', color: '8b5cf6', description: 'Grill-me chat in progress' },
   { name: 'factory:prd-drafting', color: '8b5cf6', description: 'PRD being written' },
   { name: 'factory:prd-review', color: '8b5cf6', description: 'Awaiting human PRD approval' },
@@ -79,6 +84,16 @@ export const FACTORY_LABELS: Label[] = [
     name: 'factory:from-prd',
     color: 'c4b5fd',
     description: 'Child of a decomposed PRD; triage skips grilling',
+  },
+
+  // triage metadata
+  { name: 'vague:high', color: 'fbca04', description: 'Triage vagueness gate: high' },
+  { name: 'vague:low', color: 'd1d5db', description: 'Triage vagueness gate: low' },
+  { name: 'missing:repro', color: 'fbca04', description: 'Bug report lacks repro detail' },
+  {
+    name: 'missing:criteria',
+    color: 'fbca04',
+    description: 'Work item lacks acceptance criteria',
   },
 
   // type:*

@@ -473,6 +473,7 @@ describe('getIssueLegalTargets', () => {
       type: 'bug',
     });
     vi.mocked(legalTargets).mockReturnValueOnce([
+      'factory:framing',
       'factory:grilling',
       'factory:investigating',
       'factory:dev-ready',
