@@ -953,6 +953,43 @@ describe('CodexCliRuntime timeout handling', () => {
     processKill.mockRestore();
   });
 
+  it('records a failed agent run when the Codex child process emits an error', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.emit('error', new Error('spawn ENOENT'));
+
+    await expect(run).rejects.toThrow('spawn ENOENT');
+    expect(mockRecordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-codex',
+        outcome: 'failure',
+        projectId: 'test-project',
+        role: 'developer',
+        skill: 'fix-issue',
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({
+          runId: 'run-codex',
+          skill: 'fix-issue',
+          reason: 'spawn-error',
+          error: 'spawn ENOENT',
+        }),
+      }),
+    );
+
+    child.emit('close', 0);
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+  });
+
   it('kills and rejects when streamed tool calls exceed maxTurns', async () => {
     vi.mocked(computeAllowlist).mockReturnValue(['Bash']);
     const child = makeHangingChild();

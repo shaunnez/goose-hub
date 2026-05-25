@@ -24,7 +24,9 @@ export function costFromCliEnvelope(envelope: unknown): CostUsage | null {
     numericField(usage, ['output_tokens', 'outputTokens', 'completion_tokens']) ?? 0;
   const cachedInputTokens =
     numericField(usage, ['cached_input_tokens', 'cachedInputTokens']) ??
-    numericField((usage.prompt_tokens_details ?? {}) as Record<string, unknown>, ['cached_tokens']) ??
+    numericField((usage.prompt_tokens_details ?? {}) as Record<string, unknown>, [
+      'cached_tokens',
+    ]) ??
     0;
   const reasoningOutputTokens =
     numericField(usage, ['reasoning_output_tokens', 'reasoningOutputTokens']) ??

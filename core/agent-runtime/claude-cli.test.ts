@@ -297,7 +297,9 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     const runtime = new ClaudeCliRuntime();
     await runtime.run(makeSpec()).catch(() => {});
 
-    expect(mockRecordAgentRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failure' }));
+    expect(mockRecordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'failure' }),
+    );
   });
 
   it('inserts a failure row when CLI exits non-zero with no envelope', async () => {
@@ -306,7 +308,9 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     const runtime = new ClaudeCliRuntime();
     await runtime.run(makeSpec()).catch(() => {});
 
-    expect(mockRecordAgentRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failure' }));
+    expect(mockRecordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'failure' }),
+    );
   });
 
   it('timeout emits failure events, kills the process group, rejects, and ignores late close', async () => {

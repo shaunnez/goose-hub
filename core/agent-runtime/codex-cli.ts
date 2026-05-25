@@ -946,6 +946,20 @@ export class CodexCliRuntime implements AgentRuntime {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
+        recordRun('failure');
+        eventStore.appendEvent({
+          projectId,
+          workItemId,
+          kind: 'agent.run-failed',
+          payload: {
+            runId,
+            skill: spec.skill,
+            reason: 'spawn-error',
+            error: err.message,
+          },
+          runId,
+          personaId,
+        });
         reject(err);
       });
     });
