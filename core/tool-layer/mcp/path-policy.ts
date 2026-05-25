@@ -31,6 +31,10 @@ const DENIED_SEGMENTS: ReadonlyArray<{ segment: string; reason: PathPolicyReason
   { segment: '.factory', reason: 'factory_internals' },
 ];
 
+function isRunOutputPath(segments: ReadonlyArray<string>): boolean {
+  return segments[0] === '.factory' && segments[1] === 'run-output' && segments.length >= 3;
+}
+
 export interface ResolvedPath {
   absolute: string;
   canonical: RepoRelativePath;
@@ -80,7 +84,7 @@ export function resolveWorkspacePath(workspaceRoot: string, requested: string): 
   }
 
   for (const denied of DENIED_SEGMENTS) {
-    if (segments.includes(denied.segment)) {
+    if (segments.includes(denied.segment) && !isRunOutputPath(segments)) {
       throw new PathPolicyViolation(
         denied.reason,
         requested,
@@ -105,7 +109,7 @@ export function resolveWorkspacePath(workspaceRoot: string, requested: string): 
   // passed the raw-segment check above cannot smuggle a denied segment through.
   const canonicalSegments = result.path.path.split('/').filter((s) => s.length > 0);
   for (const denied of DENIED_SEGMENTS) {
-    if (canonicalSegments.includes(denied.segment)) {
+    if (canonicalSegments.includes(denied.segment) && !isRunOutputPath(canonicalSegments)) {
       throw new PathPolicyViolation(
         denied.reason,
         requested,

@@ -579,6 +579,7 @@ export async function listFilesTool(
     command: 'rg',
     args,
     cwd: ctx.workspaceRoot,
+    runId: ctx.runId,
     timeoutMs: LIST_FILES_TIMEOUT_MS,
     env: minimalEnv(),
   });
@@ -681,6 +682,7 @@ export async function searchTextTool(
     command: 'rg',
     args,
     cwd: ctx.workspaceRoot,
+    runId: ctx.runId,
     timeoutMs: SEARCH_TIMEOUT_MS,
     stdoutLimitBytes: DEFAULT_STDOUT_LIMIT_BYTES,
     env: minimalEnv(),

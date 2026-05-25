@@ -5,7 +5,7 @@ const WorkspacePath = z
   .string()
   .min(1)
   .describe(
-    'Workspace-relative path. Absolute paths, .., ~, .codex, .agents, .claude, .factory are rejected.',
+    'Workspace-relative path. Absolute paths, .., ~, .codex, .agents, .claude, and .factory are rejected except for readable .factory/run-output spill files.',
   );
 
 const WorkspacePaths = z.array(WorkspacePath).min(1).max(50);
