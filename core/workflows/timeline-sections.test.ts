@@ -110,6 +110,15 @@ describe('timeline sections', () => {
     expect(resolveTimelineSection({ kind: 'investigation.digest-applied' })).toBe('investigation');
   });
 
+  it('routes WS3 and dogfood observability events explicitly', () => {
+    expect(resolveTimelineSection({ kind: 'dogfood.seed-applied' })).toBe('system');
+    expect(resolveTimelineSection({ kind: 'parallel-implement.wp-persisted' })).toBe(
+      'implementation',
+    );
+    expect(TIMELINE_EVENT_CLASSIFICATION['dogfood.seed-applied']).toBe('direct');
+    expect(TIMELINE_EVENT_CLASSIFICATION['parallel-implement.wp-persisted']).toBe('direct');
+  });
+
   it('keeps historical run id parsing isolated as a compatibility fallback', () => {
     expect(
       resolveTimelineSection({ kind: 'agent.run-completed', runId: 'discover-1:write-prd' }),

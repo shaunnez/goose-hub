@@ -8,6 +8,7 @@
  */
 export const EVENT_KIND_LABEL: Record<string, string> = {
   'state.transitioned': 'State transitioned',
+  'dogfood.seed-applied': 'Dogfood seed applied',
   'milestone.activated': 'Milestone activated',
   'agent.spawned': 'Agent spawned',
   'agent.decision-summary': 'Decision summary',
@@ -125,6 +126,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'parallel-implement.iteration-started': 'Parallel iteration started',
   'parallel-implement.wp-started': 'Work package started',
   'parallel-implement.wp-committed': 'Work package committed',
+  'parallel-implement.wp-persisted': 'Work package persisted',
   'parallel-implement.wp-failed': 'Work package failed',
   'parallel-implement.wp-loop-cap-hit': 'Work package loop cap hit',
   'parallel-implement.wp-timeout': 'Work package timed out',

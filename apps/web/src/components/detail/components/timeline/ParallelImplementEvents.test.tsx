@@ -2,6 +2,7 @@ import type { AgentEventDto } from '@/lib/types';
 /** @vitest-environment jsdom */
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { renderTimelineItem } from '../TimelineEvents';
 import {
   ParallelIterationStartedEvent,
   ParallelWpCommittedEvent,
@@ -124,5 +125,29 @@ describe('ParallelImplementEvents', () => {
     expect(screen.getByText('WP1 committed')).toBeTruthy();
     expect(screen.getByText('00bff479')).toBeTruthy();
     expect(document.body.textContent).not.toContain('"commitSha"');
+  });
+
+  it('renders wp-persisted with durability metadata instead of raw JSON', () => {
+    const event = makeEvent('parallel-implement.wp-persisted', {
+      wpId: 'WP2',
+      pushedSha: 'f88f39a1080dc0ddc84c6e3bc9996ce1d9893368',
+      integrationBranch: 'factory/run/805e37ae-2c79-40ef-b017-07b82dafbd09',
+      filesPersisted: 4,
+      persistMode: 'direct-integration-commit',
+      pipelineRunId: '805e37ae-2c79-40ef-b017-07b82dafbd09',
+      rawProbeKey: 'raw-value',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('WP2 persisted')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('f88f39a1');
+    expect(rendered).toContain('factory/run/805e37ae-2c79-40ef-b017-07b82dafbd09');
+    expect(rendered).toContain('4 files persisted');
+    expect(rendered).toContain('direct-integration-commit');
+    expect(rendered).not.toContain('"pushedSha"');
+    expect(rendered).not.toContain('rawProbeKey');
+    expect(rendered).not.toContain('raw-value');
   });
 });

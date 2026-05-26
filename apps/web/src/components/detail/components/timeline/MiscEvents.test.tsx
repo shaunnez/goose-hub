@@ -27,6 +27,28 @@ function withRawProbe(payload: unknown): unknown {
 }
 
 describe('Misc timeline events', () => {
+  it('renders dogfood.seed-applied as base metadata instead of raw JSON', () => {
+    const event = makeEvent('dogfood.seed-applied', {
+      seedId: 'seed-issue-1061',
+      baseBranch: 'main',
+      seedCommit: 'df129a7113e7344f045166b5e5dc0b7214632c8d',
+      truthSignal: 'green',
+      rawProbeKey: 'raw-value',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Dogfood seed applied')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('seed-issue-1061');
+    expect(rendered).toContain('main');
+    expect(rendered).toContain('df129a71');
+    expect(rendered).toContain('truth green');
+    expect(rendered).not.toContain('"seedCommit"');
+    expect(rendered).not.toContain('rawProbeKey');
+    expect(rendered).not.toContain('raw-value');
+  });
+
   it('renders agent.budget-exceeded as summary text instead of raw JSON', () => {
     const event = makeEvent('agent.budget-exceeded', {
       runId: 'e3bb94b3-4bf6-4c93-9407-9a2dc30c760d',

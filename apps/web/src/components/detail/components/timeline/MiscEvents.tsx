@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   Cpu,
   FileStack,
+  GitBranch,
   Info,
   Network,
   Route,
@@ -161,6 +162,13 @@ type AcceptanceContractPayload = {
   };
 };
 
+type DogfoodSeedAppliedPayload = {
+  seedId?: string;
+  baseBranch?: string;
+  seedCommit?: string;
+  truthSignal?: string | boolean | number;
+};
+
 function formatShortId(value: string | undefined): string | null {
   if (value == null || value.length === 0) return null;
   return value.length <= 12 ? value : value.slice(0, 8);
@@ -285,6 +293,31 @@ export function SystemNoteEvent({ event }: { event: AgentEventDto }) {
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
       <div className="text-[12.5px] text-fg-2">{getPayloadStr(event.payload)}</div>
+    </li>
+  );
+}
+
+export function DogfoodSeedAppliedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as DogfoodSeedAppliedPayload | null;
+  const shortSeedCommit = formatShortId(p?.seedCommit);
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <GitBranch size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Dogfood seed applied</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        {p?.seedId != null && <span className="font-mono">{p.seedId}</span>}
+        {p?.baseBranch != null && <span>{p.baseBranch}</span>}
+        {shortSeedCommit != null && <span className="font-mono">{shortSeedCommit}</span>}
+        {p?.truthSignal != null && <span>truth {String(p.truthSignal)}</span>}
+      </div>
     </li>
   );
 }

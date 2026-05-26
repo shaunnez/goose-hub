@@ -56,6 +56,7 @@ const WORKFLOW_GROUP_TO_TIMELINE_SECTION: Record<WorkflowGroup, TimelineSectionI
 };
 
 const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
+  'dogfood.seed-applied': 'system',
   'agent.triage-complete': 'triage',
   'agent.repo-override': 'triage',
   'agent.investigation-complete': 'investigation',
@@ -76,6 +77,7 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'agent.implement-complete': 'implementation',
   'agent.fix-feedback-complete': 'implementation',
   'agent.fix-feedback-skipped': 'implementation',
+  'parallel-implement.wp-persisted': 'implementation',
   'pr.opened': 'implementation',
   'decompose.completed': 'decompose',
   'evidence.no-spec-declared': 'dev-review',
