@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
+  type SkillContractAudit,
   auditSkillContracts,
   formatSkillContractAudit,
-  type SkillContractAudit,
 } from './skill-contract-audit.js';
 
 describe('skill-contract-audit', () => {
