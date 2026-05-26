@@ -100,6 +100,7 @@ export const EVENT_KINDS = [
   'agent.cancelled',
   'parallel-implement.iteration-started',
   'parallel-implement.wp-started',
+  'parallel-implement.wp-context-assembled',
   'parallel-implement.wp-committed',
   'parallel-implement.wp-persisted',
   'parallel-implement.wp-failed',

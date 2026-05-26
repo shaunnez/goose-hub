@@ -26,6 +26,7 @@ import type { EngineeringSpec, WorkPackage } from '@goose-hub/skills/spec-author
 import { runParallelImplementWorkflow } from './workflow.js';
 import { resolveImplementWpBudget, resolveImplementWpControl } from './wp-budget.js';
 import { runOneWpBuilder } from './wp-builder.js';
+import { buildImplementWpContextFromSpec, commandMentionsWpFile } from './wp-context.js';
 
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
   selectPersona: vi.fn().mockReturnValue({
@@ -172,6 +173,175 @@ function makeAppendEvent(): {
     events,
   };
 }
+
+describe('parallel-implement WP spec context handoff', () => {
+  it('filters #1080-shaped spec material to current and dependency WP contracts', () => {
+    const wp1: WorkPackage = {
+      id: 'WP1',
+      filesOwned: [
+        { path: 'apps/web/src/components/detail/overview-workflow-summary.ts', status: 'new' },
+        {
+          path: 'apps/web/src/components/detail/overview-workflow-summary.test.ts',
+          status: 'new',
+        },
+      ],
+      changes: 'Build the overview workflow summary helper and focused tests.',
+      dependsOn: [],
+      builderTier: 'sonnet',
+    };
+    const wp2 = makeWp('WP2', ['apps/web/src/components/detail/costs.ts']);
+    const wp3: WorkPackage = {
+      ...makeWp('WP3', ['apps/web/src/components/detail/OverviewSection.tsx']),
+      dependsOn: ['WP1'],
+    };
+    const spec: EngineeringSpec = {
+      ...makeSpec([wp1, wp2, wp3]),
+      objective: 'Show workflow, cost, and review summaries on the overview page.',
+      functionalRequirements: [
+        { id: 'FR1', statement: 'Overview workflow summary displays pipeline status.' },
+        { id: 'FR2', statement: 'Costs summary displays cost totals.' },
+        { id: 'FR3', statement: 'WP10 displays unrelated future workflow data.' },
+      ],
+      interfaceContracts: [
+        {
+          name: 'Overview workflow summary builder',
+          signature: 'export function buildOverviewWorkflowSummary(events: AgentEvent[]): Summary',
+          file: 'apps/web/src/components/detail/overview-workflow-summary.ts',
+          requiredExports: [{ name: 'buildOverviewWorkflowSummary' }],
+          lineRange: null,
+        },
+        {
+          name: 'Costs summary builder',
+          signature: 'export function buildCostsSummary(events: AgentEvent[]): Summary',
+          file: 'apps/web/src/components/detail/costs.ts',
+          requiredExports: [{ name: 'buildCostsSummary' }],
+          lineRange: null,
+        },
+        {
+          name: 'OverviewSection consumer',
+          signature: 'export function OverviewSection(props: Props): JSX.Element',
+          file: 'apps/web/src/components/detail/OverviewSection.tsx',
+          requiredExports: [{ name: 'OverviewSection' }],
+          lineRange: null,
+        },
+      ],
+      constraints: [
+        {
+          kind: 'output-format',
+          name: 'summary shape',
+          source:
+            'apps/web/src/components/detail/overview-workflow-summary.ts:buildOverviewWorkflowSummary',
+        },
+        {
+          kind: 'output-format',
+          name: 'cost shape',
+          source: 'apps/web/src/components/detail/costs.ts:buildCostsSummary',
+        },
+      ],
+      verificationTooling: [
+        {
+          name: 'workflow summary',
+          command: 'pnpm vitest run overview-workflow-summary',
+          expectedExitCodes: [0],
+          inputSpec: null,
+        },
+        {
+          name: 'costs',
+          command: 'pnpm vitest run costs',
+          expectedExitCodes: [0],
+          inputSpec: null,
+        },
+        {
+          name: 'overview section',
+          command: 'pnpm vitest run -t OverviewSection',
+          expectedExitCodes: [0],
+          inputSpec: null,
+        },
+      ],
+      acceptanceCriteria: [
+        {
+          id: 'AC1',
+          statement: 'Overview workflow summary handles running, failed, and complete states.',
+          executableChecks: [
+            { id: 'AC1-check', command: 'pnpm vitest run overview-workflow-summary' },
+          ],
+          crossCutting: false,
+        },
+        {
+          id: 'AC2',
+          statement: 'Costs are displayed.',
+          executableChecks: [{ id: 'AC2-check', command: 'pnpm vitest run costs' }],
+          crossCutting: false,
+        },
+        {
+          id: 'AC10',
+          statement: 'WP10 handles unrelated future workflow data.',
+          crossCutting: false,
+        },
+        {
+          id: 'AC3',
+          statement: 'No overview regression.',
+          crossCutting: true,
+        },
+      ],
+    };
+
+    const wp1Context = buildImplementWpContextFromSpec({
+      spec,
+      wp: wp1,
+      pipelineRunId: 'pipeline-1080',
+    });
+    expect(wp1Context.specContext.interfaceContracts.map((contract) => contract.name)).toEqual([
+      'Overview workflow summary builder',
+    ]);
+    expect(wp1Context.specContext.functionalRequirements.map((req) => req.id)).toEqual(['FR1']);
+    expect(wp1Context.verificationCommands.map((check) => check.command)).toEqual([
+      'pnpm vitest run overview-workflow-summary',
+    ]);
+    expect(wp1Context.acceptanceContract.criteria.map((criterion) => criterion.id)).toEqual([
+      'AC1',
+      'AC3',
+    ]);
+
+    const wp3Context = buildImplementWpContextFromSpec({
+      spec,
+      wp: wp3,
+      pipelineRunId: 'pipeline-1080',
+    });
+    expect(wp3Context.specContext.interfaceContracts.map((contract) => contract.name)).toEqual([
+      'Overview workflow summary builder',
+      'OverviewSection consumer',
+    ]);
+    expect(wp3Context.specContext.dependencyFilesOwned).toEqual([
+      'apps/web/src/components/detail/overview-workflow-summary.ts',
+      'apps/web/src/components/detail/overview-workflow-summary.test.ts',
+    ]);
+    expect(wp3Context.verificationCommands.map((check) => check.command)).toEqual([
+      'pnpm vitest run -t OverviewSection',
+    ]);
+  });
+
+  it('matches verification commands by path, basename, stem, and component-style test name', () => {
+    expect(
+      commandMentionsWpFile('pnpm vitest run apps/web/src/components/detail/costs.ts', [
+        'apps/web/src/components/detail/costs.ts',
+      ]),
+    ).toBe(true);
+    expect(
+      commandMentionsWpFile('pnpm vitest run overview-workflow-summary', [
+        'apps/web/src/components/detail/overview-workflow-summary.test.ts',
+      ]),
+    ).toBe(true);
+    expect(
+      commandMentionsWpFile('pnpm vitest run -t OverviewSection', [
+        'apps/web/src/components/detail/overview-section.tsx',
+      ]),
+    ).toBe(true);
+    expect(commandMentionsWpFile('pnpm vitest run captcha.spec.ts', ['core/api.ts'])).toBe(false);
+    expect(commandMentionsWpFile('pnpm vitest run roadmap.spec.ts', ['core/map.ts'])).toBe(false);
+    expect(commandMentionsWpFile('pnpm vitest run oauth.spec.ts', ['core/auth.ts'])).toBe(false);
+  });
+});
 
 describe('implement-wp budget sizing', () => {
   it('derives per-WP budgets from project config and applies global caps', () => {
@@ -1358,6 +1528,27 @@ describe('implement-wp ownership gate', () => {
       recordIterationFn: () => undefined,
       implementWpPrompt: '# prompt',
       implementWpJsonSchema: {},
+      specContext: {
+        objective: 'Build foo',
+        architecture: {
+          current: 'No foo helper',
+          new: 'Foo helper is exported',
+          decisionRationale: 'Keep it local to the web package',
+        },
+        functionalRequirements: [{ id: 'FR1', statement: 'Foo renders correctly.' }],
+        interfaceContracts: [
+          {
+            name: 'Foo helper',
+            signature: 'export function foo(): string',
+            file: 'apps/web/src/foo.ts',
+            requiredExports: [{ name: 'foo' }],
+            lineRange: null,
+          },
+        ],
+        constraints: [],
+        dependencyWpIds: [],
+        dependencyFilesOwned: [],
+      },
       parentPrdContext: {
         source: 'event',
         parentWorkItemId: 'github:shaunnez/goose-hub#55',
@@ -1379,6 +1570,15 @@ describe('implement-wp ownership gate', () => {
     expect(result).toMatchObject({ status: 'failed', wpId: 'WP1' });
     expect(specs[0]?.context).toMatchObject({
       wp: { id: 'WP1', filesOwned: ['apps/web/src/foo.ts'] },
+      specContext: {
+        objective: 'Build foo',
+        interfaceContracts: [
+          expect.objectContaining({
+            name: 'Foo helper',
+            signature: 'export function foo(): string',
+          }),
+        ],
+      },
       parentPrdContext: {
         outOfScope: ['Do not rebuild settings.'],
         acceptanceCriteria: [{ id: 'AC1', statement: 'Approval routes correctly.' }],
@@ -1390,7 +1590,19 @@ describe('implement-wp ownership gate', () => {
       FACTORY_WP_FILESOWNED: 'apps/web/src/foo.ts',
       FACTORY_WP_ID: 'WP1',
     });
+    expect(specs[0]?.contextAllowlist).toContain('specContext');
     expect(reverted).toEqual([['apps/web/src/foo.ts']]);
+    expect(
+      events.find((event) => event.kind === 'parallel-implement.wp-context-assembled'),
+    ).toMatchObject({
+      payload: {
+        wpId: 'WP1',
+        counts: expect.objectContaining({
+          ownedFiles: 1,
+          specContracts: 1,
+        }),
+      },
+    });
     const repaired = events.find((event) => event.kind === 'agent.output-repaired');
     expect(repaired?.payload).toMatchObject({
       skill: 'implement-wp',

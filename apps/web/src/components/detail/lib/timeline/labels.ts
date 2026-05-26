@@ -126,6 +126,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'swarm.wave-incomplete': 'Wave incomplete',
   'parallel-implement.iteration-started': 'Parallel iteration started',
   'parallel-implement.wp-started': 'Work package started',
+  'parallel-implement.wp-context-assembled': 'Work package context assembled',
   'parallel-implement.wp-committed': 'Work package committed',
   'parallel-implement.wp-persisted': 'Work package persisted',
   'parallel-implement.wp-failed': 'Work package failed',
