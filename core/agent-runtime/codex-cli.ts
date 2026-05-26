@@ -82,6 +82,16 @@ const ADVISORY_RUNTIME_SURFACE_PATTERNS: Array<{
   re: RegExp;
 }> = [
   {
+    surface: 'resources/templates/list failed',
+    toolName: 'resources/templates/list',
+    re: /resources\/templates\/list(?:\s+failed|[^\n]*transient stderr)/i,
+  },
+  {
+    surface: 'resources/list failed',
+    toolName: 'resources/list',
+    re: /resources\/list(?:\s+failed|[^\n]*transient stderr)/i,
+  },
+  {
     surface: 'resources/read failed',
     toolName: 'resources/read',
     re: /resources\/read(?:\?path=[^\s]+)?(?:\s+failed|[^\n]*transient stderr)/i,

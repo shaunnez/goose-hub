@@ -6,6 +6,20 @@ import { safeParseOutputForSchema } from './output-normalization.js';
 import { resolveBudgetsForProject } from './resolve-for-project.js';
 import { ScoutOutputSchema, normalizeScoutOutput } from './scout-output.js';
 
+const SCOUT_NO_EVIDENCE_REASON =
+  'scout returned no findings and made no successful Factory read/search/file tool calls';
+
+const FACTORY_EVIDENCE_TOOL_NAMES = new Set([
+  'file_exists',
+  'file_info',
+  'list_dir',
+  'list_files',
+  'read_file',
+  'read_many_files',
+  'repo_intel.query',
+  'search_text',
+]);
+
 /** Per-scout findings. Mirrors `ScoutOutputSchema` in each scout's schema.ts. */
 export interface ScoutFinding {
   file: string;
@@ -84,6 +98,30 @@ export interface RunOneScoutContext {
     appendSystemPrompt?: string;
     outputJsonSchema?: Record<string, unknown>;
   };
+}
+
+function payloadRecord(value: unknown): Record<string, unknown> | null {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function normalizedToolName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  if (value.startsWith('mcp__factory-tools__')) {
+    return value.slice('mcp__factory-tools__'.length);
+  }
+  return value;
+}
+
+function hasSuccessfulFactoryEvidenceCall(events: readonly AgentEvent[]): boolean {
+  return events.some((event) => {
+    if (event.kind !== 'agent.tool-call') return false;
+    const payload = payloadRecord(event.payload);
+    if (payload == null) return false;
+    if (payload.blocked === true || payload.status !== 'ok') return false;
+    const toolName = normalizedToolName(payload.tool_name ?? payload.toolName ?? payload.tool);
+    return toolName != null && FACTORY_EVIDENCE_TOOL_NAMES.has(toolName);
+  });
 }
 
 export async function runOneScout(
@@ -248,6 +286,24 @@ export async function runOneScout(
   const findings = scoutOutput.findings;
   const decisionSummaries =
     result.decisionSummaries.length > 0 ? result.decisionSummaries : scoutOutput.decisionSummaries;
+
+  if (findings.length === 0 && !hasSuccessfulFactoryEvidenceCall(result.events)) {
+    append({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId ?? null,
+      kind: 'swarm.scout-failed',
+      payload: { runId, scoutName: spec.scoutName, errorReason: SCOUT_NO_EVIDENCE_REASON },
+      runId,
+    });
+    return {
+      scoutName: spec.scoutName,
+      status: 'error',
+      findings: [],
+      decisionSummaries,
+      errorReason: SCOUT_NO_EVIDENCE_REASON,
+      runId,
+    };
+  }
 
   append({
     projectId: ctx.projectId,
