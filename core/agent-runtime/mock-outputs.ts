@@ -92,6 +92,13 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
     case 'qa': {
       if (testOutcome === 'fail') {
         const emptyTier = { passed: false, findings: [] };
+        const finding = {
+          tier: 'functional' as const,
+          severity: 'error' as const,
+          description: 'mock qa failure',
+          disposition: 'needs-fix' as const,
+          dispositionRef: 'e2e-test',
+        };
         return {
           output: {
             verdict: 'fail',
@@ -101,15 +108,7 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
               structural: emptyTier,
               functional: {
                 passed: false,
-                findings: [
-                  {
-                    tier: 'functional',
-                    severity: 'error',
-                    description: 'mock qa failure',
-                    disposition: 'registered',
-                    dispositionRef: 'e2e-test',
-                  },
-                ],
+                findings: [finding],
               },
               regression: emptyTier,
             },
@@ -123,7 +122,7 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
               gallsLaw: 0,
               cyclomaticComplexity: 0,
             },
-            findings: [],
+            findings: [finding],
             decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock QA fail for e2e test' }],
           },
           decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock QA fail for e2e test' }],
@@ -198,12 +197,24 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
     }
 
     case 'review': {
+      const acceptanceCriteria =
+        (
+          spec.context.acceptanceContract as
+            | { criteria?: Array<{ id?: string; statement?: string }> }
+            | undefined
+        )?.criteria ?? [];
+      const criteriaChecks = acceptanceCriteria.map((criterion) => ({
+        criterionId: criterion.id,
+        criterion: criterion.statement ?? criterion.id ?? 'Mock acceptance criterion',
+        status: 'met' as const,
+        notes: 'Mock review checked canonical acceptance criterion',
+      }));
       if (testOutcome === 'needs-fix') {
         return {
           output: {
             verdict: 'needs-fix',
             confidence: 0.4,
-            criteriaChecks: [],
+            criteriaChecks,
             findings: [],
             decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock review needs-fix for e2e test' }],
           },
@@ -215,7 +226,7 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
         output: {
           verdict: 'approved',
           confidence: 0.95,
-          criteriaChecks: [],
+          criteriaChecks,
           findings: [],
           decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock review approval for e2e test' }],
         },
@@ -436,7 +447,14 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
       const scoutSummary = `Mock ${spec.skill} for e2e test`;
       return {
         output: {
-          findings: [],
+          findings: [
+            {
+              file: 'apps/web/e2e/pipeline/README.md',
+              line: 1,
+              fact: scoutSummary,
+              confidence: 'high' as const,
+            },
+          ],
           status: 'ok' as const,
           decisionSummaries: [{ kind: 'INSIGHT', summary: scoutSummary }],
         },
