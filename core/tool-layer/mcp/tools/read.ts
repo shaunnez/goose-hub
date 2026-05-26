@@ -35,7 +35,10 @@ const READ_FILE_CAP_BYTES = 256 * 1024;
 const READ_FILE_DEFAULT_LINE_COUNT = 2000;
 const LIST_DIR_CAP_ENTRIES = 500;
 const LIST_FILES_CAP = 500;
+const SEARCH_DEFAULT_MAX_MATCHES = 20;
 const SEARCH_MAX_MATCHES = 200;
+const SEARCH_RESULT_MAX_BYTES = 8 * 1024;
+const SEARCH_PREVIEW_MAX_CHARS = 240;
 const SEARCH_TIMEOUT_MS = 15_000;
 const LIST_FILES_TIMEOUT_MS = 10_000;
 
@@ -94,12 +97,16 @@ export interface ListFilesResult {
 export interface SearchMatch {
   path: RepoRelativePath;
   line: number;
-  text: string;
+  preview: string;
 }
 
 export interface SearchTextResult {
+  query: string;
   matches: SearchMatch[];
+  matchCount: number;
   truncated: boolean;
+  resultBytes: number;
+  truncationReason?: 'matches' | 'result_bytes' | 'command_output';
   cached?: true;
   duplicateNudge?: string;
 }
@@ -157,6 +164,73 @@ function duplicateNudgeFields(duplicate: ReturnType<typeof recordDuplicateToolCa
 function rawPathToCanonical(rawPath: string, workspaceRoot: string): RepoRelativePath {
   const result = canonicalizeFactoryToolPath({ rawPath, worktreePath: workspaceRoot });
   return result.ok ? result.path : { path: rawPath, root: 'worktree' };
+}
+
+function compactSearchPreview(text: string): string {
+  const compact = text.trim().replace(/\s+/g, ' ');
+  return compact.length > SEARCH_PREVIEW_MAX_CHARS
+    ? `${compact.slice(0, SEARCH_PREVIEW_MAX_CHARS - 3)}...`
+    : compact;
+}
+
+function jsonByteLength(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value), 'utf8');
+}
+
+function searchTruncationReason(input: {
+  byteCapped: boolean;
+  commandOutputTruncated: boolean;
+  matchCapped: boolean;
+}): SearchTextResult['truncationReason'] {
+  if (input.byteCapped) return 'result_bytes';
+  if (input.commandOutputTruncated) return 'command_output';
+  if (input.matchCapped) return 'matches';
+  return undefined;
+}
+
+function buildSearchTextResult(input: {
+  query: string;
+  matches: SearchMatch[];
+  commandOutputTruncated: boolean;
+  matchCapped: boolean;
+}): SearchTextResult {
+  const matches = [...input.matches];
+  let byteCapped = false;
+
+  while (matches.length > 0) {
+    const candidate = {
+      query: input.query,
+      matches,
+      matchCount: matches.length,
+      truncated: input.commandOutputTruncated || input.matchCapped || byteCapped,
+      resultBytes: 0,
+      truncationReason: searchTruncationReason({
+        byteCapped,
+        commandOutputTruncated: input.commandOutputTruncated,
+        matchCapped: input.matchCapped,
+      }),
+    };
+    const resultBytes = jsonByteLength({ ...candidate, resultBytes: SEARCH_RESULT_MAX_BYTES });
+    if (resultBytes <= SEARCH_RESULT_MAX_BYTES) {
+      return { ...candidate, resultBytes };
+    }
+    byteCapped = true;
+    matches.pop();
+  }
+
+  const empty = {
+    query: input.query,
+    matches,
+    matchCount: 0,
+    truncated: input.commandOutputTruncated || input.matchCapped || byteCapped,
+    resultBytes: 0,
+    truncationReason: searchTruncationReason({
+      byteCapped,
+      commandOutputTruncated: input.commandOutputTruncated,
+      matchCapped: input.matchCapped,
+    }),
+  };
+  return { ...empty, resultBytes: jsonByteLength(empty) };
 }
 
 function rgAuditStatus(result: CommandResult): CommandStatus {
@@ -258,7 +332,7 @@ async function fallbackSearchText(input: {
   query: string;
   limit: number;
   glob?: string;
-}): Promise<SearchTextResult> {
+}): Promise<{ matches: SearchMatch[]; truncated: boolean }> {
   const matches: SearchMatch[] = [];
   const listing = await walkFilePaths({
     workspaceRoot: input.workspaceRoot,
@@ -281,7 +355,7 @@ async function fallbackSearchText(input: {
       if (matches.length >= input.limit) break;
       query.lastIndex = 0;
       if (!query.test(lines[index])) continue;
-      matches.push({ path: file, line: index + 1, text: lines[index] });
+      matches.push({ path: file, line: index + 1, preview: compactSearchPreview(lines[index]) });
     }
   }
 
@@ -624,19 +698,20 @@ export async function listFilesTool(
 /**
  * Full-text search via ripgrep. The query is passed as a positional argv
  * (no shell expansion); path/glob filter narrows the search. Output is
- * parsed into structured `{path, line, text}` matches to keep the agent
- * out of the raw rg format.
+ * parsed into compact structured `{path, line, preview}` matches so search
+ * stays an index/navigation tool instead of injecting large source chunks.
  */
 export async function searchTextTool(
   ctx: FactoryContext,
   input: z.infer<typeof SearchTextInput>,
 ): Promise<SearchTextResult> {
+  const limit = Math.min(input.maxMatches ?? SEARCH_DEFAULT_MAX_MATCHES, SEARCH_MAX_MATCHES);
   const args: string[] = [
     '--no-heading',
     '--with-filename',
     '--line-number',
     '--max-count',
-    String(SEARCH_MAX_MATCHES),
+    String(limit),
     '--max-columns',
     '300',
   ];
@@ -656,7 +731,6 @@ export async function searchTextTool(
   }
   args.push('--', input.query, searchPath);
 
-  const limit = Math.min(input.maxMatches ?? SEARCH_MAX_MATCHES, SEARCH_MAX_MATCHES);
   const cacheKey = normalizeRunCacheKey({
     toolName: 'search_text',
     args: { ...input, maxMatches: limit },
@@ -671,7 +745,9 @@ export async function searchTextTool(
       input: { query: input.query, path: input.path ?? null, glob: input.glob ?? null },
       status: 'ok',
       truncated: cached.truncated,
-      noMatches: cached.matches.length === 0,
+      noMatches: cached.matchCount === 0,
+      resultBytes: cached.resultBytes,
+      truncationReason: cached.truncationReason,
       cached: true,
       ...duplicateAuditFields(duplicate),
     });
@@ -689,7 +765,8 @@ export async function searchTextTool(
   });
 
   let matches: SearchMatch[];
-  let truncated: boolean;
+  let commandOutputTruncated: boolean;
+  let matchCapped: boolean;
 
   if (rgSpawnFailed(result)) {
     const fallback = await fallbackSearchText({
@@ -700,7 +777,8 @@ export async function searchTextTool(
       glob: input.glob,
     });
     matches = fallback.matches;
-    truncated = fallback.truncated;
+    commandOutputTruncated = false;
+    matchCapped = fallback.truncated;
   } else {
     matches = [];
     for (const line of result.stdout.split('\n')) {
@@ -717,22 +795,35 @@ export async function searchTextTool(
       const lineNum = Number.parseInt(line.slice(firstColon + 1, secondColon), 10);
       const text = line.slice(secondColon + 1);
       if (!Number.isFinite(lineNum)) continue;
-      matches.push({ path: rawPathToCanonical(rawPath, ctx.workspaceRoot), line: lineNum, text });
+      matches.push({
+        path: rawPathToCanonical(rawPath, ctx.workspaceRoot),
+        line: lineNum,
+        preview: compactSearchPreview(text),
+      });
     }
 
-    truncated = result.truncated || matches.length >= limit;
+    commandOutputTruncated = result.truncated;
+    matchCapped = matches.length >= limit;
   }
+
+  const output = buildSearchTextResult({
+    query: input.query,
+    matches,
+    commandOutputTruncated,
+    matchCapped,
+  });
 
   emitToolCall(ctx, {
     tool: 'search_text',
     input: { query: input.query, path: input.path ?? null, glob: input.glob ?? null },
     status: rgSpawnFailed(result) ? 'ok' : rgAuditStatus(result),
     durationMs: result.durationMs,
-    truncated,
-    noMatches: matches.length === 0 && (rgSpawnFailed(result) || rgNoMatches(result)),
+    truncated: output.truncated,
+    truncationReason: output.truncationReason,
+    resultBytes: output.resultBytes,
+    noMatches: output.matchCount === 0 && (rgSpawnFailed(result) || rgNoMatches(result)),
     ...duplicateAuditFields(duplicate),
   });
-  const output = { matches, truncated };
   if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, output);
   return output;
 }

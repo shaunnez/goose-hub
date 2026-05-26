@@ -218,17 +218,23 @@ describe('listFilesTool', () => {
 });
 
 describe('searchTextTool', () => {
-  it('finds a literal needle and returns structured matches', async () => {
+  it('finds a literal needle and returns compact structured matches', async () => {
     const result = await searchTextTool(ctx, { query: 'NEEDLE' });
+    expect(result.query).toBe('NEEDLE');
+    expect(result.matchCount).toBeGreaterThan(0);
+    expect(result.resultBytes).toBeGreaterThan(0);
     expect(result.matches.length).toBeGreaterThan(0);
     const hit = result.matches.find((m) => m.path.path.endsWith('index.ts'));
     expect(hit).toBeTruthy();
     expect(hit?.line).toBe(1);
-    expect(hit?.text).toContain('NEEDLE');
+    expect(hit?.preview).toContain('NEEDLE');
+    expect(hit).not.toHaveProperty('text');
   });
 
   it('returns empty matches array when nothing matches (rg exit 1)', async () => {
     const result = await searchTextTool(ctx, { query: 'NO_SUCH_TOKEN_xyzzy' });
+    expect(result.query).toBe('NO_SUCH_TOKEN_xyzzy');
+    expect(result.matchCount).toBe(0);
     expect(result.matches).toEqual([]);
     expect(result.truncated).toBe(false);
 
@@ -237,6 +243,32 @@ describe('searchTextTool', () => {
       (e) => (e.payload as { tool_name?: string }).tool_name === 'search_text',
     );
     expect(audit?.payload).toMatchObject({ status: 'ok', noMatches: true });
+  });
+
+  it('defaults to 20 matches so search stays an index instead of a context dump', async () => {
+    writeFileSync(
+      join(workspace, 'many.txt'),
+      Array.from({ length: 30 }, (_, i) => `TOKEN ${i + 1}`).join('\n'),
+    );
+
+    const result = await searchTextTool(ctx, { query: 'TOKEN' });
+
+    expect(result.matches).toHaveLength(20);
+    expect(result.matchCount).toBe(20);
+    expect(result.truncated).toBe(true);
+  });
+
+  it('caps default search result bytes and reports byte truncation', async () => {
+    writeFileSync(
+      join(workspace, 'wide.txt'),
+      Array.from({ length: 40 }, (_, i) => `BLOAT ${i + 1} ${'x'.repeat(260)}`).join('\n'),
+    );
+
+    const result = await searchTextTool(ctx, { query: 'BLOAT', maxMatches: 40 });
+
+    expect(result.resultBytes).toBeLessThanOrEqual(8 * 1024);
+    expect(result.truncated).toBe(true);
+    expect(result.truncationReason).toBe('result_bytes');
   });
 });
 

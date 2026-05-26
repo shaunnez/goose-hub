@@ -254,7 +254,7 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
     'search_text',
     {
       description:
-        'Search file contents via ripgrep. Returns structured `{path, line, text}` matches; capped at 200 matches per call.',
+        'Search file contents via ripgrep. Returns compact `{path, line, preview}` matches; defaults to 20 matches with an 8KB result cap.',
       inputSchema: SearchTextInput.shape,
     },
     async (input) => {
