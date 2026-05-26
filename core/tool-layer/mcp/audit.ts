@@ -14,7 +14,9 @@ export interface ToolCallAudit {
   input: Record<string, unknown>;
   durationMs?: number;
   truncated?: boolean;
+  truncationReason?: string;
   bytesRead?: number;
+  resultBytes?: number;
   cached?: boolean;
   duplicateCount?: number;
   repo_intel_intent?: string;
