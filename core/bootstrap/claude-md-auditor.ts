@@ -175,6 +175,7 @@ function buildAdditionDiff(
   existingContent: string,
   missingHeadings: string[],
   stackInfo: StackInfo,
+  filePath = 'CLAUDE.md',
 ): string {
   const cmds = stackInfo.commands ?? {};
 
@@ -258,7 +259,7 @@ function buildAdditionDiff(
   const existingLineCount = existingContent.split('\n').length;
 
   // Build the unified diff output
-  const diffParts: string[] = ['--- a/CLAUDE.md', '+++ b/CLAUDE.md'];
+  const diffParts: string[] = [`--- a/${filePath}`, `+++ b/${filePath}`];
 
   let insertionOffset = existingLineCount + 1;
 
@@ -291,7 +292,8 @@ export async function auditClaudeMd(repoPath: string, stackInfo: StackInfo): Pro
         try {
           await fs.access(path.join(repoPath, filePath));
           return true;
-        } catch {
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
           return false;
         }
       },
@@ -345,7 +347,12 @@ export async function auditAgentInstructionsFromFiles(
   // ------------------------------------------------------------------
   // Case 3: some sections are missing → produce a unified diff
   // ------------------------------------------------------------------
-  const diff = buildAdditionDiff(existingContent, missingHeadings, stackInfo);
+  const diff = buildAdditionDiff(
+    existingContent,
+    missingHeadings,
+    stackInfo,
+    targetPath ?? 'CLAUDE.md',
+  );
   const missingList = missingHeadings.join(', ');
 
   return {
@@ -383,7 +390,9 @@ async function resolveInstructionPath(
 }
 
 function delegatedClaudePath(content: string): 'CLAUDE.md' | null {
-  return /\bsee\s+CLAUDE\.md\b/i.test(content) || /\bCLAUDE\.md\b/i.test(content)
-    ? 'CLAUDE.md'
-    : null;
+  const directivePatterns = [
+    /^\s*(?:see|read|refer to|use|follow)\s+(?:the\s+)?`?CLAUDE\.md`?\b/im,
+    /\b(?:instructions|guidance|rules)\s+(?:are|live)\s+in\s+`?CLAUDE\.md`?\b/i,
+  ];
+  return directivePatterns.some((pattern) => pattern.test(content)) ? 'CLAUDE.md' : null;
 }

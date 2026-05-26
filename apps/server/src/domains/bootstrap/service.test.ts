@@ -64,6 +64,16 @@ describe('previewBootstrapService', () => {
     }
   });
 
+  it('returns 400 when a custom slug sanitises to empty', async () => {
+    const result = await previewBootstrapService({ repoRef: 'octo/widgets', slug: '!!!---!!!' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(400);
+      expect(result.error).toMatch(/slug|empty/i);
+    }
+    expect(mockInspectGithubRepo).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when GitHub responds 404 for the repo', async () => {
     mockInspectGithubRepo.mockRejectedValue(new Error('GitHub GET x -> 404: not found'));
     const result = await previewBootstrapService('octo/missing');

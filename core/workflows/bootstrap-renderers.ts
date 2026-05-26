@@ -93,15 +93,9 @@ const config: ProjectConfig = {
   name: ${JSON.stringify(name)},
   slug: ${JSON.stringify(slug)},
   source: {
-    kind: 'local-db',
-    stateMachine: 'db',
-    integrations: {
-      github: {
-        repos: ${JSON.stringify(repoRefs)},
-        mirrorLabels: false,
-        importIssues: true,
-      },
-    },
+    kind: 'github',
+    repo: ${JSON.stringify(firstRepo.repoRef)},
+    stateMachine: 'labels',
   },
   targetRepo: {
     cloneUrl: ${JSON.stringify(cloneUrl)},
@@ -209,8 +203,8 @@ function repoId(repoRef: string): string {
 }
 
 function localRepoPath(cloneRoot: string, repoRef: string): string {
-  const repoName = repoRef.split('/')[1] ?? repoRef;
-  return nodePath.posix.join(cloneRoot.replace(/\\/g, '/'), repoName);
+  const parts = repoRef.split('/').filter(Boolean);
+  return nodePath.posix.join(cloneRoot.replace(/\\/g, '/'), ...parts);
 }
 
 function renderStackBlock(stack: StackInfo, detectedAt: string): string {
@@ -338,7 +332,7 @@ function renderClaudeBlock(audit: AuditResult): string {
   switch (audit.action) {
     case 'create':
       return [
-        `**Action**: create — no agent instruction file exists in target repo.`,
+        '**Action**: create — no agent instruction file exists in target repo.',
         '',
         '**Preview** (first 40 lines):',
         '',

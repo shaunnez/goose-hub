@@ -22,8 +22,8 @@ import * as nodeOs from 'node:os';
 import * as nodePath from 'node:path';
 import type { AuditResult } from '@goose-hub/core/bootstrap/claude-md-auditor.js';
 import {
-  inspectGithubRepo,
   type InspectedGithubRepo,
+  inspectGithubRepo,
 } from '@goose-hub/core/bootstrap/github-repo-inspector.js';
 import { FACTORY_LABELS } from '@goose-hub/core/bootstrap/labels.js';
 import { logger } from '@goose-hub/core/logger.js';
@@ -156,19 +156,6 @@ export async function previewBootstrapService(
     };
   }
 
-  if (isMockMode()) {
-    const slug = deriveSlugForRequest(request, repoRefs);
-    return {
-      ok: true,
-      data: {
-        ...MOCK_FIXTURE_PREVIEW,
-        slug,
-        name: request.name?.trim() || slug,
-        repos: repoRefs.map((repoRef) => ({ ...MOCK_FIXTURE_PREVIEW.repos[0], repoRef })),
-      },
-    };
-  }
-
   let slug: string;
   try {
     slug = deriveSlugForRequest(request, repoRefs);
@@ -177,6 +164,18 @@ export async function previewBootstrapService(
       ok: false,
       error: err instanceof Error ? err.message : 'failed to derive slug',
       status: 400,
+    };
+  }
+
+  if (isMockMode()) {
+    return {
+      ok: true,
+      data: {
+        ...MOCK_FIXTURE_PREVIEW,
+        slug,
+        name: request.name?.trim() || slug,
+        repos: repoRefs.map((repoRef) => ({ ...MOCK_FIXTURE_PREVIEW.repos[0], repoRef })),
+      },
     };
   }
 
@@ -264,24 +263,19 @@ export async function runBootstrapService(
     };
   }
 
-  if (isMockMode()) {
-    const slug = deriveSlugForRequest(request, repoRefs);
-    return { ok: true, data: { ...MOCK_FIXTURE_RUN, slug } };
+  let slug: string;
+  try {
+    slug = deriveSlugForRequest(request, repoRefs);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : `invalid slug: ${request.slug}`,
+      status: 400,
+    };
   }
 
-  // Validate the optional client-supplied slug up front so a bad value
-  // (e.g. one that sanitises to empty) reports as 400 input error rather
-  // than being swallowed by the catch-all 500 below.
-  if (request.slug != null) {
-    try {
-      sanitiseSlug(request.slug);
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : `invalid slug: ${request.slug}`,
-        status: 400,
-      };
-    }
+  if (isMockMode()) {
+    return { ok: true, data: { ...MOCK_FIXTURE_RUN, slug } };
   }
 
   const token = getGithubToken();
@@ -299,7 +293,7 @@ export async function runBootstrapService(
       repoRef: request.repoRef,
       repoRefs,
       token,
-      slug: request.slug,
+      slug,
       name: request.name,
       cloneRoot: getCloneRoot(),
     });
@@ -327,11 +321,7 @@ function normalizeBootstrapRequest(input: string | BootstrapRequestDto): Bootstr
 
 /** Derive a slug using the same sanitisation as the workflow. */
 function deriveSlugForRequest(request: BootstrapRequestDto, repoRefs: string[]): string {
-  try {
-    if (request.slug != null) return sanitiseSlug(request.slug);
-    const firstRepoName = repoRefs[0].split('/')[1] ?? repoRefs[0];
-    return sanitiseSlug(firstRepoName);
-  } catch {
-    return 'unknown';
-  }
+  if (request.slug != null) return sanitiseSlug(request.slug);
+  const firstRepoName = repoRefs[0].split('/')[1] ?? repoRefs[0];
+  return sanitiseSlug(firstRepoName);
 }
