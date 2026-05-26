@@ -151,8 +151,9 @@ export function ChatPanel({ open, onClose, restoreLastConversationOnOpen = true 
     if (restoreLastConversationOnOpen) return;
     if (!openChanged && !open) return;
     loadTokenRef.current += 1;
+    writeActiveId(null);
     resetToListView();
-  }, [open, restoreLastConversationOnOpen, resetToListView]);
+  }, [open, restoreLastConversationOnOpen, resetToListView, writeActiveId]);
 
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;

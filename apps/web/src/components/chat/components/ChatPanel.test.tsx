@@ -272,7 +272,7 @@ describe('ChatPanel', () => {
     );
 
     await waitFor(() =>
-      expect(document.querySelector('[data-testid="chat-conversation-list"]')).toBeTruthy(),
+      expect(document.querySelector('[data-testid="chat-conversation-select"]')).toBeTruthy(),
     );
     click(document.querySelector('[data-testid="chat-conversation-select"]'));
     await waitFor(() => expect(queryByText('Thread should clear immediately')).toBeTruthy());
@@ -290,6 +290,7 @@ describe('ChatPanel', () => {
 
     expect(document.querySelector('[data-testid="chat-conversation-list"]')).toBeTruthy();
     expect(queryByText('Thread should clear immediately')).toBeUndefined();
+    expect(localStorage.getItem(ACTIVE_CONVERSATION_STORAGE_KEY)).toBeNull();
 
     reopenList.resolve([conversation]);
     await waitFor(() => expect(listConversations).toHaveBeenCalledTimes(2));
