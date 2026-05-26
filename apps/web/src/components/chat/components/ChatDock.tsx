@@ -26,7 +26,7 @@ export function ChatDock() {
 
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} />
+      <ChatPanel open={open} onClose={() => setOpen(false)} restoreLastConversationOnOpen={false} />
       <ChatLauncher open={open} onToggle={() => setOpen((o) => !o)} />
     </>
   );
