@@ -35,6 +35,184 @@ export const events = sqliteTable(
   }),
 );
 
+export const workItems = sqliteTable(
+  'work_items',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull(),
+    externalId: text('external_id').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull().default(''),
+    state: text('state').notNull(),
+    type: text('type').notNull(),
+    priority: text('priority').notNull(),
+    mode: text('mode').notNull(),
+    schedule: text('schedule').notNull(),
+    exec: text('exec').notNull(),
+    parentId: text('parent_id'),
+    authorIsOwner: integer('author_is_owner', { mode: 'boolean' }).notNull().default(true),
+    milestoneId: text('milestone_id'),
+    milestoneTitle: text('milestone_title'),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    closedAt: text('closed_at'),
+  },
+  (table) => ({
+    projectStateIdx: index('work_items_project_state_idx').on(table.projectId, table.state),
+    projectExternalIdUniq: uniqueIndex('work_items_project_external_id_uniq').on(
+      table.projectId,
+      table.externalId,
+    ),
+    projectScheduleIdx: index('work_items_project_schedule_idx').on(
+      table.projectId,
+      table.schedule,
+    ),
+    projectMilestoneIdx: index('work_items_project_milestone_idx').on(
+      table.projectId,
+      table.milestoneId,
+    ),
+  }),
+);
+
+export const workItemMilestones = sqliteTable(
+  'work_item_milestones',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    number: integer('number').notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    dueOn: text('due_on'),
+    state: text('state').notNull().default('open'),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (table) => ({
+    projectNumberUniq: uniqueIndex('work_item_milestones_project_number_uniq').on(
+      table.projectId,
+      table.number,
+    ),
+    projectStateIdx: index('work_item_milestones_project_state_idx').on(
+      table.projectId,
+      table.state,
+    ),
+  }),
+);
+
+export const workItemLabels = sqliteTable(
+  'work_item_labels',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id').notNull(),
+    label: text('label').notNull(),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (table) => ({
+    workItemLabelUniq: uniqueIndex('work_item_labels_work_item_label_uniq').on(
+      table.workItemId,
+      table.label,
+    ),
+    projectLabelIdx: index('work_item_labels_project_label_idx').on(table.projectId, table.label),
+  }),
+);
+
+export const workItemRepoLinks = sqliteTable(
+  'work_item_repo_links',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id').notNull(),
+    repoRef: text('repo_ref').notNull(),
+    role: text('role').notNull().default('unknown'),
+    confidence: real('confidence'),
+    source: text('source').notNull().default('manual'),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (table) => ({
+    workItemRepoRoleUniq: uniqueIndex('work_item_repo_links_work_item_repo_role_uniq').on(
+      table.workItemId,
+      table.repoRef,
+      table.role,
+    ),
+    projectWorkItemIdx: index('work_item_repo_links_project_work_item_idx').on(
+      table.projectId,
+      table.workItemId,
+    ),
+  }),
+);
+
+export const workItemExternalRefs = sqliteTable(
+  'work_item_external_refs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id').notNull(),
+    provider: text('provider').notNull(),
+    kind: text('kind').notNull(),
+    repoRef: text('repo_ref'),
+    externalId: text('external_id').notNull(),
+    url: text('url'),
+    metadataJson: text('metadata_json'),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (table) => ({
+    projectExternalRefIdx: index('work_item_external_refs_project_external_ref_idx').on(
+      table.projectId,
+      table.provider,
+      table.kind,
+      table.repoRef,
+      table.externalId,
+    ),
+    workItemKindIdx: index('work_item_external_refs_work_item_kind_idx').on(
+      table.workItemId,
+      table.kind,
+    ),
+  }),
+);
+
+export const workItemComments = sqliteTable(
+  'work_item_comments',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id').notNull(),
+    body: text('body').notNull(),
+    authorLogin: text('author_login').notNull().default('goose-hub'),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (table) => ({
+    workItemIdx: index('work_item_comments_work_item_idx').on(table.workItemId, table.id),
+    projectWorkItemIdx: index('work_item_comments_project_work_item_idx').on(
+      table.projectId,
+      table.workItemId,
+    ),
+  }),
+);
+
+export const workItemStateEvents = sqliteTable(
+  'work_item_state_events',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id').notNull(),
+    fromState: text('from_state'),
+    toState: text('to_state').notNull(),
+    mode: text('mode').notNull(),
+    note: text('note'),
+    actor: text('actor'),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (table) => ({
+    workItemIdx: index('work_item_state_events_work_item_idx').on(table.workItemId, table.id),
+    projectWorkItemIdx: index('work_item_state_events_project_work_item_idx').on(
+      table.projectId,
+      table.workItemId,
+      table.id,
+    ),
+  }),
+);
+
 export const workItemInterventions = sqliteTable(
   'work_item_interventions',
   {

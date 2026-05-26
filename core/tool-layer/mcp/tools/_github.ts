@@ -1,5 +1,7 @@
 import { getProjectBySlug } from '../../../projects/loader.js';
 import { GitHubLabelsSource } from '../../../state-source/github-labels.js';
+import type { StateSource } from '../../../state-source/interface.js';
+import { LocalDbStateSource } from '../../../state-source/local-db.js';
 
 export class GitHubTokenMissingError extends Error {
   readonly kind = 'GitHubTokenMissingError' as const;
@@ -35,16 +37,24 @@ export function resolveGitHubToken(): string {
 }
 
 /**
- * Builds a `GitHubLabelsSource` for the project the run belongs to. Reads
- * the project config to get `source.repo`, then constructs the source
- * with the orchestrator's GitHub token.
+ * Builds the configured StateSource for the project the run belongs to.
+ * GitHub-backed projects require a token; local-db projects do not.
  */
-export async function getStateSourceForProject(projectId: string): Promise<GitHubLabelsSource> {
+export async function getStateSourceForProject(projectId: string): Promise<StateSource> {
   const project = await getProjectBySlug(projectId);
   if (project == null) throw new ProjectNotFoundError(projectId);
+  const sourceKind = (project.source as { kind: string }).kind;
+  if (project.source.kind === 'local-db') {
+    const repoRef =
+      project.repositories?.[0]?.repoRef ??
+      project.repos[0] ??
+      project.source.integrations?.github?.repos[0] ??
+      `local:${project.id}`;
+    return new LocalDbStateSource(project.id, repoRef);
+  }
   if (project.source.kind !== 'github') {
     throw new Error(
-      `getStateSourceForProject: project '${projectId}' has source.kind='${project.source.kind}', only 'github' is supported.`,
+      `getStateSourceForProject: project '${projectId}' has unsupported source.kind='${sourceKind}'.`,
     );
   }
   const token = resolveGitHubToken();

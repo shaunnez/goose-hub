@@ -1,6 +1,8 @@
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
 import { InMemoryLabelsSource } from '@goose-hub/core/state-source/in-memory-labels.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
+import { LocalDbStateSource } from '@goose-hub/core/state-source/local-db.js';
+import type { ProjectConfig } from '@goose-hub/core/types.js';
 import { getProject } from './projects.js';
 
 const sourceCache = new Map<string, StateSource>();
@@ -17,22 +19,39 @@ export function isValidSlug(slug: string): boolean {
   return SLUG_PATTERN.test(slug);
 }
 
+function compatibilityRepoRef(cfg: ProjectConfig): string {
+  if (cfg.source.kind === 'github') return cfg.source.repo;
+  return (
+    cfg.repositories?.[0]?.repoRef ??
+    cfg.repos[0] ??
+    cfg.source.integrations?.github?.repos[0] ??
+    `local:${cfg.id}`
+  );
+}
+
 export async function getSourceForSlug(slug: string): Promise<StateSource | null> {
   const cached = sourceCache.get(slug);
   if (cached != null) return cached;
 
   const cfg = await getProject(slug);
   if (cfg == null) return null;
+  const sourceKind = (cfg.source as { kind: string }).kind;
 
   if (process.env.MOCK_SOURCE === 'true') {
-    const repoRef = cfg.source.kind === 'github' ? cfg.source.repo : slug;
+    const repoRef = compatibilityRepoRef(cfg);
     const source = new InMemoryLabelsSource(cfg.id, repoRef);
     sourceCache.set(slug, source);
     return source;
   }
 
+  if (cfg.source.kind === 'local-db') {
+    const source = new LocalDbStateSource(cfg.id, compatibilityRepoRef(cfg));
+    sourceCache.set(slug, source);
+    return source;
+  }
+
   if (cfg.source.kind !== 'github') {
-    throw new Error(`Unsupported source kind for ${slug}: ${cfg.source.kind}`);
+    throw new Error(`Unsupported source kind for ${slug}: ${sourceKind}`);
   }
 
   const token = process.env.GITHUB_TOKEN;
