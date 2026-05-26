@@ -149,6 +149,12 @@ export interface BudgetConfig {
       timeoutMs?: number;
       modelTier?: ModelTier;
       effort?: RuntimeEffort | null;
+      escalation?: {
+        modelTier: ModelTier;
+        maxBudgetUsd: number;
+        maxTurns?: number;
+        timeoutMs?: number;
+      };
     }
   >;
   implementWp?: {

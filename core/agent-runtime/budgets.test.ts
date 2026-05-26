@@ -157,6 +157,52 @@ describe('resolveEscalatedBudgets', () => {
     const result = resolveEscalatedBudgets('implement', { perAgentMaxUsd: 6 }, undefined, 6);
     expect(result?.budgets.maxBudgetUsd).toBe(6);
   });
+
+  it('lets DB escalation settings override config and skill defaults', () => {
+    const result = resolveEscalatedBudgets(
+      'implement',
+      {
+        skillBudgetOverrides: {
+          implement: { escalation: { modelTier: 'sonnet', maxBudgetUsd: 12 } },
+        },
+      },
+      undefined,
+      undefined,
+      {
+        escalationModelTier: 'opus',
+        escalationMaxBudgetUsd: 18,
+        escalationMaxTurns: 90,
+        escalationTimeoutMs: 420_000,
+      },
+    );
+
+    expect(result?.modelOverride).toContain('opus');
+    expect(result?.budgets).toEqual({
+      maxTurns: 90,
+      maxBudgetUsd: 18,
+      timeoutMs: 420_000,
+    });
+  });
+
+  it('uses the configured skill provider for the escalated model', () => {
+    const result = resolveEscalatedBudgets(
+      'implement',
+      {
+        skillBudgetOverrides: {
+          implement: { provider: 'codex' },
+        },
+      },
+      undefined,
+      undefined,
+      {
+        modelProvider: 'codex',
+        escalationModelTier: 'opus',
+        escalationMaxBudgetUsd: 18,
+      },
+    );
+
+    expect(result?.modelOverride).toBe('gpt-5.5');
+  });
 });
 
 describe('perAgentMaxUsd cap', () => {

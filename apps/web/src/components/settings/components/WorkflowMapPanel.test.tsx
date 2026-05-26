@@ -127,10 +127,7 @@ vi.mock('@/lib/api', () => ({
   }),
   fetchReviewSettings: vi.fn().mockResolvedValue({
     projectId: 'goose-hub-self',
-    reviewerSlots: [
-      { model: 'claude', prompt: 'default' },
-      { model: 'codex', prompt: 'unconstrained' },
-    ],
+    reviewerSlots: [{ prompt: 'default' }, { prompt: 'unconstrained' }],
     updatedAt: null,
     updatedBy: null,
   }),

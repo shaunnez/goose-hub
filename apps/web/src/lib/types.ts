@@ -606,6 +606,10 @@ export interface ProjectSettingsDto {
       modelTier: ModelTier | null;
       provider: ModelProvider | null;
       effort: RuntimeEffort | null;
+      escalationModelTier: ModelTier | null;
+      escalationMaxBudgetUsd: number | null;
+      escalationMaxTurns: number | null;
+      escalationTimeoutMs: number | null;
       updatedAt: string;
     }
   >;
@@ -628,6 +632,12 @@ export interface ProjectSettingsDto {
       modelTier: ModelTier;
       modelProvider: ModelProvider;
       effort: RuntimeEffort | null;
+      escalation: {
+        modelTier: ModelTier;
+        maxBudgetUsd: number;
+        maxTurns: number | null;
+        timeoutMs: number | null;
+      } | null;
     }
   >;
   resolvedSkillRuntimes?: Record<
@@ -641,6 +651,10 @@ export interface ProjectSettingsDto {
       resolvedPrimary: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
       resolvedFallback: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
       resolvedAdvisor: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
+      resolvedEscalation: {
+        modelId: string;
+        budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs: number };
+      } | null;
       /** Human-readable summary of the per-axis runtime resolution. */
       selectionReason?: string;
       /**
@@ -664,6 +678,7 @@ export interface ImplementWpSettingsDto {
   highPriorityUsd: number;
   manyFilesThreshold: number;
   manyFilesUsd: number;
+  contractKeywords: string[];
   contractUsd: number;
 }
 
@@ -678,6 +693,7 @@ export type ImplementWpSettingsOverrideDto = {
   implementWpHighPriorityUsd: number | null;
   implementWpManyFilesThreshold: number | null;
   implementWpManyFilesUsd: number | null;
+  implementWpContractKeywords: string[] | null;
   implementWpContractUsd: number | null;
   updatedAt: string;
   updatedBy: string | null;
@@ -905,11 +921,9 @@ export interface LearningLoopSettingsDto {
   } | null;
 }
 
-export type ReviewerSlotModel = 'claude' | 'codex';
 export type ReviewerSlotPrompt = 'default' | 'unconstrained';
 
 export interface ReviewerSlot {
-  model: ReviewerSlotModel;
   prompt: ReviewerSlotPrompt;
 }
 

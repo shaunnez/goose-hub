@@ -5,6 +5,7 @@ import { buildPrDiffWithContext } from '@goose-hub/core/agent-runtime/pr-diff-co
 import type { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import type { ReviewerSlot } from '@goose-hub/core/db/repositories/project-review-settings.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
+import type { ModelProvider } from '@goose-hub/core/types.js';
 import type { ReviewOutput } from '@goose-hub/skills/review/schema.js';
 
 export const DEFAULT_MAX_REVIEW_ROUNDS = 3;
@@ -25,7 +26,7 @@ export interface ReviewWaveResult {
     runId: string;
     round: number;
     slotIndex: number;
-    slotModel: ReviewerSlot['model'];
+    slotModel: ModelProvider;
     promptVariant: ReviewerSlot['prompt'];
   }>;
   parseFailure: boolean;
@@ -48,8 +49,8 @@ export interface DispatchReviewWaveOpts {
   workItem: WorkItem;
   projectSlug: string;
   reviewWorkflowRunId: string;
-  /** Returns the runtime to use for a given slot model. */
-  runtimeForSlot: (model: ReviewerSlot['model']) => AgentRuntime;
+  /** Returns the runtime to use for the resolved review skill provider. */
+  runtimeForSlot: (provider: ModelProvider) => AgentRuntime;
 }
 
 export function toFindingKey(f: {
@@ -106,10 +107,10 @@ export function hasCanonicalCriteriaCoverage(
   return criteria.every((criterion) => checkedIds.has(criterion.id));
 }
 
-/** Default reviewer slots: constrained + unconstrained, both on claude. */
+/** Default reviewer slots: constrained + unconstrained. Model/provider come from Skill runtime. */
 export const DEFAULT_REVIEWER_SLOTS: ReviewerSlot[] = [
-  { model: 'claude', prompt: 'default' },
-  { model: 'claude', prompt: 'unconstrained' },
+  { prompt: 'default' },
+  { prompt: 'unconstrained' },
 ];
 
 /** Shared spec builder for both single and convergent review paths. */
