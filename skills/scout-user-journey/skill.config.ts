@@ -1,5 +1,8 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
-import { InvestigationSeedSchema } from '@goose-hub/core/agent-runtime/scout-prefetch.js';
+import {
+  InvestigationSeedSchema,
+  SeedEvidenceSchema,
+} from '@goose-hub/core/agent-runtime/scout-prefetch.js';
 import { z } from 'zod';
 import { ScoutOutputSchema } from './schema.js';
 
@@ -15,6 +18,7 @@ export const ScoutUserJourneyContextSchema = z.object({
   }),
   scoutFocus: z.string().describe('One sentence describing the user-facing flow to walk'),
   investigationSeed: InvestigationSeedSchema.optional(),
+  seedEvidence: SeedEvidenceSchema.optional(),
 });
 
 const config: SkillConfig = {
@@ -26,6 +30,7 @@ const config: SkillConfig = {
     'workItem.number',
     'scoutFocus',
     'investigationSeed',
+    'seedEvidence',
   ],
   toolBundles: ['read'],
   modelPin: 'haiku',

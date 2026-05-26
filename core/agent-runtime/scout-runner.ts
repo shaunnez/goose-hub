@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
 import type { ResolvedBudget, SkillBudgetOverride } from './budgets.js';
 import { assembleSpawnContext } from './context-assembly.js';
@@ -5,6 +7,7 @@ import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './in
 import { safeParseOutputForSchema } from './output-normalization.js';
 import { resolveBudgetsForProject } from './resolve-for-project.js';
 import { ScoutOutputSchema, normalizeScoutOutput } from './scout-output.js';
+import type { SeedEvidenceSnippet } from './scout-prefetch.js';
 
 const SCOUT_NO_EVIDENCE_REASON =
   'scout returned no findings and made no successful Factory read/search/file tool calls';
@@ -49,12 +52,19 @@ export interface ScoutSpec {
 }
 
 /** Result of a single scout spawn. */
+export type ScoutLogicalOutcome = 'ok' | 'skipped' | 'failed' | 'timeout';
+export type ScoutProcessStatus = 'ok' | 'timeout' | 'error';
+
 export interface ScoutReport {
   scoutName: string;
-  status: 'ok' | 'timeout' | 'error';
+  /** Process-level runtime status. Semantic handling should prefer `outcome`. */
+  status: ScoutProcessStatus;
+  /** Logical scout outcome after schema parsing, skip classification, and evidence retry. */
+  outcome?: ScoutLogicalOutcome;
   findings: ScoutFinding[];
   decisionSummaries: DecisionSummary[];
   errorReason?: string;
+  skippedReason?: string;
   runId: string;
 }
 
@@ -79,6 +89,7 @@ export const SCOUT_CONTEXT_ALLOWLIST: readonly string[] = [
   'scoutReports',
   'symbolIndexHints',
   'investigationSeed',
+  'seedEvidence',
   'scoutDigest',
 ];
 
@@ -233,6 +244,7 @@ export async function runOneScout(
     return {
       scoutName: spec.scoutName,
       status: 'timeout',
+      outcome: 'timeout',
       findings: [],
       decisionSummaries: [],
       runId,
@@ -250,6 +262,7 @@ export async function runOneScout(
     return {
       scoutName: spec.scoutName,
       status: 'error',
+      outcome: 'failed',
       findings: [],
       decisionSummaries: [],
       errorReason: errorReason ?? 'unknown',
@@ -276,6 +289,7 @@ export async function runOneScout(
     return {
       scoutName: spec.scoutName,
       status: 'error',
+      outcome: 'failed',
       findings: [],
       decisionSummaries: result.decisionSummaries ?? [],
       errorReason: reason,
@@ -288,17 +302,29 @@ export async function runOneScout(
   let decisionSummaries =
     result.decisionSummaries.length > 0 ? result.decisionSummaries : scoutOutput.decisionSummaries;
   let effectiveRunId = runId;
-  const seedFile = firstInvestigationSeedCandidateFile(fullContext);
+  let evidenceBackedEmptyResult = false;
+  if (scoutOutput.status === 'skipped') {
+    return emitSkippedScout({
+      append,
+      ctx,
+      runId,
+      scoutName: spec.scoutName,
+      findings,
+      decisionSummaries,
+    });
+  }
+
+  const seedEvidence = await readSeedEvidenceSnippets(ctx.worktreePath, fullContext);
   if (
     findings.length === 0 &&
     !hasSuccessfulFactoryEvidenceCall(result.events) &&
-    seedFile != null
+    seedEvidence.length > 0
   ) {
     const retryTimeoutMs = remainingTimeoutMs(start, budgets.timeoutMs);
     if (retryTimeoutMs <= 0) {
       timedOut = true;
     } else if (runtime != null) {
-      const retrySpec = buildEvidenceRetrySpec(spawnSpec, seedFile, retryTimeoutMs);
+      const retrySpec = buildEvidenceRetrySpec(spawnSpec, seedEvidence, retryTimeoutMs);
       assembleSpawnContext(retrySpec);
       try {
         const retryResult = await runtime.run(retrySpec);
@@ -317,6 +343,7 @@ export async function runOneScout(
           return {
             scoutName: spec.scoutName,
             status: 'error',
+            outcome: 'failed',
             findings: [],
             decisionSummaries:
               retryResult.decisionSummaries.length > 0
@@ -328,9 +355,27 @@ export async function runOneScout(
         }
         const retryOutput = normalizeScoutOutput(retryParsed.data);
         const retryFindings = retryOutput.findings;
-        if (retryFindings.length > 0 || hasSuccessfulFactoryEvidenceCall(retryResult.events)) {
+        if (retryOutput.status === 'skipped') {
+          return emitSkippedScout({
+            append,
+            ctx,
+            runId: retrySpec.runId,
+            scoutName: spec.scoutName,
+            findings: retryFindings,
+            decisionSummaries:
+              retryResult.decisionSummaries.length > 0
+                ? retryResult.decisionSummaries
+                : retryOutput.decisionSummaries,
+          });
+        }
+        if (
+          retryFindings.length > 0 ||
+          hasSuccessfulFactoryEvidenceCall(retryResult.events) ||
+          retryOutput.status === 'ok'
+        ) {
           result = retryResult;
           findings = retryFindings;
+          evidenceBackedEmptyResult = retryFindings.length === 0 && retryOutput.status === 'ok';
           effectiveRunId = retrySpec.runId;
           decisionSummaries =
             retryResult.decisionSummaries.length > 0
@@ -365,6 +410,7 @@ export async function runOneScout(
     return {
       scoutName: spec.scoutName,
       status: 'timeout',
+      outcome: 'timeout',
       findings: [],
       decisionSummaries: [],
       runId,
@@ -382,6 +428,7 @@ export async function runOneScout(
     return {
       scoutName: spec.scoutName,
       status: 'error',
+      outcome: 'failed',
       findings: [],
       decisionSummaries,
       errorReason,
@@ -389,7 +436,11 @@ export async function runOneScout(
     };
   }
 
-  if (findings.length === 0 && !hasSuccessfulFactoryEvidenceCall(result.events)) {
+  if (
+    findings.length === 0 &&
+    !evidenceBackedEmptyResult &&
+    !hasSuccessfulFactoryEvidenceCall(result.events)
+  ) {
     append({
       projectId: ctx.projectId,
       workItemId: ctx.workItemId ?? null,
@@ -400,6 +451,7 @@ export async function runOneScout(
     return {
       scoutName: spec.scoutName,
       status: 'error',
+      outcome: 'failed',
       findings: [],
       decisionSummaries,
       errorReason: SCOUT_NO_EVIDENCE_REASON,
@@ -423,6 +475,7 @@ export async function runOneScout(
   return {
     scoutName: spec.scoutName,
     status: 'ok',
+    outcome: 'ok',
     findings,
     decisionSummaries,
     runId: effectiveRunId,
@@ -433,30 +486,107 @@ function remainingTimeoutMs(start: number, timeoutMs: number): number {
   return Math.max(0, timeoutMs - (Date.now() - start));
 }
 
-function firstInvestigationSeedCandidateFile(context: Record<string, unknown>): string | null {
+function emitSkippedScout(input: {
+  append: (input: AppendEventInput) => AgentEvent;
+  ctx: RunOneScoutContext;
+  runId: string;
+  scoutName: string;
+  findings: ScoutFinding[];
+  decisionSummaries: DecisionSummary[];
+}): ScoutReport {
+  const skippedReason =
+    input.decisionSummaries[0]?.summary ?? 'scout determined its domain does not apply';
+  input.append({
+    projectId: input.ctx.projectId,
+    workItemId: input.ctx.workItemId ?? null,
+    kind: 'swarm.scout-skipped',
+    payload: {
+      runId: input.runId,
+      scoutName: input.scoutName,
+      skippedReason,
+      decisionSummariesCount: input.decisionSummaries.length,
+    },
+    runId: input.runId,
+  });
+  return {
+    scoutName: input.scoutName,
+    status: 'ok',
+    outcome: 'skipped',
+    findings: input.findings,
+    decisionSummaries: input.decisionSummaries,
+    skippedReason,
+    runId: input.runId,
+  };
+}
+
+async function readSeedEvidenceSnippets(
+  worktreePath: string,
+  context: Record<string, unknown>,
+): Promise<SeedEvidenceSnippet[]> {
   const seed = payloadRecord(context.investigationSeed);
   const candidates = Array.isArray(seed?.candidateFiles) ? seed.candidateFiles : [];
+  const snippets: SeedEvidenceSnippet[] = [];
   for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+    const candidatePath = typeof candidate === 'string' && candidate.length > 0 ? candidate : null;
     const record = payloadRecord(candidate);
-    if (typeof record?.path === 'string' && record.path.length > 0) return record.path;
+    const filePath =
+      candidatePath ??
+      (typeof record?.path === 'string' && record.path.length > 0 ? record.path : null);
+    if (filePath == null) continue;
+    const snippet = await readBoundedSeedFile(worktreePath, filePath);
+    if (snippet != null) snippets.push(snippet);
+    if (snippets.length >= 3) break;
   }
-  return null;
+  return snippets;
+}
+
+async function readBoundedSeedFile(
+  worktreePath: string,
+  filePath: string,
+): Promise<SeedEvidenceSnippet | null> {
+  if (path.isAbsolute(filePath)) return null;
+  const root = path.resolve(worktreePath);
+  const absolutePath = path.resolve(root, filePath);
+  const relativePath = path.relative(root, absolutePath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) return null;
+
+  try {
+    const raw = await readFile(absolutePath, 'utf8');
+    const lines = raw.split(/\r?\n/);
+    const selectedLines = lines.slice(0, 80);
+    let text = selectedLines.join('\n');
+    let truncated = lines.length > selectedLines.length;
+    if (text.length > 8_000) {
+      text = text.slice(0, 8_000);
+      truncated = true;
+    }
+    if (text.trim().length === 0) return null;
+    return {
+      file: relativePath,
+      startLine: 1,
+      endLine: selectedLines.length,
+      text,
+      truncated,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function buildEvidenceRetrySpec(
   spawnSpec: AgentSpec,
-  seedFile: string,
+  seedEvidence: SeedEvidenceSnippet[],
   timeoutMs: number,
 ): AgentSpec {
-  const instruction = `Evidence retry: ignore resources/list advisory noise and perform one read_file or search_text call against the seeded file '${seedFile}' before returning JSON.`;
+  const instruction =
+    'Evidence retry: use provided <seedEvidence> snippets before any tool call. Classify whether this scout domain applies, cite the provided snippets in findings when relevant, or return status "skipped" with a decision summary when the domain does not apply. Do not ask the user for input.';
   const context =
     spawnSpec.context != null &&
     typeof spawnSpec.context === 'object' &&
     !Array.isArray(spawnSpec.context)
       ? {
           ...(spawnSpec.context as Record<string, unknown>),
-          scoutFocus: `${String((spawnSpec.context as Record<string, unknown>).scoutFocus ?? '')}\n\n${instruction}`,
+          seedEvidence,
         }
       : spawnSpec.context;
   return {

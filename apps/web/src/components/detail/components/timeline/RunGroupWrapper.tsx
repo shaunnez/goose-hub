@@ -66,9 +66,21 @@ export function RunGroupWrapper({
   const groupEventList = items
     .filter((item): item is Extract<RenderItem, { kind: 'event' }> => item.kind === 'event')
     .map((item) => item.event);
+  const scoutSemanticEvent = [...groupEventList]
+    .reverse()
+    .find((event) =>
+      [
+        'swarm.scout-failed',
+        'swarm.scout-timeout',
+        'swarm.scout-skipped',
+        'swarm.scout-completed',
+      ].includes(event.kind),
+    );
   const isFailed = groupEventList.some(
     (event) =>
       event.kind === 'agent.run-failed' ||
+      event.kind === 'swarm.scout-failed' ||
+      event.kind === 'swarm.scout-timeout' ||
       event.kind === 'qa.verification-blocked' ||
       event.kind === 'parallel-implement.exhausted' ||
       event.kind === 'parallel-implement.wp-failed' ||
@@ -149,25 +161,39 @@ export function RunGroupWrapper({
     }
   };
 
-  const statusBadge = isStalled ? (
-    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
-      <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-      Stalled
-    </span>
-  ) : isLive ? (
-    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
-      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-      Live
-    </span>
-  ) : isFailed ? (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-[color:var(--danger)] border border-red-500/20">
-      {isOrphaned ? 'Orphaned' : 'Failed'}
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-fg-5/10 text-fg-3 border border-line/50">
-      Complete
-    </span>
-  );
+  const statusBadge =
+    scoutSemanticEvent?.kind === 'swarm.scout-skipped' ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-fg-5/10 text-fg-3 border border-line/50">
+        Skipped
+      </span>
+    ) : scoutSemanticEvent?.kind === 'swarm.scout-failed' ||
+      scoutSemanticEvent?.kind === 'swarm.scout-timeout' ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-[color:var(--danger)] border border-red-500/20">
+        {scoutSemanticEvent.kind === 'swarm.scout-timeout' ? 'Timeout' : 'Failed'}
+      </span>
+    ) : scoutSemanticEvent?.kind === 'swarm.scout-completed' ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-fg-5/10 text-fg-3 border border-line/50">
+        Complete
+      </span>
+    ) : isStalled ? (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+        <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+        Stalled
+      </span>
+    ) : isLive ? (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+        Live
+      </span>
+    ) : isFailed ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-[color:var(--danger)] border border-red-500/20">
+        {isOrphaned ? 'Orphaned' : 'Failed'}
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-fg-5/10 text-fg-3 border border-line/50">
+        Complete
+      </span>
+    );
 
   const metaLine =
     isLive && !isStalled ? (

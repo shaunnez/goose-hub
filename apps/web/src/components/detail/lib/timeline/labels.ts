@@ -118,6 +118,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.run-aborted': 'Agent run aborted',
   'swarm.heartbeat': 'Swarm heartbeat',
   'swarm.scout-completed': 'Scout completed',
+  'swarm.scout-skipped': 'Scout skipped',
   'swarm.scout-failed': 'Scout failed',
   'swarm.scout-timeout': 'Scout timeout',
   'swarm.wave-completed': 'Wave completed',

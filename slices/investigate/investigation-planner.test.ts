@@ -51,6 +51,24 @@ describe('investigation planner', () => {
     ]);
   });
 
+  it('does not add schema scout for UI state wording without boundary signals', () => {
+    const plan = planInvestigation({
+      swarmEnabled: true,
+      workItem: {
+        type: 'bug',
+        title: 'Timeline empty state button is misaligned',
+        body: 'The UI state on apps/web/src/components/detail/Timeline.tsx overlaps the button.',
+      },
+    });
+
+    expect(plan.selectedWave1Scouts.map((scout) => scout.scoutName)).not.toContain('scout-schema');
+    expect(plan.selectedWave1Scouts.map((scout) => scout.scoutName).sort()).toEqual([
+      'scout-code-path',
+      'scout-test-inventory',
+      'scout-user-journey',
+    ]);
+  });
+
   it('uses a broader scout set for vague cross-module issues', () => {
     const plan = planInvestigation({
       swarmEnabled: true,

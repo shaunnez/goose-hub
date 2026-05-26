@@ -42,6 +42,17 @@ export const InvestigationSeedSchema = z.object({
 
 export type InvestigationSeed = z.infer<typeof InvestigationSeedSchema>;
 
+export const SeedEvidenceSnippetSchema = z.object({
+  file: z.string(),
+  startLine: z.number().int().positive(),
+  endLine: z.number().int().positive(),
+  text: z.string(),
+  truncated: z.boolean(),
+});
+
+export const SeedEvidenceSchema = z.array(SeedEvidenceSnippetSchema).max(3);
+export type SeedEvidenceSnippet = z.infer<typeof SeedEvidenceSnippetSchema>;
+
 /**
  * Builds an `InvestigationSeed` from bug-enhance's `groundedHints`. Used
  * at inbox promotion to persist a non-empty seed artifact for new bugs,

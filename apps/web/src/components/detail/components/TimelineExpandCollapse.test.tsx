@@ -335,6 +335,41 @@ describe('TimelineSection — expand/collapse all', () => {
     expect(screen.queryByText(rawWarning)).toBeNull();
   });
 
+  it('uses swarm scout events, not lifecycle completion, for scout row status badges', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [
+        makeRunEvent(1, 'run-investigate:scout:scout-schema:0', 'agent.run-started', {
+          skill: 'scout-schema',
+        }),
+        makeRunEvent(2, 'run-investigate:scout:scout-schema:0', 'swarm.scout-skipped', {
+          scoutName: 'scout-schema',
+          skippedReason: 'No schema boundary applies',
+        }),
+        makeRunEvent(3, 'run-investigate:scout:scout-schema:0', 'agent.run-completed', {
+          skill: 'scout-schema',
+        }),
+        makeRunEvent(4, 'run-investigate:scout:scout-code-path:1', 'agent.run-started', {
+          skill: 'scout-code-path',
+        }),
+        makeRunEvent(5, 'run-investigate:scout:scout-code-path:1', 'swarm.scout-failed', {
+          scoutName: 'scout-code-path',
+          errorReason: 'no evidence',
+        }),
+        makeRunEvent(6, 'run-investigate:scout:scout-code-path:1', 'agent.run-completed', {
+          skill: 'scout-code-path',
+        }),
+      ],
+      hasMore: false,
+    });
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    expect(await screen.findByText('Skipped')).toBeTruthy();
+    expect(await screen.findByText('Failed')).toBeTruthy();
+  });
+
   it('renders non-lifecycle terminal runs with transport warnings as recovered', async () => {
     const { fetchEventsPage } = await import('@/lib/api');
     vi.mocked(fetchEventsPage).mockResolvedValue({
