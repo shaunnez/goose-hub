@@ -899,6 +899,37 @@ export async function runParallelImplementWorkflow(
               errorReason: r.errorReason,
               runId: r.runId,
             });
+            if (r.acceptanceFailure?.kind === 'terminal-blocker') {
+              const reason =
+                r.errorReason ??
+                `implement-wp emitted terminal ${r.acceptanceFailure.decisionKind}`;
+              append({
+                projectId,
+                workItemId: workItem.id,
+                kind: 'parallel-implement.wp-terminal-blocked',
+                payload: {
+                  wpId: r.wpId,
+                  wpRunId: r.runId,
+                  decisionKind: r.acceptanceFailure.decisionKind,
+                  errorReason: reason,
+                },
+                runId: r.runId,
+              });
+              await stateSource.comment(
+                workItem.externalId,
+                buildAgentComment(
+                  'Dev',
+                  'Failed',
+                  'Parallel implement stopped on terminal WP blocker',
+                  [`${r.wpId}: ${reason}`],
+                ),
+              );
+              return {
+                status: 'failed',
+                devRunId: runId,
+                errorReason: `Terminal implement-wp ${r.acceptanceFailure.decisionKind} for ${r.wpId}: ${reason}`,
+              };
+            }
             continue;
           }
 

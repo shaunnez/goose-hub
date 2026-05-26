@@ -71,6 +71,7 @@ function resolveDevPhaseStatus(
       event.kind === 'parallel-implement.wp-failed' ||
       event.kind === 'parallel-implement.wp-timeout' ||
       event.kind === 'parallel-implement.wp-commit-failed' ||
+      event.kind === 'parallel-implement.wp-terminal-blocked' ||
       event.kind === 'dev-review.failed' ||
       event.kind === 'dev-review.error' ||
       (event.kind === 'agent.run-failed' &&

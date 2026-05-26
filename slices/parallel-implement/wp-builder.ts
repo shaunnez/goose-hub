@@ -32,6 +32,13 @@ import type { ImplementWpControlConfig } from './wp-budget.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type TerminalDecisionKind = 'TOOL_FAILURE' | 'BLOCKER';
+
+export type ImplementWpAcceptanceFailure =
+  | { kind: 'terminal-blocker'; reason: string; decisionKind: TerminalDecisionKind }
+  | { kind: 'verification-failed'; reason: string }
+  | { kind: 'low-confidence'; reason: string };
+
 // Internal result from the concurrent build phase, before the serial commit phase.
 export type WpBuildPhaseResult =
   | {
@@ -43,7 +50,13 @@ export type WpBuildPhaseResult =
       scratchWorktreePath: string;
       budgetExceeded?: BudgetExceededMetadata;
     }
-  | { status: 'failed' | 'timeout'; wpId: string; errorReason?: string; runId: string };
+  | {
+      status: 'failed' | 'timeout';
+      wpId: string;
+      errorReason?: string;
+      runId: string;
+      acceptanceFailure?: ImplementWpAcceptanceFailure;
+    };
 
 export interface RunOneWpBuilderOptions {
   wp: WorkPackage;
@@ -161,15 +174,42 @@ function pathsMatch(left: string, right: string): boolean {
   return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
 }
 
-function hasBlockingDecision(output: ImplementWpOutput, events: AgentEvent[]): boolean {
-  const outputKinds = output.decisionSummaries.map((summary) => summary.kind);
-  const eventKinds = events
-    .filter((event) => event.kind === 'agent.decision-summary')
-    .map((event) => (event.payload as { kind?: unknown }).kind)
-    .filter((kind): kind is string => typeof kind === 'string');
-  return [...outputKinds, ...eventKinds].some(
-    (kind) => kind === 'TOOL_FAILURE' || kind === 'BLOCKER',
-  );
+function isTerminalDecisionKind(kind: unknown): kind is TerminalDecisionKind {
+  return kind === 'TOOL_FAILURE' || kind === 'BLOCKER';
+}
+
+function terminalDecisionReason(kind: TerminalDecisionKind, summary?: unknown): string {
+  return typeof summary === 'string' && summary.trim().length > 0
+    ? `implement-wp emitted ${kind}: ${summary.trim()}`
+    : `implement-wp emitted ${kind}`;
+}
+
+function terminalDecisionFailure(
+  output: ImplementWpOutput,
+  events: AgentEvent[],
+): Extract<ImplementWpAcceptanceFailure, { kind: 'terminal-blocker' }> | null {
+  for (const summary of output.decisionSummaries) {
+    if (isTerminalDecisionKind(summary.kind)) {
+      return {
+        kind: 'terminal-blocker',
+        reason: terminalDecisionReason(summary.kind, summary.summary),
+        decisionKind: summary.kind,
+      };
+    }
+  }
+
+  for (const event of events) {
+    if (event.kind !== 'agent.decision-summary') continue;
+    const payload = event.payload as { kind?: unknown; summary?: unknown };
+    if (isTerminalDecisionKind(payload.kind)) {
+      return {
+        kind: 'terminal-blocker',
+        reason: terminalDecisionReason(payload.kind, payload.summary),
+        decisionKind: payload.kind,
+      };
+    }
+  }
+  return null;
 }
 
 function latestRunTestsStatusForPath(events: AgentEvent[], path: string): string | null {
@@ -196,12 +236,16 @@ function implementWpAcceptanceFailure(input: {
   output: ImplementWpOutput;
   events: AgentEvent[];
   verificationRequired: boolean;
-}): string | null {
-  if (hasBlockingDecision(input.output, input.events)) {
-    return 'implement-wp emitted TOOL_FAILURE or BLOCKER';
+}): ImplementWpAcceptanceFailure | null {
+  const terminalFailure = terminalDecisionFailure(input.output, input.events);
+  if (terminalFailure != null) {
+    return terminalFailure;
   }
   if (input.output.confidence === 'low' && input.verificationRequired) {
-    return 'implement-wp returned low confidence while verification was required';
+    return {
+      kind: 'low-confidence',
+      reason: 'implement-wp returned low confidence while verification was required',
+    };
   }
   const requiredTestPaths = [
     ...new Set([
@@ -214,11 +258,17 @@ function implementWpAcceptanceFailure(input: {
       (path) => latestRunTestsStatusForPath(input.events, path) !== 'ok',
     );
     if (failedPaths.length > 0) {
-      return `required run_tests did not pass for: ${failedPaths.join(', ')}`;
+      return {
+        kind: 'verification-failed',
+        reason: `required run_tests did not pass for: ${failedPaths.join(', ')}`,
+      };
     }
   }
   if (input.verificationRequired && !hasSuccessfulVerificationToolCall(input.events)) {
-    return 'verification was required but no verification tool passed';
+    return {
+      kind: 'verification-failed',
+      reason: 'verification was required but no verification tool passed',
+    };
   }
   return null;
 }
@@ -760,7 +810,11 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       payload: {
         wpId: wp.id,
         wpRunId,
-        errorReason: acceptanceFailure,
+        errorReason: acceptanceFailure.reason,
+        failureKind: acceptanceFailure.kind,
+        ...(acceptanceFailure.kind === 'terminal-blocker'
+          ? { decisionKind: acceptanceFailure.decisionKind }
+          : {}),
         confidence: output.confidence,
         testsWritten: output.testsWritten.map((test) => test.path),
         testsRun: output.testsRun.paths,
@@ -768,8 +822,14 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       runId: wpRunId,
     });
     opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned.map(fileOwnedPath));
-    opts.recordIterationFn(runId, wp.id, iteration, 'failed', acceptanceFailure);
-    return { status: 'failed', wpId: wp.id, errorReason: acceptanceFailure, runId: wpRunId };
+    opts.recordIterationFn(runId, wp.id, iteration, 'failed', acceptanceFailure.reason);
+    return {
+      status: 'failed',
+      wpId: wp.id,
+      errorReason: acceptanceFailure.reason,
+      runId: wpRunId,
+      acceptanceFailure,
+    };
   }
 
   // Build succeeded — return files for the serial commit phase.

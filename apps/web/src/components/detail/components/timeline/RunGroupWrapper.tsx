@@ -74,6 +74,7 @@ export function RunGroupWrapper({
       event.kind === 'parallel-implement.wp-failed' ||
       event.kind === 'parallel-implement.wp-timeout' ||
       event.kind === 'parallel-implement.wp-commit-failed' ||
+      event.kind === 'parallel-implement.wp-terminal-blocked' ||
       /^qa\..*-failed$/.test(event.kind),
   );
   const codexTransportWarnings = groupEventList.filter(isCodexTransportWarningLog);
