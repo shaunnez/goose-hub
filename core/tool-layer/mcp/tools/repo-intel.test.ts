@@ -341,6 +341,7 @@ describe('repoIntelQueryTool', () => {
 
   it.each([
     ['find-symbol', 'name'],
+    ['find-route', 'pathPattern'],
     ['find-callers', 'symbol'],
     ['find-calls-of', 'symbol'],
     ['find-jsx-usages', 'component'],
@@ -348,6 +349,7 @@ describe('repoIntelQueryTool', () => {
     ['find-tests-for', 'target'],
     ['related-files', 'target'],
     ['fetch-artifact', 'artifactKey'],
+    ['route-for-url', 'url'],
   ])(
     'returns invalid-args with field-specific hint when %s missing %s',
     async (intent, missingField) => {
@@ -424,6 +426,106 @@ describe('repoIntelQueryTool', () => {
     const payload = events[0].payload as Record<string, unknown>;
     expect(payload.tool_name).toBe('repo_intel.query');
     expect(payload.inputKeys).toEqual(['intent', 'kind', 'name']);
+  });
+
+  it.each([
+    [
+      'route-for-url',
+      {
+        intent: 'route-for-url',
+        url: 'http://localhost:5173/projects/goose-hub-self',
+        limit: 5,
+        workItemId: 'github:demo/repo#1084',
+      },
+      {
+        lookupRouteForUrl: vi.fn(() => [
+          {
+            pathPattern: '/projects/:slug',
+            filePath: 'apps/web/src/App.tsx',
+            line: 12,
+            component: 'ProjectPage',
+          },
+        ]),
+      },
+    ],
+    [
+      'find-route',
+      {
+        intent: 'find-route',
+        pathPattern: '/projects/:slug',
+        limit: 5,
+      },
+      {
+        lookupRoute: vi.fn(() => [
+          {
+            pathPattern: '/projects/:slug',
+            filePath: 'apps/web/src/App.tsx',
+            line: 12,
+            component: 'ProjectPage',
+          },
+        ]),
+      },
+    ],
+    [
+      'find-symbol',
+      {
+        intent: 'find-symbol',
+        name: 'AuthService',
+        limit: 5,
+      },
+      {
+        lookupSymbol: vi.fn(() => [
+          {
+            name: 'AuthService',
+            kind: 'function' as const,
+            filePath: 'src/auth.ts',
+            line: 1,
+            exported: true,
+          },
+        ]),
+      },
+    ],
+  ])(
+    'canonicalizes benign extra keys for %s before refined validation',
+    async (_name, query, deps) => {
+      const result = await repoIntelQueryTool(
+        makeCtx(),
+        query as unknown as RepoIntelQuery,
+        deps as RepoIntelDeps,
+      );
+
+      expect(result).toMatchObject({ ok: true, intent: query.intent });
+    },
+  );
+
+  it('audits original input keys when canonicalizing repo-intel input', async () => {
+    const ctx = makeCtx({ runId: 'repo-intel-canonical-audit-keys' });
+    await repoIntelQueryTool(
+      ctx,
+      {
+        intent: 'route-for-url',
+        url: 'http://localhost:5173/projects/goose-hub-self',
+        limit: 5,
+        workItemId: 'github:demo/repo#1084',
+      } as unknown as RepoIntelQuery,
+      {
+        lookupRouteForUrl: vi.fn(() => [
+          {
+            pathPattern: '/projects/:slug',
+            filePath: 'apps/web/src/App.tsx',
+            line: 12,
+            component: 'ProjectPage',
+          },
+        ]),
+      },
+    );
+
+    const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
+    expect(events[0].payload).toMatchObject({
+      tool_name: 'repo_intel.query',
+      status: 'ok',
+      inputKeys: ['intent', 'limit', 'url', 'workItemId'],
+    });
   });
 
   describe('grounding intents', () => {

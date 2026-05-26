@@ -202,9 +202,10 @@ export async function runOneScout(
   let result: AgentResult | undefined;
   let timedOut = false;
   let errorReason: string | undefined;
+  let runtime: AgentRuntime | undefined;
 
   try {
-    const runtime = ctx.resolveScoutRuntime?.(resolvedBudget, spec.scoutName) ?? ctx.runtime;
+    runtime = ctx.resolveScoutRuntime?.(resolvedBudget, spec.scoutName) ?? ctx.runtime;
     result = await runtime.run(spawnSpec);
   } catch (err) {
     if (isTimeoutError(err, budgets.timeoutMs)) {
@@ -283,9 +284,111 @@ export async function runOneScout(
   }
 
   const scoutOutput = normalizeScoutOutput(parsed.data);
-  const findings = scoutOutput.findings;
-  const decisionSummaries =
+  let findings = scoutOutput.findings;
+  let decisionSummaries =
     result.decisionSummaries.length > 0 ? result.decisionSummaries : scoutOutput.decisionSummaries;
+  let effectiveRunId = runId;
+  const seedFile = firstInvestigationSeedCandidateFile(fullContext);
+  if (
+    findings.length === 0 &&
+    !hasSuccessfulFactoryEvidenceCall(result.events) &&
+    seedFile != null
+  ) {
+    const retryTimeoutMs = remainingTimeoutMs(start, budgets.timeoutMs);
+    if (retryTimeoutMs <= 0) {
+      timedOut = true;
+    } else if (runtime != null) {
+      const retrySpec = buildEvidenceRetrySpec(spawnSpec, seedFile, retryTimeoutMs);
+      assembleSpawnContext(retrySpec);
+      try {
+        const retryResult = await runtime.run(retrySpec);
+        const retryParsed = safeParseOutputForSchema(ScoutOutputSchema, retryResult.output);
+        if (!retryParsed.success) {
+          const reason = `scout output failed schema validation: ${retryParsed.error.issues
+            .map((i) => `${i.path.join('.')}: ${i.message}`)
+            .join('; ')}`;
+          append({
+            projectId: ctx.projectId,
+            workItemId: ctx.workItemId ?? null,
+            kind: 'swarm.scout-failed',
+            payload: { runId, scoutName: spec.scoutName, errorReason: reason },
+            runId,
+          });
+          return {
+            scoutName: spec.scoutName,
+            status: 'error',
+            findings: [],
+            decisionSummaries:
+              retryResult.decisionSummaries.length > 0
+                ? retryResult.decisionSummaries
+                : decisionSummaries,
+            errorReason: reason,
+            runId,
+          };
+        }
+        const retryOutput = normalizeScoutOutput(retryParsed.data);
+        const retryFindings = retryOutput.findings;
+        if (retryFindings.length > 0 || hasSuccessfulFactoryEvidenceCall(retryResult.events)) {
+          result = retryResult;
+          findings = retryFindings;
+          effectiveRunId = retrySpec.runId;
+          decisionSummaries =
+            retryResult.decisionSummaries.length > 0
+              ? retryResult.decisionSummaries
+              : retryOutput.decisionSummaries;
+        }
+      } catch (err) {
+        if (isTimeoutError(err, retryTimeoutMs)) {
+          timedOut = true;
+        } else {
+          errorReason = err instanceof Error ? err.message : String(err);
+        }
+      }
+    }
+  }
+
+  if (timedOut) {
+    append({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId ?? null,
+      kind: 'agent.cancelled',
+      payload: { runId, reason: 'timeout', elapsedMs: Date.now() - start },
+      runId,
+    });
+    append({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId ?? null,
+      kind: 'swarm.scout-timeout',
+      payload: { runId, scoutName: spec.scoutName, scoutTimeoutMs: budgets.timeoutMs },
+      runId,
+    });
+    return {
+      scoutName: spec.scoutName,
+      status: 'timeout',
+      findings: [],
+      decisionSummaries: [],
+      runId,
+    };
+  }
+
+  if (errorReason != null) {
+    append({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId ?? null,
+      kind: 'swarm.scout-failed',
+      payload: { runId, scoutName: spec.scoutName, errorReason },
+      runId,
+    });
+    return {
+      scoutName: spec.scoutName,
+      status: 'error',
+      findings: [],
+      decisionSummaries,
+      errorReason,
+      runId,
+    };
+  }
+
   if (findings.length === 0 && !hasSuccessfulFactoryEvidenceCall(result.events)) {
     append({
       projectId: ctx.projectId,
@@ -309,12 +412,12 @@ export async function runOneScout(
     workItemId: ctx.workItemId ?? null,
     kind: 'swarm.scout-completed',
     payload: {
-      runId,
+      runId: effectiveRunId,
       scoutName: spec.scoutName,
       findingsCount: findings.length,
       decisionSummariesCount: decisionSummaries.length,
     },
-    runId,
+    runId: effectiveRunId,
   });
 
   return {
@@ -322,7 +425,49 @@ export async function runOneScout(
     status: 'ok',
     findings,
     decisionSummaries,
-    runId,
+    runId: effectiveRunId,
+  };
+}
+
+function remainingTimeoutMs(start: number, timeoutMs: number): number {
+  return Math.max(0, timeoutMs - (Date.now() - start));
+}
+
+function firstInvestigationSeedCandidateFile(context: Record<string, unknown>): string | null {
+  const seed = payloadRecord(context.investigationSeed);
+  const candidates = Array.isArray(seed?.candidateFiles) ? seed.candidateFiles : [];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+    const record = payloadRecord(candidate);
+    if (typeof record?.path === 'string' && record.path.length > 0) return record.path;
+  }
+  return null;
+}
+
+function buildEvidenceRetrySpec(
+  spawnSpec: AgentSpec,
+  seedFile: string,
+  timeoutMs: number,
+): AgentSpec {
+  const instruction = `Evidence retry: ignore resources/list advisory noise and perform one read_file or search_text call against the seeded file '${seedFile}' before returning JSON.`;
+  const context =
+    spawnSpec.context != null &&
+    typeof spawnSpec.context === 'object' &&
+    !Array.isArray(spawnSpec.context)
+      ? {
+          ...(spawnSpec.context as Record<string, unknown>),
+          scoutFocus: `${String((spawnSpec.context as Record<string, unknown>).scoutFocus ?? '')}\n\n${instruction}`,
+        }
+      : spawnSpec.context;
+  return {
+    ...spawnSpec,
+    runId: `${spawnSpec.runId}:evidence-retry`,
+    context,
+    budgets: { ...spawnSpec.budgets, timeoutMs },
+    appendSystemPrompt:
+      spawnSpec.appendSystemPrompt != null && spawnSpec.appendSystemPrompt.length > 0
+        ? `${spawnSpec.appendSystemPrompt}\n\n${instruction}`
+        : instruction,
   };
 }
 

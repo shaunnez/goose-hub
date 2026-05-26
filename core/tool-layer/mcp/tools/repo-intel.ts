@@ -146,7 +146,8 @@ export async function repoIntelQueryTool(
   deps: RepoIntelDeps = {},
 ): Promise<RepoIntelResult> {
   const inputKeys = sortedKeys(input);
-  const refined = RepoIntelQueryRefined.safeParse(input);
+  const canonicalInput = canonicalizeRepoIntelInput(input);
+  const refined = RepoIntelQueryRefined.safeParse(canonicalInput);
   if (!refined.success) {
     const result: RepoIntelResult = {
       ok: false,
@@ -165,7 +166,7 @@ export async function repoIntelQueryTool(
     return result;
   }
 
-  const normalized = normalizePathInputs(ctx, input);
+  const normalized = normalizePathInputs(ctx, refined.data as RepoIntelToolInput);
   const cacheKey = normalizeRunCacheKey({
     toolName: 'repo_intel.query',
     args: normalized,
@@ -201,6 +202,36 @@ export async function repoIntelQueryTool(
   if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, result);
   return result;
 }
+
+function canonicalizeRepoIntelInput(input: RepoIntelToolInput): RepoIntelToolInput {
+  const allowedFields = INTENT_FIELDS[input.intent] ?? ['intent'];
+  const out: Partial<RepoIntelToolInput> = { intent: input.intent };
+  for (const field of allowedFields) {
+    if (field === 'intent') continue;
+    const value = input[field];
+    if (value !== undefined) out[field] = value as never;
+  }
+  return out as RepoIntelToolInput;
+}
+
+const INTENT_FIELDS = {
+  'find-symbol': ['intent', 'name', 'kind'],
+  'find-callers': ['intent', 'symbol'],
+  'find-calls-of': ['intent', 'symbol', 'literalArg'],
+  'find-jsx-usages': ['intent', 'component', 'withProp'],
+  'find-importers': ['intent', 'module', 'symbol'],
+  'find-route': ['intent', 'pathPattern'],
+  'find-component': ['intent', 'component'],
+  'route-for-component': ['intent', 'component'],
+  'find-tests-for': ['intent', 'target'],
+  'related-files': ['intent', 'target'],
+  'recent-changes': ['intent', 'path', 'sinceDays'],
+  'prior-investigation': ['intent', 'workItemId', 'targetFile'],
+  'fetch-artifact': ['intent', 'artifactKey'],
+  'route-for-url': ['intent', 'url'],
+  'fuzzy-component': ['intent', 'phrase', 'limit'],
+  'recent-touched': ['intent', 'sinceDays', 'limit'],
+} satisfies Record<RepoIntelIntent, readonly (keyof RepoIntelToolInput)[]>;
 
 async function dispatchRepoIntel(
   ctx: FactoryContext,
