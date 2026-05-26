@@ -119,6 +119,92 @@ function isEditToolCall(event: AgentEvent): boolean {
   );
 }
 
+function toolCallStatus(event: AgentEvent): string | null {
+  if (event.kind !== 'agent.tool-call') return null;
+  const payload = event.payload as { status?: unknown };
+  return typeof payload.status === 'string' ? payload.status : null;
+}
+
+function toolCallPaths(event: AgentEvent): string[] {
+  const payload = event.payload as {
+    raw_path?: unknown;
+    canonical_path?: unknown;
+    tool_input?: unknown;
+  };
+  const input = toolCallInput(event);
+  const paths = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value === 'string' && value.length > 0) paths.add(value);
+  };
+  const addArray = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+    for (const entry of value) add(entry);
+  };
+  add(payload.raw_path);
+  const canonical = payload.canonical_path;
+  if (canonical != null && typeof canonical === 'object' && !Array.isArray(canonical)) {
+    add((canonical as { path?: unknown }).path);
+  }
+  add(input.path);
+  addArray(input.paths);
+  addArray(input.rawPaths);
+  return [...paths];
+}
+
+function normalizePathForCompare(path: string): string {
+  return path.replace(/^\.\//, '').replace(/\/+$/, '');
+}
+
+function pathsMatch(left: string, right: string): boolean {
+  const a = normalizePathForCompare(left);
+  const b = normalizePathForCompare(right);
+  return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+}
+
+function hasBlockingDecision(output: ImplementWpOutput, events: AgentEvent[]): boolean {
+  const outputKinds = output.decisionSummaries.map((summary) => summary.kind);
+  const eventKinds = events
+    .filter((event) => event.kind === 'agent.decision-summary')
+    .map((event) => (event.payload as { kind?: unknown }).kind)
+    .filter((kind): kind is string => typeof kind === 'string');
+  return [...outputKinds, ...eventKinds].some(
+    (kind) => kind === 'TOOL_FAILURE' || kind === 'BLOCKER',
+  );
+}
+
+function latestRunTestsStatusForPath(events: AgentEvent[], path: string): string | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (toolCallName(event) !== 'run_tests') continue;
+    const paths = toolCallPaths(event);
+    if (paths.length > 0 && !paths.some((candidate) => pathsMatch(candidate, path))) continue;
+    return toolCallStatus(event);
+  }
+  return null;
+}
+
+function implementWpAcceptanceFailure(input: {
+  output: ImplementWpOutput;
+  events: AgentEvent[];
+  verificationRequired: boolean;
+}): string | null {
+  if (hasBlockingDecision(input.output, input.events)) {
+    return 'implement-wp emitted TOOL_FAILURE or BLOCKER';
+  }
+  if (input.output.confidence === 'low' && input.verificationRequired) {
+    return 'implement-wp returned low confidence while verification was required';
+  }
+  if (input.output.testsWritten.length > 0) {
+    const failedPaths = input.output.testsRun.paths.filter(
+      (path) => latestRunTestsStatusForPath(input.events, path) !== 'ok',
+    );
+    if (failedPaths.length > 0) {
+      return `tests were written but required run_tests did not pass for: ${failedPaths.join(', ')}`;
+    }
+  }
+  return null;
+}
+
 function isVerificationToolCall(event: AgentEvent): boolean {
   const name = toolCallName(event)?.toLowerCase();
   if (name == null) return false;
@@ -639,6 +725,34 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     'implement-wp',
     output.decisionSummaries,
   );
+
+  const acceptanceFailure = implementWpAcceptanceFailure({
+    output,
+    events: result.events,
+    verificationRequired:
+      output.testsWritten.length > 0 ||
+      output.testsRun.paths.length > 0 ||
+      verificationCommands.length > 0,
+  });
+  if (acceptanceFailure != null) {
+    opts.appendEvent({
+      projectId,
+      workItemId: workItemId ?? null,
+      kind: 'parallel-implement.wp-failed',
+      payload: {
+        wpId: wp.id,
+        wpRunId,
+        errorReason: acceptanceFailure,
+        confidence: output.confidence,
+        testsWritten: output.testsWritten.map((test) => test.path),
+        testsRun: output.testsRun.paths,
+      },
+      runId: wpRunId,
+    });
+    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned.map(fileOwnedPath));
+    opts.recordIterationFn(runId, wp.id, iteration, 'failed', acceptanceFailure);
+    return { status: 'failed', wpId: wp.id, errorReason: acceptanceFailure, runId: wpRunId };
+  }
 
   // Build succeeded — return files for the serial commit phase.
   const commitMsg = `M:${wp.id} ${wp.changes.slice(0, 60)}\n\nBuilt by ${opts.personaId}`;

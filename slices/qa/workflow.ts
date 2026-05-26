@@ -476,7 +476,7 @@ export async function runQaWorkflow(
             findings: infrastructureFailure.findings,
             deterministic: true,
             agentSkipped: true,
-            failureCategory: classifyQaFailure({ orchestration: true }),
+            failureCategory: classifyQaFailure({ verificationInfrastructure: true }),
             ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
           },
           runId,

@@ -160,14 +160,24 @@ type QaPayload = {
   verdict?: string;
   overallScore?: number;
   threshold?: number;
-  findings?: Array<{
-    tier?: string;
-    severity?: string;
-    description: string;
-    suggestion?: string;
-    disposition?: 'fixed' | 'needs-fix' | 'out-of-scope' | 'follow-up';
-    dispositionRef?: string;
-  }>;
+  deterministic?: boolean;
+  agentSkipped?: boolean;
+  failureCategory?: string;
+  reason?: string;
+  failedTier?: number | string;
+  // qa.verification-blocked payload uses string findings, while qa.completed
+  // uses structured QA findings. Keep this union local to the source-failure
+  // formatter instead of widening the shared skill schemas.
+  findings?:
+    | string[]
+    | Array<{
+        tier?: string;
+        severity?: string;
+        description: string;
+        suggestion?: string;
+        disposition?: 'fixed' | 'needs-fix' | 'out-of-scope' | 'follow-up';
+        dispositionRef?: string;
+      }>;
   criteriaResults?: Array<{
     criterionId: string;
     checkId: string;
@@ -205,6 +215,8 @@ type SourceFailure = {
   runId?: string;
   feedback: string;
   actionable: boolean;
+  verificationInfrastructure?: boolean;
+  skipReason?: string;
 };
 
 function compactPayload(payload: Record<string, unknown>): Record<string, unknown> {
@@ -260,7 +272,7 @@ async function verifiedFollowUpRefsForPayload(
   stateSource: StateSource,
 ): Promise<Set<string>> {
   const refs = new Set<string>();
-  for (const finding of payload.findings ?? []) {
+  for (const finding of structuredQaFindings(payload)) {
     if (finding.disposition !== 'follow-up') continue;
     const localId = localIssueRef(finding.dispositionRef);
     if (localId == null) continue;
@@ -274,6 +286,39 @@ async function verifiedFollowUpRefsForPayload(
   return refs;
 }
 
+function structuredQaFindings(
+  payload: QaPayload,
+): NonNullable<Extract<QaPayload['findings'], Array<{ description: string }>>> {
+  return Array.isArray(payload.findings) && typeof payload.findings[0] !== 'string'
+    ? (payload.findings as NonNullable<
+        Extract<QaPayload['findings'], Array<{ description: string }>>
+      >)
+    : [];
+}
+
+function isVerificationInfrastructurePayload(payload: QaPayload): boolean {
+  return (
+    payload.failureCategory === 'verification-infrastructure' ||
+    (payload.deterministic === true &&
+      payload.agentSkipped === true &&
+      payload.failureCategory === 'orchestration')
+  );
+}
+
+function formatVerificationBlockedFeedback(payload: QaPayload): string {
+  const lines = [
+    'QA verification blocked before product assertions could run.',
+    `Failure category: ${payload.failureCategory ?? 'verification-infrastructure'}`,
+  ];
+  if (payload.failedTier != null) lines.push(`Failed tier: ${payload.failedTier}`);
+  if (payload.reason != null) lines.push(`Reason: ${payload.reason}`);
+  const findings = Array.isArray(payload.findings) ? payload.findings : [];
+  for (const finding of findings.slice(0, 5)) {
+    lines.push(`- ${typeof finding === 'string' ? finding : finding.description}`);
+  }
+  return lines.join('\n');
+}
+
 async function findLatestSourceFailure(
   events: ReturnType<typeof eventStore.replay>,
   stateSource: StateSource,
@@ -282,7 +327,10 @@ async function findLatestSourceFailure(
   let qaEvent: (typeof events)[number] | null = null;
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
-    if (e.kind === 'qa.completed' && (e.payload as QaPayload).verdict !== 'pass') {
+    if (
+      (e.kind === 'qa.completed' && (e.payload as QaPayload).verdict !== 'pass') ||
+      e.kind === 'qa.verification-blocked'
+    ) {
       qaIdx = i;
       qaEvent = e;
       break;
@@ -317,9 +365,25 @@ async function findLatestSourceFailure(
 
   if (qaEvent != null) {
     const payload = qaEvent.payload as QaPayload;
+    if (
+      qaEvent.kind === 'qa.verification-blocked' ||
+      isVerificationInfrastructurePayload(payload)
+    ) {
+      return {
+        kind: 'qa',
+        runId: sourceRunId(qaEvent),
+        feedback: formatVerificationBlockedFeedback(payload),
+        actionable: false,
+        verificationInfrastructure: true,
+        skipReason: 'verification-infrastructure',
+      };
+    }
     const { verdict = 'fail', overallScore = 0, threshold = 70 } = payload;
     const verifiedFollowUpRefs = await verifiedFollowUpRefsForPayload(payload, stateSource);
-    const actionableItems = collectActionableQaItems(payload, { verifiedFollowUpRefs });
+    const actionableItems = collectActionableQaItems(
+      { ...payload, findings: structuredQaFindings(payload) },
+      { verifiedFollowUpRefs },
+    );
     return {
       kind: 'qa',
       runId: sourceRunId(qaEvent),
@@ -388,12 +452,50 @@ export async function runFixFeedbackWorkflow(
   const commitAllFn = deps.orchestratorCommitAllImpl ?? orchestratorCommitAll;
   const pushBranchFn = deps.orchestratorPushBranchImpl ?? orchestratorPushBranch;
   const { runtime, resolvedBudget } = resolveProjectAgentExecution({
-    skill: 'implement',
+    skill: 'fix-feedback',
     role: 'developer',
     projectId,
     projectConfig,
     injectedRuntime: deps.runtime,
   });
+
+  if (sourceFailure?.verificationInfrastructure === true) {
+    await stateSource.comment(
+      workItem.externalId,
+      buildAgentComment(
+        'Dev',
+        'Verification Blocked',
+        'Skipping fix-feedback because QA failed in deterministic verification infrastructure before product assertions could run.',
+        [sourceFailure.feedback],
+      ),
+    );
+    await stateSource.transitionState(
+      workItem.externalId,
+      'factory:needs-fix',
+      'factory:needs-human',
+    );
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:needs-fix',
+      to: 'factory:needs-human',
+      by: 'fix-feedback',
+      runId,
+      extraPayload: repairPayload,
+    });
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.fix-feedback-skipped',
+      payload: {
+        ...repairPayload,
+        reason: sourceFailure.skipReason ?? 'verification-infrastructure',
+        sourceFeedback: sourceFailure.feedback,
+      },
+      runId,
+    });
+    return;
+  }
 
   const worktreePath = prLifecycle?.worktreePath;
   if (worktreePath == null) {

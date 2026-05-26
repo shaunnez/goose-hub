@@ -14,6 +14,7 @@ import {
   clearTestFailureCounter,
   consecutiveTestFailures,
   recordTestFailure,
+  recordTestFailureSignature,
   testRetryCap,
 } from '../run-cache.js';
 import type {
@@ -214,6 +215,14 @@ export async function runTestsTool(
     result.status === 'failed'
       ? parseTestFailures({ stdout: result.stdout, stderr: result.stderr })
       : undefined;
+  const failureSignature =
+    result.status === 'failed'
+      ? buildTestFailureSignature({ stdout: result.stdout, stderr: result.stderr, failureSummary })
+      : null;
+  const signatureRecord =
+    failureSignature != null
+      ? recordTestFailureSignature(ctx.runId, failureSignature, retryPathKey)
+      : null;
 
   emitToolCall(ctx, {
     tool: 'run_tests',
@@ -228,6 +237,27 @@ export async function runTestsTool(
     durationMs: result.durationMs,
     truncated: result.truncated,
   });
+  if (signatureRecord != null && signatureRecord.count >= cap && signatureRecord.paths.length > 1) {
+    eventStore.appendEvent({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId,
+      runId: ctx.runId,
+      personaId: ctx.personaId ?? null,
+      kind: 'tool.violation',
+      payload: {
+        tool: 'run_tests',
+        reason: 'repeated-test-failure-signature',
+        signature: signatureRecord.signature,
+        paths: signatureRecord.paths,
+        consecutiveFailures: signatureRecord.count,
+        cap,
+        guidance:
+          'The same test failure signature repeated across targets. Stop rotating test files; classify whether this is product code, test setup, or verification infrastructure, then edit the relevant source or setup.',
+      },
+    });
+    const blocked = buildRetrySignatureBlockedResult(argv, signatureRecord);
+    return failureSummary != null ? { ...blocked, failureSummary } : blocked;
+  }
   const verifyResult = toVerifyResult(argv, result, pathMetadata);
   return failureSummary != null ? { ...verifyResult, failureSummary } : verifyResult;
 }
@@ -249,6 +279,68 @@ function buildRetryCapBlockedResult(
     displayTruncated: false,
     command: argv,
   };
+}
+
+function buildRetrySignatureBlockedResult(
+  argv: ReadonlyArray<string>,
+  record: { signature: string; count: number; paths: string[] },
+): VerifyResult {
+  return {
+    status: 'failed',
+    exitCode: null,
+    stdout: '',
+    stderr: `[harness] run_tests stopped after repeated failure signature (${record.count} failures across ${record.paths.length} targets): ${record.signature}. Stop rotating test files; classify whether this is product code, test setup, or verification infrastructure, then edit the relevant source or setup.`,
+    durationMs: 0,
+    truncated: false,
+    displayTruncated: false,
+    command: argv,
+  };
+}
+
+function buildTestFailureSignature(input: {
+  stdout: string;
+  stderr: string;
+  failureSummary?: ParsedTestFailures;
+}): string | null {
+  const parsedFailure = input.failureSummary?.failures[0];
+  const parsedAssertion = normalizeFailureSignatureText(parsedFailure?.assertion);
+  if (parsedAssertion != null) {
+    return `${parsedFailure?.category ?? 'unknown'}:${parsedAssertion}`;
+  }
+
+  const raw = normalizeFailureSignatureText(
+    firstUsefulFailureLine(`${input.stdout}\n${input.stderr}`),
+  );
+  return raw != null ? `raw:${raw}` : null;
+}
+
+function firstUsefulFailureLine(text: string): string | null {
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    if (line.length === 0) continue;
+    if (/^(run|test files|tests|start at|duration)\b/i.test(line)) continue;
+    if (/^(stdout|stderr)\s*\|/i.test(line)) continue;
+    if (
+      /(error|typeerror|referenceerror|cannot find module|failed to load|uncaught|unhandled)/i.test(
+        line,
+      )
+    ) {
+      return line;
+    }
+  }
+  return null;
+}
+
+function normalizeFailureSignatureText(text: string | undefined | null): string | null {
+  if (text == null) return null;
+  const trimmed = text
+    .replace(/\/[^\s)]+\/([^/\s)]+\.(?:t|j)sx?)(?::\d+)?(?::\d+)?/g, '$1')
+    .replace(/\b\d+ms\b/g, '<duration>')
+    .replace(/\b\d+:\d+\b/g, '<line>')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (trimmed.length === 0) return null;
+  return trimmed.slice(0, 240);
 }
 
 export async function runLintTool(

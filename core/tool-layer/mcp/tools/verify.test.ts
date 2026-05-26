@@ -192,6 +192,71 @@ describe('runTestsTool retry cap', () => {
     expect(other.status).toBe('failed');
   });
 
+  it('blocks repeated failure signatures across different test paths', async () => {
+    writeFileSync(join(workspace, 'apps/web/src/bar.test.ts'), 'test("y", () => {});\n');
+    const vitestJson = (file: string) =>
+      JSON.stringify({
+        numTotalTests: 1,
+        numPassedTests: 0,
+        numFailedTests: 1,
+        testResults: [
+          {
+            name: `/work/apps/web/src/${file}`,
+            status: 'failed',
+            assertionResults: [
+              {
+                ancestorTitles: ['suite'],
+                title: 'renders',
+                status: 'failed',
+                failureMessages: [
+                  `TypeError: React.act is not a function\n    at /work/apps/web/src/${file}:5:7`,
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'failed',
+      exitCode: 1,
+      stdout: vitestJson('foo.test.ts'),
+      stderr: '',
+      durationMs: 18,
+      truncated: false,
+    });
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'failed',
+      exitCode: 1,
+      stdout: vitestJson('bar.test.ts'),
+      stderr: '',
+      durationMs: 18,
+      truncated: false,
+    });
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'failed',
+      exitCode: 1,
+      stdout: vitestJson('bar.test.ts'),
+      stderr: '',
+      durationMs: 18,
+      truncated: false,
+    });
+
+    await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    await runTestsTool(ctx, { path: 'src/bar.test.ts' });
+    const blocked = await runTestsTool(ctx, { path: 'src/bar.test.ts' });
+
+    expect(blocked.status).toBe('failed');
+    expect(blocked.exitCode).toBeNull();
+    expect(blocked.stderr).toMatch(/repeated failure signature/i);
+    const violations = (await import('../../../event-stream/store.js')).eventStore
+      .replay({ runId: ctx.runId, kind: 'tool.violation' })
+      .filter(
+        (event) =>
+          (event.payload as { reason?: unknown }).reason === 'repeated-test-failure-signature',
+      );
+    expect(violations).toHaveLength(1);
+  });
+
   it('attaches a parsed failureSummary when the test command exits non-zero with vitest JSON output', async () => {
     const vitestJson = JSON.stringify({
       numTotalTests: 1,

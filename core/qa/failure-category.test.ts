@@ -14,4 +14,10 @@ describe('classifyQaFailure', () => {
   it('keeps failed executable checks in the spec-contract category when no product finding exists', () => {
     expect(classifyQaFailure({ hasFailedExecutableCheck: true })).toBe('spec-contract');
   });
+
+  it('keeps verification infrastructure distinct from product and spec failures', () => {
+    expect(classifyQaFailure({ failedTier: 'functional', verificationInfrastructure: true })).toBe(
+      'verification-infrastructure',
+    );
+  });
 });

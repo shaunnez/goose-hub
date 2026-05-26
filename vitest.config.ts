@@ -13,6 +13,7 @@ export default defineConfig({
   test: {
     maxWorkers: 2,
     minWorkers: 1,
+    setupFiles: ['apps/web/vitest.setup.ts'],
     include: ['**/*.test.ts', '**/*.test.tsx'],
     exclude: [
       '**/node_modules/**',

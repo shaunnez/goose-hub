@@ -35,6 +35,10 @@ const duplicateCounters = new Map<
   Map<string, { count: number; nudged: boolean; paths: string[] }>
 >();
 const testRetryCounters = new Map<string, Map<string, number>>();
+const testFailureSignatureCounters = new Map<
+  string,
+  Map<string, { count: number; paths: Set<string> }>
+>();
 const redundantReadCounters = new Map<string, Map<string, { count: number; nudged: boolean }>>();
 
 /** Total read_file calls per run (all paths, including first reads). */
@@ -145,6 +149,12 @@ export function readCount(runId: string, canonicalPath: string): number {
 export function testRetryCap(env: NodeJS.ProcessEnv = process.env): number {
   const value = Number.parseInt(env.FACTORY_RUN_TESTS_RETRY_CAP ?? '', 10);
   return Number.isFinite(value) && value >= 1 ? value : 3;
+}
+
+export interface TestFailureSignatureRecord {
+  signature: string;
+  count: number;
+  paths: string[];
 }
 
 /** Sentinel key for `run_tests` invocations without a narrowed path. */
@@ -289,6 +299,10 @@ export function invalidateRunCacheForPaths(runId: string, rawPaths: string[]): v
   }
   if (retryMap?.size === 0) testRetryCounters.delete(runId);
 
+  // A write can legitimately change the next failure signature. Keep the
+  // signature guard focused on unproductive test rotation between edits.
+  testFailureSignatureCounters.delete(runId);
+
   // Writes also reset redundant-read counters for overlapping paths: the
   // file has changed, so reading it again is no longer redundant.
   const readMap = redundantReadCounters.get(runId);
@@ -304,6 +318,7 @@ export function clearRunCache(runId: string): void {
   runCaches.delete(runId);
   duplicateCounters.delete(runId);
   testRetryCounters.delete(runId);
+  testFailureSignatureCounters.delete(runId);
   redundantReadCounters.delete(runId);
   totalReadCounters.delete(runId);
   clearRunCommandInvocationCounter(runId);
@@ -326,6 +341,24 @@ export function recordTestFailure(runId: string, canonicalPath: string | null): 
   return next;
 }
 
+export function recordTestFailureSignature(
+  runId: string,
+  signature: string,
+  canonicalPath: string | null,
+): TestFailureSignatureRecord {
+  const pathKey = normalizeTestPathKey(canonicalPath);
+  let runMap = testFailureSignatureCounters.get(runId);
+  if (runMap == null) {
+    runMap = new Map();
+    testFailureSignatureCounters.set(runId, runMap);
+  }
+  const existing = runMap.get(signature) ?? { count: 0, paths: new Set<string>() };
+  existing.count += 1;
+  existing.paths.add(pathKey);
+  runMap.set(signature, existing);
+  return { signature, count: existing.count, paths: [...existing.paths].sort() };
+}
+
 /**
  * Clears the consecutive-failure counter for the given path. Call on
  * successful test runs and on writes/edits that mutate the target file
@@ -337,6 +370,10 @@ export function clearTestFailureCounter(runId: string, canonicalPath: string | n
   if (runMap == null) return;
   runMap.delete(key);
   if (runMap.size === 0) testRetryCounters.delete(runId);
+}
+
+export function clearTestFailureSignatureCounters(runId: string): void {
+  testFailureSignatureCounters.delete(runId);
 }
 
 /**
