@@ -268,6 +268,9 @@ describe('project settings router', () => {
     expect(body.skillMetadata['dev-review'].description).toContain('Codex pre-QA dev-review');
     expect(body.skillMetadata['dev-review'].dependencies).toContain('prDiff');
     expect(body.skillMetadata['dev-review'].callers).toContain('developer pre-QA advisor');
+    expect(body.skillMetadata['bug-enhance'].callers).toEqual(
+      expect.arrayContaining(['inbox promotion', 'lazy bug investigation grounding']),
+    );
   });
 
   it('returns implement-WP defaults, DB overrides, and resolved settings', async () => {

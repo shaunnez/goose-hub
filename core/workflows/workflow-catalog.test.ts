@@ -27,6 +27,7 @@ const knownActivationSettings = new Set<WorkflowActivationSetting>([
   'devReview.enabled',
   'review.convergent',
   'workItem.simpleBug',
+  'workItem.missingPromotionSeed',
   'priority.highCritical',
   'playwrightRepro.enabled',
   'evidencePost.enabled',
@@ -152,6 +153,35 @@ describe('workflow catalog', () => {
         (edge) => edge.from === 'investigation-complete' && edge.to === 'acceptance-contract-skill',
       ),
     ).toBe(true);
+  });
+
+  it('shows lazy bug-enhance grounding as a runtime-conditional investigation branch', () => {
+    const bug = byKind('bug');
+    const investigation = bug.stages.find((stage) => stage.id === 'investigation');
+    const branch = investigation?.branches?.find(
+      (candidate) => candidate.id === 'lazy-bug-grounding',
+    );
+    const bugEnhanceNode = bug.nodes.find((node) => node.id === 'bug-enhance-skill');
+
+    expect(bugEnhanceNode).toMatchObject({
+      skill: 'bug-enhance',
+      state: 'factory:investigating',
+      mode: 'conditional',
+      activation: {
+        setting: 'workItem.missingPromotionSeed',
+        value: true,
+        label: 'bug issue without promotion seed',
+      },
+    });
+    expect(branch).toMatchObject({
+      kind: 'conditional',
+      nodes: ['bug-enhance-skill'],
+      activation: {
+        setting: 'workItem.missingPromotionSeed',
+        value: true,
+        label: 'bug issue without promotion seed',
+      },
+    });
   });
 
   it('represents Grill, PRD, Decompose, Delivery Router, Implementation, Conflict, and Dev Review as distinct stages', () => {

@@ -149,6 +149,25 @@ vi.mock('@/lib/api', () => ({
             nodes: ['triaging', 'triage-skill', 'accepted'],
           },
           {
+            id: 'investigation',
+            title: 'Investigation',
+            group: 'investigation',
+            nodes: ['investigating', 'investigation-complete'],
+            branches: [
+              {
+                id: 'lazy-bug-grounding',
+                title: 'Lazy bug grounding',
+                kind: 'conditional',
+                activation: {
+                  setting: 'workItem.missingPromotionSeed',
+                  value: true,
+                  label: 'bug issue without promotion seed',
+                },
+                nodes: ['bug-enhance-skill'],
+              },
+            ],
+          },
+          {
             id: 'delivery',
             title: 'Delivery router',
             group: 'delivery',
@@ -196,6 +215,12 @@ vi.mock('@/lib/api', () => ({
         nodes: [
           { id: 'triaging', label: 'Triage', state: 'factory:triaging' },
           { id: 'accepted', label: 'Accepted', state: 'factory:accepted' },
+          { id: 'investigating', label: 'Investigating', state: 'factory:investigating' },
+          {
+            id: 'investigation-complete',
+            label: 'Investigation complete',
+            state: 'factory:investigation-complete',
+          },
           { id: 'needs-qa', label: 'QA', state: 'factory:needs-qa' },
           {
             id: 'triage-skill',
@@ -203,6 +228,18 @@ vi.mock('@/lib/api', () => ({
             skill: 'triage',
             role: 'triager',
             state: 'factory:triaging',
+          },
+          {
+            id: 'bug-enhance-skill',
+            label: 'bug-enhance',
+            skill: 'bug-enhance',
+            role: 'triager',
+            state: 'factory:investigating',
+            activation: {
+              setting: 'workItem.missingPromotionSeed',
+              value: true,
+              label: 'bug issue without promotion seed',
+            },
           },
           {
             id: 'qa-skill',
@@ -293,8 +330,11 @@ describe('WorkflowMapPanel', () => {
     expect(screen.getAllByText('triage').length).toBeGreaterThan(0);
     expect(screen.getAllByText('qa').length).toBeGreaterThan(0);
     expect(screen.getByText('Repair')).toBeTruthy();
+    expect(screen.getByTestId('workflow-branch-lazy-bug-grounding').textContent).toContain(
+      'conditional',
+    );
     expect(screen.getByTestId('workflow-vertical-flow')).toBeTruthy();
-    expect(screen.getAllByTestId('workflow-stage')).toHaveLength(3);
+    expect(screen.getAllByTestId('workflow-stage')).toHaveLength(4);
     expect(screen.getByTestId('workflow-variant-multi-agent-delivery').textContent).toContain(
       'active',
     );

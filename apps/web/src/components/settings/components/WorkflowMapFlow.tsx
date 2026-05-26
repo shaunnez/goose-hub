@@ -277,7 +277,9 @@ function BranchPanel({
   const status =
     branch.kind === 'retry' || branch.kind === 'failure'
       ? 'conditional'
-      : activationStatus(branch.activation, modes);
+      : branch.kind === 'conditional' && branch.activation == null
+        ? 'conditional'
+        : activationStatus(branch.activation, modes);
   const nodes = branch.nodes.map((nodeId) => nodesById.get(nodeId)).filter(isWorkflowNode);
   const icon =
     branch.kind === 'retry' ? (
