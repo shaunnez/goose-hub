@@ -44,8 +44,12 @@ vi.mock('../logger.js', () => ({
 
 // Control existsSync responses per test
 let existsSyncImpl: (p: unknown) => boolean = () => true;
+let readdirSyncImpl: (p: unknown) => unknown[] = () => [];
+let statSyncImpl: (p: unknown) => { isDirectory(): boolean } = () => ({ isDirectory: () => false });
 vi.mock('node:fs', () => ({
   existsSync: (p: unknown) => existsSyncImpl(p),
+  readdirSync: (p: unknown) => readdirSyncImpl(p),
+  statSync: (p: unknown) => statSyncImpl(p),
 }));
 
 const { runBugEnhance } = await import('./bug-enhance-runner.js');
@@ -72,6 +76,14 @@ function makeAgentResult(hints: GroundedHints | undefined) {
   };
 }
 
+function fakeDirent(name: string, kind: 'file' | 'dir') {
+  return {
+    name,
+    isFile: () => kind === 'file',
+    isDirectory: () => kind === 'dir',
+  };
+}
+
 const BASE_INPUT = {
   projectId: 'goose-hub-self',
   workItemId: 'github:owner/repo#42',
@@ -82,6 +94,7 @@ const BASE_INPUT = {
 
 describe('runBugEnhance — path-existence pruning', () => {
   beforeEach(() => {
+    mockRunFn.mockClear();
     mockRunFn.mockResolvedValue(makeAgentResult(makeHints(['real.ts', 'fake.ts'])));
     vi.mocked(eventStore.appendEvent).mockClear();
     // Default: workspace exists; 'real.ts' exists; 'fake.ts' does not
@@ -91,6 +104,8 @@ describe('runBugEnhance — path-existence pruning', () => {
       if (s === '/repo/real.ts') return true;
       return false;
     };
+    readdirSyncImpl = () => [];
+    statSyncImpl = () => ({ isDirectory: () => false });
   });
 
   it('keeps paths that exist and drops paths that do not', async () => {
@@ -143,5 +158,51 @@ describe('runBugEnhance — path-existence pruning', () => {
     expect(names).toContain('RealComp');
     expect(names).toContain('NoFile');
     expect(names).not.toContain('FakeComp');
+  });
+
+  it('adds preflight guidance when the issue mentions a stale path with nearby files', async () => {
+    mockRunFn.mockResolvedValue(
+      makeAgentResult(makeHints(['apps/web/src/components/chat/components/ChatPanel.tsx'])),
+    );
+    existsSyncImpl = (p) => {
+      const s = String(p);
+      return (
+        s === '/repo' ||
+        s === '/repo/apps/web/src/components/chat' ||
+        s === '/repo/apps/web/src/components/chat/components' ||
+        s === '/repo/apps/web/src/components/chat/components/ChatPanel.tsx'
+      );
+    };
+    statSyncImpl = (p) => ({
+      isDirectory: () =>
+        String(p) === '/repo/apps/web/src/components/chat' ||
+        String(p) === '/repo/apps/web/src/components/chat/components',
+    });
+    readdirSyncImpl = (p) => {
+      const s = String(p);
+      if (s === '/repo/apps/web/src/components/chat') {
+        return [fakeDirent('README.md', 'file'), fakeDirent('components', 'dir')];
+      }
+      if (s === '/repo/apps/web/src/components/chat/components') {
+        return [fakeDirent('ChatDock.tsx', 'file'), fakeDirent('ChatPanel.tsx', 'file')];
+      }
+      return [];
+    };
+
+    await runBugEnhance({
+      ...BASE_INPUT,
+      body: 'The bug seems to be in apps/web/src/components/chat/ChatWidget.tsx',
+    });
+
+    const spec = mockRunFn.mock.calls.at(-1)?.[0] as { appendSystemPrompt?: string };
+    expect(spec.appendSystemPrompt).toContain(
+      'Missing issue-mentioned path: `apps/web/src/components/chat/ChatWidget.tsx`',
+    );
+    expect(spec.appendSystemPrompt).toContain(
+      '`apps/web/src/components/chat/components/ChatPanel.tsx`',
+    );
+    expect(spec.appendSystemPrompt).toContain(
+      'Use existing nearby files as grounding targets; do not read missing paths.',
+    );
   });
 });

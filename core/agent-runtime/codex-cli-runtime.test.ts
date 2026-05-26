@@ -262,6 +262,7 @@ describe('CodexCliRuntime timeout handling', () => {
           env: expect.objectContaining({
             FACTORY_SKILL: 'fix-issue',
             FACTORY_PERSONA_ID: 'test-project/developer/0',
+            FACTORY_FORBID_MCP_RESOURCES: '1',
           }),
         }),
       }),
@@ -591,6 +592,54 @@ describe('CodexCliRuntime timeout handling', () => {
     expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'agent.run-completed' }),
     );
+  });
+
+  it('dedupes repeated resources/read advisories and filters them from stderr logs', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec({ skill: 'scout-test-inventory' }));
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"ok":true}' },
+        })}\n`,
+      ),
+    );
+    child.stderr.emit(
+      'data',
+      Buffer.from(
+        [
+          'Reading additional input from stdin...',
+          'resources/read failed: noop',
+          'resources/read failed: noop2',
+          'resources/read failed: noop3',
+          '',
+        ].join('\n'),
+      ),
+    );
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+
+    const calls: Parameters<typeof mockEventStore.appendEvent>[0][] =
+      mockEventStore.appendEvent.mock.calls.map((c: unknown[]) => c[0]);
+    const advisories = calls.filter((e) => e.kind === 'agent.runtime-advisory');
+    expect(advisories).toHaveLength(1);
+    expect(advisories[0].payload as { stderr?: string }).toMatchObject({
+      stderr: 'resources/read failed: noop',
+    });
+
+    const stderrLog = calls.find(
+      (e) => e.kind === 'agent.log' && (e.payload as { stream?: string }).stream === 'stderr',
+    );
+    expect(stderrLog?.payload as { text?: string }).toMatchObject({
+      text: 'Reading additional input from stdin...',
+    });
   });
 
   it('does not fail on the startup resources/list probe', async () => {

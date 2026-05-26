@@ -8,6 +8,7 @@ import { AdviseOnPlanSchema } from '../../skills/advise-on-plan/schema.js';
 import { ImplementSchema } from '../../skills/implement/schema.js';
 import { InterventionProposerOutputSchema } from '../../skills/intervention-proposer/schema.js';
 import { ReviewOutputSchema } from '../../skills/review/schema.js';
+import { EngineeringSpecSchema } from '../../skills/spec-author/schema.js';
 import { TriageOutputSchema } from '../../skills/triage/schema.js';
 import { PRDOutputSchema } from '../../skills/write-prd/schema.js';
 import { toJsonSchema } from './schema-bridge.js';
@@ -224,6 +225,14 @@ describe('toJsonSchema', () => {
     expect(schemaAllowsNull(properties.reason)).toBe(true);
   });
 
+  it('keeps spec-author executable check evidence schema free of oneOf for Codex', () => {
+    const result = toJsonSchema(EngineeringSpecSchema);
+    const json = JSON.stringify(result);
+
+    expect(json).not.toContain('"oneOf"');
+    expect(json).toContain('"evidenceExpectation"');
+  });
+
   it('keeps active skill output schemas strict enough for Codex response schemas', async () => {
     const configs = await loadActiveSkillConfigs();
 
@@ -291,6 +300,7 @@ function visitSchema(skillName: string, node: unknown, path: string, issues: str
 
   if ('propertyNames' in node) issues.push(`${path}: propertyNames is not allowed`);
   if (node.format === 'uri') issues.push(`${path}: format uri is not allowed`);
+  if ('oneOf' in node) issues.push(`${path}: oneOf is not allowed`);
 
   if (isObjectSchema(node)) {
     const properties = isRecord(node.properties) ? node.properties : {};

@@ -37,6 +37,14 @@ function sanitizeSchemaNode(value: unknown): unknown {
     if (key === 'format' && typeof child === 'string' && UNSUPPORTED_CODEX_FORMATS.has(child)) {
       continue;
     }
+    if (key === 'oneOf') {
+      const variants = sanitizeSchemaNode(child);
+      if (Array.isArray(variants)) {
+        const existing = Array.isArray(next.anyOf) ? next.anyOf : [];
+        next.anyOf = [...existing, ...variants];
+      }
+      continue;
+    }
     next[key] = sanitizeSchemaNode(child);
   }
 

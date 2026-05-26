@@ -227,6 +227,13 @@ export function appendRuntimeAdvisoryEvent(input: {
   return true;
 }
 
+function filterRuntimeAdvisoryStderr(stderr: string): string {
+  return stderr
+    .split(/\r?\n/)
+    .filter((line) => detectRuntimeAdvisorySurface(line) == null)
+    .join('\n');
+}
+
 function outputSchemaPathForRun(workspaceDir: string, runId: string): string {
   const digest = createHash('sha256').update(runId).digest('hex').slice(0, 16);
   return join(workspaceDir, OUTPUT_SCHEMAS_DIR, `${digest}.schema.json`);
@@ -283,7 +290,12 @@ export class CodexCliRuntime implements AgentRuntime {
             ...entry,
             enabledTools: codexMcpEnabledToolsForServer(name, allowedTools),
             ...(name === 'factory-tools'
-              ? { required: true, startupTimeoutSec: 20, toolTimeoutSec: 600 }
+              ? {
+                  required: true,
+                  startupTimeoutSec: 20,
+                  toolTimeoutSec: 600,
+                  env: { ...entry.env, FACTORY_FORBID_MCP_RESOURCES: '1' },
+                }
               : {}),
           },
         ]),
@@ -395,6 +407,7 @@ export class CodexCliRuntime implements AgentRuntime {
         FACTORY_PROJECT_ID: projectId,
         FACTORY_WORKSPACE_DIR: workspaceDir,
         FACTORY_SERVER_PORT: process.env.FACTORY_SERVER_PORT ?? '3001',
+        FACTORY_FORBID_MCP_RESOURCES: '1',
         FACTORY_ITERATION: String(spec.iteration ?? 0),
         FACTORY_PHASE: spec.phase ?? '',
       };
@@ -422,6 +435,7 @@ export class CodexCliRuntime implements AgentRuntime {
       let settled = false;
       let toolCallCount = 0;
       let emittedNativePatchBlocked = false;
+      const emittedRuntimeAdvisorySurfaces = new Set<string>();
       const assistantMarkerOffsets = new Map<string, number>();
 
       const emitNativePatchBlocked = () => {
@@ -666,6 +680,22 @@ export class CodexCliRuntime implements AgentRuntime {
         }
       };
 
+      const appendRuntimeAdvisoryOnce = (line: string): boolean => {
+        const advisory = detectRuntimeAdvisorySurface(line);
+        if (advisory == null) return false;
+        const key = advisory.surface;
+        if (emittedRuntimeAdvisorySurfaces.has(key)) return true;
+        emittedRuntimeAdvisorySurfaces.add(key);
+        return appendRuntimeAdvisoryEvent({
+          line,
+          projectId,
+          workItemId,
+          runId,
+          personaId,
+          skill: spec.skill,
+        });
+      };
+
       child.stderr?.on('data', (chunk: Buffer) => {
         const text = chunk.toString();
         stderr += text;
@@ -678,14 +708,7 @@ export class CodexCliRuntime implements AgentRuntime {
             failForbiddenRuntimeSurface(violation);
             return;
           }
-          appendRuntimeAdvisoryEvent({
-            line,
-            projectId,
-            workItemId,
-            runId,
-            personaId,
-            skill: spec.skill,
-          });
+          appendRuntimeAdvisoryOnce(line);
         }
       });
 
@@ -774,14 +797,7 @@ export class CodexCliRuntime implements AgentRuntime {
             reject(new Error(violation.blockReason));
             return;
           }
-          appendRuntimeAdvisoryEvent({
-            line: stderrLineBuffer,
-            projectId,
-            workItemId,
-            runId,
-            personaId,
-            skill: spec.skill,
-          });
+          appendRuntimeAdvisoryOnce(stderrLineBuffer);
         }
 
         const envelope = parseCodexEnvelope(stdout);
@@ -918,22 +934,25 @@ export class CodexCliRuntime implements AgentRuntime {
           return;
         }
 
-        const stderrTrimmed = stderr.trim();
-        if (stderrTrimmed.length > 0) {
-          if (stderrIncludesNativePatchRejection(stderrTrimmed)) emitNativePatchBlocked();
-          eventStore.appendEvent({
-            projectId,
-            workItemId,
-            kind: 'agent.log',
-            payload: {
+        const rawStderrTrimmed = stderr.trim();
+        if (rawStderrTrimmed.length > 0) {
+          if (stderrIncludesNativePatchRejection(rawStderrTrimmed)) emitNativePatchBlocked();
+          const stderrTrimmed = filterRuntimeAdvisoryStderr(rawStderrTrimmed).trim();
+          if (stderrTrimmed.length > 0) {
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.log',
+              payload: {
+                runId,
+                skill: spec.skill,
+                stream: 'stderr',
+                text: stderrTrimmed.slice(0, 4000),
+              },
               runId,
-              skill: spec.skill,
-              stream: 'stderr',
-              text: stderrTrimmed.slice(0, 4000),
-            },
-            runId,
-            personaId,
-          });
+              personaId,
+            });
+          }
         }
 
         eventStore.appendEvent({

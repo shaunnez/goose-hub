@@ -20,6 +20,7 @@ export interface FactoryContext {
   personaId?: string | null;
   workspaceRoot: string;
   serverPort: number;
+  forbidResources?: boolean;
 }
 
 /**
@@ -69,5 +70,6 @@ export function loadFactoryContext(env: NodeJS.ProcessEnv = process.env): Factor
     personaId: (env.FACTORY_PERSONA_ID ?? '').trim() || null,
     workspaceRoot,
     serverPort,
+    forbidResources: env.FACTORY_FORBID_MCP_RESOURCES === '1',
   };
 }

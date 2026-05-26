@@ -14,12 +14,12 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `server` | yes | API + SSE host for the Goose Hub web UI. Stands up the server process the UI talks to. Closes M2.01 (#26). |
 | `web` | yes | Vite + React 19 + Tailwind 4 + React Router v6. Closes M2.02 (#27). |
 
-## core/ (36 entries, 4 missing README)
+## core/ (36 entries, 0 missing README)
 
 | Name | README | Summary |
 |---|---|---|
-| `acceptance-contracts` | **missing** | _(no README)_ |
-| `agent-artifacts` | **missing** | _(no README)_ |
+| `acceptance-contracts` | yes | Normalizes acceptance criteria and executable verification checks from the best available work-item source. |
+| `agent-artifacts` | yes | Stores large or reusable agent-run payloads in SQLite and returns small artifact references for event payloads. |
 | `agent-comment` | yes | Builds structured GitHub-issue comment markdown for agent status updates. One small pure function so every agent posts comments in the same shape. |
 | `agent-runtime` | yes | Typed contracts and model registry for all agent runtime code. |
 | `audit` | yes | Orchestration glue for the `code-quality-audit` skill (M19.22, #698). |
@@ -36,7 +36,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `learning` | yes | Cross-run learning loop for Goose Hub (M11.11). |
 | `orchestrator` | yes | Cross-cutting orchestration concerns that don't belong to a single slice. The orchestrator is stateless across ticks (FACTORY_RULES rule 7); these modules are pure or scoped to a single dispatch. |
 | `persona` | yes | Persona stats accumulation. Updates `persona_stats` after every agent run. |
-| `prd` | **missing** | _(no README)_ |
+| `prd` | yes | Reads the latest durable PRD artifact for a work item from the event stream. |
 | `projects` | yes | Project registration loader for Goose Hub's multi-project orchestration. |
 | `qa` | yes | Shared QA routing helpers. |
 | `quality-score` | yes | Per-run QualityScore (0–100) with components and convergence detection. |
@@ -44,7 +44,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `retry` | yes | Retry counters for QA and Review failures. Counts are derived from the event stream — no separate retry table. |
 | `review` | yes | Pure helpers used by the Review slice. The slice itself lives in `slices/review/`; this module hosts logic that's reusable, deterministic, and easier to test outside the slice's workflow harness. |
 | `route-index` | yes | Regenerable SQLite index for frontend routes and JSX component usages. |
-| `runtime-profiler` | **missing** | _(no README)_ |
+| `runtime-profiler` | yes | Builds per-skill runtime cost, reliability, and tool-use profiles from local run telemetry. |
 | `scout-reports` | yes | SQLite persistence for scout skill outputs produced during investigation workflows. |
 | `state-machine` | yes | Typed state machine for Goose Hub issue lifecycle management. |
 | `state-source` | yes | Adapter layer between Goose Hub and the source of truth for work items (currently GitHub Issues; Jira lands in M14). |
@@ -144,9 +144,9 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `wave2-risk-analyst` | yes | Wave-2 deep agent. Consumes cross-validated Wave-1 scout reports and emits a structured, falsifiable risk register. |
 | `write-prd` | yes | Authors a Product Requirements Document for a single work item. Produces structured output conforming to `PRDOutputSchema`. Runs in **fresh context** (no prior chat history, no implementation reasoning) — the `refinedIntent` is the source of truth. |
 
-## target-projects/ (1 entries, 1 missing README)
+## target-projects/ (1 entries, 0 missing README)
 
 | Name | README | Summary |
 |---|---|---|
-| `goose-hub-self` | **missing** | _(no README)_ |
+| `goose-hub-self` | yes | Target-project configuration for running Factory workflows against Goose Hub itself. |
 

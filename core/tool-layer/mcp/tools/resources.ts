@@ -127,6 +127,25 @@ export async function readWorkspaceResource(
 ): Promise<ReadResourceResult> {
   const uriStr = typeof uri === 'string' ? uri : uri.toString();
   const auditBase = { tool_name: 'resources/read', uri: uriStr };
+  if (ctx.forbidResources === true) {
+    const message =
+      'resources/read is disabled for this Factory run; use read_file, file_exists, list_files, or search_text instead.';
+    eventStore.appendEvent({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId,
+      runId: ctx.runId,
+      personaId: ctx.personaId ?? null,
+      kind: 'agent.tool-call',
+      payload: {
+        ...auditBase,
+        status: 'failed',
+        blocked: true,
+        block_reason: 'forbidden-resource-surface',
+        error: message,
+      },
+    });
+    throw new Error(message);
+  }
 
   try {
     const parsed = uriToWorkspaceRelative(uriStr);

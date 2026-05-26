@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   BugEnhanceOutputSchema,
@@ -73,6 +73,10 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
   }
 
   try {
+    const pathGroundingPrompt = buildPathGroundingPrompt(input);
+    const appendSystemPrompt =
+      pathGroundingPrompt.length > 0 ? `${prompt}\n\n${pathGroundingPrompt}` : prompt;
+
     const result = await runtime.run({
       runId,
       role: 'triager',
@@ -91,7 +95,7 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
       modelOverride: bugEnhanceRuntime.modelOverride,
       personaId,
       outputJsonSchema: jsonSchema,
-      appendSystemPrompt: prompt,
+      appendSystemPrompt,
     });
 
     const parsed = safeParseOutputForSchema(BugEnhanceOutputSchema, result.output);
@@ -119,6 +123,119 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
   } catch (err) {
     logger.error('bug-enhance: agent run failed', { err: String(err) });
     return { markdown: null, groundedHints: null };
+  }
+}
+
+const BODY_PATH_RE = /(?:[\w.-]+\/)+(?:[\w.-]+\.[A-Za-z0-9]+)/g;
+const NEARBY_FILE_LIMIT = 8;
+const NEARBY_FILE_DEPTH = 3;
+const NEARBY_FILE_EXT_RE = /\.(?:tsx?|jsx?|md|json|css|scss|mjs|cjs)$/;
+
+function buildPathGroundingPrompt(input: RunBugEnhanceInput): string {
+  const base = input.workspaceDir ?? process.cwd();
+  if (!existsSync(base)) return '';
+
+  const mentionedPaths = extractMentionedPaths(`${input.title}\n${input.body}`);
+  if (mentionedPaths.length === 0) return '';
+
+  const lines = ['## Factory preflight path grounding', ''];
+  let hasGrounding = false;
+
+  for (const mentionedPath of mentionedPaths) {
+    const abs = join(base, mentionedPath);
+    if (existsSync(abs)) {
+      lines.push(`- Existing issue-mentioned path: \`${mentionedPath}\``);
+      hasGrounding = true;
+      continue;
+    }
+
+    const nearby = findNearbyFiles(base, mentionedPath);
+    lines.push(`- Missing issue-mentioned path: \`${mentionedPath}\``);
+    if (nearby.length > 0) {
+      lines.push(`  Nearby existing files: ${nearby.map((path) => `\`${path}\``).join(', ')}`);
+    } else {
+      lines.push('  Nearby existing files: none found with a shallow local scan');
+    }
+    hasGrounding = true;
+  }
+
+  if (!hasGrounding) return '';
+  lines.push('', 'Use existing nearby files as grounding targets; do not read missing paths.');
+  return lines.join('\n');
+}
+
+function extractMentionedPaths(text: string): string[] {
+  return Array.from(new Set(text.match(BODY_PATH_RE) ?? []));
+}
+
+function findNearbyFiles(base: string, missingPath: string): string[] {
+  const parts = missingPath.split('/').filter(Boolean);
+  while (parts.length > 0) {
+    parts.pop();
+    const relDir = parts.join('/');
+    const absDir = relDir.length === 0 ? base : join(base, relDir);
+    if (!isDirectory(absDir)) continue;
+    const files = collectNearbyFiles(base, relDir, NEARBY_FILE_DEPTH);
+    return rankNearbyFiles(files, missingPath).slice(0, NEARBY_FILE_LIMIT);
+  }
+  return [];
+}
+
+function collectNearbyFiles(base: string, relDir: string, depth: number): string[] {
+  const absDir = relDir.length === 0 ? base : join(base, relDir);
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = readdirSync(absDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const files: string[] = [];
+  for (const entry of entries) {
+    const relPath = relDir.length === 0 ? entry.name : `${relDir}/${entry.name}`;
+    if (entry.isFile() && NEARBY_FILE_EXT_RE.test(entry.name)) {
+      files.push(relPath);
+      continue;
+    }
+    if (depth > 0 && entry.isDirectory()) {
+      files.push(...collectNearbyFiles(base, relPath, depth - 1));
+    }
+  }
+  return files;
+}
+
+function rankNearbyFiles(files: string[], missingPath: string): string[] {
+  const missingName =
+    missingPath
+      .split('/')
+      .at(-1)
+      ?.replace(/\.[^.]+$/, '') ?? missingPath;
+  return [...files].sort(
+    (a, b) => scoreNearbyFile(a, missingName) - scoreNearbyFile(b, missingName),
+  );
+}
+
+function scoreNearbyFile(file: string, missingName: string): number {
+  const fileName =
+    file
+      .split('/')
+      .at(-1)
+      ?.replace(/\.[^.]+$/, '') ?? file;
+  const prefix = commonPrefixLength(fileName.toLowerCase(), missingName.toLowerCase());
+  return -prefix;
+}
+
+function commonPrefixLength(a: string, b: string): number {
+  let count = 0;
+  while (count < a.length && count < b.length && a[count] === b[count]) count += 1;
+  return count;
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
   }
 }
 

@@ -246,6 +246,23 @@ describe('resources/read', () => {
     expect(asText(result.contents[0]).text).toBeDefined();
   });
 
+  it('blocks resources/read when the run forbids MCP resources', async () => {
+    await expect(
+      readWorkspaceResource({ ...ctx, forbidResources: true }, 'factory://README.md'),
+    ).rejects.toThrow(/resources\/read is disabled/);
+
+    const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
+    const blocked = events.find(
+      (e) => (e.payload as { tool_name?: string }).tool_name === 'resources/read',
+    );
+    expect(blocked?.payload).toMatchObject({
+      tool_name: 'resources/read',
+      status: 'failed',
+      blocked: true,
+      block_reason: 'forbidden-resource-surface',
+    });
+  });
+
   it('does not throw "Invalid URL" when called with read_file?path=… via the server transport', async () => {
     writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'test-pkg' }, null, 2));
     const server = buildFactoryMcpServer(ctx);
