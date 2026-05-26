@@ -40,7 +40,7 @@ function oldIssueComment(oldItem: WorkItem, newItem: WorkItem): string {
     'Restarted via Goose Hub.',
     '',
     `Fresh issue: ${issueRef(newItem)}`,
-    `Previous lifecycle archived from state: ${oldItem.state}`,
+    `Previous lifecycle restart requested from state: ${oldItem.state}`,
   ].join('\n');
 }
 

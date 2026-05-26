@@ -1,8 +1,8 @@
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
-import { restartIssue } from '@goose-hub/core/projects/restart-issue.js';
+import { type RestartIssueResult, restartIssue } from '@goose-hub/core/projects/restart-issue.js';
 import { STATES, type StateName } from '@goose-hub/core/state-machine/states.js';
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
-import type { Schedule } from '@goose-hub/core/state-source/interface.js';
+import type { Schedule, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
 
 const VALID_SCHEDULES = new Set<Schedule>(['current', 'next', 'later', 'blocked-by']);
@@ -56,6 +56,10 @@ function parseArgs(rawArgs: string[]): ParsedRestartArgs | null {
   return { slug, id, state, schedule, yes };
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export async function issueRestartCommand(rawArgs: string[]): Promise<void> {
   const args = parseArgs(rawArgs);
   if (args == null) {
@@ -85,7 +89,13 @@ export async function issueRestartCommand(rawArgs: string[]): Promise<void> {
   }
 
   const source = new GitHubLabelsSource(config.id, config.source.repo, token);
-  const oldItem = await source.getItem(args.id);
+  let oldItem: WorkItem;
+  try {
+    oldItem = await source.getItem(args.id);
+  } catch (err) {
+    console.error(`Failed to fetch issue #${args.id}: ${errorMessage(err)}`);
+    process.exit(1);
+  }
   const targetState = args.state ?? 'factory:triaging';
   const schedule = args.schedule ?? oldItem.schedule;
 
@@ -103,17 +113,33 @@ export async function issueRestartCommand(rawArgs: string[]): Promise<void> {
     return;
   }
 
-  const result = await restartIssue({
-    source,
-    projectId: args.slug,
-    itemId: oldItem.id,
-    targetState,
-    schedule,
-  });
+  let result: RestartIssueResult;
+  try {
+    result = await restartIssue({
+      source,
+      projectId: config.id,
+      itemId: oldItem.id,
+      targetState,
+      schedule,
+    });
+  } catch (err) {
+    console.error(`Issue restart failed: ${errorMessage(err)}`);
+    console.error(
+      'If --yes was used, the operation may have partially completed. Check the issue comments and labels before retrying.',
+    );
+    process.exit(1);
+  }
+
+  let verifiedOldState = 'archive requested';
+  try {
+    verifiedOldState = (await source.getItem(oldItem.id)).state;
+  } catch {
+    // Keep the success output honest when post-restart verification cannot read GitHub.
+  }
 
   console.log(`Restarted ${oldItem.repoRef}#${oldItem.externalId}.`);
   console.log(`  fresh issue:  ${result.newItem.repoRef}#${result.newItem.externalId}`);
-  console.log('  old state:    factory:archived');
+  console.log(`  old state:    ${verifiedOldState}`);
   console.log(`  new state:    ${result.targetState}`);
   console.log(`  new schedule: ${result.schedule}`);
 }
