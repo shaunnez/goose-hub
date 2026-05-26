@@ -1,13 +1,33 @@
-export interface SourceConfig {
+export interface GitHubSourceConfig {
   kind: 'github';
   repo: string;
   stateMachine: 'labels';
 }
 
+export interface LocalDbSourceConfig {
+  kind: 'local-db';
+  stateMachine: 'db';
+  integrations?: {
+    github?: {
+      repos: string[];
+      mirrorLabels?: boolean;
+      importIssues?: boolean;
+    };
+  };
+}
+
+export type SourceConfig = GitHubSourceConfig | LocalDbSourceConfig;
+
 export interface TargetRepoConfig {
   cloneUrl: string;
   defaultBranch: string;
   localPath: string;
+}
+
+export interface ProjectRepositoryConfig extends TargetRepoConfig {
+  id: string;
+  repoRef: string;
+  role?: 'code' | 'docs' | 'infra' | 'unknown';
 }
 
 export interface StackConfig {
@@ -188,6 +208,7 @@ export interface ProjectConfig {
   slug: string;
   source: SourceConfig;
   targetRepo: TargetRepoConfig;
+  repositories?: ProjectRepositoryConfig[];
   stack: StackConfig;
   mode: 'interactive' | 'supervised' | 'autonomous';
   storage: { kind: 'local'; path: string };

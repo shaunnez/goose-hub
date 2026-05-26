@@ -59,3 +59,15 @@ const REPO_REF_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 export function isValidRepoRef(ref: string): boolean {
   return REPO_REF_PATTERN.test(ref.trim());
 }
+
+export function parseRepoRefs(raw: string): string[] {
+  return raw
+    .split(/[\n,]+/)
+    .map((ref) => ref.trim())
+    .filter(Boolean);
+}
+
+export function isValidRepoRefs(raw: string): boolean {
+  const refs = parseRepoRefs(raw);
+  return refs.length > 0 && refs.every(isValidRepoRef);
+}

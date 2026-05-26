@@ -17,7 +17,18 @@ afterEach(() => {
 
 const FIXTURE_PREVIEW = {
   slug: 'widgets',
+  name: 'widgets',
   defaultBranch: 'main',
+  repos: [
+    {
+      repoRef: 'octo/widgets',
+      defaultBranch: 'main',
+      description: 'Widgets',
+      stackSummary: 'node (pnpm) — scripts: build, test',
+      auditAction: 'create' as const,
+      auditPath: 'CLAUDE.md',
+    },
+  ],
   stack: { type: 'node', summary: 'node (pnpm) — scripts: build, test', raw: {} },
   audit: {
     action: 'create' as const,
@@ -110,7 +121,11 @@ describe('BootstrapWizard', () => {
     await waitFor(() => expect(screen.getByTestId('bootstrap-result')).toBeTruthy());
     const link = screen.getByTestId('bootstrap-pr-link') as HTMLAnchorElement;
     expect(link.href).toBe('https://github.com/shaunnez/goose-hub/pull/123');
-    expect(runBootstrap).toHaveBeenCalledWith('octo/widgets', 'widgets');
+    expect(runBootstrap).toHaveBeenCalledWith({
+      repoRefs: ['octo/widgets'],
+      name: undefined,
+      slug: 'widgets',
+    });
   });
 
   it('shows update-mode CLAUDE.md as a diff when audit.action="update"', async () => {

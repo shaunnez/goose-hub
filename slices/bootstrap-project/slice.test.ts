@@ -176,6 +176,7 @@ function makeDeps(overrides: {
   detectStack?: () => unknown;
   auditClaudeMd?: () => unknown;
   installLabels?: () => unknown;
+  inspectGithubRepo?: () => unknown;
 }) {
   const writeFile = vi.fn().mockResolvedValue(undefined);
   const mkdir = vi.fn().mockResolvedValue(undefined);
@@ -185,6 +186,7 @@ function makeDeps(overrides: {
     detectStack: overrides.detectStack as never,
     auditClaudeMd: overrides.auditClaudeMd as never,
     installLabels: overrides.installLabels as never,
+    inspectGithubRepo: overrides.inspectGithubRepo as never,
     writeFile: writeFile as unknown as typeof import('node:fs/promises').writeFile,
     mkdir: mkdir as unknown as typeof import('node:fs/promises').mkdir,
     log,
@@ -253,9 +255,9 @@ describe('renderProjectConfig', () => {
       stack: makeNodeStack({ test: 'pnpm test' }),
       detectedAt: '2026-05-07T00:00:00.000Z',
     });
-    expect(out).toContain("id: 'my-app'");
-    expect(out).toContain("slug: 'my-app'");
-    expect(out).toContain("repo: 'octo/my-app'");
+    expect(out).toContain('id: "my-app"');
+    expect(out).toContain('slug: "my-app"');
+    expect(out).toContain('"octo/my-app"');
     expect(out).toContain('2026-05-07T00:00:00.000Z');
     expect(out).toContain('export default config');
   });
@@ -318,6 +320,22 @@ function happyAudit(action: 'create' | 'update' | 'ok' = 'create') {
 
 function happyInstallLabels(counts = { created: 5, updated: 2, skipped: 40, errors: [] }) {
   return vi.fn().mockResolvedValue(counts);
+}
+
+function happyInspect(defaultBranch = 'main') {
+  return vi.fn().mockResolvedValue({
+    repoRef: 'octo/widgets',
+    defaultBranch,
+    description: '',
+    cloneUrl: 'git@github.com:octo/widgets.git',
+    stack: makeNodeStack({ test: 'pnpm test', lint: 'pnpm lint' }),
+    audit: {
+      action: 'create' as const,
+      content: '# CLAUDE.md\n\n## What this repo is\n\n…\n',
+      rationale: 'mock',
+      path: 'CLAUDE.md',
+    },
+  });
 }
 
 beforeEach(() => {
@@ -385,8 +403,9 @@ describe('bootstrapProject — happy path', () => {
     const putBody = configPut?.body as { branch: string; content: string; message: string };
     expect(putBody.branch).toBe('bootstrap/widgets');
     const decoded = Buffer.from(putBody.content, 'base64').toString('utf-8');
-    expect(decoded).toContain("slug: 'widgets'");
-    expect(decoded).toContain("repo: 'octo/widgets'");
+    expect(decoded).toContain('slug: "widgets"');
+    expect(decoded).toContain("kind: 'local-db'");
+    expect(decoded).toContain('"octo/widgets"');
 
     // repos.md was also pushed to the bootstrap branch.
     const reposPut = recorded.find(
@@ -583,8 +602,7 @@ describe("bootstrapProject — scaffolded config uses the target repo's default 
     });
     const deps = makeDeps({
       fetchImpl,
-      detectStack: happyDetectStack(),
-      auditClaudeMd: happyAudit(),
+      inspectGithubRepo: happyInspect('master'),
       installLabels: happyInstallLabels(),
     });
 
@@ -599,8 +617,8 @@ describe("bootstrapProject — scaffolded config uses the target repo's default 
       (configPut?.body as { content: string }).content,
       'base64',
     ).toString('utf-8');
-    expect(decoded).toContain("defaultBranch: 'master'");
-    expect(decoded).not.toContain("defaultBranch: 'main'");
+    expect(decoded).toContain('defaultBranch: "master"');
+    expect(decoded).not.toContain('defaultBranch: "main"');
   });
 });
 

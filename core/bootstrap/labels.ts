@@ -50,6 +50,11 @@ export const FACTORY_LABELS: Label[] = [
   },
   { name: 'factory:needs-fix', color: '1d76db', description: 'Review found issues; back to dev' },
   { name: 'factory:approved', color: '22c55e', description: 'Approved; awaiting human merge gate' },
+  {
+    name: 'factory:merge-conflict',
+    color: 'b91c1c',
+    description: 'Merge conflict resolver needed',
+  },
   { name: 'factory:retrospecting', color: '14b8a6', description: 'Retrospective in progress' },
   { name: 'factory:needs-human', color: 'b91c1c', description: 'Escalated to human; agents stop' },
   { name: 'factory:done', color: 'd1d5db', description: 'Done' },
@@ -81,6 +86,11 @@ export const FACTORY_LABELS: Label[] = [
   },
   { name: 'factory:docs', color: '0075ca', description: 'Plan/doc issue' },
   {
+    name: 'factory:blocked-by-dependency',
+    color: 'fbca04',
+    description: 'Legacy dependency-blocked marker',
+  },
+  {
     name: 'factory:from-prd',
     color: 'c4b5fd',
     description: 'Child of a decomposed PRD; triage skips grilling',
@@ -100,6 +110,8 @@ export const FACTORY_LABELS: Label[] = [
   { name: 'type:feature', color: '0e8a16', description: 'New capability' },
   { name: 'type:bug', color: 'b91c1c', description: 'Defect to fix' },
   { name: 'type:chore', color: 'd1d5db', description: 'Maintenance / infra' },
+  { name: 'type:improvement', color: '14b8a6', description: 'Factory improvement candidate' },
+  { name: 'type:refactor', color: 'c7d2fe', description: 'Refactoring work' },
   { name: 'type:research', color: 'ec4899', description: 'Research lane' },
 
   // priority:*
@@ -129,4 +141,14 @@ export const FACTORY_LABELS: Label[] = [
   // exec:*
   { name: 'exec:serial', color: 'a5b4fc', description: 'Must run serially with siblings' },
   { name: 'exec:parallel', color: 'c7d2fe', description: 'May run alongside siblings' },
+
+  // area:* (Goose Hub project conventions)
+  { name: 'area:agent-runtime', color: 'c7d2fe', description: 'Agent runtime area' },
+  { name: 'area:bootstrap', color: 'c7d2fe', description: 'Project bootstrap area' },
+  { name: 'area:server', color: 'c7d2fe', description: 'Server area' },
+  { name: 'area:skills', color: 'c7d2fe', description: 'Skills area' },
+  { name: 'area:web', color: 'c7d2fe', description: 'Web UI area' },
+
+  // integration/tooling
+  { name: 'codex', color: '111827', description: 'Codex-related work' },
 ];

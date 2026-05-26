@@ -31,6 +31,13 @@ export async function statusCommand(slug: string): Promise<void> {
     process.exit(1);
   }
 
+  if (config.source.kind !== 'github') {
+    console.error(
+      `goose status currently supports github-labels projects only. ${slug} uses ${config.source.kind}.`,
+    );
+    process.exit(1);
+  }
+
   const source = new GitHubLabelsSource(config.id, config.source.repo, token);
 
   let items: WorkItem[];

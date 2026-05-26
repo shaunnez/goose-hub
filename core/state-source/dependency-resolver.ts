@@ -142,12 +142,14 @@ export async function createProjectAwareTargetSource(
   const fetchers = new Map<string, ProjectIssueFetcher>();
 
   for (const project of projects) {
-    const repoRef = project.source.repo;
+    const repoRefs = project.source.kind === 'github' ? [project.source.repo] : project.repos;
     const fetcher =
       options.fetchTargetForProject != null
         ? options.fetchTargetForProject(project)
         : defaultFetchTargetForProject(options.githubToken ?? process.env.GITHUB_TOKEN ?? '');
-    fetchers.set(repoRef, fetcher);
+    for (const repoRef of repoRefs) {
+      fetchers.set(repoRef, fetcher);
+    }
   }
 
   return async (repoRef, issueNumber) => {

@@ -48,7 +48,16 @@ export type AuditResult = {
   content: string;
   /** Human-readable explanation of what was found and why. */
   rationale: string;
+  /** Instruction file that was audited, or CLAUDE.md when a new file is proposed. */
+  path?: string;
+  /** Agent instruction files found in the repo root. */
+  discoveredFiles?: string[];
 };
+
+export interface InstructionFileReader {
+  exists(filePath: string): Promise<boolean>;
+  readText(filePath: string): Promise<string>;
+}
 
 // ---------------------------------------------------------------------------
 // Required section headings
@@ -276,20 +285,34 @@ function buildAdditionDiff(
  * the content (template or diff) that should be applied.
  */
 export async function auditClaudeMd(repoPath: string, stackInfo: StackInfo): Promise<AuditResult> {
-  const claudeMdPath = path.join(repoPath, 'CLAUDE.md');
+  return auditAgentInstructionsFromFiles(
+    {
+      exists: async (filePath) => {
+        try {
+          await fs.access(path.join(repoPath, filePath));
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      readText: (filePath) => fs.readFile(path.join(repoPath, filePath), 'utf-8'),
+    },
+    stackInfo,
+  );
+}
 
+export async function auditAgentInstructionsFromFiles(
+  files: InstructionFileReader,
+  stackInfo: StackInfo,
+): Promise<AuditResult> {
   // ------------------------------------------------------------------
-  // Case 1: no CLAUDE.md → generate a template
+  // Case 1: no agent instruction file → generate a CLAUDE.md template
   // ------------------------------------------------------------------
+  const discoveredFiles = await discoverInstructionFiles(files);
+  const targetPath = await resolveInstructionPath(files, discoveredFiles);
   let existingContent: string | null = null;
-  try {
-    existingContent = await fs.readFile(claudeMdPath, 'utf-8');
-  } catch (err) {
-    // Only ENOENT is "missing"; permission, IO, or path errors must surface
-    // so bootstrap doesn't silently misreport an unreadable file as missing.
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw err;
-    }
+  if (targetPath != null) {
+    existingContent = await files.readText(targetPath);
   }
 
   if (existingContent === null) {
@@ -298,6 +321,8 @@ export async function auditClaudeMd(repoPath: string, stackInfo: StackInfo): Pro
       action: 'create',
       content: template,
       rationale: 'No CLAUDE.md found. Generated a template populated with detected stack commands.',
+      path: 'CLAUDE.md',
+      discoveredFiles,
     };
   }
 
@@ -311,7 +336,9 @@ export async function auditClaudeMd(repoPath: string, stackInfo: StackInfo): Pro
     return {
       action: 'ok',
       content: '',
-      rationale: 'CLAUDE.md exists and contains all required sections. No changes needed.',
+      rationale: `${targetPath} exists and contains all required sections. No changes needed.`,
+      path: targetPath ?? 'CLAUDE.md',
+      discoveredFiles,
     };
   }
 
@@ -324,6 +351,39 @@ export async function auditClaudeMd(repoPath: string, stackInfo: StackInfo): Pro
   return {
     action: 'update',
     content: diff,
-    rationale: `CLAUDE.md exists but is missing required sections: ${missingList}. Diff shows additions only — existing content is preserved.`,
+    rationale: `${targetPath} exists but is missing required sections: ${missingList}. Diff shows additions only — existing content is preserved.`,
+    path: targetPath ?? 'CLAUDE.md',
+    discoveredFiles,
   };
+}
+
+const INSTRUCTION_FILE_CANDIDATES = ['AGENTS.md', 'AGENT.md', 'CLAUDE.md'] as const;
+
+async function discoverInstructionFiles(files: InstructionFileReader): Promise<string[]> {
+  const found: string[] = [];
+  for (const candidate of INSTRUCTION_FILE_CANDIDATES) {
+    if (await files.exists(candidate)) found.push(candidate);
+  }
+  return found;
+}
+
+async function resolveInstructionPath(
+  files: InstructionFileReader,
+  discoveredFiles: string[],
+): Promise<string | null> {
+  if (discoveredFiles.length === 0) return null;
+
+  const first = discoveredFiles[0];
+  const firstContent = await files.readText(first);
+  const delegated = delegatedClaudePath(firstContent);
+  if (delegated != null && discoveredFiles.includes(delegated)) {
+    return delegated;
+  }
+  return first;
+}
+
+function delegatedClaudePath(content: string): 'CLAUDE.md' | null {
+  return /\bsee\s+CLAUDE\.md\b/i.test(content) || /\bCLAUDE\.md\b/i.test(content)
+    ? 'CLAUDE.md'
+    : null;
 }

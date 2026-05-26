@@ -15,10 +15,19 @@ import type { StackInfo } from '../bootstrap/stack-detector.js';
 
 export interface PrBodyInput {
   repoRef: string;
+  repoRefs?: string[];
   slug: string;
+  name?: string;
   stack: StackInfo;
   audit: AuditResult;
   labels: InstallResult;
+}
+
+export interface BootstrapRepoRenderInput {
+  repoRef: string;
+  defaultBranch: string;
+  description: string;
+  cloneUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,37 +68,51 @@ export function summariseStack(stack: StackInfo): string {
  */
 export function renderProjectConfig(input: {
   slug: string;
+  name?: string;
   repoRef: string;
+  repos?: BootstrapRepoRenderInput[];
   defaultBranch: string;
   cloneRoot: string;
   stack: StackInfo;
   detectedAt: string;
 }): string {
   const { slug, repoRef, defaultBranch, cloneRoot, stack, detectedAt } = input;
+  const name = input.name ?? slug;
+  const repos = input.repos ?? [{ repoRef, defaultBranch, description: '' }];
+  const repoRefs = repos.map((repo) => repo.repoRef);
+  const firstRepo = repos[0] ?? { repoRef, defaultBranch, description: '' };
   const stackBlock = renderStackBlock(stack, detectedAt);
-  const cloneUrl = `git@github.com:${repoRef}.git`;
-  const localPath = nodePath.posix.join(cloneRoot.replace(/\\/g, '/'), slug);
+  const cloneUrl = firstRepo.cloneUrl ?? `git@github.com:${firstRepo.repoRef}.git`;
+  const localPath = localRepoPath(cloneRoot, firstRepo.repoRef);
+  const repositoriesBlock = renderRepositoriesBlock(repos, cloneRoot);
 
   return `import type { ProjectConfig } from '../../core/types.js';
 
 const config: ProjectConfig = {
-  id: '${slug}',
-  name: '${slug}',
-  slug: '${slug}',
+  id: ${JSON.stringify(slug)},
+  name: ${JSON.stringify(name)},
+  slug: ${JSON.stringify(slug)},
   source: {
-    kind: 'github',
-    repo: '${repoRef}',
-    stateMachine: 'labels',
+    kind: 'local-db',
+    stateMachine: 'db',
+    integrations: {
+      github: {
+        repos: ${JSON.stringify(repoRefs)},
+        mirrorLabels: false,
+        importIssues: true,
+      },
+    },
   },
   targetRepo: {
-    cloneUrl: '${cloneUrl}',
-    defaultBranch: '${defaultBranch}',
-    localPath: '${localPath}',
+    cloneUrl: ${JSON.stringify(cloneUrl)},
+    defaultBranch: ${JSON.stringify(firstRepo.defaultBranch ?? defaultBranch)},
+    localPath: ${JSON.stringify(localPath)},
   },
+  repositories: ${repositoriesBlock},
   stack: ${stackBlock},
   mode: 'supervised',
-  storage: { kind: 'local', path: '~/.factory/data/${slug}' },
-  repos: ['${repoRef}'],
+  storage: { kind: 'local', path: ${JSON.stringify(`~/.factory/data/${slug}`)} },
+  repos: ${JSON.stringify(repoRefs)},
   agentConfig: {
     runtime: 'claude-cli',
     rolesModels: {
@@ -161,6 +184,33 @@ const config: ProjectConfig = {
 
 export default config;
 `;
+}
+
+function renderRepositoriesBlock(repos: BootstrapRepoRenderInput[], cloneRoot: string): string {
+  const entries = repos.map((repo) => ({
+    id: repoId(repo.repoRef),
+    repoRef: repo.repoRef,
+    cloneUrl: repo.cloneUrl ?? `git@github.com:${repo.repoRef}.git`,
+    defaultBranch: repo.defaultBranch,
+    localPath: localRepoPath(cloneRoot, repo.repoRef),
+    role: 'unknown',
+  }));
+  return JSON.stringify(entries, null, 4)
+    .replace(/"([^"]+)":/g, '$1:')
+    .replace(/"unknown"/g, "'unknown'");
+}
+
+function repoId(repoRef: string): string {
+  return repoRef
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function localRepoPath(cloneRoot: string, repoRef: string): string {
+  const repoName = repoRef.split('/')[1] ?? repoRef;
+  return nodePath.posix.join(cloneRoot.replace(/\\/g, '/'), repoName);
 }
 
 function renderStackBlock(stack: StackInfo, detectedAt: string): string {
@@ -238,6 +288,7 @@ function renderStackBlock(stack: StackInfo, detectedAt: string): string {
 export function renderPrBody(input: PrBodyInput): string {
   const { repoRef, slug, stack, audit, labels } = input;
   const stackSummary = summariseStack(stack);
+  const repoRefs = input.repoRefs?.length ? input.repoRefs : [repoRef];
 
   const claudeBlock = renderClaudeBlock(audit);
   const errorTail =
@@ -246,9 +297,13 @@ export function renderPrBody(input: PrBodyInput): string {
       : '';
   const labelBlock = `- created: ${labels.created}\n- updated: ${labels.updated}\n- skipped: ${labels.skipped}\n- errors: ${labels.errors.length}${errorTail}`;
 
-  return `# Bootstrap registration: ${repoRef}
+  return `# Bootstrap registration: ${input.name ?? slug}
 
-This PR registers \`${repoRef}\` as a Factory-managed project under slug \`${slug}\`.
+This PR registers \`${input.name ?? slug}\` as a Factory-managed project under slug \`${slug}\`.
+
+## Repositories
+
+${repoRefs.map((ref) => `- \`${ref}\``).join('\n')}
 
 ## Stack summary
 
@@ -264,10 +319,10 @@ ${labelBlock}
 
 ## Webhook setup
 
-After this PR merges, configure a GitHub webhook on \`${repoRef}\` so factory ticks
+After this PR merges, configure GitHub webhooks on the linked repos so factory ticks
 react to label changes:
 
-1. Go to \`https://github.com/${repoRef}/settings/hooks/new\`.
+1. Go to each repo's hook settings, for example \`https://github.com/${repoRefs[0]}/settings/hooks/new\`.
 2. **Payload URL**: \`https://<your-goose-hub-host>/webhook/github\`
 3. **Content type**: \`application/json\`
 4. **Secret**: the value of \`GITHUB_WEBHOOK_SECRET\` from your goose-hub server env.
@@ -283,7 +338,7 @@ function renderClaudeBlock(audit: AuditResult): string {
   switch (audit.action) {
     case 'create':
       return [
-        '**Action**: create — no CLAUDE.md exists in target repo.',
+        `**Action**: create — no agent instruction file exists in target repo.`,
         '',
         '**Preview** (first 40 lines):',
         '',
@@ -293,7 +348,7 @@ function renderClaudeBlock(audit: AuditResult): string {
       ].join('\n');
     case 'update':
       return [
-        '**Action**: update — existing CLAUDE.md is missing required sections.',
+        `**Action**: update — existing ${audit.path ?? 'agent instruction file'} is missing required sections.`,
         '',
         '**Diff**:',
         '',
@@ -302,7 +357,7 @@ function renderClaudeBlock(audit: AuditResult): string {
         '```',
       ].join('\n');
     case 'ok':
-      return '**Action**: ok — CLAUDE.md already contains all required sections; no changes proposed.';
+      return `**Action**: ok — ${audit.path ?? 'agent instruction file'} already contains all required sections; no changes proposed.`;
   }
 }
 
@@ -310,7 +365,20 @@ function renderClaudeBlock(audit: AuditResult): string {
 // repos.md renderer
 // ---------------------------------------------------------------------------
 
-export function renderReposMd(slug: string, repoRef: string, description: string): string {
-  const desc = description.trim() || `${repoRef} managed by Factory.`;
-  return `# Repo Registry — ${slug}\n\n### [${repoRef}](https://github.com/${repoRef})\n**Description:** ${desc}\n`;
+export function renderReposMd(
+  slug: string,
+  repoRefOrRepos: string | BootstrapRepoRenderInput[],
+  description = '',
+): string {
+  const repos =
+    typeof repoRefOrRepos === 'string'
+      ? [{ repoRef: repoRefOrRepos, description, defaultBranch: 'main' }]
+      : repoRefOrRepos;
+  const body = repos
+    .map((repo) => {
+      const desc = repo.description.trim() || `${repo.repoRef} managed by Factory.`;
+      return `### [${repo.repoRef}](https://github.com/${repo.repoRef})\n**Default branch:** \`${repo.defaultBranch}\`\n**Description:** ${desc}`;
+    })
+    .join('\n\n');
+  return `# Repo Registry — ${slug}\n\n${body}\n`;
 }

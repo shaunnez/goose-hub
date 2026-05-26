@@ -27,7 +27,9 @@ describe('POST /projects/bootstrap/preview', () => {
       ok: true,
       data: {
         slug: 'widgets',
+        name: 'widgets',
         defaultBranch: 'main',
+        repos: [],
         stack: { type: 'node', summary: 'node (pnpm)', raw: {} },
         audit: { action: 'create', content: '...', rationale: '...' },
         labelsToInstall: [{ name: 'factory:done', color: 'd1d5db', description: 'Done' }],
@@ -42,7 +44,7 @@ describe('POST /projects/bootstrap/preview', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { slug: string };
     expect(body.slug).toBe('widgets');
-    expect(mockPreview).toHaveBeenCalledWith('octo/widgets');
+    expect(mockPreview).toHaveBeenCalledWith({ repoRef: 'octo/widgets' });
   });
 
   it('returns the service status code on failure', async () => {
@@ -75,7 +77,7 @@ describe('POST /projects/bootstrap/preview', () => {
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(400);
-    expect(mockPreview).toHaveBeenCalledWith('');
+    expect(mockPreview).toHaveBeenCalledWith({});
   });
 });
 
@@ -101,7 +103,7 @@ describe('POST /projects/bootstrap/run', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { registrationPrUrl: string };
     expect(body.registrationPrUrl).toContain('pull/100');
-    expect(mockRun).toHaveBeenCalledWith('octo/widgets', undefined);
+    expect(mockRun).toHaveBeenCalledWith({ repoRef: 'octo/widgets' });
   });
 
   it('forwards a slug override', async () => {
@@ -122,7 +124,7 @@ describe('POST /projects/bootstrap/run', () => {
       body: JSON.stringify({ repoRef: 'octo/widgets', slug: 'custom' }),
     });
     expect(res.status).toBe(200);
-    expect(mockRun).toHaveBeenCalledWith('octo/widgets', 'custom');
+    expect(mockRun).toHaveBeenCalledWith({ repoRef: 'octo/widgets', slug: 'custom' });
   });
 
   it('returns the service error status on failure', async () => {

@@ -1,6 +1,7 @@
 import { installLabels } from '@goose-hub/core/bootstrap/label-installer.js';
 import type { InstallResult } from '@goose-hub/core/bootstrap/label-installer.js';
 import { FACTORY_LABELS } from '@goose-hub/core/bootstrap/labels.js';
+import { STATES } from '@goose-hub/core/state-machine/states.js';
 import { describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -64,6 +65,11 @@ function makeMockFetch(existing: GHLabel[], opts?: { failCreate?: string; failPa
 describe('label-installer slice — end-to-end', () => {
   const repoRef = 'owner/repo';
   const token = 'ghp_test';
+
+  it('canonical labels cover every factory state', () => {
+    const names = new Set(FACTORY_LABELS.map((label) => label.name));
+    expect(STATES.filter((state) => !names.has(state))).toEqual([]);
+  });
 
   it('empty repo: all labels created, none skipped', async () => {
     const mockFetch = makeMockFetch([]);

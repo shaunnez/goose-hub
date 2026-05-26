@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockBootstrapProject, mockDetectStack, mockAuditClaudeMd } = vi.hoisted(() => ({
+const { mockBootstrapProject, mockInspectGithubRepo } = vi.hoisted(() => ({
   mockBootstrapProject: vi.fn(),
-  mockDetectStack: vi.fn(),
-  mockAuditClaudeMd: vi.fn(),
+  mockInspectGithubRepo: vi.fn(),
 }));
 
 vi.mock('@goose-hub/core/workflows/bootstrap-project.js', async () => {
@@ -16,12 +15,8 @@ vi.mock('@goose-hub/core/workflows/bootstrap-project.js', async () => {
   };
 });
 
-vi.mock('@goose-hub/core/bootstrap/stack-detector.js', () => ({
-  detectStack: mockDetectStack,
-}));
-
-vi.mock('@goose-hub/core/bootstrap/claude-md-auditor.js', () => ({
-  auditClaudeMd: mockAuditClaudeMd,
+vi.mock('@goose-hub/core/bootstrap/github-repo-inspector.js', () => ({
+  inspectGithubRepo: mockInspectGithubRepo,
 }));
 
 import { previewBootstrapService, runBootstrapService } from './service.js';
@@ -70,46 +65,38 @@ describe('previewBootstrapService', () => {
   });
 
   it('returns 404 when GitHub responds 404 for the repo', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ message: 'Not Found' }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    );
+    mockInspectGithubRepo.mockRejectedValue(new Error('GitHub GET x -> 404: not found'));
     const result = await previewBootstrapService('octo/missing');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(404);
   });
 
   it('returns full preview DTO on the happy path', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ default_branch: 'develop' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    );
-    mockDetectStack.mockResolvedValue({
-      type: 'node',
-      packageManager: 'pnpm',
-      scripts: { build: 'pnpm build', test: 'pnpm test' },
-    });
-    mockAuditClaudeMd.mockResolvedValue({
-      action: 'create',
-      content: '# CLAUDE.md\n\n…\n',
-      rationale: 'No CLAUDE.md found',
+    mockInspectGithubRepo.mockResolvedValue({
+      repoRef: 'octo/widgets',
+      defaultBranch: 'develop',
+      description: 'Widgets',
+      cloneUrl: 'git@github.com:octo/widgets.git',
+      stack: {
+        type: 'node',
+        packageManager: 'pnpm',
+        scripts: { build: 'pnpm build', test: 'pnpm test' },
+      },
+      audit: {
+        action: 'create',
+        content: '# CLAUDE.md\n\n…\n',
+        rationale: 'No CLAUDE.md found',
+        path: 'CLAUDE.md',
+      },
     });
 
     const result = await previewBootstrapService('octo/widgets');
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.slug).toBe('widgets');
+      expect(result.data.name).toBe('widgets');
       expect(result.data.defaultBranch).toBe('develop');
+      expect(result.data.repos[0].repoRef).toBe('octo/widgets');
       expect(result.data.stack.type).toBe('node');
       expect(result.data.stack.summary).toContain('node');
       expect(result.data.audit.action).toBe('create');
@@ -133,8 +120,7 @@ describe('previewBootstrapService', () => {
       expect(result.data.audit.action).toBe('create');
       expect(result.data.labelsToInstall.length).toBeGreaterThan(0);
     }
-    expect(mockDetectStack).not.toHaveBeenCalled();
-    expect(mockAuditClaudeMd).not.toHaveBeenCalled();
+    expect(mockInspectGithubRepo).not.toHaveBeenCalled();
   });
 });
 
@@ -169,7 +155,7 @@ describe('runBootstrapService', () => {
       expect(result.data.slug).toBe('widgets');
       expect(mockBootstrapProject).toHaveBeenCalledWith(
         expect.objectContaining({
-          repoRef: 'octo/widgets',
+          repoRefs: ['octo/widgets'],
           token: 'test-token',
         }),
       );

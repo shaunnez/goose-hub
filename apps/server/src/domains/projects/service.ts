@@ -8,7 +8,7 @@ export async function listProjectsService(): Promise<{ projects: unknown[] }> {
 export interface ProjectConfigDto {
   slug: string;
   name: string;
-  source: { kind: string; repo: string };
+  source: { kind: string; repo?: string; integrations?: unknown };
   targetRepo: { cloneUrl: string; defaultBranch: string; localPath: string };
   stack: {
     runtime: string;
