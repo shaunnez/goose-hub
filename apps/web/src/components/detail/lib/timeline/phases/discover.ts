@@ -1,3 +1,5 @@
+import { isAnsweredGrillTransition } from '../grill';
+
 export function getDiscoverSessionId(event: AgentEventDto): string | null {
   const payload = event.payload as { discoverSessionId?: unknown } | null;
   if (typeof payload?.discoverSessionId === 'string' && payload.discoverSessionId.trim() !== '') {
@@ -43,12 +45,6 @@ export function getDiscoverPhaseId(
 function isGrillPhaseEvent(event: AgentEventDto): boolean {
   if (event.kind.startsWith('grill.')) return true;
   return isAnsweredGrillTransition(event);
-}
-
-function isAnsweredGrillTransition(event: AgentEventDto): boolean {
-  if (event.kind !== 'state.transitioned' || getDiscoverSessionId(event) == null) return false;
-  const payload = event.payload as { from?: unknown; to?: unknown } | null;
-  return payload?.from === 'factory:gate-pending' && payload.to === 'factory:grilling';
 }
 
 function isPrdPhaseEvent(event: AgentEventDto): boolean {
