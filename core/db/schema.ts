@@ -74,6 +74,12 @@ export const workItems = sqliteTable(
   }),
 );
 
+export const workItemCounters = sqliteTable('work_item_counters', {
+  projectId: text('project_id').primaryKey(),
+  lastExternalId: integer('last_external_id').notNull().default(0),
+  updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+});
+
 export const workItemMilestones = sqliteTable(
   'work_item_milestones',
   {

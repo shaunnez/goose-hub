@@ -27,11 +27,13 @@ function parseStateLabel(label: string): StateName | null {
   return STATE_LABELS.has(label) ? (label as StateName) : null;
 }
 
-function mapDependencyRefs(body: string, type: 'depends-on' | 'blocks'): string[] {
+function mapDependencyRefs(body: string, type: 'depends-on' | 'blocks', repoRef: string): string[] {
   return parseDependencies(body)
     .filter((ref) => ref.type === type)
     .map((ref) =>
-      ref.repoRef == null ? String(ref.issueNumber) : `${ref.repoRef}#${ref.issueNumber}`,
+      ref.repoRef == null || ref.repoRef === repoRef
+        ? String(ref.issueNumber)
+        : `${ref.repoRef}#${ref.issueNumber}`,
     );
 }
 
@@ -74,10 +76,11 @@ export class LocalDbStateSource implements StateSource {
 
   private toWorkItem(row: LocalDbWorkItemRow): WorkItem {
     const repoLinks = this.repository.listRepoLinks(this.projectId, row.id);
+    const repoRef = repoLinks[0]?.repoRef ?? this.repoRef;
     return {
       id: row.id,
       externalId: row.externalId,
-      repoRef: repoLinks[0]?.repoRef ?? this.repoRef,
+      repoRef,
       title: row.title,
       body: row.body,
       type: row.type as WorkItemType,
@@ -90,8 +93,8 @@ export class LocalDbStateSource implements StateSource {
       milestoneTitle: row.milestoneTitle ?? undefined,
       schedule: row.schedule as Schedule,
       exec: row.exec as WorkItem['exec'],
-      dependsOn: mapDependencyRefs(row.body, 'depends-on'),
-      blocks: mapDependencyRefs(row.body, 'blocks'),
+      dependsOn: mapDependencyRefs(row.body, 'depends-on', repoRef),
+      blocks: mapDependencyRefs(row.body, 'blocks', repoRef),
       createdAt: new Date(row.createdAt),
     };
   }
@@ -249,7 +252,7 @@ export class LocalDbStateSource implements StateSource {
       });
     }
     if (input.extraLabels != null) await this.addLabels(row.id, input.extraLabels);
-    return this.toWorkItem(row);
+    return this.toWorkItem(this.repository.requireWorkItem(this.projectId, row.id));
   }
 
   async createMilestone(title: string): Promise<Milestone> {

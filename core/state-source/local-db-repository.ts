@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import { and, asc, eq, or, sql } from 'drizzle-orm';
 import { db as defaultDb } from '../db/db.js';
 import {
   projectState,
   workItemComments,
+  workItemCounters,
   workItemExternalRefs,
   workItemLabels,
   workItemMilestones,
@@ -47,11 +47,10 @@ export interface LocalDbCreateWorkItemInput {
 export interface LocalDbRepositoryOptions {
   db?: LocalDbDatabase;
   now?: () => Date;
-  id?: () => string;
 }
 
-function defaultId(): string {
-  return `wi_${randomUUID()}`;
+function canonicalLocalWorkItemId(projectId: string, externalId: string): string {
+  return `local:${projectId}#${externalId}`;
 }
 
 function closedAtForState(state: StateName, nowIso: string): string | null {
@@ -67,27 +66,14 @@ function externalIdFromItemId(projectId: string, itemId: string): string {
 export class LocalDbWorkItemRepository {
   private readonly db: LocalDbDatabase;
   private readonly now: () => Date;
-  private readonly id: () => string;
 
   constructor(options: LocalDbRepositoryOptions = {}) {
     this.db = options.db ?? defaultDb;
     this.now = options.now ?? (() => new Date());
-    this.id = options.id ?? defaultId;
   }
 
   private nowIso(): string {
     return this.now().toISOString();
-  }
-
-  private nextExternalId(projectId: string): string {
-    const row = this.db
-      .select({
-        max: sql<number>`coalesce(max(cast(${workItems.externalId} as integer)), 0)`,
-      })
-      .from(workItems)
-      .where(eq(workItems.projectId, projectId))
-      .get();
-    return String((row?.max ?? 0) + 1);
   }
 
   private nextMilestoneNumber(projectId: string): number {
@@ -105,12 +91,29 @@ export class LocalDbWorkItemRepository {
     return this.db.transaction((tx) => {
       const now = this.nowIso();
       const state = input.state ?? 'factory:triaging';
+      const counter = tx
+        .insert(workItemCounters)
+        .values({
+          projectId: input.projectId,
+          lastExternalId: 1,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: workItemCounters.projectId,
+          set: {
+            lastExternalId: sql`${workItemCounters.lastExternalId} + 1`,
+            updatedAt: now,
+          },
+        })
+        .returning({ externalId: workItemCounters.lastExternalId })
+        .get();
+      const externalId = String(counter.externalId);
       const row = tx
         .insert(workItems)
         .values({
-          id: this.id(),
+          id: canonicalLocalWorkItemId(input.projectId, externalId),
           projectId: input.projectId,
-          externalId: this.nextExternalId(input.projectId),
+          externalId,
           title: input.title,
           body: input.body ?? '',
           state,
