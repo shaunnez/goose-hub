@@ -1,9 +1,7 @@
 /** @vitest-environment jsdom */
 import type { ChatConversationDto, ChatMessageDto, ChatToolInvocationDto } from '@/lib/types';
-import { screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { type Root, createRoot } from 'react-dom/client';
-import { act } from 'react-dom/test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatDock } from './ChatDock';
@@ -36,15 +34,8 @@ vi.mock('@/lib/api/chat', () => ({
   resolveInvocation: mockResolveInvocation,
 }));
 
-let root: Root | null = null;
-
 afterEach(() => {
-  if (root != null) {
-    act(() => {
-      root.unmount();
-      root = null;
-    });
-  }
+  cleanup();
   document.body.innerHTML = '';
   localStorage.clear();
 });
@@ -98,17 +89,11 @@ function message(overrides: Partial<ChatMessageDto> = {}): ChatMessageDto {
 }
 
 function renderChatDock() {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  root = createRoot(container);
-  act(() => {
-    root?.render(
-      <MemoryRouter initialEntries={['/projects/goose-hub-self']}>
-        <ChatDock />
-      </MemoryRouter>,
-    );
-  });
-  return container;
+  return render(
+    <MemoryRouter initialEntries={['/projects/goose-hub-self']}>
+      <ChatDock />
+    </MemoryRouter>,
+  );
 }
 
 describe('ChatDock', () => {
@@ -133,6 +118,26 @@ describe('ChatDock', () => {
     expect(await screen.findByText('Existing thread reply')).toBeTruthy();
 
     await user.click(screen.getByTestId('chat-launcher'));
+    await waitFor(() => {
+      expect(localStorage.getItem('hub-chat-active-conversation-id')).toBeNull();
+    });
+
+    await user.click(screen.getByTestId('chat-launcher'));
+
+    expect(await screen.findByTestId('chat-conversation-list')).toBeTruthy();
+    expect(screen.queryByText('Existing thread reply')).toBeNull();
+    expect(screen.queryByTestId('chat-input')).toBeNull();
+  });
+
+  it('resets to list view after panel close and reopen', async () => {
+    const user = userEvent.setup();
+    renderChatDock();
+
+    await user.click(screen.getByTestId('chat-launcher'));
+    await user.click(await screen.findByTestId('chat-conversation-select'));
+    expect(await screen.findByText('Existing thread reply')).toBeTruthy();
+
+    await user.click(screen.getByLabelText('Close chat'));
     await waitFor(() => {
       expect(localStorage.getItem('hub-chat-active-conversation-id')).toBeNull();
     });

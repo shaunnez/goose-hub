@@ -25,10 +25,14 @@ export function ChatDock() {
     } catch {}
   }, [open]);
 
+  const handleClose = () => {
+    setResetKey((key) => key + 1);
+    setOpen(false);
+  };
+
   const handleLauncherToggle = () => {
     if (open) {
-      setResetKey((key) => key + 1);
-      setOpen(false);
+      handleClose();
       return;
     }
 
@@ -37,7 +41,7 @@ export function ChatDock() {
 
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} resetKey={resetKey} />
+      <ChatPanel open={open} onClose={handleClose} resetKey={resetKey} />
       <ChatLauncher open={open} onToggle={handleLauncherToggle} />
     </>
   );
