@@ -34,11 +34,12 @@ const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 interface ChatPanelProps {
   open: boolean;
   onClose: () => void;
+  resetKey: number;
 }
 
 type View = 'thread' | 'list';
 
-export function ChatPanel({ open, onClose }: ChatPanelProps) {
+export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const resolved = useMemo(() => resolveScopeFromPath(location.pathname), [location.pathname]);
@@ -136,6 +137,26 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     }
   }, []);
 
+  const resetPanelState = useCallback(() => {
+    loadTokenRef.current += 1;
+    writeActiveId(null);
+    setConversation(null);
+    setMessages([]);
+    setInvocations([]);
+    setView('list');
+  }, [writeActiveId]);
+
+  const lastResetKeyRef = useRef(resetKey);
+
+  useEffect(() => {
+    if (lastResetKeyRef.current === resetKey) {
+      return;
+    }
+
+    lastResetKeyRef.current = resetKey;
+    resetPanelState();
+  }, [resetKey, resetPanelState]);
+
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;
     let cancelled = false;
@@ -208,10 +229,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
           }
         } else {
           if (cancelled) return;
-          setConversation(null);
-          setMessages([]);
-          setInvocations([]);
-          setView('list');
+          resetPanelState();
         }
       } catch (err) {
         if (!cancelled) setError(`Could not load conversations: ${String(err)}`);
@@ -220,7 +238,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, readActiveId, loadConversation]);
+  }, [open, readActiveId, loadConversation, resetPanelState]);
 
   const handleNewConversation = useCallback(async () => {
     setBusy(true);

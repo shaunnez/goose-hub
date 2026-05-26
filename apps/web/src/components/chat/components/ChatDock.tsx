@@ -17,6 +17,7 @@ export function ChatDock() {
       return false;
     }
   });
+  const [resetKey, setResetKey] = useState(0);
 
   useEffect(() => {
     try {
@@ -24,10 +25,20 @@ export function ChatDock() {
     } catch {}
   }, [open]);
 
+  const handleLauncherToggle = () => {
+    if (open) {
+      setResetKey((key) => key + 1);
+      setOpen(false);
+      return;
+    }
+
+    setOpen(true);
+  };
+
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} />
-      <ChatLauncher open={open} onToggle={() => setOpen((o) => !o)} />
+      <ChatPanel open={open} onClose={() => setOpen(false)} resetKey={resetKey} />
+      <ChatLauncher open={open} onToggle={handleLauncherToggle} />
     </>
   );
 }
