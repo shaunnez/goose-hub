@@ -719,6 +719,32 @@ describe('validateEngineeringSpec — repoRoot-backed checks', () => {
       }),
     );
   });
+
+  it('allows repo-root e2e paths with the package-scoped web Playwright command', () => {
+    mkdirSync(join(tmpRepo, 'apps/web/e2e/pipeline'), { recursive: true });
+    writeFileSync(join(tmpRepo, 'apps/web/e2e/pipeline/golden-feature.spec.ts'), 'export {};\n');
+    const spec = baseSpec({
+      constraints: [
+        {
+          kind: 'phase',
+          name: 'healthz endpoint',
+          source: 'apps/server/src/routes/healthz.ts:healthzHandler',
+        },
+      ],
+      verificationTooling: [
+        {
+          name: 'web e2e',
+          command:
+            'pnpm --filter @goose-hub/web exec playwright test apps/web/e2e/pipeline/golden-feature.spec.ts',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = validateEngineeringSpec(spec, { repoRoot: tmpRepo });
+
+    expect(result.ok).toBe(true);
+  });
 });
 
 // ─── TDD contract: wp-missing-test-file ──────────────────────────────────────
