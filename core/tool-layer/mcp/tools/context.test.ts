@@ -28,6 +28,14 @@ describe('getProjectContext', () => {
     expect(result.id).toBe(REAL_PROJECT_SLUG);
     expect(['interactive', 'supervised', 'autonomous']).toContain(result.mode);
     expect(Array.isArray(result.repos)).toBe(true);
+    expect(Array.isArray(result.repositories)).toBe(true);
+    for (const repo of result.repositories) {
+      expect(repo).toMatchObject({
+        repoRef: expect.any(String),
+        defaultBranch: expect.any(String),
+        selectedForWorkItem: expect.any(Boolean),
+      });
+    }
   });
 
   it('omits keys outside the visible slice (no agentConfig, budgets, etc.)', async () => {

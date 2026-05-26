@@ -146,7 +146,7 @@ describe('drizzle migrations', () => {
     expect(trackingRows).toHaveLength(1);
 
     const tableRows = sqlite
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='persona_names'")
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='work_items'")
       .all();
     expect(tableRows).toHaveLength(1);
   });

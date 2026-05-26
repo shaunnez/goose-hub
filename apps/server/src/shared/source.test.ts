@@ -66,7 +66,7 @@ describe('getSourceForSlug', () => {
     expect(result).toBeNull();
   });
 
-  it('throws when source kind is not github', async () => {
+  it('throws when source kind is unsupported', async () => {
     vi.doMock('./projects.js', () => ({
       getProject: vi.fn().mockResolvedValue({
         id: 'proj-1',
@@ -77,6 +77,28 @@ describe('getSourceForSlug', () => {
     }));
     const { getSourceForSlug } = await import('./source.js');
     await expect(getSourceForSlug('test-slug')).rejects.toThrow('Unsupported source kind');
+  });
+
+  it('returns a LocalDbStateSource for local-db projects without requiring GITHUB_TOKEN', async () => {
+    vi.doMock('./projects.js', () => ({
+      getProject: vi.fn().mockResolvedValue({
+        id: 'proj-local',
+        name: 'Local',
+        slug: 'local-project',
+        source: { kind: 'local-db', stateMachine: 'db' },
+        repos: ['org/local-repo'],
+      }),
+    }));
+    const originalToken = process.env.GITHUB_TOKEN;
+    process.env.GITHUB_TOKEN = '';
+    const { getSourceForSlug } = await import('./source.js');
+    try {
+      const source = await getSourceForSlug('local-project');
+      expect(source?.projectId).toBe('proj-local');
+      expect(source?.repoRef).toBe('org/local-repo');
+    } finally {
+      process.env.GITHUB_TOKEN = originalToken;
+    }
   });
 
   it('throws when GITHUB_TOKEN is an empty string (exercises the token guard)', async () => {

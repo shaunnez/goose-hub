@@ -1,19 +1,24 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import type { EventKind } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
+import { LocalDbWorkItemRepository } from '@goose-hub/core/state-source/local-db-repository.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
 import type { Context } from 'hono';
 import { dispatchForLabel, dispatchTriageBatch } from '#shared/dispatch.js';
 
-async function buildRepoSlugMap(): Promise<Record<string, string>> {
+type RepoProjectEntry = { slug: string; sourceKind: string; projectId: string };
+
+async function buildRepoSlugMap(): Promise<Record<string, RepoProjectEntry>> {
   const projects = await loadProjects(targetProjectsRoot);
-  const map: Record<string, string> = {};
+  const map: Record<string, RepoProjectEntry> = {};
   for (const cfg of projects) {
     for (const repo of cfg.repos ?? []) {
       if (map[repo] != null) {
         logger.warn('duplicate repo in project configs, last-wins', { repo, slug: cfg.slug });
       }
-      map[repo] = cfg.slug;
+      map[repo] = { slug: cfg.slug, sourceKind: cfg.source?.kind ?? 'github', projectId: cfg.id };
     }
   }
   return map;
@@ -67,9 +72,9 @@ export async function handleGitHubWebhook(c: Context): Promise<Response> {
 
   const repoName = payload.repository?.full_name ?? '';
   const repoToSlug = await buildRepoSlugMap();
-  const slug = repoToSlug[repoName];
+  const project = repoToSlug[repoName];
 
-  if (slug == null) {
+  if (project == null) {
     return c.json({
       ok: true,
       event: eventType,
@@ -80,8 +85,9 @@ export async function handleGitHubWebhook(c: Context): Promise<Response> {
 
   // issues.opened → run triage batch (via shared dispatcher per #207)
   if (payload.action === 'opened') {
-    void dispatchTriageBatch(slug);
-    return c.json({ ok: true, event: eventType, action: 'dispatched', slug });
+    if (project.sourceKind !== 'local-db') void dispatchTriageBatch(project.slug);
+    else appendLocalDbGithubEvent(project.projectId, repoName, payload, 'github.issue.opened');
+    return c.json({ ok: true, event: eventType, action: 'dispatched', slug: project.slug });
   }
 
   // issues.labeled with a factory:* label → route to appropriate workflow
@@ -101,11 +107,33 @@ export async function handleGitHubWebhook(c: Context): Promise<Response> {
       return c.json({ ok: true, event: eventType, action: 'labeled', status: 'no-issue-number' });
     }
 
-    dispatchForLabel(slug, issueNumber, labelName).catch((err: unknown) => {
-      logger.error('webhook dispatch failed', { slug, labelName, issueNumber, error: String(err) });
+    if (project.sourceKind === 'local-db') {
+      appendLocalDbGithubEvent(project.projectId, repoName, payload, 'github.label.changed');
+      return c.json({
+        ok: true,
+        event: eventType,
+        action: 'recorded',
+        label: labelName,
+        slug: project.slug,
+      });
+    }
+
+    dispatchForLabel(project.slug, issueNumber, labelName).catch((err: unknown) => {
+      logger.error('webhook dispatch failed', {
+        slug: project.slug,
+        labelName,
+        issueNumber,
+        error: String(err),
+      });
     });
 
-    return c.json({ ok: true, event: eventType, action: 'dispatched', label: labelName, slug });
+    return c.json({
+      ok: true,
+      event: eventType,
+      action: 'dispatched',
+      label: labelName,
+      slug: project.slug,
+    });
   }
 
   return c.json({
@@ -113,5 +141,34 @@ export async function handleGitHubWebhook(c: Context): Promise<Response> {
     event: eventType,
     action: payload.action ?? 'unknown',
     status: 'ignored',
+  });
+}
+
+function appendLocalDbGithubEvent(
+  projectId: string,
+  repoRef: string,
+  payload: WebhookPayload,
+  kind: Extract<EventKind, 'github.issue.opened' | 'github.label.changed'>,
+): void {
+  const issueNumber = payload.issue?.number;
+  if (issueNumber == null) return;
+  const item = new LocalDbWorkItemRepository().getWorkItemByExternalRef({
+    projectId,
+    provider: 'github',
+    kind: 'issue',
+    repoRef,
+    externalId: String(issueNumber),
+  });
+  eventStore.appendEvent({
+    projectId,
+    workItemId: item?.id ?? null,
+    kind,
+    payload: {
+      action: payload.action ?? null,
+      repoRef,
+      issueNumber,
+      label: payload.label?.name ?? null,
+      authority: 'external-only',
+    },
   });
 }

@@ -4,8 +4,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { Result } from '#shared/middleware.js';
-import { getSourceForSlug, isValidSlug } from '#shared/source.js';
-import { getRepoRef } from './internal.js';
+import { isValidSlug } from '#shared/source.js';
+import { resolveCanonicalWorkItemForRoute } from '#shared/work-item-resolution.js';
 
 const CODE_TAB_DIFF_EXCLUDES = ['.claude/', '.pnpm-store/', 'node_modules/'] as const;
 
@@ -53,12 +53,11 @@ export async function getIssueWorktreeDiff(
   opts?: { fetchImpl?: typeof fetch },
 ): Promise<Result<{ diff: string | null; runId: string | null; reason?: string }>> {
   const fetchImpl = opts?.fetchImpl ?? fetch;
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  const resolved = await resolveCanonicalWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
   if (!isValidSlug(slug)) return { ok: false, error: 'invalid slug', status: 400 };
 
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
+  const { canonicalWorkItemId: workItemId, repoRef } = resolved.data;
   const ascending = eventStore.replay({ projectId: slug, workItemId });
 
   // Newest-first scan for a runId on a fix-issue lifecycle event.

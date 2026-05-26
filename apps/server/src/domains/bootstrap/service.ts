@@ -26,6 +26,7 @@ import {
   inspectGithubRepo,
 } from '@goose-hub/core/bootstrap/github-repo-inspector.js';
 import { FACTORY_LABELS } from '@goose-hub/core/bootstrap/labels.js';
+import { importGitHubIssuesToLocalDb } from '@goose-hub/core/integrations/github/import-issues.js';
 import { logger } from '@goose-hub/core/logger.js';
 import {
   type BootstrapResult,
@@ -35,6 +36,7 @@ import {
   summariseStack,
 } from '@goose-hub/core/workflows/bootstrap-project.js';
 import type { Result } from '#shared/middleware.js';
+import { getProject } from '#shared/projects.js';
 
 export interface PreviewLabelDto {
   name: string;
@@ -74,6 +76,15 @@ export interface BootstrapRunDto {
   stackSummary: string;
   auditAction: 'create' | 'update' | 'ok';
   labelCounts?: { created: number; updated: number; skipped: number };
+}
+
+export interface LocalDbActivationDto {
+  slug: string;
+  reposLinked: number;
+  issuesImported: number;
+  issuesUpdated: number;
+  issuesSkipped: number;
+  mirrorLabels: boolean;
 }
 
 export interface BootstrapRequestDto {
@@ -311,6 +322,30 @@ export async function runBootstrapService(
       stackSummary: result.stackSummary,
       auditAction: result.auditAction,
       labelCounts: result.labelCounts,
+    },
+  };
+}
+
+export async function activateLocalDbProject(slug: string): Promise<Result<LocalDbActivationDto>> {
+  const cfg = await getProject(slug);
+  if (cfg == null) return { ok: false, error: 'project not found', status: 404 };
+  if (cfg.source.kind !== 'local-db') {
+    return { ok: false, error: 'project source is not local-db', status: 400 };
+  }
+  const token = getGithubToken() ?? undefined;
+  const imported = await importGitHubIssuesToLocalDb({
+    projectConfig: cfg,
+    token,
+  });
+  return {
+    ok: true,
+    data: {
+      slug,
+      reposLinked: imported.repoRefs.length,
+      issuesImported: imported.imported,
+      issuesUpdated: imported.updated,
+      issuesSkipped: imported.skipped,
+      mirrorLabels: cfg.source.integrations?.github?.mirrorLabels === true,
     },
   };
 }

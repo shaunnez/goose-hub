@@ -290,7 +290,7 @@ export interface PostIssueCommentResult {
 
 /**
  * Posts a comment to the run's work item (or an explicit issue number).
- * Workflow-owned. Wraps `GitHubLabelsSource.comment()`.
+ * Workflow-owned. Routes through the configured StateSource.
  */
 export async function postIssueCommentTool(
   ctx: FactoryContext,
@@ -317,7 +317,7 @@ export interface TransitionStateResult {
 /**
  * Transitions the work item from its current state to `to`. Reads the
  * current state first to satisfy the legal-transition check inside
- * `GitHubLabelsSource.transitionState()`. Workflow-owned.
+ * the configured StateSource. Workflow-owned.
  */
 export async function transitionStateTool(
   ctx: FactoryContext,
