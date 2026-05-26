@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { bootstrapProject } from '@goose-hub/core/workflows/bootstrap-project.js';
 import { bootstrapCommand } from './bootstrap-command.js';
 import { runAgentCommand } from './commands/agent.js';
+import { issueRestartCommand } from './commands/issue-restart.js';
 import { playbookCommand } from './commands/playbook.js';
 import { skillCommand } from './commands/skill.js';
 import { statusCommand } from './commands/status.js';
@@ -27,6 +28,16 @@ switch (command) {
     } else {
       console.error(
         'Usage: goose task move <project-slug> <issue-id> --to=current [--with-dependencies | --ignore-dependencies]',
+      );
+      process.exit(1);
+    }
+    break;
+  case 'issue':
+    if (args[0] === 'restart') {
+      await issueRestartCommand(args.slice(1));
+    } else {
+      console.error(
+        'Usage: goose issue restart <project-slug> <issue-id> [--state=factory:triaging] [--schedule=current|next|later|blocked-by] [--yes]',
       );
       process.exit(1);
     }
@@ -62,6 +73,9 @@ switch (command) {
     );
     console.error(
       '  task move <project-slug> <issue-id> --to=current [--with-dependencies | --ignore-dependencies]',
+    );
+    console.error(
+      '  issue restart <project-slug> <issue-id> [--state=factory:triaging] [--schedule=current|next|later|blocked-by] [--yes]',
     );
     console.error('  playbook export|import <project-slug> [--json]');
     console.error('  skill triggers <skill-name> [--json]');
