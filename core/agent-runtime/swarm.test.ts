@@ -928,6 +928,54 @@ describe('swarm.dispatchWave', () => {
     });
   });
 
+  it('does not load seed evidence from path-policy denied workspace internals', async () => {
+    const { fn: appendEvent } = makeFakeAppendEvent();
+    const worktreePath = await makeSeedWorktree();
+    await mkdir(join(worktreePath, '.factory'), { recursive: true });
+    await writeFile(join(worktreePath, '.factory/mcp-config.json'), '{"secret":true}', 'utf8');
+    const seenSpecs: AgentSpec[] = [];
+    const runtime = makeRuntime({
+      'scout-schema': (spec) => {
+        seenSpecs.push(spec);
+        return Promise.resolve(
+          emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/list failed')]),
+        );
+      },
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-seed-denylist',
+      scoutSpecs: [
+        {
+          ...makeScoutSpec('scout-schema'),
+          extraContext: {
+            investigationSeed: {
+              ...makeInvestigationSeed(),
+              candidateFiles: [{ path: '.factory/mcp-config.json', root: 'worktree' }],
+            },
+          },
+        },
+      ],
+      workItem: makeWorkItem(),
+      worktreePath,
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(seenSpecs).toHaveLength(1);
+    expect(result.reports[0]).toMatchObject({
+      status: 'error',
+      outcome: 'failed',
+      errorReason:
+        'scout returned no findings and made no successful Factory read/search/file tool calls',
+    });
+  });
+
   it('does not halt a wave when seeded retry evidence leaves only one no-evidence scout', async () => {
     const { fn: appendEvent } = makeFakeAppendEvent();
     const worktreePath = await makeSeedWorktree();

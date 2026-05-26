@@ -1,6 +1,6 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
+import { open } from 'node:fs/promises';
 import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
+import { resolveWorkspacePath } from '../tool-layer/mcp/path-policy.js';
 import type { ResolvedBudget, SkillBudgetOverride } from './budgets.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
@@ -314,79 +314,77 @@ export async function runOneScout(
     });
   }
 
-  const seedEvidence = await readSeedEvidenceSnippets(ctx.worktreePath, fullContext);
-  if (
-    findings.length === 0 &&
-    !hasSuccessfulFactoryEvidenceCall(result.events) &&
-    seedEvidence.length > 0
-  ) {
-    const retryTimeoutMs = remainingTimeoutMs(start, budgets.timeoutMs);
-    if (retryTimeoutMs <= 0) {
-      timedOut = true;
-    } else if (runtime != null) {
-      const retrySpec = buildEvidenceRetrySpec(spawnSpec, seedEvidence, retryTimeoutMs);
-      assembleSpawnContext(retrySpec);
-      try {
-        const retryResult = await runtime.run(retrySpec);
-        const retryParsed = safeParseOutputForSchema(ScoutOutputSchema, retryResult.output);
-        if (!retryParsed.success) {
-          const reason = `scout output failed schema validation: ${retryParsed.error.issues
-            .map((i) => `${i.path.join('.')}: ${i.message}`)
-            .join('; ')}`;
-          append({
-            projectId: ctx.projectId,
-            workItemId: ctx.workItemId ?? null,
-            kind: 'swarm.scout-failed',
-            payload: { runId, scoutName: spec.scoutName, errorReason: reason },
-            runId,
-          });
-          return {
-            scoutName: spec.scoutName,
-            status: 'error',
-            outcome: 'failed',
-            findings: [],
-            decisionSummaries:
+  if (findings.length === 0 && !hasSuccessfulFactoryEvidenceCall(result.events)) {
+    const seedEvidence = await readSeedEvidenceSnippets(ctx.worktreePath, fullContext);
+    if (seedEvidence.length > 0) {
+      const retryTimeoutMs = remainingTimeoutMs(start, budgets.timeoutMs);
+      if (retryTimeoutMs <= 0) {
+        timedOut = true;
+      } else if (runtime != null) {
+        const retrySpec = buildEvidenceRetrySpec(spawnSpec, seedEvidence, retryTimeoutMs);
+        assembleSpawnContext(retrySpec);
+        try {
+          const retryResult = await runtime.run(retrySpec);
+          const retryParsed = safeParseOutputForSchema(ScoutOutputSchema, retryResult.output);
+          if (!retryParsed.success) {
+            const reason = `scout output failed schema validation: ${retryParsed.error.issues
+              .map((i) => `${i.path.join('.')}: ${i.message}`)
+              .join('; ')}`;
+            append({
+              projectId: ctx.projectId,
+              workItemId: ctx.workItemId ?? null,
+              kind: 'swarm.scout-failed',
+              payload: { runId, scoutName: spec.scoutName, errorReason: reason },
+              runId,
+            });
+            return {
+              scoutName: spec.scoutName,
+              status: 'error',
+              outcome: 'failed',
+              findings: [],
+              decisionSummaries:
+                retryResult.decisionSummaries.length > 0
+                  ? retryResult.decisionSummaries
+                  : decisionSummaries,
+              errorReason: reason,
+              runId,
+            };
+          }
+          const retryOutput = normalizeScoutOutput(retryParsed.data);
+          const retryFindings = retryOutput.findings;
+          if (retryOutput.status === 'skipped') {
+            return emitSkippedScout({
+              append,
+              ctx,
+              runId: retrySpec.runId,
+              scoutName: spec.scoutName,
+              findings: retryFindings,
+              decisionSummaries:
+                retryResult.decisionSummaries.length > 0
+                  ? retryResult.decisionSummaries
+                  : retryOutput.decisionSummaries,
+            });
+          }
+          if (
+            retryFindings.length > 0 ||
+            hasSuccessfulFactoryEvidenceCall(retryResult.events) ||
+            retryOutput.status === 'ok'
+          ) {
+            result = retryResult;
+            findings = retryFindings;
+            evidenceBackedEmptyResult = retryFindings.length === 0 && retryOutput.status === 'ok';
+            effectiveRunId = retrySpec.runId;
+            decisionSummaries =
               retryResult.decisionSummaries.length > 0
                 ? retryResult.decisionSummaries
-                : decisionSummaries,
-            errorReason: reason,
-            runId,
-          };
-        }
-        const retryOutput = normalizeScoutOutput(retryParsed.data);
-        const retryFindings = retryOutput.findings;
-        if (retryOutput.status === 'skipped') {
-          return emitSkippedScout({
-            append,
-            ctx,
-            runId: retrySpec.runId,
-            scoutName: spec.scoutName,
-            findings: retryFindings,
-            decisionSummaries:
-              retryResult.decisionSummaries.length > 0
-                ? retryResult.decisionSummaries
-                : retryOutput.decisionSummaries,
-          });
-        }
-        if (
-          retryFindings.length > 0 ||
-          hasSuccessfulFactoryEvidenceCall(retryResult.events) ||
-          retryOutput.status === 'ok'
-        ) {
-          result = retryResult;
-          findings = retryFindings;
-          evidenceBackedEmptyResult = retryFindings.length === 0 && retryOutput.status === 'ok';
-          effectiveRunId = retrySpec.runId;
-          decisionSummaries =
-            retryResult.decisionSummaries.length > 0
-              ? retryResult.decisionSummaries
-              : retryOutput.decisionSummaries;
-        }
-      } catch (err) {
-        if (isTimeoutError(err, retryTimeoutMs)) {
-          timedOut = true;
-        } else {
-          errorReason = err instanceof Error ? err.message : String(err);
+                : retryOutput.decisionSummaries;
+          }
+        } catch (err) {
+          if (isTimeoutError(err, retryTimeoutMs)) {
+            timedOut = true;
+          } else {
+            errorReason = err instanceof Error ? err.message : String(err);
+          }
         }
       }
     }
@@ -544,25 +542,37 @@ async function readBoundedSeedFile(
   worktreePath: string,
   filePath: string,
 ): Promise<SeedEvidenceSnippet | null> {
-  if (path.isAbsolute(filePath)) return null;
-  const root = path.resolve(worktreePath);
-  const absolutePath = path.resolve(root, filePath);
-  const relativePath = path.relative(root, absolutePath);
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) return null;
-
+  const resolved = (() => {
+    try {
+      return resolveWorkspacePath(worktreePath, filePath);
+    } catch {
+      return null;
+    }
+  })();
+  if (resolved == null) return null;
   try {
-    const raw = await readFile(absolutePath, 'utf8');
+    const handle = await open(resolved.absolute, 'r');
+    let raw = '';
+    let bytesRead = 0;
+    try {
+      const buffer = Buffer.alloc(16_384);
+      const readResult = await handle.read(buffer, 0, buffer.length, 0);
+      bytesRead = readResult.bytesRead;
+      raw = buffer.subarray(0, bytesRead).toString('utf8');
+    } finally {
+      await handle.close();
+    }
     const lines = raw.split(/\r?\n/);
     const selectedLines = lines.slice(0, 80);
     let text = selectedLines.join('\n');
-    let truncated = lines.length > selectedLines.length;
+    let truncated = lines.length > selectedLines.length || bytesRead === 16_384;
     if (text.length > 8_000) {
       text = text.slice(0, 8_000);
       truncated = true;
     }
     if (text.trim().length === 0) return null;
     return {
-      file: relativePath,
+      file: resolved.canonical.path,
       startLine: 1,
       endLine: selectedLines.length,
       text,
