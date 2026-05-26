@@ -1482,6 +1482,107 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     ).toBe(true);
   });
 
+  it('collapses lazy bug-enhance into its parent investigation section', () => {
+    const investigationRunId = 'investigate-run';
+    const bugEnhanceRunId = `${investigationRunId}:bug-enhance`;
+
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', investigationRunId, {
+        payload: { skill: 'investigate' },
+      }),
+      makeEvent(2, 'agent.run-started', bugEnhanceRunId, {
+        payload: {
+          skill: 'bug-enhance',
+          parentRunId: investigationRunId,
+          investigationRunId,
+        },
+      }),
+      makeEvent(3, 'agent.tool-call', bugEnhanceRunId, {
+        payload: { tool_name: 'read_file' },
+      }),
+      makeEvent(4, 'agent.run-completed', bugEnhanceRunId, {
+        payload: { skill: 'bug-enhance' },
+      }),
+      makeEvent(5, 'agent.bug-enhance-lazy', investigationRunId, {
+        payload: { producedSeed: true, candidateFileCount: 1 },
+      }),
+      makeEvent(6, 'agent.investigation-complete', investigationRunId),
+    ]);
+
+    const investigationSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'investigation',
+    );
+
+    expect(investigationSections).toHaveLength(1);
+    expect(investigationSections[0].items.some((item) => item.kind === 'investigation-phase')).toBe(
+      false,
+    );
+    expect(
+      investigationSections[0].items.some(
+        (item) => item.kind === 'run-group' && item.runId === investigationRunId,
+      ),
+    ).toBe(true);
+    expect(
+      investigationSections[0].items.some(
+        (item) => item.kind === 'run-group' && item.runId === bugEnhanceRunId,
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps lazy bug-enhance attached to the correct investigation when there are multiple runs', () => {
+    const firstInvestigation = 'investigate-first';
+    const secondInvestigation = 'investigate-second';
+
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', firstInvestigation, {
+        payload: { skill: 'investigate' },
+      }),
+      makeEvent(2, 'agent.run-started', `${firstInvestigation}:bug-enhance`, {
+        payload: { skill: 'bug-enhance', parentRunId: firstInvestigation },
+      }),
+      makeEvent(3, 'agent.run-completed', `${firstInvestigation}:bug-enhance`),
+      makeEvent(4, 'agent.investigation-complete', firstInvestigation),
+      makeEvent(5, 'agent.run-started', secondInvestigation, {
+        payload: { skill: 'investigate' },
+      }),
+      makeEvent(6, 'agent.run-started', `${secondInvestigation}:bug-enhance`, {
+        payload: { skill: 'bug-enhance', parentRunId: secondInvestigation },
+      }),
+      makeEvent(7, 'agent.run-completed', `${secondInvestigation}:bug-enhance`),
+      makeEvent(8, 'agent.investigation-complete', secondInvestigation),
+    ]);
+
+    const investigationSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'investigation',
+    );
+
+    expect(investigationSections).toHaveLength(2);
+    const firstSection = investigationSections.find((section) =>
+      section.items.some((item) => item.kind === 'run-group' && item.runId === firstInvestigation),
+    );
+    const secondSection = investigationSections.find((section) =>
+      section.items.some((item) => item.kind === 'run-group' && item.runId === secondInvestigation),
+    );
+
+    expect(
+      firstSection?.items.some(
+        (item) => item.kind === 'run-group' && item.runId === `${firstInvestigation}:bug-enhance`,
+      ),
+    ).toBe(true);
+    expect(
+      secondSection?.items.some(
+        (item) => item.kind === 'run-group' && item.runId === `${secondInvestigation}:bug-enhance`,
+      ),
+    ).toBe(true);
+    expect(
+      firstSection?.items.some(
+        (item) => item.kind === 'run-group' && item.runId === `${secondInvestigation}:bug-enhance`,
+      ),
+    ).toBe(false);
+  });
+
   it('keeps section cost attribution limited to runs inside that section', () => {
     const items = groupTimelineEventsByCanonicalSection([
       makeEvent(1, 'agent.run-started', 'run-grill-cost', { payload: { skill: 'grill-me' } }),

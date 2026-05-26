@@ -1610,6 +1610,7 @@ describe('runInvestigateWorkflow', () => {
           title: workItem.title,
           body: workItem.body,
           workspaceDir: '/tmp/test-worktree',
+          parentRunId: expect.any(String),
         }),
       );
       expect(mockPersistGroundedSeed).toHaveBeenCalledWith(

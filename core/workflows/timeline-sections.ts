@@ -406,6 +406,7 @@ function timelineSectionFromHistoricalRunId(
 ): TimelineSectionId | null {
   if (runId == null) return null;
   if (runId.includes(':scout:')) return 'investigation';
+  if (runId.includes(':bug-enhance')) return 'investigation';
   if (runId.endsWith(':grill-me')) return 'grill';
   if (runId.endsWith(':write-prd') || runId.endsWith(':advise-on-prd')) return 'prd';
   if (runId.endsWith(':decompose-issues')) return 'decompose';

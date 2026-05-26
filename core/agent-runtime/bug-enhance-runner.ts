@@ -38,6 +38,8 @@ export interface RunBugEnhanceInput {
   body: string;
   /** Optional working directory for tool execution (e.g. worktree path). */
   workspaceDir?: string;
+  /** Parent investigation run when bug-enhance runs lazily inside investigation. */
+  parentRunId?: string;
 }
 
 /**
@@ -61,7 +63,9 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
     model: bugEnhanceRuntime.modelOverride,
     skillProvider: bugEnhanceRuntime.provider,
   });
-  const runId = crypto.randomUUID();
+  const parentRunId = input.parentRunId?.trim();
+  const runId =
+    parentRunId != null && parentRunId !== '' ? `${parentRunId}:bug-enhance` : crypto.randomUUID();
   const { personaId } = selectPersona(input.projectId, 'triager');
 
   let prompt: string;
@@ -96,6 +100,14 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
       personaId,
       outputJsonSchema: jsonSchema,
       appendSystemPrompt,
+      ...(parentRunId != null && parentRunId !== ''
+        ? {
+            extraEventPayload: {
+              parentRunId,
+              investigationRunId: parentRunId,
+            },
+          }
+        : {}),
     });
 
     const parsed = safeParseOutputForSchema(BugEnhanceOutputSchema, result.output);

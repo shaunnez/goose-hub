@@ -425,8 +425,11 @@ function timelineSegmentExplicitKey(
 
 function getInvestigationRunIdFromRunId(runId: string | null): string | null {
   if (runId == null) return null;
-  const markerIndex = runId.indexOf(':scout:');
-  return markerIndex > 0 ? runId.slice(0, markerIndex) : null;
+  for (const marker of [':scout:', ':bug-enhance']) {
+    const markerIndex = runId.indexOf(marker);
+    if (markerIndex > 0) return runId.slice(0, markerIndex);
+  }
+  return null;
 }
 
 function getPipelineRunIdFromRunId(runId: string | null): string | null {

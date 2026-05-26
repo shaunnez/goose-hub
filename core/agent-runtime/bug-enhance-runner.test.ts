@@ -114,6 +114,20 @@ describe('runBugEnhance — path-existence pruning', () => {
     expect(result.groundedHints?.candidateFiles[0].path).toBe('real.ts');
   });
 
+  it('uses a parent investigation child run id when provided', async () => {
+    await runBugEnhance({ ...BASE_INPUT, parentRunId: 'investigate-parent' });
+
+    expect(mockRunFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'investigate-parent:bug-enhance',
+        extraEventPayload: {
+          parentRunId: 'investigate-parent',
+          investigationRunId: 'investigate-parent',
+        },
+      }),
+    );
+  });
+
   it('emits agent.bug-enhance-hallucinated and returns null when all candidateFiles pruned', async () => {
     mockRunFn.mockResolvedValue(makeAgentResult(makeHints(['fake.ts', 'also-fake.ts'])));
 

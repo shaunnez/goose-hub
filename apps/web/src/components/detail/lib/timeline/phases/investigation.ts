@@ -10,10 +10,11 @@ function getRenderItemRunId(item: RenderItem): string | null {
 function getInvestigationChildParentRunId(item: RenderItem): string | null {
   const runId = getRenderItemRunId(item);
   if (runId == null) return null;
-  const marker = ':scout:';
-  const markerIndex = runId.indexOf(marker);
-  if (markerIndex <= 0) return null;
-  return runId.slice(0, markerIndex);
+  for (const marker of [':scout:', ':bug-enhance']) {
+    const markerIndex = runId.indexOf(marker);
+    if (markerIndex > 0) return runId.slice(0, markerIndex);
+  }
+  return null;
 }
 
 function getInvestigationPayloadParentRunIds(item: RenderItem): string[] {
