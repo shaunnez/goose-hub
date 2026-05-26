@@ -14,8 +14,9 @@ import {
 import type { Result } from '#shared/middleware.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
+import { resolveWorkItemForRoute } from '#shared/work-item-resolution.js';
 import type { LegalTargetsDto } from '../interventions/dto.js';
-import { getLastPersonaIdsByWorkItem, getRepoRef } from './internal.js';
+import { getLastPersonaIdsByWorkItem } from './internal.js';
 
 type RawObject = Record<string, unknown>;
 
@@ -345,10 +346,9 @@ export async function getIssueSpec(
     } | null;
   }>
 > {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const workItemId = resolved.data.canonicalWorkItemId;
   const record = getEngineeringSpec(slug, workItemId);
   if (record == null) return { ok: true, data: { spec: null } };
   return {
@@ -392,10 +392,9 @@ export async function getIssuePrd(
     } | null;
   }>
 > {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const workItemId = resolved.data.canonicalWorkItemId;
   const prd = await resolveLatestPrd({
     projectId: slug,
     workItemId,
@@ -459,10 +458,9 @@ export async function getIssueEvents(
   id: string,
   opts?: { limit?: number; before?: number; after?: number },
 ): Promise<Result<{ events: unknown[]; hasMore: boolean }>> {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const workItemId = resolved.data.canonicalWorkItemId;
 
   if (opts?.limit != null) {
     const fetched = fetchVisibleIssueTimelineEvents({
@@ -541,10 +539,9 @@ export async function getIssueComments(
   slug: string,
   id: string,
 ): Promise<Result<{ comments: unknown[] }>> {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { source, canonicalWorkItemId: workItemId } = resolved.data;
   const comments = await source.listComments(workItemId);
   return { ok: true, data: { comments } };
 }
@@ -555,10 +552,9 @@ export async function commentOnIssue(
   body: string | undefined,
 ): Promise<Result<{ ok: true }>> {
   if (!body?.trim()) return { ok: false, error: 'body is required', status: 400 };
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { source, canonicalWorkItemId: workItemId } = resolved.data;
   await source.comment(workItemId, body.trim());
   eventStore.appendEvent({
     projectId: slug,
@@ -574,10 +570,9 @@ export async function setIssueMilestone(
   id: string,
   milestoneNumber: number | null,
 ): Promise<Result<{ ok: true }>> {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { source, canonicalWorkItemId: workItemId } = resolved.data;
   await source.setMilestone(workItemId, milestoneNumber);
   eventStore.appendEvent({
     projectId: slug,
@@ -615,10 +610,9 @@ export async function setIssueLabel(
   if (group === 'type' && !VALID_TYPE.includes(value as never)) {
     return { ok: false, error: 'invalid type', status: 400 };
   }
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { source, canonicalWorkItemId: workItemId } = resolved.data;
   // Translate UI-facing schedule synonyms (`backlog`/`icebox`) to the canonical
   // label values (`next`/`later`) before the data layer sees them. Without
   // this, the in-memory source silently no-ops and GitHub gets an invalid

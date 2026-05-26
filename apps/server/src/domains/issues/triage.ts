@@ -4,6 +4,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
+import { resolveWorkItemForRoute } from '#shared/work-item-resolution.js';
 
 interface TriageEventPayload {
   triage: { type: string; priority: string };
@@ -39,10 +40,10 @@ export async function getIssueTriage(
   slug: string,
   id: string,
 ): Promise<Result<{ triage: unknown }>> {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const workItemId = `github:${source.repoRef}#${id}`;
-  const projectId = source.projectId;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { canonicalWorkItemId: workItemId } = resolved.data;
+  const projectId = resolved.data.source.projectId;
 
   const allEvents = eventStore.replay({ projectId, workItemId });
   const triageEvent = allEvents.filter((e) => e.kind === 'agent.triage-complete').at(-1);
@@ -67,8 +68,9 @@ export async function overrideIssueRepo(
   if (typeof repo !== 'string') return { ok: false, error: 'repo is required', status: 400 };
   if (!isValidSlug(slug)) return { ok: false, error: 'invalid slug', status: 400 };
 
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  if ((await getSourceForSlug(slug)) == null) {
+    return { ok: false, error: 'project not found', status: 404 };
+  }
 
   const reposMdPath = join(targetProjectsRoot, slug, 'repos.md');
   const reposMd = readFileSync(reposMdPath, 'utf8');
@@ -81,8 +83,10 @@ export async function overrideIssueRepo(
     return { ok: false, error: `repo '${repo}' not in allowlist`, status: 400 };
   }
 
-  const workItemId = `github:${source.repoRef}#${id}`;
-  const projectId = source.projectId;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { canonicalWorkItemId: workItemId } = resolved.data;
+  const projectId = resolved.data.source.projectId;
 
   eventStore.appendEvent({ projectId, workItemId, kind: 'agent.repo-override', payload: { repo } });
 

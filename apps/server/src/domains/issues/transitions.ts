@@ -7,6 +7,7 @@ import {
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { transitionAndEmitState } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { upsertGithubExternalRef } from '@goose-hub/core/integrations/github/external-refs.js';
 import { validateInterventionAction } from '@goose-hub/core/interventions/actions.js';
 import {
   decide,
@@ -30,8 +31,7 @@ import { CACHE_KEY, bustCache } from '#shared/cache.js';
 import { dispatchRetro } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { sliceUrl } from '#shared/slice-url.js';
-import { getSourceForSlug } from '#shared/source.js';
-import { getRepoRef } from './internal.js';
+import { resolveWorkItemForRoute } from '#shared/work-item-resolution.js';
 
 // Slice imports cross the package boundary (FACTORY_RULES rule 28a — slices/
 // is not a workspace package). Use dynamic import via import.meta.url so the
@@ -121,10 +121,9 @@ export async function approveIssue(
     intervention?: { id: string; correlationId: string };
   } = {},
 ): Promise<Result<{ ok: true; sha: string; prNumber: number }>> {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { source, canonicalWorkItemId: workItemId, repoRef } = resolved.data;
 
   // Find the most recent pr.opened event for this issue.
   const events = eventStore.replay({ projectId: slug, workItemId });
@@ -284,6 +283,15 @@ export async function approveIssue(
     kind: 'pr.merged',
     payload: { prNumber, sha: merged.sha, ...interventionEventPayload(options.intervention) },
   });
+  if (workItemId.startsWith('local:')) {
+    upsertGithubExternalRef({
+      projectId: slug,
+      workItemId,
+      kind: 'commit',
+      repoRef,
+      externalId: merged.sha,
+    });
+  }
 
   // Clean up the dev worktree now that the PR is merged.
   const allEvents = eventStore.replay({ workItemId });
@@ -299,7 +307,7 @@ export async function approveIssue(
   await transitionAndEmitState({
     mode: 'legal',
     source,
-    itemId: id,
+    itemId: workItemId,
     projectId: slug,
     workItemId,
     from: 'factory:approved',
@@ -308,7 +316,7 @@ export async function approveIssue(
     extraPayload: interventionEventPayload(options.intervention),
   });
   await source.comment(
-    id,
+    workItemId,
     buildAgentComment('Gate', 'Approved', `PR #${prNumber} merged via Goose Hub UI`, [
       `SHA: ${merged.sha}`,
     ]),
@@ -340,10 +348,9 @@ export async function rejectIssue(
   if (typeof reason !== 'string' || reason.trim().length === 0) {
     return { ok: false, error: 'rejection reason is required', status: 400 };
   }
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { source, canonicalWorkItemId: workItemId } = resolved.data;
 
   eventStore.appendEvent({
     projectId: slug,
@@ -352,13 +359,13 @@ export async function rejectIssue(
     payload: { source: 'ui', reason, ...interventionEventPayload(options.intervention) },
   });
   await source.comment(
-    id,
+    workItemId,
     buildAgentComment('Gate', 'Rejected', 'Rejected at approval gate', [`Reason: ${reason}`]),
   );
   await transitionAndEmitState({
     mode: 'legal',
     source,
-    itemId: id,
+    itemId: workItemId,
     projectId: slug,
     workItemId,
     from: 'factory:approved',
@@ -409,10 +416,9 @@ export async function transitionIssue(
     };
   }
 
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-
-  const workItemId = `github:${source.repoRef}#${id}`;
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { source, canonicalWorkItemId: workItemId } = resolved.data;
   const discoverSessionId =
     fromState === 'factory:gate-pending' && toState === 'factory:grilling'
       ? activeDiscoverSessionId(slug, workItemId)

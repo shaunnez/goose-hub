@@ -98,7 +98,19 @@ import {
   transitionIssue,
 } from './service.js';
 
-const mockSource = {
+type MockSource = {
+  repoRef: string;
+  projectId: string;
+  transitionState: ReturnType<typeof vi.fn>;
+  comment: ReturnType<typeof vi.fn>;
+  setMilestone: ReturnType<typeof vi.fn>;
+  setLabelInGroup: ReturnType<typeof vi.fn>;
+  listOpenWork: ReturnType<typeof vi.fn>;
+  getItem: ReturnType<typeof vi.fn>;
+  listComments: ReturnType<typeof vi.fn>;
+};
+
+const mockSource: MockSource = {
   repoRef: 'owner/repo',
   projectId: 'test-proj',
   transitionState: vi.fn().mockResolvedValue(undefined),
@@ -106,7 +118,21 @@ const mockSource = {
   setMilestone: vi.fn().mockResolvedValue(undefined),
   setLabelInGroup: vi.fn().mockResolvedValue(undefined),
   listOpenWork: vi.fn().mockResolvedValue([]),
-  getItem: vi.fn().mockResolvedValue({ id: 'github:owner/repo#1' }),
+  getItem: vi.fn(async (itemId: string) => ({
+    id: `github:owner/repo#${itemId}`,
+    externalId: itemId,
+    repoRef: 'owner/repo',
+    title: 'Issue',
+    body: '',
+    type: 'feature',
+    priority: 'medium',
+    mode: 'supervised',
+    state: 'factory:triaging',
+    schedule: 'current',
+    exec: 'serial',
+    dependsOn: [],
+    blocks: [],
+  })),
   listComments: vi.fn().mockResolvedValue([]),
 };
 
@@ -292,6 +318,21 @@ describe('getIssueSpec', () => {
     ]);
     expect(result.data.spec?.acceptanceCriteriaCount).toBe(2);
     expect(result.data.spec).not.toHaveProperty('decisionSummaries');
+  });
+
+  it('looks up Engineering Spec rows with local-db canonical work item ids', async () => {
+    mockSource.getItem.mockResolvedValueOnce({
+      id: 'wi_local_42',
+      externalId: '42',
+      repoRef: 'owner/repo',
+      state: 'factory:triaging',
+      type: 'feature',
+    });
+
+    const result = await getIssueSpec('test-proj', '42');
+
+    expect(result.ok).toBe(true);
+    expect(getEngineeringSpec).toHaveBeenCalledWith('test-proj', 'wi_local_42');
   });
 });
 
@@ -517,6 +558,24 @@ describe('commentOnIssue — validation', () => {
       expect.objectContaining({ kind: 'manual.action' }),
     );
   });
+
+  it('posts comments against local-db canonical work item ids', async () => {
+    mockSource.getItem.mockResolvedValueOnce({
+      id: 'wi_local_1',
+      externalId: '1',
+      repoRef: 'owner/repo',
+      state: 'factory:triaging',
+      type: 'feature',
+    });
+
+    const result = await commentOnIssue('proj', '1', 'Local comment');
+
+    expect(result.ok).toBe(true);
+    expect(mockSource.comment).toHaveBeenCalledWith('wi_local_1', 'Local comment');
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ workItemId: 'wi_local_1' }),
+    );
+  });
 });
 
 describe('setIssueLabel — validation', () => {
@@ -589,6 +648,21 @@ describe('setIssueLabel — validation', () => {
       'schedule',
       'later',
     );
+  });
+
+  it('writes grouped labels against local-db canonical work item ids', async () => {
+    mockSource.getItem.mockResolvedValueOnce({
+      id: 'wi_local_1',
+      externalId: '1',
+      repoRef: 'owner/repo',
+      state: 'factory:triaging',
+      type: 'feature',
+    });
+
+    const result = await setIssueLabel('proj', '1', 'priority', 'high');
+
+    expect(result.ok).toBe(true);
+    expect(mockSource.setLabelInGroup).toHaveBeenCalledWith('wi_local_1', 'priority', 'high');
   });
 });
 
@@ -874,11 +948,11 @@ describe('approveIssue / rejectIssue (#186)', () => {
     const result = await rejectIssue('proj', '1', 'tests are flaky');
     expect(result).toMatchObject({ ok: true });
     expect(mockSource.comment).toHaveBeenCalledWith(
-      '1',
+      'github:owner/repo#1',
       expect.stringContaining('tests are flaky'),
     );
     expect(mockSource.transitionState).toHaveBeenCalledWith(
-      '1',
+      'github:owner/repo#1',
       'factory:approved',
       'factory:needs-fix',
     );
@@ -939,7 +1013,7 @@ describe('approveIssue / rejectIssue (#186)', () => {
       expect.objectContaining({ repo: 'owner/repo', prNumber: 99 }),
     );
     expect(mockSource.transitionState).toHaveBeenCalledWith(
-      '1',
+      'github:owner/repo#1',
       'factory:approved',
       'factory:retrospecting',
     );
@@ -1104,6 +1178,26 @@ describe('getIssueEvents', () => {
       expect(events[0].id).toBe(2);
       expect(events[1].id).toBe(1);
     }
+  });
+
+  it('queries timeline events with local-db canonical work item ids', async () => {
+    mockSource.getItem.mockResolvedValueOnce({
+      id: 'wi_local_1',
+      externalId: '1',
+      repoRef: 'owner/repo',
+      state: 'factory:triaging',
+      type: 'feature',
+    });
+    vi.mocked(eventStore.replay).mockReturnValueOnce([]);
+
+    const { getIssueEvents } = await import('./service.js');
+    const result = await getIssueEvents('proj', '1');
+
+    expect(result.ok).toBe(true);
+    expect(eventStore.replay).toHaveBeenCalledWith({
+      projectId: 'proj',
+      workItemId: 'wi_local_1',
+    });
   });
 
   it('excludes historical Hub Chat events from issue timelines', async () => {
@@ -1354,6 +1448,24 @@ describe('getIssueComments', () => {
       expect(result.data.comments).toEqual(comments);
     }
   });
+
+  it('lists comments by local-db canonical work item id', async () => {
+    mockSource.getItem.mockResolvedValueOnce({
+      id: 'wi_local_1',
+      externalId: '1',
+      repoRef: 'owner/repo',
+      state: 'factory:triaging',
+      type: 'feature',
+    });
+    const comments = [{ id: 1, body: 'hello' }];
+    mockSource.listComments.mockResolvedValueOnce(comments);
+
+    const { getIssueComments } = await import('./service.js');
+    const result = await getIssueComments('proj', '1');
+
+    expect(result.ok).toBe(true);
+    expect(mockSource.listComments).toHaveBeenCalledWith('wi_local_1');
+  });
 });
 
 describe('getIssueTriage', () => {
@@ -1452,6 +1564,22 @@ describe('setIssueMilestone', () => {
     expect(eventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'manual.action' }),
     );
+  });
+
+  it('sets milestone using local-db canonical work item ids', async () => {
+    mockSource.getItem.mockResolvedValueOnce({
+      id: 'wi_local_1',
+      externalId: '1',
+      repoRef: 'owner/repo',
+      state: 'factory:triaging',
+      type: 'feature',
+    });
+
+    const { setIssueMilestone } = await import('./service.js');
+    const result = await setIssueMilestone('proj', '1', 3);
+
+    expect(result.ok).toBe(true);
+    expect(mockSource.setMilestone).toHaveBeenCalledWith('wi_local_1', 3);
   });
 
   it('can set milestone to null to clear it', async () => {

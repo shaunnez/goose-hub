@@ -3,7 +3,8 @@ import { listCostsForWorkItem } from '@goose-hub/core/cost/repository.js';
 import type { CostLabel, Stage } from '@goose-hub/core/cost/types.js';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getIssueWorktreeDiff } from '../domains/issues/diff.js';
-import { getSourceForSlug, isValidSlug } from './source.js';
+import { isValidSlug } from './source.js';
+import { resolveWorkItemForRoute } from './work-item-resolution.js';
 
 export const WORK_ITEM_SNAPSHOT_SECTIONS = [
   'issue',
@@ -78,11 +79,10 @@ export async function canonicalizeWorkItemId(
   workItemIdOrNumber: string | number,
 ): Promise<string> {
   if (!isValidSlug(projectSlug)) throw new Error(`invalid project slug '${projectSlug}'`);
-  const source = await getSourceForSlug(projectSlug);
-  if (source == null) throw new Error(`project not found: ${projectSlug}`);
   const issueNumber = issueNumberFromWorkItemId(workItemIdOrNumber);
-  const item = (await source.getItem(issueNumber)) as WorkItemLike;
-  return item.id || `github:${source.repoRef}#${issueNumber}`;
+  const resolved = await resolveWorkItemForRoute(projectSlug, issueNumber);
+  if (!resolved.ok) throw new Error(`project not found: ${projectSlug}`);
+  return resolved.data.canonicalWorkItemId;
 }
 
 export async function getWorkItemSnapshot(
@@ -91,13 +91,12 @@ export async function getWorkItemSnapshot(
   options: WorkItemSnapshotOptions = {},
 ): Promise<Record<string, unknown>> {
   if (!isValidSlug(projectSlug)) throw new Error(`invalid project slug '${projectSlug}'`);
-  const source = await getSourceForSlug(projectSlug);
-  if (source == null) throw new Error(`project not found: ${projectSlug}`);
-
   const externalId = issueNumberFromWorkItemId(issueNumber);
-  const item = (await source.getItem(externalId)) as WorkItemLike;
-  const workItemId = item.id || `github:${source.repoRef}#${externalId}`;
-  const projectId = source.projectId;
+  const resolved = await resolveWorkItemForRoute(projectSlug, externalId);
+  if (!resolved.ok) throw new Error(`project not found: ${projectSlug}`);
+  const item = resolved.data.item as WorkItemLike;
+  const workItemId = resolved.data.canonicalWorkItemId;
+  const projectId = resolved.data.source.projectId;
   const depth = options.depth ?? 'compact';
   const sections = normalizeSections(options.sections);
   const timelineLimit = Math.min(

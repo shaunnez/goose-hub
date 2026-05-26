@@ -28,8 +28,7 @@ import type { PRDOutput } from '@goose-hub/skills/write-prd/schema.js';
 import { dispatchFixIssue, dispatchRetryWritePrd, dispatchRevisePrd } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { getProject } from '#shared/projects.js';
-import { getSourceForSlug } from '#shared/source.js';
-import { getRepoRef } from './internal.js';
+import { resolveWorkItemForRoute } from '#shared/work-item-resolution.js';
 
 async function moveOrForce(
   source: import('@goose-hub/core/state-source/interface.js').StateSource,
@@ -87,12 +86,9 @@ async function approvedPrdNextStep(slug: string): Promise<'spec-author' | 'fix-i
 }
 
 export async function approvePRD(slug: string, id: string): Promise<Result<{ ok: true }>> {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
-
-  const item = await source.getItem(id);
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { source, item, canonicalWorkItemId: workItemId } = resolved.data;
   if (item.state !== 'factory:prd-review') {
     return {
       ok: false,
@@ -106,7 +102,7 @@ export async function approvePRD(slug: string, id: string): Promise<Result<{ ok:
     workItemId,
     reason: 'PRD approved',
   });
-  await moveOrForce(source, id, 'factory:prd-review', 'factory:dev-ready');
+  await moveOrForce(source, workItemId, 'factory:prd-review', 'factory:dev-ready');
   const discoverSessionId = latestDiscoverSessionId(slug, workItemId);
   const sessionPayload =
     discoverSessionId != null ? { discoverSessionId } : ({} as Record<string, never>);
@@ -157,12 +153,9 @@ export async function revisePRD(
   id: string,
   concerns: string[],
 ): Promise<Result<{ ok: true }>> {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
-
-  const item = await source.getItem(id);
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { source, item, canonicalWorkItemId: workItemId } = resolved.data;
   if (item.state !== 'factory:prd-review') {
     return {
       ok: false,
@@ -183,13 +176,13 @@ export async function revisePRD(
   const priorPrd = latestPrd?.prd != null ? (latestPrd.prd as PRDOutput) : undefined;
   if (priorPrd == null) {
     await source.comment(
-      id,
+      workItemId,
       'revise-prd: no PRD draft found for this issue. Returning to needs-human.',
     );
     await transitionAndEmitState({
       source,
       projectId: slug,
-      itemId: id,
+      itemId: workItemId,
       workItemId,
       from: 'factory:prd-review',
       to: 'factory:needs-human',
@@ -225,12 +218,9 @@ export async function revisePRD(
 }
 
 export async function declinePRD(slug: string, id: string): Promise<Result<{ ok: true }>> {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
-
-  const item = await source.getItem(id);
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { source, item, canonicalWorkItemId: workItemId } = resolved.data;
   if (item.state !== 'factory:prd-review') {
     return {
       ok: false,
@@ -244,7 +234,7 @@ export async function declinePRD(slug: string, id: string): Promise<Result<{ ok:
     workItemId,
     reason: 'PRD declined',
   });
-  await moveOrForce(source, id, 'factory:prd-review', 'factory:done');
+  await moveOrForce(source, workItemId, 'factory:prd-review', 'factory:done');
   const discoverSessionId = latestDiscoverSessionId(slug, workItemId);
   const sessionPayload =
     discoverSessionId != null ? { discoverSessionId } : ({} as Record<string, never>);
@@ -268,12 +258,9 @@ export async function declinePRD(slug: string, id: string): Promise<Result<{ ok:
 }
 
 export async function proceedToPrd(slug: string, id: string): Promise<Result<{ ok: true }>> {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const repoRef = await getRepoRef(slug);
-  const workItemId = `github:${repoRef}#${id}`;
-
-  const item = await source.getItem(id);
+  const resolved = await resolveWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const { source, item, canonicalWorkItemId: workItemId } = resolved.data;
   if (item.state !== 'factory:gate-pending') {
     return {
       ok: false,
@@ -282,7 +269,7 @@ export async function proceedToPrd(slug: string, id: string): Promise<Result<{ o
     };
   }
 
-  await moveOrForce(source, id, 'factory:gate-pending', 'factory:prd-drafting');
+  await moveOrForce(source, workItemId, 'factory:gate-pending', 'factory:prd-drafting');
   const discoverSessionId = activeDiscoverSessionId(slug, workItemId);
   const sessionPayload =
     discoverSessionId != null ? { discoverSessionId } : ({} as Record<string, never>);

@@ -45,7 +45,12 @@ export async function getSourceForSlug(slug: string): Promise<StateSource | null
   }
 
   if (cfg.source.kind === 'local-db') {
-    const source = new LocalDbStateSource(cfg.id, compatibilityRepoRef(cfg));
+    const source = new LocalDbStateSource(
+      cfg.id,
+      compatibilityRepoRef(cfg),
+      undefined,
+      cfg.source.integrations,
+    );
     sourceCache.set(slug, source);
     return source;
   }

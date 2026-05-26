@@ -1,4 +1,4 @@
-import { and, asc, eq, or, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db as defaultDb } from '../db/db.js';
 import {
   projectState,
@@ -251,6 +251,36 @@ export class LocalDbWorkItemRepository {
       .run();
   }
 
+  updateWorkItem(
+    projectId: string,
+    itemId: string,
+    patch: Partial<{
+      title: string;
+      body: string;
+      state: StateName;
+      type: WorkItemType;
+      priority: Priority;
+      mode: Mode;
+      schedule: Schedule;
+      exec: ExecMode;
+      milestoneId: string | null;
+      milestoneTitle: string | null;
+    }>,
+  ): LocalDbWorkItemRow {
+    const item = this.requireWorkItem(projectId, itemId);
+    const now = this.nowIso();
+    return this.db
+      .update(workItems)
+      .set({
+        ...patch,
+        updatedAt: now,
+        ...(patch.state != null ? { closedAt: closedAtForState(patch.state, now) } : {}),
+      })
+      .where(eq(workItems.id, item.id))
+      .returning()
+      .get();
+  }
+
   addLabel(projectId: string, itemId: string, label: string): void {
     const item = this.requireWorkItem(projectId, itemId);
     this.db
@@ -370,7 +400,7 @@ export class LocalDbWorkItemRepository {
       .all();
   }
 
-  createExternalRef(input: {
+  upsertExternalRef(input: {
     projectId: string;
     itemId: string;
     provider: string;
@@ -381,6 +411,26 @@ export class LocalDbWorkItemRepository {
     metadata?: unknown;
   }): LocalDbExternalRefRow {
     const item = this.requireWorkItem(input.projectId, input.itemId);
+    const existing = this.getExternalRef({
+      projectId: input.projectId,
+      provider: input.provider,
+      kind: input.kind,
+      repoRef: input.repoRef ?? null,
+      externalId: input.externalId,
+    });
+    if (existing != null) {
+      return this.db
+        .update(workItemExternalRefs)
+        .set({
+          workItemId: item.id,
+          url: input.url ?? existing.url,
+          metadataJson:
+            input.metadata == null ? existing.metadataJson : JSON.stringify(input.metadata),
+        })
+        .where(eq(workItemExternalRefs.id, existing.id))
+        .returning()
+        .get();
+    }
     return this.db
       .insert(workItemExternalRefs)
       .values({
@@ -396,6 +446,66 @@ export class LocalDbWorkItemRepository {
       })
       .returning()
       .get();
+  }
+
+  createExternalRef(
+    input: Parameters<LocalDbWorkItemRepository['upsertExternalRef']>[0],
+  ): LocalDbExternalRefRow {
+    return this.upsertExternalRef(input);
+  }
+
+  getExternalRef(input: {
+    projectId: string;
+    provider: string;
+    kind: string;
+    repoRef?: string | null;
+    externalId: string;
+  }): LocalDbExternalRefRow | null {
+    return (
+      this.db
+        .select()
+        .from(workItemExternalRefs)
+        .where(
+          and(
+            eq(workItemExternalRefs.projectId, input.projectId),
+            eq(workItemExternalRefs.provider, input.provider),
+            eq(workItemExternalRefs.kind, input.kind),
+            input.repoRef == null
+              ? isNull(workItemExternalRefs.repoRef)
+              : eq(workItemExternalRefs.repoRef, input.repoRef),
+            eq(workItemExternalRefs.externalId, input.externalId),
+          ),
+        )
+        .get() ?? null
+    );
+  }
+
+  getWorkItemByExternalRef(input: {
+    projectId: string;
+    provider: string;
+    kind: string;
+    repoRef?: string | null;
+    externalId: string;
+  }): LocalDbWorkItemRow | null {
+    const ref = this.getExternalRef(input);
+    if (ref == null) return null;
+    return this.getWorkItem(input.projectId, ref.workItemId);
+  }
+
+  listExternalRefsByKind(input: {
+    projectId: string;
+    provider?: string;
+    kind?: string;
+  }): LocalDbExternalRefRow[] {
+    const clauses = [eq(workItemExternalRefs.projectId, input.projectId)];
+    if (input.provider != null) clauses.push(eq(workItemExternalRefs.provider, input.provider));
+    if (input.kind != null) clauses.push(eq(workItemExternalRefs.kind, input.kind));
+    return this.db
+      .select()
+      .from(workItemExternalRefs)
+      .where(and(...clauses))
+      .orderBy(asc(workItemExternalRefs.id))
+      .all();
   }
 
   listExternalRefs(projectId: string, itemId: string): LocalDbExternalRefRow[] {

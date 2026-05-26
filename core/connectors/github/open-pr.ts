@@ -57,6 +57,17 @@ export function validatePrBody(body: string, issueNumber: number): void {
 }
 
 export async function openPR(input: OpenPrInput): Promise<OpenPrResult> {
+  validatePrBody(input.body, input.issueNumber);
+  return openPrUnchecked(input);
+}
+
+export async function openLocalDbPR(
+  input: Omit<OpenPrInput, 'issueNumber'>,
+): Promise<OpenPrResult> {
+  return openPrUnchecked(input);
+}
+
+async function openPrUnchecked(input: Omit<OpenPrInput, 'issueNumber'>): Promise<OpenPrResult> {
   if (process.env.MOCK_SOURCE === 'true') {
     return {
       prNumber: 999,
@@ -69,7 +80,6 @@ export async function openPR(input: OpenPrInput): Promise<OpenPrResult> {
   const {
     worktreePath,
     repo,
-    issueNumber,
     title,
     body,
     branchName,
@@ -83,7 +93,6 @@ export async function openPR(input: OpenPrInput): Promise<OpenPrResult> {
   if (title.length === 0 || title.length > 70) {
     throw new Error(`PR title must be 1–70 chars; got ${title.length}`);
   }
-  validatePrBody(body, issueNumber);
 
   // 1. Push the current worktree HEAD to the named feature branch.
   // `--force-with-lease` is intentional: replays of the same workflow run

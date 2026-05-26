@@ -118,7 +118,48 @@ describe('LocalDbWorkItemRepository', () => {
       kind: 'issue',
       externalId: '42',
     });
+    expect(
+      repository.getWorkItemByExternalRef({
+        projectId: 'proj',
+        provider: 'github',
+        kind: 'issue',
+        repoRef: 'owner/repo',
+        externalId: '42',
+      })?.id,
+    ).toBe(created.id);
     expect(repository.listLabels('proj', created.id)).toEqual(['custom:label']);
+  });
+
+  it('upserts external refs idempotently by provider kind repo and external id', () => {
+    const { repository } = trackedRepository();
+    const item = repository.createWorkItem({ projectId: 'proj', title: 'A' });
+
+    const first = repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: item.id,
+      provider: 'github',
+      kind: 'pull_request',
+      repoRef: 'owner/repo',
+      externalId: '9',
+      url: 'https://github.com/owner/repo/pull/9',
+    });
+    const second = repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: item.id,
+      provider: 'github',
+      kind: 'pull_request',
+      repoRef: 'owner/repo',
+      externalId: '9',
+      url: 'https://github.com/owner/repo/pull/9/files',
+    });
+
+    expect(second.id).toBe(first.id);
+    expect(
+      repository.listExternalRefsByKind({ projectId: 'proj', kind: 'pull_request' }),
+    ).toHaveLength(1);
+    expect(repository.listExternalRefs('proj', item.id)[0].url).toBe(
+      'https://github.com/owner/repo/pull/9/files',
+    );
   });
 
   it('creates and assigns local milestones', () => {

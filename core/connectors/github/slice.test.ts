@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MergeConflictError, mergePR } from './merge-pr.js';
-import { openPR, validatePrBody } from './open-pr.js';
+import { openLocalDbPR, openPR, validatePrBody } from './open-pr.js';
 
 describe('validatePrBody (#184)', () => {
   it('accepts a body with Closes #N on its own line', () => {
@@ -132,6 +132,28 @@ describe('openPR (#184)', () => {
     await expect(openPR({ ...baseInput, gitExec, fetchImpl })).rejects.toThrow(
       /403 Forbidden — rate limit exceeded/,
     );
+  });
+
+  it('opens a local-db PR without requiring a closing GitHub issue line', async () => {
+    const gitExec = vi.fn().mockReturnValue('');
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ number: 3, html_url: 'https://example/3' }), { status: 201 }),
+      ) as unknown as typeof fetch;
+
+    await expect(
+      openLocalDbPR({
+        worktreePath: '/work/wt',
+        repo: 'shaunnez/goose-hub',
+        title: 'M7.05: example chore',
+        body: '## Summary\n\nLocal Work Item: local:proj#1\n',
+        branchName: 'factory/run-abc',
+        token: 'ghp_test',
+        gitExec,
+        fetchImpl,
+      }),
+    ).resolves.toMatchObject({ prNumber: 3 });
   });
 });
 

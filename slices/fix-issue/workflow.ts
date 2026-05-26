@@ -18,6 +18,7 @@ import {
   symbolHintsToKeyFiles,
 } from '@goose-hub/core/symbol-index/lookup.js';
 import { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-git.js';
+import { resolveRepositoryForWorkItem } from '@goose-hub/core/workspaces/repo-affinity.js';
 import { resolveWorkflowBaseForWorkItem } from '@goose-hub/core/workspaces/workflow-base.js';
 import {
   cleanupWorktree,
@@ -116,14 +117,23 @@ export async function runFixIssueWorkflow(
     workItem,
     injectedRuntime: deps.runtime,
   });
+  const selectedRepository = resolveRepositoryForWorkItem({
+    project: implementExecution.projectConfig,
+    workItem,
+    fallbackLocalPath: targetRepo,
+  });
+  const workflowWorkItem =
+    selectedRepository.repoRef === workItem.repoRef
+      ? workItem
+      : { ...workItem, repoRef: selectedRepository.repoRef };
   const workflowBase = resolveWorkflowBaseFn(
     projectId,
     workItem.id,
-    targetRepo,
-    implementExecution.projectConfig?.targetRepo?.defaultBranch,
+    selectedRepository.localPath,
+    selectedRepository.defaultBranch,
   );
   const baseBranch = workflowBase.branch;
-  const worktreePath = createWtFn(targetRepo, runId, workflowBase.ref);
+  const worktreePath = createWtFn(selectedRepository.localPath, runId, workflowBase.ref);
   const investigation = latestInvestigationContext({
     projectId,
     workItemId: workItem.id,
@@ -288,10 +298,10 @@ export async function runFixIssueWorkflow(
         // proceed — first attempt's output is final.
         await afterImplement({
           implementOutput: firstAttempt,
-          workItem,
+          workItem: workflowWorkItem,
           stateSource,
           projectId,
-          targetRepo,
+          targetRepo: selectedRepository.localPath,
           runId,
           worktreePath,
           baseBranch,
@@ -316,7 +326,7 @@ export async function runFixIssueWorkflow(
       execution: implementExecution,
       runId,
       projectId,
-      workItem,
+      workItem: workflowWorkItem,
       worktreePath,
       stack: await deriveStack(projectId),
       appendSystemPrompt: implementPrompt,
@@ -334,10 +344,10 @@ export async function runFixIssueWorkflow(
 
     await afterImplement({
       implementOutput,
-      workItem,
+      workItem: workflowWorkItem,
       stateSource,
       projectId,
-      targetRepo,
+      targetRepo: selectedRepository.localPath,
       runId,
       worktreePath,
       baseBranch,

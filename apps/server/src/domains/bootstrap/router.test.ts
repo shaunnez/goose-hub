@@ -1,12 +1,14 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockPreview, mockRun } = vi.hoisted(() => ({
+const { mockActivate, mockPreview, mockRun } = vi.hoisted(() => ({
+  mockActivate: vi.fn(),
   mockPreview: vi.fn(),
   mockRun: vi.fn(),
 }));
 
 vi.mock('./service.js', () => ({
+  activateLocalDbProject: mockActivate,
   previewBootstrapService: mockPreview,
   runBootstrapService: mockRun,
 }));
@@ -142,5 +144,44 @@ describe('POST /projects/bootstrap/run', () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('workflow exploded');
+  });
+});
+
+describe('POST /projects/bootstrap/activate', () => {
+  it('activates a merged local-db project by slug', async () => {
+    mockActivate.mockResolvedValue({
+      ok: true,
+      data: {
+        slug: 'widgets',
+        reposLinked: 1,
+        issuesImported: 2,
+        issuesUpdated: 0,
+        issuesSkipped: 0,
+        mirrorLabels: true,
+      },
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/bootstrap/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'widgets' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ issuesImported: 2, mirrorLabels: true });
+    expect(mockActivate).toHaveBeenCalledWith('widgets');
+  });
+
+  it('requires slug for activation', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/bootstrap/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockActivate).not.toHaveBeenCalled();
   });
 });
