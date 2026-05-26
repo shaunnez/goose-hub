@@ -594,6 +594,9 @@ export interface ProjectSettingsDto {
     playwrightReproEnabled: number | null;
     evidencePostEnabled: number | null;
   } | null;
+  implementWpDefaults: ImplementWpSettingsDto;
+  resolvedImplementWp: ImplementWpSettingsDto;
+  dbImplementWpOverrides: ImplementWpSettingsOverrideDto | null;
   dbSkillOverrides: Record<
     string,
     {
@@ -649,6 +652,36 @@ export interface ProjectSettingsDto {
     }
   >;
 }
+
+export interface ImplementWpSettingsDto {
+  editTestLoopMaxCycles: number;
+  bugMaxTurns: number;
+  bugMaxBudgetUsd: number;
+  featureMaxTurns: number;
+  featureMaxBudgetUsd: number;
+  complexMaxTurns: number;
+  complexMaxBudgetUsd: number;
+  highPriorityUsd: number;
+  manyFilesThreshold: number;
+  manyFilesUsd: number;
+  contractUsd: number;
+}
+
+export type ImplementWpSettingsOverrideDto = {
+  implementWpEditTestLoopMaxCycles: number | null;
+  implementWpBugMaxTurns: number | null;
+  implementWpBugMaxBudgetUsd: number | null;
+  implementWpFeatureMaxTurns: number | null;
+  implementWpFeatureMaxBudgetUsd: number | null;
+  implementWpComplexMaxTurns: number | null;
+  implementWpComplexMaxBudgetUsd: number | null;
+  implementWpHighPriorityUsd: number | null;
+  implementWpManyFilesThreshold: number | null;
+  implementWpManyFilesUsd: number | null;
+  implementWpContractUsd: number | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
 
 export interface RuntimeTraceDecisionDto<T> {
   value: T;

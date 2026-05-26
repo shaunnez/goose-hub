@@ -16,6 +16,17 @@ export type GlobalBudgetPatch = {
   maxScoutAgents?: number | null;
   maxRetries?: number | null;
   perBashCommandMaxSeconds?: number | null;
+  implementWpEditTestLoopMaxCycles?: number | null;
+  implementWpBugMaxTurns?: number | null;
+  implementWpBugMaxBudgetUsd?: number | null;
+  implementWpFeatureMaxTurns?: number | null;
+  implementWpFeatureMaxBudgetUsd?: number | null;
+  implementWpComplexMaxTurns?: number | null;
+  implementWpComplexMaxBudgetUsd?: number | null;
+  implementWpHighPriorityUsd?: number | null;
+  implementWpManyFilesThreshold?: number | null;
+  implementWpManyFilesUsd?: number | null;
+  implementWpContractUsd?: number | null;
   useMultiAgentPipeline?: number | null;
   useInvestigationSwarm?: number | null;
   coachPolicyEnabled?: number | null;
@@ -290,6 +301,17 @@ export function resetAllProjectBudgets(projectId: string): void {
       maxScoutAgents: null,
       maxRetries: null,
       perBashCommandMaxSeconds: null,
+      implementWpEditTestLoopMaxCycles: null,
+      implementWpBugMaxTurns: null,
+      implementWpBugMaxBudgetUsd: null,
+      implementWpFeatureMaxTurns: null,
+      implementWpFeatureMaxBudgetUsd: null,
+      implementWpComplexMaxTurns: null,
+      implementWpComplexMaxBudgetUsd: null,
+      implementWpHighPriorityUsd: null,
+      implementWpManyFilesThreshold: null,
+      implementWpManyFilesUsd: null,
+      implementWpContractUsd: null,
       updatedAt: new Date().toISOString(),
       updatedBy: 'ui',
     })

@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { SKILL_BUDGETS } from '@goose-hub/core/agent-runtime/budgets.js';
+import { resolveImplementWpSettings } from '@goose-hub/core/agent-runtime/implement-wp-settings.js';
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { deriveSkillRuntimeResponse } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import {
@@ -48,6 +49,17 @@ const GlobalBudgetPatchSchema = z.object({
   maxScoutAgents: z.number().int().min(1).max(50).nullable().optional(),
   maxRetries: z.number().int().min(0).max(20).nullable().optional(),
   perBashCommandMaxSeconds: z.number().int().min(0).max(3600).nullable().optional(),
+  implementWpEditTestLoopMaxCycles: z.number().int().min(1).max(20).nullable().optional(),
+  implementWpBugMaxTurns: z.number().int().min(1).max(500).nullable().optional(),
+  implementWpBugMaxBudgetUsd: z.number().min(0).max(100).nullable().optional(),
+  implementWpFeatureMaxTurns: z.number().int().min(1).max(500).nullable().optional(),
+  implementWpFeatureMaxBudgetUsd: z.number().min(0).max(100).nullable().optional(),
+  implementWpComplexMaxTurns: z.number().int().min(1).max(500).nullable().optional(),
+  implementWpComplexMaxBudgetUsd: z.number().min(0).max(100).nullable().optional(),
+  implementWpHighPriorityUsd: z.number().min(0).max(100).nullable().optional(),
+  implementWpManyFilesThreshold: z.number().int().min(0).max(100).nullable().optional(),
+  implementWpManyFilesUsd: z.number().min(0).max(100).nullable().optional(),
+  implementWpContractUsd: z.number().min(0).max(100).nullable().optional(),
   qaE2eMode: z.enum(['off', 'ui-changed', 'always']).nullable().optional(),
   playwrightReproEnabled: z.number().int().min(0).max(1).nullable().optional(),
   evidencePostEnabled: z.number().int().min(0).max(1).nullable().optional(),
@@ -134,6 +146,41 @@ const SKILL_CALLERS: Record<string, string[]> = {
   'implement-wp': ['parallel implementation workflow'],
   'code-quality-audit': ['architecture audit workflow'],
 };
+
+function flattenImplementWpSettings(settings: ReturnType<typeof resolveImplementWpSettings>) {
+  return {
+    editTestLoopMaxCycles: settings.editTestLoopMaxCycles,
+    bugMaxTurns: settings.budgetSizing.bug.maxTurns,
+    bugMaxBudgetUsd: settings.budgetSizing.bug.maxBudgetUsd,
+    featureMaxTurns: settings.budgetSizing.feature.maxTurns,
+    featureMaxBudgetUsd: settings.budgetSizing.feature.maxBudgetUsd,
+    complexMaxTurns: settings.budgetSizing.complex.maxTurns,
+    complexMaxBudgetUsd: settings.budgetSizing.complex.maxBudgetUsd,
+    highPriorityUsd: settings.budgetSizing.complexAdditions.highPriorityUsd,
+    manyFilesThreshold: settings.budgetSizing.complexAdditions.manyFilesThreshold,
+    manyFilesUsd: settings.budgetSizing.complexAdditions.manyFilesUsd,
+    contractUsd: settings.budgetSizing.complexAdditions.contractUsd,
+  };
+}
+
+function dbImplementWpOverrides(row: ReturnType<typeof readProjectSettings>) {
+  if (row == null) return null;
+  const values = {
+    implementWpEditTestLoopMaxCycles: row.implementWpEditTestLoopMaxCycles,
+    implementWpBugMaxTurns: row.implementWpBugMaxTurns,
+    implementWpBugMaxBudgetUsd: row.implementWpBugMaxBudgetUsd,
+    implementWpFeatureMaxTurns: row.implementWpFeatureMaxTurns,
+    implementWpFeatureMaxBudgetUsd: row.implementWpFeatureMaxBudgetUsd,
+    implementWpComplexMaxTurns: row.implementWpComplexMaxTurns,
+    implementWpComplexMaxBudgetUsd: row.implementWpComplexMaxBudgetUsd,
+    implementWpHighPriorityUsd: row.implementWpHighPriorityUsd,
+    implementWpManyFilesThreshold: row.implementWpManyFilesThreshold,
+    implementWpManyFilesUsd: row.implementWpManyFilesUsd,
+    implementWpContractUsd: row.implementWpContractUsd,
+  };
+  if (!Object.values(values).some((value) => value != null)) return null;
+  return { ...values, updatedAt: row.updatedAt, updatedBy: row.updatedBy };
+}
 
 function roleForSkill(skill: string): Role | undefined {
   if (skill === 'advise-on-plan') return 'researcher';
@@ -405,12 +452,21 @@ router.get('/:slug/settings', async (c) => {
           evidencePostEnabled: globalRow.evidencePostEnabled ?? null,
         }
       : null;
+  const implementWpDefaults = flattenImplementWpSettings(
+    resolveImplementWpSettings(project.budgets),
+  );
+  const resolvedImplementWp = flattenImplementWpSettings(
+    resolveImplementWpSettings(project.budgets, globalRow),
+  );
 
   return c.json({
     projectId: project.id,
     configBudgets: project.budgets,
     dbGlobalOverrides,
     dbPipelineFlags,
+    implementWpDefaults,
+    dbImplementWpOverrides: dbImplementWpOverrides(globalRow),
+    resolvedImplementWp,
     dbSkillOverrides: skillSettings,
     registeredSkills: Object.keys(SKILL_BUDGETS),
     skillDefaults,

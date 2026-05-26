@@ -270,6 +270,121 @@ describe('project settings router', () => {
     expect(body.skillMetadata['dev-review'].callers).toContain('developer pre-QA advisor');
   });
 
+  it('returns implement-WP defaults, DB overrides, and resolved settings', async () => {
+    mockGetProject.mockResolvedValue({
+      ...project(),
+      budgets: {
+        implementWp: {
+          editTestLoopMaxCycles: 4,
+          budgetSizing: {
+            bug: { maxTurns: 80, maxBudgetUsd: 5 },
+            feature: { maxTurns: 110, maxBudgetUsd: 7 },
+            complex: { maxTurns: 140, maxBudgetUsd: 9 },
+            complexAdditions: {
+              highPriorityUsd: 2,
+              manyFilesThreshold: 5,
+              manyFilesUsd: 1.5,
+              contractUsd: 2.5,
+            },
+          },
+        },
+      },
+    });
+    mockReadProjectSettings.mockReturnValue({
+      projectId: 'goose-hub-self',
+      implementWpEditTestLoopMaxCycles: 2,
+      implementWpBugMaxTurns: null,
+      implementWpBugMaxBudgetUsd: 3.5,
+      implementWpFeatureMaxTurns: null,
+      implementWpFeatureMaxBudgetUsd: null,
+      implementWpComplexMaxTurns: null,
+      implementWpComplexMaxBudgetUsd: null,
+      implementWpHighPriorityUsd: null,
+      implementWpManyFilesThreshold: null,
+      implementWpManyFilesUsd: null,
+      implementWpContractUsd: null,
+      updatedAt: '2026-05-26T00:00:00Z',
+      updatedBy: 'ui',
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings');
+    const body = (await res.json()) as {
+      implementWpDefaults: Record<string, number>;
+      dbImplementWpOverrides: Record<string, number | string | null>;
+      resolvedImplementWp: Record<string, number>;
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.implementWpDefaults).toMatchObject({
+      editTestLoopMaxCycles: 4,
+      bugMaxTurns: 80,
+      bugMaxBudgetUsd: 5,
+      highPriorityUsd: 2,
+      manyFilesThreshold: 5,
+    });
+    expect(body.dbImplementWpOverrides).toMatchObject({
+      implementWpEditTestLoopMaxCycles: 2,
+      implementWpBugMaxBudgetUsd: 3.5,
+      updatedBy: 'ui',
+    });
+    expect(body.resolvedImplementWp).toMatchObject({
+      editTestLoopMaxCycles: 2,
+      bugMaxTurns: 80,
+      bugMaxBudgetUsd: 3.5,
+      featureMaxBudgetUsd: 7,
+    });
+  });
+
+  it('writes implement-WP workflow-level patches through project settings', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/global', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        implementWpEditTestLoopMaxCycles: 2,
+        implementWpFeatureMaxBudgetUsd: 9.5,
+        implementWpManyFilesThreshold: null,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockWriteProjectSettings).toHaveBeenCalledWith(
+      'goose-hub-self',
+      {
+        implementWpEditTestLoopMaxCycles: 2,
+        implementWpFeatureMaxBudgetUsd: 9.5,
+        implementWpManyFilesThreshold: null,
+      },
+      'ui',
+    );
+  });
+
+  it('rejects invalid implement-WP workflow-level patches', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/global', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        implementWpEditTestLoopMaxCycles: 0,
+        implementWpManyFilesThreshold: 101,
+      }),
+    });
+
+    expect(res.status).toBe(422);
+    expect(mockWriteProjectSettings).not.toHaveBeenCalled();
+  });
+
+  it('routes reset-all through the budget reset repository helper', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/budgets', {
+      method: 'DELETE',
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockResetAllProjectBudgets).toHaveBeenCalledWith('goose-hub-self');
+  });
+
   it('writes tier/provider patches to project_skill_settings model columns', async () => {
     const app = makeApp();
     const res = await app.request('/projects/goose-hub-self/settings/skills/repo-match', {

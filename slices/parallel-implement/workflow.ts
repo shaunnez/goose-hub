@@ -12,6 +12,7 @@ import {
   runDevReviewResponse,
   shouldRunDevReview,
 } from '@goose-hub/core/agent-runtime/dev-review-advisor.js';
+import { resolveImplementWpBudgetConfig } from '@goose-hub/core/agent-runtime/implement-wp-settings.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import {
   latestInvestigationContext,
@@ -23,6 +24,7 @@ import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/reso
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
+import { readProjectSettings } from '@goose-hub/core/db/repositories/project-settings.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
@@ -596,6 +598,11 @@ export async function runParallelImplementWorkflow(
 
   const projectConfig = await getProjectBySlug(projectId);
   const workflowBase = resolveWorkflowBaseFn(targetRepo, projectConfig?.targetRepo?.defaultBranch);
+  const projectSettingsRow = readProjectSettings(projectId);
+  const implementWpBudgetConfig = resolveImplementWpBudgetConfig(
+    projectConfig?.budgets,
+    projectSettingsRow,
+  );
   const { runtime, resolvedBudget: implementWpBudget } = resolveProjectAgentExecution({
     skill: 'implement-wp',
     role: 'developer',
@@ -608,7 +615,7 @@ export async function runParallelImplementWorkflow(
   const maxRetries = globalSettings.maxRetries ?? 2;
   const wpTimeoutMs = 900_000;
   const implementWpControl =
-    deps.implementWpControlOverride ?? resolveImplementWpControl(projectConfig?.budgets);
+    deps.implementWpControlOverride ?? resolveImplementWpControl(implementWpBudgetConfig);
   const devReviewCfg =
     deps.devReviewConfigOverride ??
     resolveDevReviewConfig(projectId, projectConfig?.agentConfig?.devReview);
@@ -851,7 +858,7 @@ export async function runParallelImplementWorkflow(
               defaultBudgets: implementWpBudget.budgets,
               workItem,
               wp,
-              budgetConfig: projectConfig?.budgets,
+              budgetConfig: implementWpBudgetConfig,
             }),
             modelOverride: implementWpBudget.modelOverride,
             personaId,
