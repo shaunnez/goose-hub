@@ -54,6 +54,11 @@ export type StackInfo =
   | RubyStackInfo
   | UnknownStackInfo;
 
+export interface StackFileReader {
+  exists(filePath: string): Promise<boolean>;
+  readText(filePath: string): Promise<string>;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -75,11 +80,10 @@ async function readText(filePath: string): Promise<string> {
 // Detectors
 // ---------------------------------------------------------------------------
 
-async function tryDetectNode(repoPath: string): Promise<NodeStackInfo | null> {
-  const manifestPath = path.join(repoPath, 'package.json');
-  if (!(await fileExists(manifestPath))) return null;
+async function tryDetectNode(files: StackFileReader): Promise<NodeStackInfo | null> {
+  if (!(await files.exists('package.json'))) return null;
 
-  const raw = await readText(manifestPath);
+  const raw = await files.readText('package.json');
   let pkg: Record<string, unknown>;
   try {
     pkg = JSON.parse(raw) as Record<string, unknown>;
@@ -108,21 +112,18 @@ async function tryDetectNode(repoPath: string): Promise<NodeStackInfo | null> {
     packageManager = 'pnpm';
   } else if (pmField.startsWith('yarn')) {
     packageManager = 'yarn';
-  } else if (await fileExists(path.join(repoPath, 'pnpm-lock.yaml'))) {
+  } else if (await files.exists('pnpm-lock.yaml')) {
     packageManager = 'pnpm';
-  } else if (await fileExists(path.join(repoPath, 'yarn.lock'))) {
+  } else if (await files.exists('yarn.lock')) {
     packageManager = 'yarn';
   }
 
   return { type: 'node', packageManager, scripts };
 }
 
-async function tryDetectPython(repoPath: string): Promise<PythonStackInfo | null> {
-  const pyprojectPath = path.join(repoPath, 'pyproject.toml');
-  const requirementsPath = path.join(repoPath, 'requirements.txt');
-
-  const hasPyproject = await fileExists(pyprojectPath);
-  const hasRequirements = await fileExists(requirementsPath);
+async function tryDetectPython(files: StackFileReader): Promise<PythonStackInfo | null> {
+  const hasPyproject = await files.exists('pyproject.toml');
+  const hasRequirements = await files.exists('requirements.txt');
 
   if (!hasPyproject && !hasRequirements) return null;
 
@@ -130,7 +131,7 @@ async function tryDetectPython(repoPath: string): Promise<PythonStackInfo | null
   let lintTool: PythonStackInfo['lintTool'];
 
   if (hasPyproject) {
-    const content = await readText(pyprojectPath);
+    const content = await files.readText('pyproject.toml');
     // Detect pytest: [tool.pytest.*] section or pytest in dependencies
     if (/\[tool\.pytest/i.test(content) || /\bpytest\b/.test(content)) {
       testRunner = 'pytest';
@@ -146,11 +147,10 @@ async function tryDetectPython(repoPath: string): Promise<PythonStackInfo | null
   return { type: 'python', testRunner, ...(lintTool ? { lintTool } : {}) };
 }
 
-async function tryDetectGo(repoPath: string): Promise<GoStackInfo | null> {
-  const goModPath = path.join(repoPath, 'go.mod');
-  if (!(await fileExists(goModPath))) return null;
+async function tryDetectGo(files: StackFileReader): Promise<GoStackInfo | null> {
+  if (!(await files.exists('go.mod'))) return null;
 
-  const content = await readText(goModPath);
+  const content = await files.readText('go.mod');
 
   // Extract module name: first non-comment line starting with "module ".
   // Strip any trailing inline comment (e.g. `module example.com/app // root`).
@@ -173,11 +173,10 @@ async function tryDetectGo(repoPath: string): Promise<GoStackInfo | null> {
   };
 }
 
-async function tryDetectRust(repoPath: string): Promise<RustStackInfo | null> {
-  const cargoPath = path.join(repoPath, 'Cargo.toml');
-  if (!(await fileExists(cargoPath))) return null;
+async function tryDetectRust(files: StackFileReader): Promise<RustStackInfo | null> {
+  if (!(await files.exists('Cargo.toml'))) return null;
 
-  const content = await readText(cargoPath);
+  const content = await files.readText('Cargo.toml');
 
   // Extract crate name from [package] section
   let crateName = '';
@@ -209,11 +208,10 @@ async function tryDetectRust(repoPath: string): Promise<RustStackInfo | null> {
   };
 }
 
-async function tryDetectRuby(repoPath: string): Promise<RubyStackInfo | null> {
-  const gemfilePath = path.join(repoPath, 'Gemfile');
-  if (!(await fileExists(gemfilePath))) return null;
+async function tryDetectRuby(files: StackFileReader): Promise<RubyStackInfo | null> {
+  if (!(await files.exists('Gemfile'))) return null;
 
-  const content = await readText(gemfilePath);
+  const content = await files.readText('Gemfile');
 
   // Detect test runner
   let testRunner: RubyStackInfo['testRunner'] = 'minitest';
@@ -246,8 +244,15 @@ const DETECTORS = [
 // ---------------------------------------------------------------------------
 
 export async function detectStack(repoPath: string): Promise<StackInfo> {
+  return detectStackFromFiles({
+    exists: (filePath) => fileExists(path.join(repoPath, filePath)),
+    readText: (filePath) => readText(path.join(repoPath, filePath)),
+  });
+}
+
+export async function detectStackFromFiles(files: StackFileReader): Promise<StackInfo> {
   for (const detect of DETECTORS) {
-    const result = await detect(repoPath);
+    const result = await detect(files);
     if (result !== null) return result;
   }
   return { type: 'unknown' };

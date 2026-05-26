@@ -3,7 +3,7 @@ export interface ProjectSummary {
   name: string;
   slug: string;
   color: string;
-  source: { kind: string; repo: string };
+  source: { kind: string; repo?: string; integrations?: unknown };
   defaultBranch?: string;
 }
 
@@ -441,7 +441,7 @@ export interface WorkItemCostsDto {
 export interface ProjectConfigDto {
   slug: string;
   name: string;
-  source: { kind: string; repo: string };
+  source: { kind: string; repo?: string; integrations?: unknown };
   targetRepo: { cloneUrl: string; defaultBranch: string; localPath: string };
   stack: {
     runtime: string;
@@ -551,7 +551,16 @@ export interface BootstrapPreviewLabelDto {
 
 export interface BootstrapPreviewDto {
   slug: string;
+  name: string;
   defaultBranch: string;
+  repos: Array<{
+    repoRef: string;
+    defaultBranch: string;
+    description: string;
+    stackSummary: string;
+    auditAction: 'create' | 'update' | 'ok';
+    auditPath: string | null;
+  }>;
   stack: {
     type: string;
     summary: string;

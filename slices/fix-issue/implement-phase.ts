@@ -19,12 +19,14 @@ import {
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
-import type { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
+import { openLocalDbPR, type openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { upsertGithubExternalRef } from '@goose-hub/core/integrations/github/external-refs.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { LocalDbWorkItemRepository } from '@goose-hub/core/state-source/local-db-repository.js';
 import {
   emitSymbolIndexHintsUsedEvent,
   offeredHintsFromSymbolKeyFiles,
@@ -796,6 +798,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
 
 export async function afterImplement(input: AfterImplementInput): Promise<void> {
   const { implementOutput, workItem, stateSource, projectId, runId, worktreePath } = input;
+  const stateSourceItemId = workItem.id.startsWith('local:') ? workItem.id : workItem.externalId;
   const observedChangedFiles = deriveObservedChangedFiles(worktreePath);
 
   // Orchestrator commits the builder's work before opening the PR (ADR 0031).
@@ -842,21 +845,62 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
   if (token.length === 0 && process.env.MOCK_OPEN_PR !== 'true') {
     throw new Error('GITHUB_TOKEN env var is required to open PR');
   }
-  const repoRef = stateSource.repoRef;
+  const linkedIssueRef = workItem.id.startsWith('local:')
+    ? latestLinkedGithubIssue(projectId, workItem.id)
+    : null;
+  const repoRef = linkedIssueRef?.repoRef ?? workItem.repoRef ?? stateSource.repoRef;
   const branchName = `factory/${runId}`;
   const title = `M7.XX: ${workItem.title.slice(0, 50)}`;
-  const body = buildPrBody({ workItem, implementOutput, observedChangedFiles });
-
-  const prResult = await input.openPRFn({
-    worktreePath,
-    repo: repoRef,
-    issueNumber: Number(workItem.externalId),
-    title,
-    body,
-    branchName,
-    baseBranch: input.baseBranch,
-    token,
+  const closesIssueNumber =
+    linkedIssueRef != null ? Number(linkedIssueRef.externalId) : Number(workItem.externalId);
+  const shouldCloseGithubIssue =
+    Number.isFinite(closesIssueNumber) &&
+    (linkedIssueRef != null || !workItem.id.startsWith('local:'));
+  const body = buildPrBody({
+    workItem,
+    implementOutput,
+    observedChangedFiles,
+    closesIssueNumber: shouldCloseGithubIssue ? closesIssueNumber : null,
   });
+
+  const prResult = shouldCloseGithubIssue
+    ? await input.openPRFn({
+        worktreePath,
+        repo: repoRef,
+        issueNumber: closesIssueNumber,
+        title,
+        body,
+        branchName,
+        baseBranch: input.baseBranch,
+        token,
+      })
+    : await openLocalDbPR({
+        worktreePath,
+        repo: repoRef,
+        title,
+        body,
+        branchName,
+        baseBranch: input.baseBranch,
+        token,
+      });
+
+  if (workItem.id.startsWith('local:')) {
+    upsertGithubExternalRef({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'pull_request',
+      repoRef,
+      externalId: String(prResult.prNumber),
+      url: prResult.prUrl,
+    });
+    upsertGithubExternalRef({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'branch',
+      repoRef,
+      externalId: prResult.branch,
+    });
+  }
 
   eventStore.appendEvent({
     projectId,
@@ -877,7 +921,7 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
   });
 
   await stateSource.comment(
-    workItem.externalId,
+    stateSourceItemId,
     buildAgentComment(
       'Dev',
       'Complete',
@@ -917,7 +961,7 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
   });
 
   // Step 7: M8 path — route through QA before approval (factory:in-progress → factory:needs-qa)
-  await stateSource.transitionState(workItem.externalId, 'factory:in-progress', 'factory:needs-qa');
+  await stateSource.transitionState(stateSourceItemId, 'factory:in-progress', 'factory:needs-qa');
   emitStateTransitionEvent({
     projectId,
     workItemId: workItem.id,
@@ -926,4 +970,11 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
     by: 'fix-issue',
     runId,
   });
+}
+
+function latestLinkedGithubIssue(projectId: string, workItemId: string) {
+  const refs = new LocalDbWorkItemRepository()
+    .listExternalRefs(projectId, workItemId)
+    .filter((ref) => ref.provider === 'github' && ref.kind === 'issue');
+  return refs.at(-1) ?? null;
 }

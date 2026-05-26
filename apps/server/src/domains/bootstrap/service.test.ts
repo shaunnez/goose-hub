@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockBootstrapProject, mockDetectStack, mockAuditClaudeMd } = vi.hoisted(() => ({
-  mockBootstrapProject: vi.fn(),
-  mockDetectStack: vi.fn(),
-  mockAuditClaudeMd: vi.fn(),
-}));
+const { mockBootstrapProject, mockGetProject, mockImportIssues, mockInspectGithubRepo } =
+  vi.hoisted(() => ({
+    mockBootstrapProject: vi.fn(),
+    mockGetProject: vi.fn(),
+    mockImportIssues: vi.fn(),
+    mockInspectGithubRepo: vi.fn(),
+  }));
 
 vi.mock('@goose-hub/core/workflows/bootstrap-project.js', async () => {
   const actual = await vi.importActual<
@@ -16,15 +18,19 @@ vi.mock('@goose-hub/core/workflows/bootstrap-project.js', async () => {
   };
 });
 
-vi.mock('@goose-hub/core/bootstrap/stack-detector.js', () => ({
-  detectStack: mockDetectStack,
+vi.mock('@goose-hub/core/bootstrap/github-repo-inspector.js', () => ({
+  inspectGithubRepo: mockInspectGithubRepo,
 }));
 
-vi.mock('@goose-hub/core/bootstrap/claude-md-auditor.js', () => ({
-  auditClaudeMd: mockAuditClaudeMd,
+vi.mock('@goose-hub/core/integrations/github/import-issues.js', () => ({
+  importGitHubIssuesToLocalDb: mockImportIssues,
 }));
 
-import { previewBootstrapService, runBootstrapService } from './service.js';
+vi.mock('#shared/projects.js', () => ({
+  getProject: mockGetProject,
+}));
+
+import { activateLocalDbProject, previewBootstrapService, runBootstrapService } from './service.js';
 
 const ORIGINAL_TOKEN = process.env.GITHUB_TOKEN;
 const ORIGINAL_MOCK = process.env.MOCK_BOOTSTRAP;
@@ -33,6 +39,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.GITHUB_TOKEN = 'test-token';
   Reflect.deleteProperty(process.env, 'MOCK_BOOTSTRAP');
+  mockGetProject.mockResolvedValue(null);
+  mockImportIssues.mockResolvedValue({ imported: 0, updated: 0, skipped: 0, repoRefs: [] });
 });
 
 afterEach(() => {
@@ -41,6 +49,54 @@ afterEach(() => {
   if (ORIGINAL_MOCK === undefined) Reflect.deleteProperty(process.env, 'MOCK_BOOTSTRAP');
   else process.env.MOCK_BOOTSTRAP = ORIGINAL_MOCK;
   vi.unstubAllGlobals();
+});
+
+describe('activateLocalDbProject', () => {
+  it('runs idempotent GitHub import for local-db projects', async () => {
+    const cfg = {
+      id: 'widgets',
+      slug: 'widgets',
+      source: {
+        kind: 'local-db',
+        stateMachine: 'db',
+        integrations: {
+          github: { repos: ['octo/widgets'], importIssues: true, mirrorLabels: true },
+        },
+      },
+      repos: ['octo/widgets'],
+    };
+    mockGetProject.mockResolvedValue(cfg);
+    mockImportIssues.mockResolvedValue({
+      imported: 2,
+      updated: 1,
+      skipped: 0,
+      repoRefs: ['octo/widgets'],
+    });
+
+    const result = await activateLocalDbProject('widgets');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        reposLinked: 1,
+        issuesImported: 2,
+        issuesUpdated: 1,
+        mirrorLabels: true,
+      },
+    });
+    expect(mockImportIssues).toHaveBeenCalledWith(
+      expect.objectContaining({ projectConfig: cfg, token: 'test-token' }),
+    );
+  });
+
+  it('rejects activation for non-local-db projects', async () => {
+    mockGetProject.mockResolvedValue({ id: 'x', source: { kind: 'github', repo: 'o/r' } });
+
+    const result = await activateLocalDbProject('x');
+
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect(mockImportIssues).not.toHaveBeenCalled();
+  });
 });
 
 describe('previewBootstrapService', () => {
@@ -69,47 +125,49 @@ describe('previewBootstrapService', () => {
     }
   });
 
+  it('returns 400 when a custom slug sanitises to empty', async () => {
+    const result = await previewBootstrapService({ repoRef: 'octo/widgets', slug: '!!!---!!!' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(400);
+      expect(result.error).toMatch(/slug|empty/i);
+    }
+    expect(mockInspectGithubRepo).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when GitHub responds 404 for the repo', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ message: 'Not Found' }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    );
+    mockInspectGithubRepo.mockRejectedValue(new Error('GitHub GET x -> 404: not found'));
     const result = await previewBootstrapService('octo/missing');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(404);
   });
 
   it('returns full preview DTO on the happy path', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ default_branch: 'develop' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    );
-    mockDetectStack.mockResolvedValue({
-      type: 'node',
-      packageManager: 'pnpm',
-      scripts: { build: 'pnpm build', test: 'pnpm test' },
-    });
-    mockAuditClaudeMd.mockResolvedValue({
-      action: 'create',
-      content: '# CLAUDE.md\n\n…\n',
-      rationale: 'No CLAUDE.md found',
+    mockInspectGithubRepo.mockResolvedValue({
+      repoRef: 'octo/widgets',
+      defaultBranch: 'develop',
+      description: 'Widgets',
+      cloneUrl: 'git@github.com:octo/widgets.git',
+      stack: {
+        type: 'node',
+        packageManager: 'pnpm',
+        scripts: { build: 'pnpm build', test: 'pnpm test' },
+      },
+      audit: {
+        action: 'create',
+        content: '# CLAUDE.md\n\n…\n',
+        rationale: 'No CLAUDE.md found',
+        path: 'CLAUDE.md',
+      },
     });
 
     const result = await previewBootstrapService('octo/widgets');
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.slug).toBe('widgets');
+      expect(result.data.name).toBe('widgets');
       expect(result.data.defaultBranch).toBe('develop');
+      expect(result.data.repos[0].repoRef).toBe('octo/widgets');
       expect(result.data.stack.type).toBe('node');
       expect(result.data.stack.summary).toContain('node');
       expect(result.data.audit.action).toBe('create');
@@ -133,8 +191,7 @@ describe('previewBootstrapService', () => {
       expect(result.data.audit.action).toBe('create');
       expect(result.data.labelsToInstall.length).toBeGreaterThan(0);
     }
-    expect(mockDetectStack).not.toHaveBeenCalled();
-    expect(mockAuditClaudeMd).not.toHaveBeenCalled();
+    expect(mockInspectGithubRepo).not.toHaveBeenCalled();
   });
 });
 
@@ -169,7 +226,7 @@ describe('runBootstrapService', () => {
       expect(result.data.slug).toBe('widgets');
       expect(mockBootstrapProject).toHaveBeenCalledWith(
         expect.objectContaining({
-          repoRef: 'octo/widgets',
+          repoRefs: ['octo/widgets'],
           token: 'test-token',
         }),
       );

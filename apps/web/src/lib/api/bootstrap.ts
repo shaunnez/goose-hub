@@ -16,11 +16,21 @@ export async function fetchProjectConfigs(signal?: AbortSignal): Promise<Project
   return configs;
 }
 
-export async function previewBootstrap(repoRef: string): Promise<BootstrapPreviewDto> {
+export interface BootstrapRequest {
+  repoRef?: string;
+  repoRefs?: string[];
+  slug?: string;
+  name?: string;
+}
+
+export async function previewBootstrap(
+  input: string | BootstrapRequest,
+): Promise<BootstrapPreviewDto> {
+  const body = typeof input === 'string' ? { repoRef: input } : input;
   const res = await fetch('/api/projects/bootstrap/preview', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ repoRef }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -29,11 +39,15 @@ export async function previewBootstrap(repoRef: string): Promise<BootstrapPrevie
   return (await res.json()) as BootstrapPreviewDto;
 }
 
-export async function runBootstrap(repoRef: string, slug?: string): Promise<BootstrapRunDto> {
+export async function runBootstrap(
+  input: string | BootstrapRequest,
+  slug?: string,
+): Promise<BootstrapRunDto> {
+  const body = typeof input === 'string' ? { repoRef: input, slug } : input;
   const res = await fetch('/api/projects/bootstrap/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ repoRef, slug }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');

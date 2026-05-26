@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import {
   type AuditResult,
   type StackInfo,
+  auditAgentInstructionsFromFiles,
   auditClaudeMd,
 } from '@goose-hub/core/bootstrap/claude-md-auditor.js';
 import { describe, expect, it } from 'vitest';
@@ -98,6 +99,34 @@ describe('auditClaudeMd — partial CLAUDE.md (missing sections)', () => {
   });
 });
 
+describe('auditClaudeMd — instruction file delegation', () => {
+  it('uses delegated CLAUDE.md when AGENTS.md gives an explicit directive', async () => {
+    const files = makeInstructionFiles({
+      'AGENTS.md': '# AGENTS.md\n\nSee CLAUDE.md for all instructions.\n',
+      'CLAUDE.md': '# CLAUDE.md\n\n## What this repo is\n\nExisting.\n',
+    });
+
+    const result = await auditAgentInstructionsFromFiles(files, minimalStack);
+
+    expect(result.path).toBe('CLAUDE.md');
+    expect(result.content).toContain('--- a/CLAUDE.md');
+    expect(result.content).toContain('+++ b/CLAUDE.md');
+  });
+
+  it('audits AGENTS.md when CLAUDE.md is only mentioned without delegation', async () => {
+    const files = makeInstructionFiles({
+      'AGENTS.md': '# AGENTS.md\n\nDo not place secrets in CLAUDE.md.\n',
+      'CLAUDE.md': '# CLAUDE.md\n\n## What this repo is\n\nExisting.\n',
+    });
+
+    const result = await auditAgentInstructionsFromFiles(files, minimalStack);
+
+    expect(result.path).toBe('AGENTS.md');
+    expect(result.content).toContain('--- a/AGENTS.md');
+    expect(result.content).toContain('+++ b/AGENTS.md');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Scenario 3: complete CLAUDE.md → action='ok'
 // ---------------------------------------------------------------------------
@@ -181,3 +210,15 @@ describe('AuditResult type shape', () => {
     expect(typeof result.rationale).toBe('string');
   });
 });
+
+function makeInstructionFiles(files: Record<string, string>) {
+  return {
+    exists: async (filePath: string): Promise<boolean> =>
+      Object.prototype.hasOwnProperty.call(files, filePath),
+    readText: async (filePath: string): Promise<string> => {
+      const content = files[filePath];
+      if (content == null) throw new Error(`missing fixture file: ${filePath}`);
+      return content;
+    },
+  };
+}

@@ -16,8 +16,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   WIZARD_STEPS,
   type WizardStep,
-  isValidRepoRef,
+  isValidRepoRefs,
   nextStep,
+  parseRepoRefs,
   prevStep,
   stepIndex,
   stepLabel,
@@ -31,6 +32,9 @@ interface BootstrapWizardProps {
 interface WizardState {
   step: WizardStep;
   repoRef: string;
+  repoRefsText: string;
+  projectName: string;
+  slug: string;
   preview: BootstrapPreviewDto | null;
   result: BootstrapRunDto | null;
   loading: boolean;
@@ -40,6 +44,9 @@ interface WizardState {
 const INITIAL_STATE: WizardState = {
   step: 'repo',
   repoRef: '',
+  repoRefsText: '',
+  projectName: '',
+  slug: '',
   preview: null,
   result: null,
   loading: false,
@@ -69,15 +76,26 @@ export function BootstrapWizard({ open, onClose }: BootstrapWizardProps) {
   }
 
   async function handleValidateRepo() {
-    if (!isValidRepoRef(state.repoRef)) {
-      setError('Repository ref must look like "owner/repo"');
+    if (!isValidRepoRefs(state.repoRefsText || state.repoRef)) {
+      setError('Each repository ref must look like "owner/repo"');
       return;
     }
+    const repoRefs = parseRepoRefs(state.repoRefsText || state.repoRef);
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const preview = await previewBootstrap(state.repoRef.trim());
+      const preview = await previewBootstrap({
+        repoRefs,
+        name: state.projectName.trim() || undefined,
+        slug: state.slug.trim() || undefined,
+      });
       if (!openRef.current) return;
-      setState((s) => ({ ...s, preview, loading: false, step: nextStep(s.step) }));
+      setState((s) => ({
+        ...s,
+        repoRef: repoRefs[0] ?? '',
+        preview,
+        loading: false,
+        step: nextStep(s.step),
+      }));
     } catch (err) {
       if (!openRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to validate repo');
@@ -87,7 +105,11 @@ export function BootstrapWizard({ open, onClose }: BootstrapWizardProps) {
   async function handleOpenPr() {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const result = await runBootstrap(state.repoRef.trim(), state.preview?.slug);
+      const result = await runBootstrap({
+        repoRefs: parseRepoRefs(state.repoRefsText || state.repoRef),
+        name: state.projectName.trim() || undefined,
+        slug: state.slug.trim() || state.preview?.slug,
+      });
       if (!openRef.current) return;
       setState((s) => ({ ...s, result, loading: false }));
     } catch (err) {
@@ -155,8 +177,16 @@ export function BootstrapWizard({ open, onClose }: BootstrapWizardProps) {
         <div style={{ marginTop: 16 }}>
           {state.step === 'repo' && (
             <StepRepo
-              repoRef={state.repoRef}
-              onChange={(repoRef) => setState((s) => ({ ...s, repoRef, error: null }))}
+              repoRefsText={state.repoRefsText}
+              projectName={state.projectName}
+              slug={state.slug}
+              onRepoRefsChange={(repoRefsText) =>
+                setState((s) => ({ ...s, repoRefsText, repoRef: repoRefsText, error: null }))
+              }
+              onProjectNameChange={(projectName) =>
+                setState((s) => ({ ...s, projectName, error: null }))
+              }
+              onSlugChange={(slug) => setState((s) => ({ ...s, slug, error: null }))}
               loading={state.loading}
               onSubmit={handleValidateRepo}
             />
@@ -204,7 +234,7 @@ export function BootstrapWizard({ open, onClose }: BootstrapWizardProps) {
 function canAdvance(state: WizardState): boolean {
   if (state.loading) return false;
   if (state.step === 'repo') {
-    return isValidRepoRef(state.repoRef);
+    return isValidRepoRefs(state.repoRefsText || state.repoRef);
   }
   if (state.step === 'submit') {
     return state.result != null;
@@ -257,13 +287,21 @@ function StepIndicator({ current }: { current: WizardStep }) {
 }
 
 function StepRepo({
-  repoRef,
-  onChange,
+  repoRefsText,
+  projectName,
+  slug,
+  onRepoRefsChange,
+  onProjectNameChange,
+  onSlugChange,
   loading,
   onSubmit,
 }: {
-  repoRef: string;
-  onChange: (v: string) => void;
+  repoRefsText: string;
+  projectName: string;
+  slug: string;
+  onRepoRefsChange: (v: string) => void;
+  onProjectNameChange: (v: string) => void;
+  onSlugChange: (v: string) => void;
   loading: boolean;
   onSubmit: () => void;
 }) {
@@ -275,34 +313,51 @@ function StepRepo({
         if (!loading) onSubmit();
       }}
     >
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: 10, marginBottom: 10 }}>
+        <Field label="Project alias" htmlFor="bootstrap-project-name">
+          <input
+            id="bootstrap-project-name"
+            data-testid="bootstrap-project-name-input"
+            type="text"
+            value={projectName}
+            onChange={(e) => onProjectNameChange(e.target.value)}
+            placeholder="Goose Hub"
+            autoComplete="off"
+            style={textInputStyle}
+          />
+        </Field>
+        <Field label="Slug" htmlFor="bootstrap-project-slug">
+          <input
+            id="bootstrap-project-slug"
+            data-testid="bootstrap-slug-input"
+            type="text"
+            value={slug}
+            onChange={(e) => onSlugChange(e.target.value)}
+            placeholder="goose-hub"
+            autoComplete="off"
+            style={textInputStyle}
+          />
+        </Field>
+      </div>
       <label
         htmlFor="bootstrap-repo-ref"
         style={{ display: 'block', fontSize: 12, color: 'var(--fg-2)', marginBottom: 4 }}
       >
-        GitHub repository (owner/repo)
+        GitHub repositories (owner/repo, one per line)
       </label>
-      <input
+      <textarea
         id="bootstrap-repo-ref"
         data-testid="bootstrap-repo-input"
-        type="text"
-        value={repoRef}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="octo/widgets"
+        value={repoRefsText}
+        onChange={(e) => onRepoRefsChange(e.target.value)}
+        placeholder={'octo/widgets\nocto/docs'}
         autoComplete="off"
         autoCapitalize="off"
         spellCheck={false}
         style={{
-          display: 'block',
-          width: '100%',
-          boxSizing: 'border-box',
-          padding: '6px 10px',
-          borderRadius: 6,
-          border: '1px solid var(--line)',
-          background: 'var(--bg)',
-          color: 'var(--fg)',
-          fontSize: 13,
-          fontFamily: 'monospace',
-          outline: 'none',
+          ...textInputStyle,
+          minHeight: 72,
+          resize: 'vertical',
         }}
       />
       <p style={{ marginTop: 6, fontSize: 11, color: 'var(--fg-3)' }}>
@@ -310,6 +365,37 @@ function StepRepo({
         token.
       </p>
     </form>
+  );
+}
+
+const textInputStyle: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  boxSizing: 'border-box',
+  padding: '6px 10px',
+  borderRadius: 6,
+  border: '1px solid var(--line)',
+  background: 'var(--bg)',
+  color: 'var(--fg)',
+  fontSize: 13,
+  fontFamily: 'monospace',
+  outline: 'none',
+};
+
+function Field({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label htmlFor={htmlFor} style={{ display: 'block', fontSize: 12, color: 'var(--fg-2)' }}>
+      <span style={{ display: 'block', marginBottom: 4 }}>{label}</span>
+      {children}
+    </label>
   );
 }
 
@@ -327,6 +413,16 @@ function StepStack({ preview }: { preview: BootstrapPreviewDto }) {
       <p style={{ margin: '0 0 4px', fontSize: 12 }}>
         <strong>Slug:</strong> <code style={{ fontFamily: 'monospace' }}>{preview.slug}</code>
       </p>
+      <p style={{ margin: '0 0 4px', fontSize: 12 }}>
+        <strong>Repos:</strong> {preview.repos.length}
+      </p>
+      <ul style={{ margin: '8px 0 0 18px', padding: 0, fontSize: 12, color: 'var(--fg-2)' }}>
+        {preview.repos.map((repo) => (
+          <li key={repo.repoRef}>
+            <code style={{ fontFamily: 'monospace' }}>{repo.repoRef}</code> — {repo.stackSummary}
+          </li>
+        ))}
+      </ul>
       <pre
         data-testid="stack-summary"
         style={{

@@ -35,13 +35,16 @@ import {
   type InstallResult,
   installLabels as defaultInstallLabels,
 } from '../bootstrap/label-installer.js';
+import {
+  type InspectedGithubRepo,
+  inspectGithubRepo as defaultInspectGithubRepo,
+} from '../bootstrap/github-repo-inspector.js';
 import { type StackInfo, detectStack as defaultDetectStack } from '../bootstrap/stack-detector.js';
 import {
   applyLabels,
   createBranch,
   findExistingRegistrationPrs,
   getDefaultBranchSha,
-  getRepoInfo,
   openPullRequest,
   putFileOnBranch,
 } from './bootstrap-github.js';
@@ -61,9 +64,13 @@ export { renderPrBody, renderProjectConfig, renderReposMd, summariseStack };
 
 export interface BootstrapInput {
   /** "owner/repo" of the target project to bootstrap. */
-  repoRef: string;
+  repoRef?: string;
+  /** One or more GitHub repositories to register under the target project. */
+  repoRefs?: string[];
   /** GitHub token with repo write access on both target repo + shaunnez/goose-hub. */
   token: string;
+  /** Human-facing project alias. Defaults to the slug. */
+  name?: string;
   /** Optional override slug; defaults to a sanitised form of the repo name. */
   slug?: string;
   /** Local directory containing (or for cloning) the target repo. */
@@ -83,6 +90,7 @@ export interface BootstrapDeps {
   detectStack?: typeof defaultDetectStack;
   auditClaudeMd?: typeof defaultAuditClaudeMd;
   installLabels?: typeof defaultInstallLabels;
+  inspectGithubRepo?: typeof defaultInspectGithubRepo;
   fetch?: typeof fetch;
   writeFile?: typeof nodeFs.writeFile;
   mkdir?: typeof nodeFs.mkdir;
@@ -132,6 +140,28 @@ export function parseRepoRef(ref: string): { owner: string; repo: string } {
   return { owner: parts[0], repo: parts[1] };
 }
 
+export function normalizeRepoRefs(input: Pick<BootstrapInput, 'repoRef' | 'repoRefs'>): string[] {
+  const refs = input.repoRefs?.length
+    ? input.repoRefs
+    : input.repoRef != null
+      ? [input.repoRef]
+      : [];
+  const normalized = refs.map((ref) => ref.trim()).filter(Boolean);
+  if (normalized.length === 0) {
+    throw new BootstrapInputError('at least one repoRef is required');
+  }
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const ref of normalized) {
+    parseRepoRef(ref);
+    const key = ref.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(ref);
+  }
+  return deduped;
+}
+
 // ---------------------------------------------------------------------------
 // Public workflow entry point
 // ---------------------------------------------------------------------------
@@ -143,13 +173,16 @@ export async function bootstrapProject(
   const detectStack = deps.detectStack ?? defaultDetectStack;
   const auditClaudeMd = deps.auditClaudeMd ?? defaultAuditClaudeMd;
   const installLabels = deps.installLabels ?? defaultInstallLabels;
+  const inspectGithubRepo = deps.inspectGithubRepo ?? defaultInspectGithubRepo;
   const fetchImpl = deps.fetch ?? fetch;
   const writeFileImpl = deps.writeFile ?? nodeFs.writeFile;
   const mkdirImpl = deps.mkdir ?? nodeFs.mkdir;
   const log = deps.log ?? ((msg: string) => console.log(msg));
 
-  const { owner, repo } = parseRepoRef(input.repoRef);
+  const repoRefs = normalizeRepoRefs(input);
+  const { owner, repo } = parseRepoRef(repoRefs[0]);
   const slug = sanitiseSlug(input.slug ?? repo);
+  const name = input.name?.trim() || slug;
 
   // ── Idempotency check ────────────────────────────────────────────────
   const existing = await findExistingRegistrationPrs(slug, input.token, fetchImpl);
@@ -165,31 +198,43 @@ export async function bootstrapProject(
     };
   }
 
-  // ── Step 1: detect stack ─────────────────────────────────────────────
-  const stack = await detectStack(nodePath.join(input.cloneRoot, repo));
+  // ── Step 1: inspect remote repos + detect stack ──────────────────────
+  const inspectedRepos = await inspectRepos({
+    repoRefs,
+    fetchImpl,
+    token: input.token,
+    inspectGithubRepo,
+    detectStack,
+    auditClaudeMd,
+    cloneRoot: input.cloneRoot,
+    useLocalFallback:
+      deps.inspectGithubRepo == null && (deps.detectStack != null || deps.auditClaudeMd != null),
+  });
+  const primary = inspectedRepos[0];
+  const stack = primary.stack;
   const stackSummary = summariseStack(stack);
 
-  // ── Step 2: audit CLAUDE.md ──────────────────────────────────────────
-  const audit = await auditClaudeMd(nodePath.join(input.cloneRoot, repo), {
-    type: stack.type,
-    commands: stack.type === 'node' ? stack.scripts : undefined,
-  });
+  // ── Step 2: audit agent instruction files ────────────────────────────
+  const audit = primary.audit;
 
-  // ── Step 3: install labels on the *target* repo ──────────────────────
-  const labels = await installLabels(input.repoRef, input.token, fetchImpl);
+  // ── Step 3: install labels on linked GitHub repos for optional mirroring ─
+  const labels = aggregateLabelResults(
+    await Promise.all(repoRefs.map((repoRef) => installLabels(repoRef, input.token, fetchImpl))),
+  );
 
   // ── Step 4: scaffold target-projects/<slug>/project.config.ts ────────
-  // Fetch the *target* repo's default branch and description in one round-trip.
-  const { defaultBranch: targetDefaultBranch, description: targetDescription } = await getRepoInfo(
-    fetchImpl,
-    input.token,
-    input.repoRef,
-  );
   const detectedAt = new Date().toISOString();
   const configContent = renderProjectConfig({
     slug,
-    repoRef: input.repoRef,
-    defaultBranch: targetDefaultBranch,
+    name,
+    repoRef: repoRefs[0],
+    repos: inspectedRepos.map((repoInfo) => ({
+      repoRef: repoInfo.repoRef,
+      defaultBranch: repoInfo.defaultBranch,
+      description: repoInfo.description,
+      cloneUrl: repoInfo.cloneUrl,
+    })),
+    defaultBranch: primary.defaultBranch,
     cloneRoot: input.cloneRoot,
     stack,
     detectedAt,
@@ -225,7 +270,15 @@ export async function bootstrapProject(
     message: `bootstrap: scaffold target-projects/${slug}/project.config.ts`,
   });
 
-  const reposMdContent = renderReposMd(slug, input.repoRef, targetDescription);
+  const reposMdContent = renderReposMd(
+    slug,
+    inspectedRepos.map((repoInfo) => ({
+      repoRef: repoInfo.repoRef,
+      defaultBranch: repoInfo.defaultBranch,
+      description: repoInfo.description,
+      cloneUrl: repoInfo.cloneUrl,
+    })),
+  );
   await putFileOnBranch({
     fetchImpl,
     token: input.token,
@@ -241,7 +294,7 @@ export async function bootstrapProject(
   // PR it directly into the target). We do NOT add CLAUDE.md to the
   // goose-hub registration PR — that would be a governance violation.
 
-  const prBody = renderPrBody({ repoRef: input.repoRef, slug, stack, audit, labels });
+  const prBody = renderPrBody({ repoRef: repoRefs[0], repoRefs, slug, name, stack, audit, labels });
   const opened = await openPullRequest({
     fetchImpl,
     token: input.token,
@@ -268,4 +321,60 @@ export async function bootstrapProject(
     auditAction: audit.action,
     labelCounts: { created: labels.created, updated: labels.updated, skipped: labels.skipped },
   };
+}
+
+async function inspectRepos(input: {
+  repoRefs: string[];
+  fetchImpl: typeof fetch;
+  token: string;
+  inspectGithubRepo: typeof defaultInspectGithubRepo;
+  detectStack: typeof defaultDetectStack;
+  auditClaudeMd: typeof defaultAuditClaudeMd;
+  cloneRoot: string;
+  useLocalFallback: boolean;
+}): Promise<InspectedGithubRepo[]> {
+  if (input.useLocalFallback) {
+    const inspected: InspectedGithubRepo[] = [];
+    for (const repoRef of input.repoRefs) {
+      const { repo } = parseRepoRef(repoRef);
+      const stack = await input.detectStack(nodePath.join(input.cloneRoot, repo));
+      const audit = await input.auditClaudeMd(nodePath.join(input.cloneRoot, repo), {
+        type: stack.type,
+        commands: stack.type === 'node' ? stack.scripts : undefined,
+      });
+      inspected.push({
+        repoRef,
+        defaultBranch: 'main',
+        description: '',
+        cloneUrl: `git@github.com:${repoRef}.git`,
+        stack,
+        audit,
+      });
+    }
+    return inspected;
+  }
+
+  const inspected: InspectedGithubRepo[] = [];
+  for (const repoRef of input.repoRefs) {
+    inspected.push(
+      await input.inspectGithubRepo({
+        fetchImpl: input.fetchImpl,
+        token: input.token,
+        repoRef,
+      }),
+    );
+  }
+  return inspected;
+}
+
+function aggregateLabelResults(results: InstallResult[]): InstallResult {
+  return results.reduce<InstallResult>(
+    (acc, result) => ({
+      created: acc.created + result.created,
+      updated: acc.updated + result.updated,
+      skipped: acc.skipped + result.skipped,
+      errors: [...acc.errors, ...result.errors],
+    }),
+    { created: 0, updated: 0, skipped: 0, errors: [] },
+  );
 }

@@ -20,18 +20,23 @@
 
 import * as nodeOs from 'node:os';
 import * as nodePath from 'node:path';
-import { auditClaudeMd } from '@goose-hub/core/bootstrap/claude-md-auditor.js';
+import type { AuditResult } from '@goose-hub/core/bootstrap/claude-md-auditor.js';
+import {
+  type InspectedGithubRepo,
+  inspectGithubRepo,
+} from '@goose-hub/core/bootstrap/github-repo-inspector.js';
 import { FACTORY_LABELS } from '@goose-hub/core/bootstrap/labels.js';
-import { detectStack } from '@goose-hub/core/bootstrap/stack-detector.js';
+import { importGitHubIssuesToLocalDb } from '@goose-hub/core/integrations/github/import-issues.js';
 import { logger } from '@goose-hub/core/logger.js';
 import {
   type BootstrapResult,
   bootstrapProject,
-  parseRepoRef,
+  normalizeRepoRefs,
   sanitiseSlug,
   summariseStack,
 } from '@goose-hub/core/workflows/bootstrap-project.js';
 import type { Result } from '#shared/middleware.js';
+import { getProject } from '#shared/projects.js';
 
 export interface PreviewLabelDto {
   name: string;
@@ -41,7 +46,16 @@ export interface PreviewLabelDto {
 
 export interface BootstrapPreviewDto {
   slug: string;
+  name: string;
   defaultBranch: string;
+  repos: Array<{
+    repoRef: string;
+    defaultBranch: string;
+    description: string;
+    stackSummary: string;
+    auditAction: AuditResult['action'];
+    auditPath: string | null;
+  }>;
   stack: {
     type: string;
     summary: string;
@@ -64,9 +78,36 @@ export interface BootstrapRunDto {
   labelCounts?: { created: number; updated: number; skipped: number };
 }
 
+export interface LocalDbActivationDto {
+  slug: string;
+  reposLinked: number;
+  issuesImported: number;
+  issuesUpdated: number;
+  issuesSkipped: number;
+  mirrorLabels: boolean;
+}
+
+export interface BootstrapRequestDto {
+  repoRef?: string;
+  repoRefs?: string[];
+  slug?: string;
+  name?: string;
+}
+
 const MOCK_FIXTURE_PREVIEW: BootstrapPreviewDto = {
   slug: 'mock-repo',
+  name: 'mock-repo',
   defaultBranch: 'main',
+  repos: [
+    {
+      repoRef: 'octo/mock-repo',
+      defaultBranch: 'main',
+      description: 'Mock repo',
+      stackSummary: 'node (pnpm) — scripts: build, test, lint',
+      auditAction: 'create',
+      auditPath: 'CLAUDE.md',
+    },
+  ],
   stack: {
     type: 'node',
     summary: 'node (pnpm) — scripts: build, test, lint',
@@ -111,50 +152,41 @@ function getCloneRoot(): string {
   return process.env.BOOTSTRAP_CLONE_ROOT ?? nodePath.join(nodeOs.tmpdir(), 'goose-hub-bootstrap');
 }
 
-/**
- * Preview the stack + CLAUDE.md audit + canonical label set for `repoRef`
- * without making any GitHub mutations.
- *
- * Note: this calls `detectStack` and `auditClaudeMd` against a *local*
- * checkout of the target repo at `<cloneRoot>/<repo>`. The wizard's UX
- * assumes the human has already cloned the repo to the standard location;
- * if the path doesn't exist the detectors fall back to `unknown`/`create`
- * which is still safe (the human can edit the scaffold before merging the
- * registration PR).
- */
 export async function previewBootstrapService(
-  repoRef: string,
+  input: string | BootstrapRequestDto,
 ): Promise<Result<BootstrapPreviewDto>> {
-  if (typeof repoRef !== 'string' || repoRef.trim().length === 0) {
-    return { ok: false, error: 'repoRef is required', status: 400 };
-  }
-
-  if (isMockMode()) {
-    return {
-      ok: true,
-      data: { ...MOCK_FIXTURE_PREVIEW, slug: deriveSlugForRepo(repoRef) },
-    };
-  }
-
-  let parsed: { owner: string; repo: string };
+  const request = normalizeBootstrapRequest(input);
+  let repoRefs: string[];
   try {
-    parsed = parseRepoRef(repoRef);
+    repoRefs = normalizeRepoRefs(request);
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : `invalid repoRef: ${repoRef}`,
+      error: err instanceof Error ? err.message : 'invalid repository input',
       status: 400,
     };
   }
 
   let slug: string;
   try {
-    slug = sanitiseSlug(parsed.repo);
+    slug = deriveSlugForRequest(request, repoRefs);
   } catch (err) {
     return {
       ok: false,
       error: err instanceof Error ? err.message : 'failed to derive slug',
       status: 400,
+    };
+  }
+
+  if (isMockMode()) {
+    return {
+      ok: true,
+      data: {
+        ...MOCK_FIXTURE_PREVIEW,
+        slug,
+        name: request.name?.trim() || slug,
+        repos: repoRefs.map((repoRef) => ({ ...MOCK_FIXTURE_PREVIEW.repos[0], repoRef })),
+      },
     };
   }
 
@@ -167,80 +199,50 @@ export async function previewBootstrapService(
     };
   }
 
-  // Validate accessibility via GET /repos/:owner/:repo. We use this to
-  // populate `defaultBranch` in the response (and to surface 404 early).
-  let defaultBranch = 'main';
+  let inspected: InspectedGithubRepo[];
   try {
-    const res = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'goose-hub-bootstrap-preview',
-      },
-    });
-    if (res.status === 404) {
-      return { ok: false, error: `repo not found: ${repoRef}`, status: 404 };
-    }
-    if (!res.ok) {
-      return {
-        ok: false,
-        error: `failed to access ${repoRef}: ${res.status} ${res.statusText}`,
-        status: 502,
-      };
-    }
-    const meta = (await res.json()) as { default_branch?: string };
-    if (meta.default_branch) defaultBranch = meta.default_branch;
+    inspected = await Promise.all(
+      repoRefs.map((repoRef) => inspectGithubRepo({ fetchImpl: fetch, token, repoRef })),
+    );
   } catch (err) {
-    logger.warn('bootstrap preview: repo accessibility check failed', {
-      repoRef,
+    logger.warn('bootstrap preview: remote repo inspection failed', {
+      repoRefs,
       error: String(err),
     });
+    const status = /-> 404| 404[: ]/.test(String(err)) ? 404 : 502;
     return {
       ok: false,
-      error: `failed to reach github for ${repoRef}: ${String(err)}`,
-      status: 502,
+      error:
+        status === 404
+          ? `repo not found: ${repoRefs.join(', ')}`
+          : `failed to inspect github repos: ${String(err)}`,
+      status,
     };
   }
 
-  const repoPath = nodePath.join(getCloneRoot(), parsed.repo);
-
-  let stack: Awaited<ReturnType<typeof detectStack>>;
-  try {
-    stack = await detectStack(repoPath);
-  } catch (err) {
-    logger.warn('bootstrap preview: stack detection failed', { repoRef, error: String(err) });
-    return {
-      ok: false,
-      error: `stack detection failed for ${repoRef}: ${String(err)}`,
-      status: 500,
-    };
-  }
-
-  let audit: Awaited<ReturnType<typeof auditClaudeMd>>;
-  try {
-    audit = await auditClaudeMd(repoPath, {
-      type: stack.type,
-      commands: stack.type === 'node' ? stack.scripts : undefined,
-    });
-  } catch (err) {
-    logger.warn('bootstrap preview: audit failed', { repoRef, error: String(err) });
-    return {
-      ok: false,
-      error: `CLAUDE.md audit failed for ${repoRef}: ${String(err)}`,
-      status: 500,
-    };
-  }
-
+  const primary = inspected[0];
   const dto: BootstrapPreviewDto = {
     slug,
-    defaultBranch,
+    name: request.name?.trim() || slug,
+    defaultBranch: primary.defaultBranch,
+    repos: inspected.map((repoInfo) => ({
+      repoRef: repoInfo.repoRef,
+      defaultBranch: repoInfo.defaultBranch,
+      description: repoInfo.description,
+      stackSummary: summariseStack(repoInfo.stack),
+      auditAction: repoInfo.audit.action,
+      auditPath: repoInfo.audit.path ?? null,
+    })),
     stack: {
-      type: stack.type,
-      summary: summariseStack(stack),
-      raw: stack,
+      type: primary.stack.type,
+      summary: summariseStack(primary.stack),
+      raw: primary.stack,
     },
-    audit: { action: audit.action, content: audit.content, rationale: audit.rationale },
+    audit: {
+      action: primary.audit.action,
+      content: primary.audit.content,
+      rationale: primary.audit.rationale,
+    },
     labelsToInstall: FACTORY_LABELS.map((l) => ({
       name: l.name,
       color: l.color,
@@ -256,41 +258,35 @@ export async function previewBootstrapService(
  * URL on success.
  */
 export async function runBootstrapService(
-  repoRef: string,
+  input: string | BootstrapRequestDto,
   slugOverride?: string,
 ): Promise<Result<BootstrapRunDto>> {
-  if (typeof repoRef !== 'string' || repoRef.trim().length === 0) {
-    return { ok: false, error: 'repoRef is required', status: 400 };
-  }
-
-  if (isMockMode()) {
-    const slug = slugOverride ?? deriveSlugForRepo(repoRef);
-    return { ok: true, data: { ...MOCK_FIXTURE_RUN, slug } };
-  }
-
+  const request = normalizeBootstrapRequest(input);
+  if (slugOverride != null) request.slug = slugOverride;
+  let repoRefs: string[];
   try {
-    parseRepoRef(repoRef);
+    repoRefs = normalizeRepoRefs(request);
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : `invalid repoRef: ${repoRef}`,
+      error: err instanceof Error ? err.message : 'invalid repository input',
       status: 400,
     };
   }
 
-  // Validate the optional client-supplied slug up front so a bad value
-  // (e.g. one that sanitises to empty) reports as 400 input error rather
-  // than being swallowed by the catch-all 500 below.
-  if (slugOverride != null) {
-    try {
-      sanitiseSlug(slugOverride);
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : `invalid slug: ${slugOverride}`,
-        status: 400,
-      };
-    }
+  let slug: string;
+  try {
+    slug = deriveSlugForRequest(request, repoRefs);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : `invalid slug: ${request.slug}`,
+      status: 400,
+    };
+  }
+
+  if (isMockMode()) {
+    return { ok: true, data: { ...MOCK_FIXTURE_RUN, slug } };
   }
 
   const token = getGithubToken();
@@ -305,13 +301,15 @@ export async function runBootstrapService(
   let result: BootstrapResult;
   try {
     result = await bootstrapProject({
-      repoRef,
+      repoRef: request.repoRef,
+      repoRefs,
       token,
-      slug: slugOverride,
+      slug,
+      name: request.name,
       cloneRoot: getCloneRoot(),
     });
   } catch (err) {
-    logger.error('bootstrap workflow failed', { repoRef, error: String(err) });
+    logger.error('bootstrap workflow failed', { repoRefs, error: String(err) });
     return { ok: false, error: String(err), status: 500 };
   }
 
@@ -328,12 +326,37 @@ export async function runBootstrapService(
   };
 }
 
-/** Derive a slug from a `repoRef` using the same sanitisation as the workflow. */
-function deriveSlugForRepo(repoRef: string): string {
-  try {
-    const { repo } = parseRepoRef(repoRef);
-    return sanitiseSlug(repo);
-  } catch {
-    return 'unknown';
+export async function activateLocalDbProject(slug: string): Promise<Result<LocalDbActivationDto>> {
+  const cfg = await getProject(slug);
+  if (cfg == null) return { ok: false, error: 'project not found', status: 404 };
+  if (cfg.source.kind !== 'local-db') {
+    return { ok: false, error: 'project source is not local-db', status: 400 };
   }
+  const token = getGithubToken() ?? undefined;
+  const imported = await importGitHubIssuesToLocalDb({
+    projectConfig: cfg,
+    token,
+  });
+  return {
+    ok: true,
+    data: {
+      slug,
+      reposLinked: imported.repoRefs.length,
+      issuesImported: imported.imported,
+      issuesUpdated: imported.updated,
+      issuesSkipped: imported.skipped,
+      mirrorLabels: cfg.source.integrations?.github?.mirrorLabels === true,
+    },
+  };
+}
+
+function normalizeBootstrapRequest(input: string | BootstrapRequestDto): BootstrapRequestDto {
+  return typeof input === 'string' ? { repoRef: input } : { ...input };
+}
+
+/** Derive a slug using the same sanitisation as the workflow. */
+function deriveSlugForRequest(request: BootstrapRequestDto, repoRefs: string[]): string {
+  if (request.slug != null) return sanitiseSlug(request.slug);
+  const firstRepoName = repoRefs[0].split('/')[1] ?? repoRefs[0];
+  return sanitiseSlug(firstRepoName);
 }

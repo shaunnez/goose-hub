@@ -31,6 +31,13 @@ export async function sweepCommand(slug: string, milestoneArg: string): Promise<
     process.exit(1);
   }
 
+  if (config.source.kind !== 'github') {
+    console.error(
+      `goose sweep currently supports github-labels projects only. ${slug} uses ${config.source.kind}.`,
+    );
+    process.exit(1);
+  }
+
   const source = new GitHubLabelsSource(config.id, config.source.repo, token);
 
   let allOpen: WorkItem[];

@@ -1,12 +1,14 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockPreview, mockRun } = vi.hoisted(() => ({
+const { mockActivate, mockPreview, mockRun } = vi.hoisted(() => ({
+  mockActivate: vi.fn(),
   mockPreview: vi.fn(),
   mockRun: vi.fn(),
 }));
 
 vi.mock('./service.js', () => ({
+  activateLocalDbProject: mockActivate,
   previewBootstrapService: mockPreview,
   runBootstrapService: mockRun,
 }));
@@ -27,7 +29,9 @@ describe('POST /projects/bootstrap/preview', () => {
       ok: true,
       data: {
         slug: 'widgets',
+        name: 'widgets',
         defaultBranch: 'main',
+        repos: [],
         stack: { type: 'node', summary: 'node (pnpm)', raw: {} },
         audit: { action: 'create', content: '...', rationale: '...' },
         labelsToInstall: [{ name: 'factory:done', color: 'd1d5db', description: 'Done' }],
@@ -42,7 +46,7 @@ describe('POST /projects/bootstrap/preview', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { slug: string };
     expect(body.slug).toBe('widgets');
-    expect(mockPreview).toHaveBeenCalledWith('octo/widgets');
+    expect(mockPreview).toHaveBeenCalledWith({ repoRef: 'octo/widgets' });
   });
 
   it('returns the service status code on failure', async () => {
@@ -75,7 +79,7 @@ describe('POST /projects/bootstrap/preview', () => {
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(400);
-    expect(mockPreview).toHaveBeenCalledWith('');
+    expect(mockPreview).toHaveBeenCalledWith({});
   });
 });
 
@@ -101,7 +105,7 @@ describe('POST /projects/bootstrap/run', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { registrationPrUrl: string };
     expect(body.registrationPrUrl).toContain('pull/100');
-    expect(mockRun).toHaveBeenCalledWith('octo/widgets', undefined);
+    expect(mockRun).toHaveBeenCalledWith({ repoRef: 'octo/widgets' });
   });
 
   it('forwards a slug override', async () => {
@@ -122,7 +126,7 @@ describe('POST /projects/bootstrap/run', () => {
       body: JSON.stringify({ repoRef: 'octo/widgets', slug: 'custom' }),
     });
     expect(res.status).toBe(200);
-    expect(mockRun).toHaveBeenCalledWith('octo/widgets', 'custom');
+    expect(mockRun).toHaveBeenCalledWith({ repoRef: 'octo/widgets', slug: 'custom' });
   });
 
   it('returns the service error status on failure', async () => {
@@ -140,5 +144,44 @@ describe('POST /projects/bootstrap/run', () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('workflow exploded');
+  });
+});
+
+describe('POST /projects/bootstrap/activate', () => {
+  it('activates a merged local-db project by slug', async () => {
+    mockActivate.mockResolvedValue({
+      ok: true,
+      data: {
+        slug: 'widgets',
+        reposLinked: 1,
+        issuesImported: 2,
+        issuesUpdated: 0,
+        issuesSkipped: 0,
+        mirrorLabels: true,
+      },
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/bootstrap/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'widgets' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ issuesImported: 2, mirrorLabels: true });
+    expect(mockActivate).toHaveBeenCalledWith('widgets');
+  });
+
+  it('requires slug for activation', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/bootstrap/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockActivate).not.toHaveBeenCalled();
   });
 });

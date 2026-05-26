@@ -35,7 +35,10 @@ export function ProjectConfigPanel({ config }: Props) {
       <Section title="Project">
         <Row label="Name" value={config.name} />
         <Row label="Slug" value={config.slug} />
-        <Row label="Source" value={`${config.source.kind}:${config.source.repo}`} />
+        <Row
+          label="Source"
+          value={`${config.source.kind}${config.source.repo ? `:${config.source.repo}` : ''}`}
+        />
         <Row
           label="Active milestone"
           value={
