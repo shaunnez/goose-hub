@@ -67,6 +67,26 @@ export function SwarmScoutFailedEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
+export function SwarmScoutSkippedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { scoutName?: string; skippedReason?: string } | null;
+  const name = p?.scoutName ?? '—';
+  const reason = p?.skippedReason ?? 'domain not applicable';
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line-400 bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <Clock size={13} className="shrink-0 text-fg-4" />
+        <span className="font-mono uppercase tracking-wider">Scout skipped: {name}</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="text-[11.5px] text-fg-3 break-words">{reason}</div>
+    </li>
+  );
+}
+
 export function SwarmScoutTimeoutEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as { scoutName?: string; scoutTimeoutMs?: number } | null;
   const name = p?.scoutName ?? '—';
@@ -94,15 +114,27 @@ export function SwarmWaveEvent({ event }: { event: AgentEventDto }) {
     scoutCount?: number;
     okCount?: number;
     failedScouts?: string[];
+    skippedScouts?: string[];
+    summary?: string;
   } | null;
   const ok = p?.okCount ?? 0;
   const total = p?.scoutCount ?? 0;
   const failed = p?.failedScouts ?? [];
+  const skipped = p?.skippedScouts ?? [];
 
   const isHalted = event.kind === 'swarm.wave-halted';
   const isIncomplete = event.kind === 'swarm.wave-incomplete';
 
-  const label = isHalted ? 'Wave halted' : isIncomplete ? 'Wave incomplete' : 'Wave completed';
+  const label =
+    p?.summary === 'completed-with-skips'
+      ? 'Wave completed with skips'
+      : p?.summary === 'completed-with-failed-scout'
+        ? 'Wave completed with failed scout'
+        : isHalted
+          ? 'Wave halted'
+          : isIncomplete
+            ? 'Wave incomplete'
+            : 'Wave completed';
   const Icon = isHalted ? AlertTriangle : isIncomplete ? AlertTriangle : Layers;
   const iconClass = isHalted
     ? 'shrink-0 text-[color:var(--danger)]'
@@ -123,6 +155,9 @@ export function SwarmWaveEvent({ event }: { event: AgentEventDto }) {
       </div>
       <div className="text-[11.5px] text-fg-3">
         {ok}/{total} scouts ok
+        {skipped.length > 0 && (
+          <span className="ml-2 text-fg-4">· skipped: {skipped.join(', ')}</span>
+        )}
         {failed.length > 0 && <span className="ml-2 text-fg-4">· failed: {failed.join(', ')}</span>}
       </div>
     </li>

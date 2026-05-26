@@ -315,6 +315,37 @@ describe('groupEvents — investigation runs', () => {
     }
   });
 
+  it('groups scout evidence retry events under the base scout run row', () => {
+    const baseRunId = 'run-investigate:scout:scout-schema:0';
+    const retryRunId = `${baseRunId}:evidence-retry`;
+    const items = groupEvents([
+      makeEvent(1, 'agent.run-started', baseRunId, {
+        payload: { skill: 'scout-schema' },
+      }),
+      makeEvent(2, 'agent.run-completed', baseRunId),
+      makeEvent(3, 'agent.run-started', retryRunId, {
+        payload: { skill: 'scout-schema' },
+      }),
+      makeEvent(4, 'swarm.scout-skipped', retryRunId, {
+        payload: { scoutName: 'scout-schema', skippedReason: 'No schema boundary applies' },
+      }),
+      makeEvent(5, 'agent.run-completed', retryRunId),
+    ]);
+
+    const phase = items.find((item) => item.kind === 'investigation-phase');
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind !== 'investigation-phase') return;
+    const runGroups = phase.items.filter((item) => item.kind === 'run-group');
+    expect(runGroups).toHaveLength(1);
+    const [group] = runGroups;
+    expect(group?.kind).toBe('run-group');
+    if (group?.kind !== 'run-group') return;
+    expect(group.runId).toBe(baseRunId);
+    expect(
+      group.items.some((item) => item.kind === 'event' && item.event.runId === retryRunId),
+    ).toBe(true);
+  });
+
   it('uses start time and runId as stable tie-breakers for same-second activity', () => {
     const sameActivity = '2026-05-12T10:00:10Z';
     const sameStart = '2026-05-12T10:00:01Z';
