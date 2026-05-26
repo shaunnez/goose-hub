@@ -1,9 +1,18 @@
-import { describe, expect, it } from 'vitest';
-import { auditSkillContracts, formatSkillContractAudit } from './skill-contract-audit.js';
+import { beforeAll, describe, expect, it } from 'vitest';
+import {
+  auditSkillContracts,
+  formatSkillContractAudit,
+  type SkillContractAudit,
+} from './skill-contract-audit.js';
 
 describe('skill-contract-audit', () => {
-  it('produces a readable per-skill report without enforcing cleanliness', async () => {
-    const audit = await auditSkillContracts(process.cwd());
+  let audit: SkillContractAudit;
+
+  beforeAll(async () => {
+    audit = await auditSkillContracts(process.cwd());
+  });
+
+  it('produces a readable per-skill report without enforcing cleanliness', () => {
     expect(audit.skills.length).toBeGreaterThan(0);
 
     const implement = audit.skills.find((s: { skill: string }) => s.skill === 'implement');
@@ -21,9 +30,7 @@ describe('skill-contract-audit', () => {
     expect(output).toContain('projectOverlays:');
   });
 
-  it('enforces deterministic context tag drift checks for every runtime skill', async () => {
-    const audit = await auditSkillContracts(process.cwd());
-
+  it('enforces deterministic context tag drift checks for every runtime skill', () => {
     for (const report of audit.skills) {
       expect(report.snakeCaseTags, `${report.skill} should not reference snake_case tags`).toEqual(
         [],
@@ -39,9 +46,7 @@ describe('skill-contract-audit', () => {
     }
   });
 
-  it('requires every runtime skill to declare its output schema in skill.config.ts', async () => {
-    const audit = await auditSkillContracts(process.cwd());
-
+  it('requires every runtime skill to declare its output schema in skill.config.ts', () => {
     for (const report of audit.skills) {
       expect(
         report.outputSchema.configured,
@@ -50,9 +55,7 @@ describe('skill-contract-audit', () => {
     }
   });
 
-  it('requires every runtime skill output example to be marked and schema-valid', async () => {
-    const audit = await auditSkillContracts(process.cwd());
-
+  it('requires every runtime skill output example to be marked and schema-valid', () => {
     for (const report of audit.skills) {
       expect(
         report.outputExample.status,
@@ -61,8 +64,7 @@ describe('skill-contract-audit', () => {
     }
   });
 
-  it('marks the grill/prd/decompose/advisor family clean', async () => {
-    const audit = await auditSkillContracts(process.cwd());
+  it('marks the grill/prd/decompose/advisor family clean', () => {
     const cleanSkills = [
       'grill-me',
       'write-prd',
@@ -84,8 +86,7 @@ describe('skill-contract-audit', () => {
     }
   });
 
-  it('marks the investigate/scout/wave/spec-author family clean', async () => {
-    const audit = await auditSkillContracts(process.cwd());
+  it('marks the investigate/scout/wave/spec-author family clean', () => {
     const cleanSkills = [
       'investigate',
       'scout-code-path',
@@ -112,8 +113,7 @@ describe('skill-contract-audit', () => {
     }
   });
 
-  it('marks the implement/QA/review/evidence family clean', async () => {
-    const audit = await auditSkillContracts(process.cwd());
+  it('marks the implement/QA/review/evidence family clean', () => {
     const cleanSkills = [
       'implement',
       'implement-wp',
@@ -139,9 +139,7 @@ describe('skill-contract-audit', () => {
     }
   });
 
-  it('keeps path language canonical across base prompts and project overlays', async () => {
-    const audit = await auditSkillContracts(process.cwd());
-
+  it('keeps path language canonical across base prompts and project overlays', () => {
     for (const report of audit.skills) {
       expect(
         report.pathLanguage.vagueWorkspaceRelative,
@@ -158,8 +156,7 @@ describe('skill-contract-audit', () => {
     }
   });
 
-  it('includes per-project overlays in the path-language audit', async () => {
-    const audit = await auditSkillContracts(process.cwd());
+  it('includes per-project overlays in the path-language audit', () => {
     const specAuthor = audit.skills.find((s: { skill: string }) => s.skill === 'spec-author');
 
     expect(specAuthor?.projectOverlayPaths).toContain(
@@ -168,9 +165,7 @@ describe('skill-contract-audit', () => {
     expect(specAuthor?.pathLanguage.packageRelativeCommandGuidance).toEqual([]);
   });
 
-  it('keeps worktreePath out of skill prompts and context allowlists', async () => {
-    const audit = await auditSkillContracts(process.cwd());
-
+  it('keeps worktreePath out of skill prompts and context allowlists', () => {
     for (const report of audit.skills) {
       expect(
         report.worktreePathExposure.allowlist,
@@ -183,8 +178,7 @@ describe('skill-contract-audit', () => {
     }
   }, 10_000);
 
-  it('marks the retrospective/audit/coach/sprint family clean', async () => {
-    const audit = await auditSkillContracts(process.cwd());
+  it('marks the retrospective/audit/coach/sprint family clean', () => {
     const cleanSkills = [
       'retrospective-light',
       'retrospective-deep',

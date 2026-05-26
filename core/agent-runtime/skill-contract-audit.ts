@@ -54,6 +54,11 @@ export type WorktreePathExposureReport = {
   configLines: string[];
 };
 
+type SourceFile = {
+  path: string;
+  source: string;
+};
+
 function extractTags(input: string): string[] {
   const matches = input.matchAll(/<\/?([a-zA-Z][a-zA-Z0-9_-]*)\b/g);
   return Array.from(new Set(Array.from(matches, (m) => m[1]))).sort();
@@ -328,9 +333,9 @@ function collectConsumers(
   schemaPath: string,
   schemaSource: string,
   skill: string,
+  sourceFiles: SourceFile[],
 ): string[] {
   const rel = relative(repoRoot, schemaPath).replaceAll('\\', '/');
-  const roots = ['core', 'slices', 'apps/server/src/domains'];
   const consumers = new Set<string>();
   const exportedNames = extractExportedNames(schemaSource);
   const moduleHints = [
@@ -340,32 +345,50 @@ function collectConsumers(
     `skills/${skill}/schema`,
   ];
 
+  for (const file of sourceFiles) {
+    const importsSchema =
+      moduleHints.some((hint) => file.source.includes(hint)) ||
+      exportedNames.some((name) => file.source.includes(name));
+
+    if (importsSchema) {
+      consumers.add(file.path);
+    }
+  }
+
+  return Array.from(consumers).sort();
+}
+
+function collectSourceFiles(repoRoot: string): SourceFile[] {
+  const roots = ['core', 'slices', 'apps/server/src/domains'];
+  const sourceFiles: SourceFile[] = [];
+
   for (const root of roots) {
     const dir = join(repoRoot, root);
     if (!existsSync(dir)) continue;
+
     const stack = [dir];
     while (stack.length > 0) {
       const current = stack.pop();
       if (!current) continue;
+
       for (const item of readdirSync(current, { withFileTypes: true })) {
         const full = join(current, item.name);
         if (item.isDirectory()) {
           stack.push(full);
-        } else if (item.isFile() && /\.(ts|tsx|js|mjs|cjs)$/.test(item.name)) {
-          const src = readFileSync(full, 'utf8');
-          const importsSchema =
-            moduleHints.some((hint) => src.includes(hint)) ||
-            exportedNames.some((name) => src.includes(name));
+          continue;
+        }
 
-          if (importsSchema) {
-            consumers.add(relative(repoRoot, full).replaceAll('\\', '/'));
-          }
+        if (item.isFile() && /\.(ts|tsx|js|mjs|cjs)$/.test(item.name)) {
+          sourceFiles.push({
+            path: relative(repoRoot, full).replaceAll('\\', '/'),
+            source: readFileSync(full, 'utf8'),
+          });
         }
       }
     }
   }
 
-  return Array.from(consumers).sort();
+  return sourceFiles;
 }
 
 async function loadSkillConfig(configPath: string): Promise<SkillConfig | null> {
@@ -398,6 +421,7 @@ export async function auditSkillContracts(repoRoot: string): Promise<SkillContra
     .filter((d) => d.isDirectory())
     .map((d) => d.name)
     .sort();
+  const sourceFiles = collectSourceFiles(repoRoot);
 
   const reports: SkillContractReport[] = [];
 
@@ -443,7 +467,7 @@ export async function auditSkillContracts(repoRoot: string): Promise<SkillContra
       worktreePathExposure: auditWorktreePathExposure(promptWithProjectOverlays, config),
       projectOverlayPaths: projectOverlays.map((overlay) => overlay.path),
       consumerPaths: existsSync(schemaPath)
-        ? collectConsumers(repoRoot, schemaPath, schema, skill)
+        ? collectConsumers(repoRoot, schemaPath, schema, skill, sourceFiles)
         : [],
     });
   }
