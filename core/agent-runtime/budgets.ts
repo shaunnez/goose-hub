@@ -236,6 +236,15 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     modelTier: 'sonnet',
     escalation: { modelTier: 'opus', maxBudgetUsd: 20.0 },
   },
+  // Repair/debug loops need their own tier so cheap implement overrides do not
+  // send verification recovery into a weaker model by accident.
+  'fix-feedback': {
+    maxTurns: 100,
+    maxBudgetUsd: 6.0,
+    timeoutMs: 900_000,
+    modelTier: 'sonnet',
+    escalation: { modelTier: 'opus', maxBudgetUsd: 12.0 },
+  },
   // M19.22 (#698) — code-quality-audit. Opus-tier qualitative scoring across
   // 8 categories; read-only + git log/blame access. Higher turn cap to allow
   // the auditor to verify evidence across multiple files.

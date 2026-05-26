@@ -313,6 +313,74 @@ describe('Tier 2 (Functional) — golden test', () => {
     expect(result.findings[0]?.code).toBe('verification-runner-missing');
   });
 
+  it('classifies React/jsdom harness runtime failures as verification infrastructure', async () => {
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'focused test',
+          command: 'pnpm vitest run apps/web/src/components/chat/components/ChatDock.test.tsx',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp', {
+      runVerificationCommandImpl: async () => ({
+        passed: false,
+        output:
+          'TypeError: React.act is not a function\nTypeError: scrollRef.current?.scrollTo is not a function',
+      }),
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.findings[0]?.category).toBe('verification-infrastructure');
+    expect(result.findings[0]?.code).toBe('verification-harness-runtime');
+  });
+
+  it('keeps app import resolution failures as product failures', async () => {
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'focused test',
+          command: 'pnpm vitest run apps/web/src/components/foo.test.tsx',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp', {
+      runVerificationCommandImpl: async () => ({
+        passed: false,
+        output: "Error: Cannot find module '@/components/MissingWidget'",
+      }),
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.findings[0]?.category).toBe('product');
+  });
+
+  it('keeps Testing Library assertion errors as product failures', async () => {
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'focused test',
+          command: 'pnpm vitest run apps/web/src/components/foo.test.tsx',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp', {
+      runVerificationCommandImpl: async () => ({
+        passed: false,
+        output: 'TestingLibraryElementError: Unable to find an element with the role "button"',
+      }),
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.findings[0]?.category).toBe('product');
+  });
+
   it('passes vacuously when no verificationTooling is declared', async () => {
     const spec = makeSpec({ verificationTooling: [] });
     const result = await verifyFunctional(spec, '/tmp');

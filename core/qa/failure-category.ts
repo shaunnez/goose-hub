@@ -3,6 +3,7 @@ export const QA_FAILURE_CATEGORIES = [
   'product',
   'regression-unrelated',
   'orchestration',
+  'verification-infrastructure',
 ] as const;
 
 export type QaFailureCategory = (typeof QA_FAILURE_CATEGORIES)[number];
@@ -14,7 +15,9 @@ export function classifyQaFailure(input: {
   hasActionableFinding?: boolean;
   hasFailedExecutableCheck?: boolean;
   orchestration?: boolean;
+  verificationInfrastructure?: boolean;
 }): QaFailureCategory {
+  if (input.verificationInfrastructure === true) return 'verification-infrastructure';
   if (input.orchestration === true) return 'orchestration';
   if (input.hasFailedExecutableCheck === true) return 'spec-contract';
   if (input.hasActionableFinding === true) return 'product';

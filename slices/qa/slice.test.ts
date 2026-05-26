@@ -2347,7 +2347,7 @@ describe('runQaWorkflow', () => {
         failedTier: 2,
         reason: 'malformed-verification-command',
         agentSkipped: true,
-        failureCategory: 'orchestration',
+        failureCategory: 'verification-infrastructure',
       });
     });
 

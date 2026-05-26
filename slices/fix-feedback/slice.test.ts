@@ -303,6 +303,44 @@ describe('runFixFeedbackWorkflow', () => {
     );
   });
 
+  it('skips implement and escalates when QA reports deterministic verification infrastructure failure', async () => {
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makePrOpenedEvent(),
+      {
+        id: 3,
+        kind: 'qa.verification-blocked' as EventKind,
+        payload: {
+          failedTier: 2,
+          reason: 'verification-harness-runtime',
+          findings: ['TypeError: React.act is not a function'],
+          deterministic: true,
+          agentSkipped: true,
+          failureCategory: 'verification-infrastructure',
+        },
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#42',
+        createdAt: new Date().toISOString(),
+        runId: 'qa-run-1',
+      },
+    ]);
+    const workItem = makeWorkItem();
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo');
+
+    expect(mockClaudeCliRun).not.toHaveBeenCalled();
+    expect(stateSource.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-fix',
+      'factory:needs-human',
+    );
+    expect(vi.mocked(eventStore.appendEvent)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.fix-feedback-skipped',
+        payload: expect.objectContaining({ reason: 'verification-infrastructure' }),
+      }),
+    );
+  });
+
   it('passes existing worktreePath as runtime workspaceDir', async () => {
     vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent('/work/existing-wt')]);
     mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });

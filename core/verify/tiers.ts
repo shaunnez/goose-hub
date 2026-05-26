@@ -210,7 +210,22 @@ function classifyVerificationCommandFailure(
   ) {
     return { category: 'verification-infrastructure', code: 'verification-harness-config' };
   }
+  if (isLikelyVerificationHarnessFailure(detail)) {
+    return { category: 'verification-infrastructure', code: 'verification-harness-runtime' };
+  }
   return { category: 'product' };
+}
+
+function isLikelyVerificationHarnessFailure(detail: string): boolean {
+  return (
+    /react\.act is not a function/i.test(detail) ||
+    /(?:element|html\w*element)\.prototype\.scrollto|scrollto is not a function/i.test(detail) ||
+    /cleanup is not a function/i.test(detail) ||
+    /referenceerror:\s*(?:window|document|element|html\w*element|localstorage|matchmedia|resizeobserver|intersectionobserver)\s+is not defined/i.test(
+      detail,
+    ) ||
+    /typeerror:.*(?:render|cleanup|act)\b.*is not a function/i.test(detail)
+  );
 }
 
 function normalizeVerificationCommand(command: string): string {
@@ -459,6 +474,9 @@ export async function runTier(
           ? 'qa.functional-failed'
           : 'qa.regression-failed';
 
+    const verificationInfrastructure = result.findings.some(
+      (finding) => finding.category === 'verification-infrastructure',
+    );
     deps.appendEvent({
       projectId: runArtifacts.projectId,
       workItemId: runArtifacts.workItemId ?? null,
@@ -469,7 +487,20 @@ export async function runTier(
         evidence: result.evidence,
         findingCount: result.findings.length,
         runId: runArtifacts.runId,
-        ...(!result.passed ? { failureCategory: classifyQaFailure({ failedTier: tier }) } : {}),
+        ...(!result.passed
+          ? {
+              failureCategory: classifyQaFailure({
+                failedTier: tier,
+                verificationInfrastructure,
+              }),
+              findings: result.findings.map((finding) => ({
+                severity: finding.severity,
+                description: finding.message,
+                code: finding.code,
+                category: finding.category,
+              })),
+            }
+          : {}),
       },
       runId: runArtifacts.runId,
     });
