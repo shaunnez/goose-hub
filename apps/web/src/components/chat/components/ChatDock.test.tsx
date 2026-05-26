@@ -83,7 +83,7 @@ describe('ChatDock', () => {
     await waitFor(() => expect(screen.getByTestId('chat-input')).toBeTruthy());
     expect(fetchConversation).toHaveBeenCalledWith('conv-1');
 
-    fireEvent.click(screen.getByLabelText('Close chat'));
+    fireEvent.click(screen.getByTestId('chat-launcher'));
 
     await waitFor(() => {
       expect(screen.getByTestId('chat-panel').className).toContain('translate-x-full');

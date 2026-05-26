@@ -65,6 +65,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const loadTokenRef = useRef(0);
   const activeConversationIdRef = useRef<string | null>(null);
   const inFlightRunByConversationRef = useRef<Map<string, string>>(new Map());
+  const previousOpenRef = useRef(open);
 
   useEffect(() => {
     activeConversationIdRef.current = conversation?.id ?? null;
@@ -135,6 +136,22 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       // localStorage unavailable — accept the loss; selection is best-effort.
     }
   }, []);
+
+  const resetPanelState = useCallback(() => {
+    loadTokenRef.current += 1;
+    writeActiveId(null);
+    setConversation(null);
+    setMessages([]);
+    setInvocations([]);
+    setView('list');
+  }, [writeActiveId]);
+
+  useEffect(() => {
+    if (previousOpenRef.current && !open) {
+      resetPanelState();
+    }
+    previousOpenRef.current = open;
+  }, [open, resetPanelState]);
 
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;
@@ -415,16 +432,6 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     [navigate, onClose],
   );
 
-  const handleClose = useCallback(() => {
-    loadTokenRef.current += 1;
-    writeActiveId(null);
-    setConversation(null);
-    setMessages([]);
-    setInvocations([]);
-    setView('list');
-    onClose();
-  }, [onClose, writeActiveId]);
-
   const toggleView = useCallback(() => {
     setView((v) => (v === 'thread' ? 'list' : conversation != null ? 'thread' : 'list'));
   }, [conversation]);
@@ -473,7 +480,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         </select>
         <button
           type="button"
-          onClick={handleClose}
+          onClick={onClose}
           aria-label="Close chat"
           className="p-1 text-fg-2 hover:text-fg rounded"
         >
