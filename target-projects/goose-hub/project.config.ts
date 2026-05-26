@@ -1,0 +1,95 @@
+import type { ProjectConfig } from '../../core/types.js';
+
+const config: ProjectConfig = {
+  id: 'goose-hub',
+  name: 'goose-hub',
+  slug: 'goose-hub',
+  source: {
+    kind: 'github',
+    repo: 'shaunnez/goose-hub',
+    stateMachine: 'labels',
+  },
+  targetRepo: {
+    cloneUrl: 'git@github.com:shaunnez/goose-hub.git',
+    defaultBranch: 'main',
+    localPath: '/var/folders/v3/cjyfc_ls0bs35tq3bbmk83bh0000gp/T/goose-hub-bootstrap/goose-hub',
+  },
+  stack: {
+    runtime: 'unknown',
+    packageManager: 'unknown',
+    testCommand: 'echo "TODO: configure testCommand"',
+    detectedAt: "2026-05-26T08:24:42.739Z",
+  },
+  mode: 'supervised',
+  storage: { kind: 'local', path: '~/.factory/data/goose-hub' },
+  repos: ['shaunnez/goose-hub'],
+  agentConfig: {
+    runtime: 'claude-cli',
+    rolesModels: {
+      triager: { primary: 'haiku', fallback: 'haiku', advisor: null },
+      griller: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      'prd-writer': { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      decomposer: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      investigator: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      developer: { primary: 'haiku', fallback: 'sonnet', advisor: null },
+      qa: { primary: 'sonnet', fallback: null, advisor: null },
+      reviewer: { primary: 'sonnet', fallback: null, advisor: null },
+      retrospector: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      researcher: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+    },
+    fallbackPolicy: {
+      critical: 'same-tier-only',
+      high: 'same-tier-only',
+      medium: 'allow-down-tier',
+      low: 'allow-down-tier',
+    },
+    toolAllowlists: {
+      triager: { bundles: ['core'] },
+      griller: { bundles: ['core'] },
+      'prd-writer': { bundles: ['read', 'core'] },
+      decomposer: { bundles: ['read', 'core'] },
+      investigator: { bundles: ['read', 'core'] },
+      developer: { bundles: ['dev-tools'] },
+      qa: { bundles: ['qa-tools'] },
+      reviewer: { bundles: ['read', 'qa-tools'] },
+      retrospector: { bundles: ['core'] },
+      researcher: { bundles: ['read'] },
+    },
+    advisorMode: {
+      enabled: false,
+      triggerOn: { priorities: [] },
+      maxAdvisorBudgetUsd: 0,
+      disableInAutonomous: true,
+    },
+    retrospectivePolicy: {
+      defaultTier: 'light',
+      deepTriggers: [],
+    },
+  },
+  budgets: {
+    dailyTokens: 0,
+    maxParallelAgents: 0,
+    maxRetries: 0,
+    perBashCommandMaxSeconds: 0,
+    perWorkflowMaxUsd: 0,
+    perAgentMaxUsd: 0,
+    perAdvisorMaxUsd: 0,
+  },
+  governance: {
+    immutablePaths: [
+      'MISSION.md',
+      'FACTORY_RULES.md',
+      'CLAUDE.md',
+      'target-projects/**/MISSION.md',
+      'target-projects/**/FACTORY_RULES.md',
+      'target-projects/**/project.config.ts',
+      'target-projects/**/personas/**',
+    ],
+  },
+  isolation: { mode: 'native' },
+  archiveAfterDays: 7,
+  visibility: 'always_visible',
+  colorStripe: '#6366f1',
+};
+
+export default config;
