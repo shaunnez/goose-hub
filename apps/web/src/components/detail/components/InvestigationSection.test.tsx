@@ -2,10 +2,9 @@
 import type { AgentEventDto, EngineeringSpecDto } from '@/lib/types';
 import { ActiveProjectProvider } from '@/state/active-project';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
-import { cleanup } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { InvestigationSection } from './InvestigationSection';
+import { INVESTIGATION_ACCORDION_DEFAULTS, InvestigationSection } from './InvestigationSection';
 
 afterEach(cleanup);
 
@@ -76,6 +75,18 @@ const ENGINEERING_SPEC: EngineeringSpecDto = {
   riskRegister: [],
 };
 
+const ACCEPTANCE_CONTRACT = {
+  source: 'engineering-spec' as const,
+  runId: 'contract-run-1',
+  criteria: [
+    {
+      id: 'AC-1',
+      statement: 'Users can log in.',
+      executableChecks: [{ id: 'check-1', command: 'pnpm test', expectedExitCodes: [0] }],
+    },
+  ],
+};
+
 function investigationEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   return {
     ...INVESTIGATION_EVENT,
@@ -101,14 +112,46 @@ function toolCallEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   };
 }
 
-function renderSection(events: AgentEventDto[] = [], spec?: EngineeringSpecDto | null) {
+type RenderSectionOptions = {
+  spec?: EngineeringSpecDto | null;
+  acceptanceContract?: {
+    source: 'engineering-spec';
+    runId: string;
+    criteria: Array<{
+      id: string;
+      statement: string;
+      executableChecks?: Array<{
+        id: string;
+        command: string;
+        expectedExitCodes?: number[];
+        kind?: string;
+      }>;
+    }>;
+  } | null;
+  itemType?: string;
+  itemState?: string;
+  comments?: Array<{ id: number; body: string; createdAt: string }>;
+};
+
+function renderSection(events: AgentEventDto[] = [], options: RenderSectionOptions = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['events', 'test-proj', '42'], events);
-  if (spec !== undefined) qc.setQueryData(['spec', 'test-proj', '42'], spec);
+  if (options.spec !== undefined) qc.setQueryData(['spec', 'test-proj', '42'], options.spec);
+  if (options.acceptanceContract !== undefined) {
+    qc.setQueryData(['acceptance-contract', 'test-proj', '42'], options.acceptanceContract);
+  }
+  if (options.comments !== undefined) {
+    qc.setQueryData(['comments', 'test-proj', '42'], options.comments);
+  }
   render(
     <QueryClientProvider client={qc}>
       <ActiveProjectProvider initialSlug="test-proj">
-        <InvestigationSection projectSlug="test-proj" id="42" />
+        <InvestigationSection
+          projectSlug="test-proj"
+          id="42"
+          itemType={options.itemType}
+          itemState={options.itemState}
+        />
       </ActiveProjectProvider>
     </QueryClientProvider>,
   );
@@ -127,8 +170,61 @@ describe('InvestigationSection', () => {
     expect(screen.getByTestId('findings-content')).toBeTruthy();
   });
 
+  it('exports the expected accordion default states', () => {
+    expect(INVESTIGATION_ACCORDION_DEFAULTS.findings).toBe(true);
+    expect(INVESTIGATION_ACCORDION_DEFAULTS['acceptance-contract']).toBe(false);
+    expect(INVESTIGATION_ACCORDION_DEFAULTS['engineering-spec']).toBe(false);
+    expect(INVESTIGATION_ACCORDION_DEFAULTS['open-questions']).toBe(false);
+  });
+
+  it('shows findings expanded while acceptance contract and engineering spec start collapsed', () => {
+    renderSection([INVESTIGATION_EVENT], {
+      spec: ENGINEERING_SPEC,
+      acceptanceContract: ACCEPTANCE_CONTRACT,
+    });
+
+    expect(screen.getByTestId('findings-content')).toBeTruthy();
+    expect(screen.queryByText('Users can log in.')).toBeNull();
+    expect(screen.queryByText('Build the authentication flow with token refresh.')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: /Acceptance Contract/i }).getAttribute('aria-expanded'),
+    ).toBe('false');
+    expect(
+      screen.getByRole('button', { name: /Engineering Spec/i }).getAttribute('aria-expanded'),
+    ).toBe('false');
+  });
+
+  it('toggles representative accordion sections without losing existing content test ids', () => {
+    renderSection([INVESTIGATION_EVENT], {
+      spec: ENGINEERING_SPEC,
+      acceptanceContract: ACCEPTANCE_CONTRACT,
+      itemType: 'bug',
+      itemState: 'factory:gate-pending',
+      comments: [
+        {
+          id: 1,
+          body: 'Human review notes:\n\nLooks plausible.',
+          createdAt: '2026-05-22T10:00:00Z',
+        },
+      ],
+    });
+
+    const acceptanceButton = screen.getAllByRole('button', { name: /Acceptance Contract/i })[0];
+    fireEvent.click(acceptanceButton);
+    expect(acceptanceButton.getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: /Open Questions/i }));
+    expect(screen.getByTestId('open-questions-list')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Open Questions/i }));
+    expect(screen.queryByTestId('open-questions-list')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Proceed Gate/i }));
+    expect(screen.getByTestId('investigation-proceed-gate')).toBeTruthy();
+  });
+
   it('renders the Engineering Spec panel when a spec exists', () => {
-    renderSection([INVESTIGATION_EVENT], ENGINEERING_SPEC);
+    renderSection([INVESTIGATION_EVENT], { spec: ENGINEERING_SPEC });
     expect(screen.getByText('Engineering Spec')).toBeTruthy();
     expect(screen.getByText('1 work package · 1 AC')).toBeTruthy();
   });
@@ -142,6 +238,7 @@ describe('InvestigationSection', () => {
 
   it('renders key files list', () => {
     renderSection([INVESTIGATION_EVENT]);
+    fireEvent.click(screen.getByRole('button', { name: /Key Files/i }));
     const filesList = screen.getByTestId('key-files-list');
     expect(filesList).toBeTruthy();
     expect(screen.getByText('src/auth/login.ts')).toBeTruthy();
@@ -150,6 +247,7 @@ describe('InvestigationSection', () => {
 
   it('renders open questions list', () => {
     renderSection([INVESTIGATION_EVENT]);
+    fireEvent.click(screen.getByRole('button', { name: /Open Questions/i }));
     const questionsList = screen.getByTestId('open-questions-list');
     expect(questionsList).toBeTruthy();
     expect(screen.getByText('Does this affect the mobile app?')).toBeTruthy();
