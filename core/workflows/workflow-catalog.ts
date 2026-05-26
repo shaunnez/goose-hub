@@ -601,6 +601,18 @@ const bugEntry: WorkflowCatalogEntry = {
       },
     ),
     skillNode(
+      'bug-enhance-skill',
+      'bug-enhance',
+      'bug-enhance',
+      'triager',
+      'factory:investigating',
+      {
+        group: 'investigation',
+        mode: 'conditional',
+        notes: 'Lazy UI/web bug grounding when no promotion seed exists.',
+      },
+    ),
+    skillNode(
       'investigate-skill',
       'investigate',
       'investigate',
@@ -745,6 +757,7 @@ const bugEntry: WorkflowCatalogEntry = {
     primary('investigating', 'investigation-complete'),
     primary('investigation-complete', 'dev-ready'),
     optional('investigating', 'needs-human', 'Investigation blocked'),
+    summary('investigating', 'bug-enhance-skill', 'lazy bug grounding'),
     summary('investigating', 'investigate-skill'),
     summary('investigating', 'playwright-repro-skill', 'browser repro'),
     summary('investigation-complete', 'acceptance-contract-skill', 'legacy contract'),
@@ -800,6 +813,13 @@ const bugEntry: WorkflowCatalogEntry = {
         },
       ],
       branches: [
+        {
+          id: 'lazy-bug-grounding',
+          title: 'Lazy bug grounding',
+          description: 'Runs bug-enhance inside investigation when no promotion seed exists.',
+          kind: 'conditional',
+          nodes: ['bug-enhance-skill'],
+        },
         {
           id: 'investigation-blocked',
           title: 'Investigation blocked',

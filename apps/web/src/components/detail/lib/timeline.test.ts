@@ -1454,6 +1454,34 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     ).toBe(true);
   });
 
+  it('keeps lazy bug-enhance runs inside investigation', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'bug-enhance-run', {
+        payload: { skill: 'bug-enhance' },
+      }),
+      makeEvent(2, 'agent.tool-call', 'bug-enhance-run', {
+        payload: { tool_name: 'read_file' },
+      }),
+      makeEvent(3, 'agent.run-completed', 'bug-enhance-run', {
+        payload: { skill: 'bug-enhance' },
+      }),
+    ]);
+
+    expect(
+      items.some((item) => item.kind === 'timeline-section' && item.section === 'system'),
+    ).toBe(false);
+    const investigation = items.find(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'investigation',
+    );
+    expect(investigation).toBeDefined();
+    expect(
+      investigation?.items.some(
+        (item) => item.kind === 'run-group' && item.runId === 'bug-enhance-run',
+      ),
+    ).toBe(true);
+  });
+
   it('keeps section cost attribution limited to runs inside that section', () => {
     const items = groupTimelineEventsByCanonicalSection([
       makeEvent(1, 'agent.run-started', 'run-grill-cost', { payload: { skill: 'grill-me' } }),
