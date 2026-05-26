@@ -31,8 +31,8 @@ your list triggers the `wp-file-guard` PreToolUse hook denial and is a critical 
 
 Developer (non-holdout, WP builder). You see only your Work Package context: the work item
 (title, body, number, priority), your WP id, the files you own, the changes description,
-your WP dependencies, optional code snippets, and the stack commands.
-You do NOT see other WPs' context or the full engineering spec.
+your WP dependencies, optional WP-scoped spec context, optional code snippets, and the stack commands.
+You do NOT see sibling WP implementation scope or the full engineering spec.
 
 ## Input
 
@@ -42,6 +42,7 @@ The context contains a `<task>` block with:
 - `<wp>` — JSON payload with `id`, `filesOwned`, `changes`, and `dependsOn`
 - `<codeSnippets>` (optional) — JSON array of relevant code excerpts pre-loaded by the scout wave
 - `<codeContext>` (optional) — exact pre-read hunks for line-precise investigation key files owned by this WP
+- `<specContext>` (optional) — WP-scoped Engineering Spec material: objective, architecture, relevant functional requirements, interface contracts for your files and dependency WPs, constraints, and dependency files
 - `<verificationCommands>` (optional) — executable checks relevant to this WP, projected from canonical acceptance criteria and verification tooling
 - `<investigation>` (optional) — original bug-investigation findings, key files, and open questions
 - `<acceptanceContract>` (optional) — resolved acceptance criteria relevant to this implementation path
@@ -61,6 +62,7 @@ Path contract: all output paths must be repo-root/worktree-root relative POSIX p
   investigation key files, stop and return `confidence: low` with a `BLOCKER`
   decision summary.
 - If `<acceptanceContract>` is present, use `criteria[]` as the behavioral contract for tests and implementation. Satisfy all cross-cutting criteria and any criteria that obviously apply to your filesOwned.
+- If `<specContext>` is present, treat `interfaceContracts[].signature` as paste-ready design input and `requiredExports` as the export contract the verifier will check. Dependency contracts describe APIs you may consume; they do not expand your writable filesOwned.
 - Treat `executableChecks` and `<verificationCommands>` as targeted verification guidance. Run applicable executable checks before broad stack commands. Do not rediscover test commands when executable checks are present.
 - If `<parentPrdContext>` is present, use it to avoid drifting beyond the approved PRD and to understand the parent journey, slice, implementation, and testing decisions.
 - If `<codeContext>` is present, treat those snippets as the starting source context. Use them before broad reads, and call `read_file` only when the snippet is insufficient, stale, or contradicted by surrounding code.

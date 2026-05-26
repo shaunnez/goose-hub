@@ -91,6 +91,7 @@ describe('implement-wp skill.config', () => {
     expect(allowlist).toContain('wp.filesOwned');
     expect(allowlist).toContain('wp.changes');
     expect(allowlist).toContain('codeContext');
+    expect(allowlist).toContain('specContext');
     expect(allowlist).toContain('parentPrdContext');
     expect(allowlist).not.toContain('worktreePath');
   });
@@ -127,6 +128,33 @@ describe('implement-wp skill.config', () => {
           snippet: '10: export function bar() {',
         },
       ],
+      specContext: {
+        objective: 'Add bar helper',
+        architecture: {
+          current: 'No helper',
+          new: 'Export helper',
+          decisionRationale: 'Keep logic shared',
+        },
+        functionalRequirements: [{ id: 'FR1', statement: 'bar returns guarded values.' }],
+        interfaceContracts: [
+          {
+            name: 'bar helper',
+            signature: 'export function bar(): string',
+            file: 'core/foo/bar.ts',
+            requiredExports: [{ name: 'bar' }],
+            lineRange: null,
+          },
+        ],
+        constraints: [
+          {
+            kind: 'output-format',
+            name: 'bar output',
+            source: 'core/foo/bar.ts:bar',
+          },
+        ],
+        dependencyWpIds: [],
+        dependencyFilesOwned: [],
+      },
       investigation: {
         findings: 'bar needs a guard',
         keyFiles: [
@@ -175,5 +203,11 @@ describe('implement-wp prompt live decisions', () => {
   it('documents line-precise code context', () => {
     expect(prompt).toContain('<codeContext>');
     expect(prompt).toContain('exact pre-read hunks');
+  });
+
+  it('documents WP-scoped spec context contracts', () => {
+    expect(prompt).toContain('<specContext>');
+    expect(prompt).toContain('interfaceContracts[].signature');
+    expect(prompt).toContain('requiredExports');
   });
 });

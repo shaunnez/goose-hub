@@ -1,8 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
-import type { ExecutableCheck } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import {
   type EffectiveDevReviewConfig,
@@ -72,6 +70,7 @@ import {
   resolveImplementWpControl,
 } from './wp-budget.js';
 import { runOneWpBuilder } from './wp-builder.js';
+import { buildImplementWpContextFromSpec } from './wp-context.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -161,36 +160,6 @@ function filterWpObservedFiles(
 
 function declaredWpFilesWritten(paths: Array<{ path: string }>): string[] {
   return uniqueSorted(paths.map((file) => file.path));
-}
-
-function acceptanceContractFromSpec(
-  spec: EngineeringSpec,
-  pipelineRunId: string,
-): AcceptanceContract {
-  return {
-    source: 'engineering-spec',
-    runId: pipelineRunId,
-    criteria: spec.acceptanceCriteria.map((ac, index) => ({
-      id: ac.id ?? `AC-${index + 1}`,
-      statement: ac.statement,
-      ...(ac.executableChecks != null && ac.executableChecks.length > 0
-        ? { executableChecks: ac.executableChecks }
-        : {}),
-      ...(ac.journeyRef != null ? { journeyRef: ac.journeyRef } : {}),
-      ...(ac.stepIdx != null ? { stepIdx: ac.stepIdx } : {}),
-      ...(ac.crossCutting != null ? { crossCutting: ac.crossCutting } : {}),
-      sourceRef: 'engineering_specs.spec.acceptanceCriteria',
-    })),
-  };
-}
-
-function verificationCommandsFromSpec(spec: EngineeringSpec): ExecutableCheck[] {
-  return spec.verificationTooling.map((tool, index) => ({
-    id: `verification-tool-${index + 1}`,
-    command: tool.command,
-    expectedExitCodes: tool.expectedExitCodes,
-    kind: 'custom',
-  }));
 }
 
 function emitWpObservedMismatch(input: {
@@ -697,8 +666,6 @@ export async function runParallelImplementWorkflow(
     };
   }
   const specForRun = normalizedSpec.spec;
-  const acceptanceContract = acceptanceContractFromSpec(specForRun, pipelineRunId);
-  const verificationCommands = verificationCommandsFromSpec(specForRun);
 
   const stack = projectConfig?.stack
     ? {
@@ -855,8 +822,13 @@ export async function runParallelImplementWorkflow(
         }
 
         // Phase 1 — concurrent build (no git writes to integration worktree).
-        const buildPhaseResults = await runWithConcurrencyCap(batchWps, maxParallel, (wp) =>
-          runOneWpBuilder({
+        const buildPhaseResults = await runWithConcurrencyCap(batchWps, maxParallel, (wp) => {
+          const specHandoff = buildImplementWpContextFromSpec({
+            spec: specForRun,
+            wp,
+            pipelineRunId,
+          });
+          return runOneWpBuilder({
             wp,
             iteration,
             runId,
@@ -882,12 +854,13 @@ export async function runParallelImplementWorkflow(
             implementWpPrompt,
             implementWpJsonSchema,
             investigation,
-            acceptanceContract,
-            verificationCommands,
+            specContext: specHandoff.specContext,
+            acceptanceContract: specHandoff.acceptanceContract,
+            verificationCommands: specHandoff.verificationCommands,
             parentPrdContext,
             implementWpControl,
-          }),
-        );
+          });
+        });
 
         // Phase 2 — serial commit (one WP at a time into the integration worktree).
         for (const buildResult of buildPhaseResults) {

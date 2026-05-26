@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { basename } from 'node:path';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import type { ExecutableCheck } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildCodeContextBundle } from '@goose-hub/core/agent-runtime/code-context.js';
@@ -25,10 +24,16 @@ import {
 } from '@goose-hub/core/workspaces/path-normalization.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
 import type { ImplementWpOutput } from '@goose-hub/skills/implement-wp/schema.js';
-import { type WorkPackage, fileOwnedPath } from '@goose-hub/skills/spec-author/schema.js';
+import {
+  type WorkPackage,
+  fileOwnedPath,
+  fileOwnedStatus,
+} from '@goose-hub/skills/spec-author/schema.js';
 import type { PrdPlanningContext } from '../spec-author/prd-planning-context.js';
 import type { recordWpIteration } from './parallel-helpers.js';
 import type { ImplementWpControlConfig } from './wp-budget.js';
+import type { ImplementWpSpecContext } from './wp-context.js';
+import { commandMentionsWpFile } from './wp-context.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,6 +84,7 @@ export interface RunOneWpBuilderOptions {
   implementWpPrompt: string;
   implementWpJsonSchema: Record<string, unknown>;
   investigation?: InvestigationContext;
+  specContext?: ImplementWpSpecContext;
   acceptanceContract?: AcceptanceContract;
   verificationCommands?: ExecutableCheck[];
   parentPrdContext?: PrdPlanningContext;
@@ -413,10 +419,6 @@ function normalizeImplementWpOutputPaths(input: {
   };
 }
 
-function commandMentionsWpFile(command: string, filesOwned: string[]): boolean {
-  return filesOwned.some((path) => command.includes(path) || command.includes(basename(path)));
-}
-
 function wpRelevantExecutableChecks(input: {
   acceptanceContract?: AcceptanceContract;
   verificationCommands?: ExecutableCheck[];
@@ -556,6 +558,30 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     verificationCommands: opts.verificationCommands,
     filesOwned: wpFilePaths,
   });
+  opts.appendEvent({
+    projectId,
+    workItemId: workItemId ?? null,
+    kind: 'parallel-implement.wp-context-assembled',
+    payload: {
+      schemaVersion: 1,
+      pipelineRunId: opts.pipelineRunId ?? runId,
+      devRunId: runId,
+      wpId: wp.id,
+      wpRunId,
+      iteration,
+      counts: {
+        ownedFiles: wpFilePaths.length,
+        newOwnedFiles: wp.filesOwned.filter((file) => fileOwnedStatus(file) === 'new').length,
+        codeSnippets: codeSnippets.length,
+        codeContextEntries: codeContext.length,
+        specContracts: opts.specContext?.interfaceContracts.length ?? 0,
+        relevantAcceptanceCriteria: opts.acceptanceContract?.criteria.length ?? 0,
+        verificationCommands: verificationCommands.length,
+        referenceFiles: 0,
+      },
+    },
+    runId: wpRunId,
+  });
 
   const spawnSpec: AgentSpec = {
     runId: wpRunId,
@@ -579,6 +605,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       },
       ...(codeSnippets.length > 0 ? { codeSnippets } : {}),
       ...(codeContext.length > 0 ? { codeContext } : {}),
+      ...(opts.specContext != null ? { specContext: opts.specContext } : {}),
       ...(verificationCommands.length > 0 ? { verificationCommands } : {}),
       investigation: opts.investigation,
       acceptanceContract: opts.acceptanceContract,
@@ -617,6 +644,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       'wp.dependsOn',
       'codeSnippets',
       'codeContext',
+      'specContext',
       'verificationCommands',
       'investigation',
       'acceptanceContract',
