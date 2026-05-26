@@ -2,6 +2,7 @@ import type { AgentEventDto } from '@/lib/types';
 import { AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 
 export function GateAwaitingHumanEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { gate?: string; reason?: string; runDisposition?: string } | null;
   return (
     <li
       data-event-kind={event.kind}
@@ -10,9 +11,15 @@ export function GateAwaitingHumanEvent({ event }: { event: AgentEventDto }) {
       <div className="flex items-center gap-2 text-[11px] text-fg-3">
         <AlertCircle size={13} className="shrink-0 text-[color:var(--warning)]" />
         <span className="font-mono uppercase tracking-wider">Gate — awaiting human</span>
+        {p?.gate != null && (
+          <span className="rounded border border-yellow-500/20 bg-yellow-500/10 px-1.5 py-0.5 font-mono text-[10px] uppercase text-yellow-400">
+            {p.gate}
+          </span>
+        )}
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
+      {p?.reason != null && <p className="mt-1.5 text-[12px] text-fg-2">{p.reason}</p>}
     </li>
   );
 }

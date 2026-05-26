@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { db } from '@goose-hub/core/db/db.js';
 import { wpIterations } from '@goose-hub/core/db/schema.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
+import { classifyQaFailure } from '@goose-hub/core/qa/failure-category.js';
 import { type EngineeringSpec, fileOwnedPath } from '@goose-hub/skills/spec-author/schema.js';
 import { and, desc, eq } from 'drizzle-orm';
 
@@ -468,6 +469,7 @@ export async function runTier(
         evidence: result.evidence,
         findingCount: result.findings.length,
         runId: runArtifacts.runId,
+        ...(!result.passed ? { failureCategory: classifyQaFailure({ failedTier: tier }) } : {}),
       },
       runId: runArtifacts.runId,
     });

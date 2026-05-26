@@ -20,6 +20,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { collectActionableQaItems } from '@goose-hub/core/qa/actionability.js';
+import { classifyQaFailure } from '@goose-hub/core/qa/failure-category.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateQa } from '@goose-hub/core/retry/retry-counter.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -475,6 +476,7 @@ export async function runQaWorkflow(
             findings: infrastructureFailure.findings,
             deterministic: true,
             agentSkipped: true,
+            failureCategory: classifyQaFailure({ orchestration: true }),
             ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
           },
           runId,
@@ -534,6 +536,7 @@ export async function runQaWorkflow(
           findings: synthetic.findings,
           deterministic: true,
           agentSkipped: true,
+          failureCategory: classifyQaFailure({ failedTier }),
           ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
         },
         runId,
@@ -767,7 +770,11 @@ export async function runQaWorkflow(
           projectId: projectSlug,
           workItemId: workItem.id,
           kind,
-          payload: { tier, findings: groundTruthTierResults[tier].findings },
+          payload: {
+            tier,
+            findings: groundTruthTierResults[tier].findings,
+            failureCategory: classifyQaFailure({ failedTier: tier }),
+          },
           runId,
         });
       }
@@ -789,6 +796,18 @@ export async function runQaWorkflow(
       },
       { verifiedFollowUpRefs },
     );
+    const failedTier = (['structural', 'functional', 'regression'] as const).find(
+      (tier) => !groundTruthTierResults[tier].passed,
+    );
+    const hasFailedExecutableCheck = criteriaResults.some((result) => !result.passed);
+    const qaFailureCategory =
+      verdict === 'pass' && actionableQaItems.length === 0 && !hasFailedExecutableCheck
+        ? undefined
+        : classifyQaFailure({
+            failedTier,
+            hasActionableFinding: actionableQaItems.length > 0,
+            hasFailedExecutableCheck,
+          });
 
     eventStore.appendEvent({
       projectId: projectSlug,
@@ -801,6 +820,7 @@ export async function runQaWorkflow(
         tierResults: groundTruthTierResults,
         qualityScores: qaOutput.qualityScores,
         findings: qaOutput.findings,
+        ...(qaFailureCategory != null ? { failureCategory: qaFailureCategory } : {}),
         ...(criteriaResults.length > 0 ? { criteriaResults } : {}),
         ...(testRun ? { testRun } : {}),
         ...(deterministic != null ? { deterministic: true } : {}),
@@ -888,7 +908,11 @@ export async function runQaWorkflow(
       projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
-      payload: { runId, error: error.message },
+      payload: {
+        runId,
+        error: error.message,
+        failureCategory: classifyQaFailure({ orchestration: true }),
+      },
       runId,
     });
     await stateSource.comment(

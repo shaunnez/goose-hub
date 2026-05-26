@@ -481,6 +481,7 @@ describe('runTier — event emission', () => {
       evidence: expect.any(Array),
       findingCount: 1,
       runId: 'r1',
+      failureCategory: 'spec-contract',
     });
     expect(result.tier).toBe(1);
   });

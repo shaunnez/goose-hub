@@ -828,6 +828,39 @@ describe('runQaWorkflow', () => {
       expect(payload.qualityScores).toBeDefined();
     });
 
+    it('classifies actionable QA findings as product failures on qa.completed', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const productFailure = makePassResult();
+      productFailure.output = {
+        ...(productFailure.output as Record<string, unknown>),
+        verdict: 'fail',
+        overallScore: 60,
+        findings: [
+          {
+            tier: 'functional',
+            severity: 'error',
+            description: 'User cannot save the form',
+            disposition: 'needs-fix',
+            dispositionRef: 'current PR',
+          },
+        ],
+      };
+      mockRun.mockResolvedValueOnce(productFailure);
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const completed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.completed');
+      expect(completed?.[0].payload).toMatchObject({
+        verdict: 'fail',
+        failureCategory: 'product',
+      });
+    });
+
     it('emits agent.decision-summary per decisionSummary entry', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
@@ -2213,6 +2246,7 @@ describe('runQaWorkflow', () => {
       expect(payload.overallScore).toBe(0);
       expect(payload.agentSkipped).toBe(true);
       expect(payload.deterministic).toBe(true);
+      expect(payload.failureCategory).toBe('spec-contract');
 
       expect(source.transitionState).toHaveBeenCalledWith(
         '42',
@@ -2313,6 +2347,7 @@ describe('runQaWorkflow', () => {
         failedTier: 2,
         reason: 'malformed-verification-command',
         agentSkipped: true,
+        failureCategory: 'orchestration',
       });
     });
 
