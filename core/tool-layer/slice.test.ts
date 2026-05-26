@@ -10,6 +10,7 @@ import {
   writeWpBuilderSandbox,
 } from './sandbox.js';
 import { redactSecrets } from './secret-redaction.js';
+import { bindToolsForAgentSpec } from './tool-binding.js';
 import { evaluateWorkspaceBoundary } from './workspace-boundary.js';
 
 // ─── secret-redaction ────────────────────────────────────────────────────────
@@ -238,6 +239,109 @@ describe('computeAllowlist', () => {
   it('allows decision-record-only when no role specified', () => {
     const list = computeAllowlist({ toolBundles: ['decision-record-only'], toolExtras: [] });
     expect(list).toContain('record-decision');
+  });
+});
+
+describe('bindToolsForAgentSpec', () => {
+  it('builds a single binding artifact for read-only runs', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['read'],
+      toolExtras: [],
+      role: 'investigator',
+      skill: 'investigate',
+    });
+
+    expect(binding.allowlist).toContain('mcp__factory-tools__read_file');
+    expect(binding.allowlist).toContain('mcp__factory-tools__get_diff');
+    expect(binding.enabledToolsByServer['factory-tools']).toContain('read_file');
+    expect(binding.enabledToolsByServer['factory-tools']).toContain('get_diff');
+    expect(binding.nativeTools).toEqual([]);
+    expect(binding.mcpServerBundles).toEqual([]);
+    expect(binding.sandboxMode).toBe('read-only');
+  });
+
+  it('binds dev-tools to workspace-write without native Bash', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['dev-tools'],
+      toolExtras: [],
+      role: 'developer',
+      skill: 'implement',
+    });
+
+    expect(binding.allowlist).toContain('mcp__factory-tools__write_file');
+    expect(binding.allowlist).toContain('mcp__factory-tools__run_tests');
+    expect(binding.nativeTools).toEqual([]);
+    expect(binding.sandboxMode).toBe('workspace-write');
+  });
+
+  it('binds evidence validation browser skills to danger-full-access and never approval', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['validate'],
+      toolExtras: [],
+      role: 'developer',
+      skill: 'playwright-repro',
+    });
+
+    expect(binding.sandboxMode).toBe('danger-full-access');
+    expect(binding.approvalPolicy).toBe('never');
+  });
+
+  it('keeps QA validate-like bundles read-only unless the skill needs browser process access', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['read', 'validate'],
+      toolExtras: [],
+      role: 'qa',
+      skill: 'qa',
+    });
+
+    expect(binding.sandboxMode).toBe('read-only');
+    expect(binding.approvalPolicy).toBeUndefined();
+  });
+
+  it('adds optional MCP server bundles separately from the flat allowlist', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['read', 'playwright-mcp'],
+      toolExtras: [],
+      role: 'developer',
+      skill: 'spec-author',
+    });
+
+    expect(binding.mcpServerBundles).toEqual(['playwright-mcp']);
+    expect(binding.enabledToolsByServer['playwright-test']).toContain('browser_navigate');
+    expect(binding.allowlist).toContain('mcp__playwright-test__browser_navigate');
+  });
+
+  it('strips holdout-blocked capabilities from holdout roles', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['decision-record-only', 'emergency-debug'],
+      toolExtras: ['mcp__factory-tools__write_file'],
+      role: 'reviewer',
+      skill: 'review',
+    });
+
+    expect(binding.allowlist).toEqual([]);
+    expect(binding.nativeTools).toEqual([]);
+    expect(binding.sandboxMode).toBe('read-only');
+  });
+
+  it('normalizes bundle order before fingerprinting equivalent bindings', () => {
+    const first = bindToolsForAgentSpec({
+      toolBundles: ['read', 'qa-tools'],
+      toolExtras: [],
+      role: 'qa',
+      skill: 'qa',
+    });
+    const second = bindToolsForAgentSpec({
+      toolBundles: ['qa-tools', 'read'],
+      toolExtras: [],
+      role: 'qa',
+      skill: 'qa',
+    });
+
+    expect(first.allowlist).toEqual(second.allowlist);
+    expect(first.fingerprints.toolBindingHash).toBe(second.fingerprints.toolBindingHash);
+    expect(first.fingerprints.toolAllowlistHash).toBe(second.fingerprints.toolAllowlistHash);
+    expect(first.fingerprints.mcpServerSetHash).toBe(second.fingerprints.mcpServerSetHash);
   });
 });
 
