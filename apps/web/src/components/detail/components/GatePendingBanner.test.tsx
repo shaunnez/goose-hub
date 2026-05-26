@@ -145,7 +145,7 @@ describe('GatePendingBanner', () => {
   it('submits a proposed option with the intervention version as CAS', async () => {
     const onTransitioned = vi.fn();
     const intervention = makeIntervention();
-    vi.mocked(fetchIssueInterventions).mockResolvedValueOnce([intervention]);
+    vi.mocked(fetchIssueInterventions).mockResolvedValue([intervention]);
 
     render_(
       <GatePendingBanner
@@ -171,14 +171,13 @@ describe('GatePendingBanner', () => {
   });
 
   it('renders legal-target fallback for OPEN interventions and decides manual transition', async () => {
-    vi.mocked(fetchIssueInterventions).mockResolvedValueOnce([
-      makeIntervention({
-        status: 'OPEN',
-        proposedOptions: [],
-        leaseOwner: null,
-        version: 3,
-      }),
-    ]);
+    const intervention = makeIntervention({
+      status: 'OPEN',
+      proposedOptions: [],
+      leaseOwner: null,
+      version: 3,
+    });
+    vi.mocked(fetchIssueInterventions).mockResolvedValue([intervention]);
     vi.mocked(fetchLegalTargets).mockResolvedValueOnce({
       from: 'factory:needs-human',
       legalTargets: ['factory:needs-qa', 'factory:triaging'],
@@ -203,6 +202,86 @@ describe('GatePendingBanner', () => {
         reason: 'manual fallback from intervention banner',
       });
     });
+  });
+
+  it('refreshes instead of deciding a stale OPEN intervention that became PROPOSED', async () => {
+    const staleOpen = makeIntervention({
+      status: 'OPEN',
+      title: 'Issue moved to needs-human',
+      proposedOptions: [],
+      leaseOwner: null,
+      version: 8,
+    });
+    const proposed = makeIntervention({
+      status: 'PROPOSED',
+      title: 'Issue moved to needs-human',
+      proposedOptions: [
+        {
+          actionType: 'manual_transition',
+          label: 'Return to dev-ready after fixing Playwright',
+          description: 'Use this once the dependency problem has been fixed.',
+          payload: {
+            from: 'factory:needs-human',
+            to: 'factory:dev-ready',
+            reason: 'retry implementation',
+          },
+          risk: 'low',
+        },
+      ],
+      version: 10,
+    });
+    vi.mocked(fetchIssueInterventions)
+      .mockResolvedValueOnce([staleOpen])
+      .mockResolvedValueOnce([proposed]);
+    vi.mocked(fetchLegalTargets).mockResolvedValueOnce({
+      from: 'factory:needs-human',
+      legalTargets: ['factory:dev-ready'],
+    });
+
+    render_(<GatePendingBanner state="factory:needs-human" projectSlug="proj" id="42" />);
+
+    fireEvent.click(await screen.findByTestId('gate-action-manual-factory-dev-ready'));
+
+    await screen.findByText('Return to dev-ready after fixing Playwright');
+    expect(decideIntervention).not.toHaveBeenCalled();
+    expect(screen.queryByText(/version conflict/i)).toBeNull();
+  });
+
+  it('refetches active interventions after a decision version conflict', async () => {
+    const intervention = makeIntervention({ version: 8 });
+    const refreshed = makeIntervention({
+      version: 10,
+      proposedOptions: [
+        {
+          actionType: 'manual_transition',
+          label: 'Return with latest proposal',
+          description: 'Use the latest proposal.',
+          payload: {
+            from: 'factory:needs-human',
+            to: 'factory:dev-ready',
+            reason: 'retry implementation',
+          },
+          risk: 'low',
+        },
+      ],
+    });
+    vi.mocked(fetchIssueInterventions)
+      .mockResolvedValueOnce([intervention])
+      .mockResolvedValueOnce([intervention])
+      .mockResolvedValueOnce([refreshed]);
+    vi.mocked(decideIntervention).mockRejectedValueOnce(
+      new Error(
+        'POST /interventions/int-1/decide failed: 409 Conflict {"error":"intervention version conflict"}',
+      ),
+    );
+
+    render_(<GatePendingBanner state="factory:needs-human" projectSlug="proj" id="42" />);
+
+    fireEvent.click(await screen.findByTestId('gate-action-option-0'));
+
+    await screen.findByText('Return with latest proposal');
+    expect(decideIntervention).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/409 Conflict/i)).toBeNull();
   });
 
   it('does not render Grill as a generic gate-pending intervention action', async () => {

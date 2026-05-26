@@ -580,7 +580,8 @@ export async function runInvestigateWorkflow(
             'Escalated',
             'Not enough scouts succeeded — escalating to needs-human',
             [
-              `Required scouts: ${initialPlan.minSuccessfulScouts}`,
+              `Required applicable scouts: ${wave1Result.requiredOkCount}`,
+              `Applicable scouts: ${wave1Result.applicableCount}`,
               `Failed scouts: ${wave1Result.failedScouts.join(', ') || '(none)'}`,
               `Skipped scouts: ${wave1Result.skippedScouts.join(', ') || '(none)'}`,
             ],

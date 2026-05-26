@@ -668,6 +668,53 @@ describe('swarm.dispatchWave', () => {
     expect(events.some((e) => e.kind === 'swarm.wave-halted')).toBe(false);
   });
 
+  it('advances when skipped scouts make the original success threshold inapplicable', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-code-path': () => Promise.resolve(okResult('scout-code-path')),
+      'scout-test-inventory': () => Promise.resolve(okResult('scout-test-inventory')),
+      'scout-schema': () => Promise.resolve(skippedResult('No schema boundary applies')),
+      'scout-dependency': () => Promise.resolve(skippedResult('No dependency boundary applies')),
+      'scout-user-journey': () => Promise.resolve(skippedResult('No user journey applies')),
+      'scout-pattern': () => Promise.resolve(skippedResult('No reusable pattern applies')),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-skips-reduce-threshold',
+      scoutSpecs: [
+        makeScoutSpec('scout-code-path'),
+        makeScoutSpec('scout-test-inventory'),
+        makeScoutSpec('scout-schema'),
+        makeScoutSpec('scout-dependency'),
+        makeScoutSpec('scout-user-journey'),
+        makeScoutSpec('scout-pattern'),
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+      minSuccessfulScouts: 3,
+    });
+
+    expect(result.status).toBe('ok');
+    expect(result.shouldAdvance).toBe(true);
+    expect(result.summary).toBe('completed-with-skips');
+    expect(result.okCount).toBe(2);
+    expect(result.skippedScouts).toHaveLength(4);
+    const waveCompleted = events.find((event) => event.kind === 'swarm.wave-completed');
+    expect(waveCompleted?.payload).toMatchObject({
+      okCount: 2,
+      applicableCount: 2,
+      requiredOkCount: 2,
+      scoutCount: 6,
+    });
+  });
+
   it('still halts when two applicable scouts fail with no evidence', async () => {
     const { fn: appendEvent } = makeFakeAppendEvent();
     const runtime = makeRuntime({

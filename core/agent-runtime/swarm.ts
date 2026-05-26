@@ -39,6 +39,10 @@ export interface WaveResult {
   skippedScouts: string[];
   /** Count of semantically useful ok scout reports. Skips do not count. */
   okCount: number;
+  /** Count of scouts whose domain applied; skipped scouts do not count. */
+  applicableCount: number;
+  /** Effective ok threshold after clamping against applicable scouts. */
+  requiredOkCount: number;
   /** Human-facing wave summary for timeline display. */
   summary:
     | 'completed'
@@ -167,6 +171,13 @@ export async function dispatchWave(opts: DispatchWaveOptions): Promise<WaveResul
     .filter((report) => outcomeFor(report) === 'skipped')
     .map((r) => r.scoutName);
   const okCount = reports.filter((report) => outcomeFor(report) === 'ok').length;
+  const applicableCount = reports.length - skippedScouts.length;
+  // Skips are neutral only after the requested wave actually ran; launching too
+  // few scouts should not satisfy the default Wave-1 evidence threshold.
+  const requiredOkCount =
+    reports.length >= minSuccessfulScouts
+      ? Math.max(1, Math.min(minSuccessfulScouts, applicableCount))
+      : minSuccessfulScouts;
 
   let status: WaveStatus;
   let shouldAdvance: boolean;
@@ -178,7 +189,7 @@ export async function dispatchWave(opts: DispatchWaveOptions): Promise<WaveResul
     shouldAdvance = false;
     shouldEscalate = true;
     summary = 'halted';
-  } else if (okCount < minSuccessfulScouts) {
+  } else if (okCount < requiredOkCount) {
     status = 'incomplete';
     shouldAdvance = false;
     shouldEscalate = false;
@@ -210,6 +221,8 @@ export async function dispatchWave(opts: DispatchWaveOptions): Promise<WaveResul
       parentRunId: opts.parentRunId,
       scoutCount: reports.length,
       okCount,
+      applicableCount,
+      requiredOkCount,
       failedScouts,
       skippedScouts,
       summary,
@@ -223,6 +236,8 @@ export async function dispatchWave(opts: DispatchWaveOptions): Promise<WaveResul
     failedScouts,
     skippedScouts,
     okCount,
+    applicableCount,
+    requiredOkCount,
     summary,
     shouldAdvance,
     shouldEscalate,

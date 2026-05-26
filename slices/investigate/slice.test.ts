@@ -225,6 +225,8 @@ function makeWaveResult(overrides: Partial<WaveResult> = {}): WaveResult {
     failedScouts: [],
     skippedScouts: [],
     okCount: 3,
+    applicableCount: 3,
+    requiredOkCount: 3,
     summary: 'completed',
     shouldAdvance: true,
     shouldEscalate: false,

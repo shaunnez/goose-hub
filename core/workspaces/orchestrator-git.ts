@@ -8,12 +8,16 @@ const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 
 /**
  * Resolves the scratch worktree path for a given (runId, wpId) pair.
- * Pattern: ~/.factory/workspaces/<runId>:wp:<wpId>/
+ * Pattern: ~/.factory/workspaces/<runId>__wp__<wpId>/
  *
- * The colon-separated compound key makes it immediately clear from the filesystem
- * which run and WP a worktree belongs to.
+ * Avoid path delimiter characters because pnpm refuses to add node_modules/.bin
+ * paths containing them to PATH when running package-scoped executables.
  */
 export function wpWorktreePath(runId: string, wpId: string): string {
+  return join(WORKSPACES_DIR, `${runId}__wp__${wpId}`);
+}
+
+function legacyWpWorktreePath(runId: string, wpId: string): string {
   return join(WORKSPACES_DIR, `${runId}:wp:${wpId}`);
 }
 
@@ -51,18 +55,19 @@ export function createWpScratchWorktree(
  * Idempotent: no-ops when the worktree path does not exist.
  */
 export function cleanupWpWorktree(runId: string, wpId: string): void {
-  const wtPath = wpWorktreePath(runId, wpId);
-  if (!existsSync(wtPath)) return;
-  try {
-    execFileSync('git', ['worktree', 'remove', '--force', wtPath], {
-      cwd: wtPath,
-      stdio: 'pipe',
-      env: GIT_ENV,
-    });
-  } catch {
-    // Fall through — forcibly remove below.
+  for (const wtPath of [wpWorktreePath(runId, wpId), legacyWpWorktreePath(runId, wpId)]) {
+    if (!existsSync(wtPath)) continue;
+    try {
+      execFileSync('git', ['worktree', 'remove', '--force', wtPath], {
+        cwd: wtPath,
+        stdio: 'pipe',
+        env: GIT_ENV,
+      });
+    } catch {
+      // Fall through — forcibly remove below.
+    }
+    rmSync(wtPath, { recursive: true, force: true });
   }
-  rmSync(wtPath, { recursive: true, force: true });
 }
 
 /**

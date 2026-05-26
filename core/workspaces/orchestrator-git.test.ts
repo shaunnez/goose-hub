@@ -1,15 +1,24 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, delimiter, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { orchestratorCommitAll } from './orchestrator-git.js';
+import { orchestratorCommitAll, wpWorktreePath } from './orchestrator-git.js';
 
 let repo: string;
 
 function git(args: string[]): string {
   return execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
 }
+
+describe('wpWorktreePath', () => {
+  it('uses a path-delimiter-safe scratch worktree directory name', () => {
+    const path = wpWorktreePath('run-123', 'WP1');
+
+    expect(basename(path)).toBe('run-123__wp__WP1');
+    expect(basename(path)).not.toContain(delimiter);
+  });
+});
 
 describe('orchestratorCommitAll', () => {
   beforeEach(() => {
