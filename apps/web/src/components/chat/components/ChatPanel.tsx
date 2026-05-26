@@ -31,14 +31,15 @@ import { ConversationList } from './ConversationList';
 
 const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 
-interface ChatPanelProps {
+export interface ChatPanelProps {
   open: boolean;
   onClose: () => void;
+  resetOnOpenKey: number;
 }
 
 type View = 'thread' | 'list';
 
-export function ChatPanel({ open, onClose }: ChatPanelProps) {
+export function ChatPanel({ open, onClose, resetOnOpenKey }: ChatPanelProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const resolved = useMemo(() => resolveScopeFromPath(location.pathname), [location.pathname]);
@@ -63,6 +64,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   //  * the open-panel roster effect clobbering a thread the user just clicked
   //    "New" to create while the list was still in flight.
   const loadTokenRef = useRef(0);
+  const lastHandledResetOnOpenKeyRef = useRef(resetOnOpenKey);
   const activeConversationIdRef = useRef<string | null>(null);
   const inFlightRunByConversationRef = useRef<Map<string, string>>(new Map());
 
@@ -187,6 +189,8 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     if (!open) return;
     let cancelled = false;
     setError(null);
+    const shouldResetOnOpen = resetOnOpenKey !== lastHandledResetOnOpenKeyRef.current;
+    lastHandledResetOnOpenKeyRef.current = resetOnOpenKey;
     // Token snapshot for this open. If `loadTokenRef` advances before we
     // settle (e.g. user clicked New / picked a row mid-flight), drop our
     // state writes — the newer interaction is the source of truth now.
@@ -196,6 +200,13 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         const list = await listConversations({});
         if (cancelled || loadTokenRef.current !== openToken) return;
         setConversations(list);
+        if (shouldResetOnOpen) {
+          setConversation(null);
+          setMessages([]);
+          setInvocations([]);
+          setView('list');
+          return;
+        }
         const previousId = readActiveId();
         const previous = list.find((c) => c.id === previousId);
         if (previous != null) {
@@ -220,7 +231,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, readActiveId, loadConversation]);
+  }, [open, resetOnOpenKey, readActiveId, loadConversation]);
 
   const handleNewConversation = useCallback(async () => {
     setBusy(true);
