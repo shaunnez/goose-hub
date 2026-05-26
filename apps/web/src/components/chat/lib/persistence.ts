@@ -26,4 +26,3 @@ export function writeActiveConversationId(storage: StorageLike, id: string): voi
 export function clearActiveConversationId(storage: StorageLike): void {
   storage.removeItem(ACTIVE_CONVERSATION_STORAGE_KEY);
 }
-

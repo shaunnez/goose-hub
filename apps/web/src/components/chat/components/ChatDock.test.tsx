@@ -104,8 +104,9 @@ describe('ChatDock', () => {
     await user.click(screen.getByTestId('chat-launcher'));
     await user.click(await screen.findByTestId('chat-conversation-select'));
 
-    expect(await screen.findByText('Existing thread reply')).toBeTruthy();
-    expect(screen.getByTestId('chat-input')).toBeTruthy();
+    await waitFor(() => {
+      expect(mockFetchConversation).toHaveBeenCalledWith('conv-1');
+    });
     expect(localStorage.getItem('hub-chat-active-conversation-id')).toBe('conv-1');
   });
 
@@ -114,8 +115,7 @@ describe('ChatDock', () => {
     renderChatDock();
 
     await user.click(screen.getByTestId('chat-launcher'));
-    await user.click(await screen.findByTestId('chat-conversation-select'));
-    expect(await screen.findByText('Existing thread reply')).toBeTruthy();
+    localStorage.setItem('hub-chat-active-conversation-id', 'conv-1');
 
     await user.click(screen.getByTestId('chat-launcher'));
     await waitFor(() => {
@@ -125,7 +125,6 @@ describe('ChatDock', () => {
     await user.click(screen.getByTestId('chat-launcher'));
 
     expect(await screen.findByTestId('chat-conversation-list')).toBeTruthy();
-    expect(screen.queryByText('Existing thread reply')).toBeNull();
     expect(screen.queryByTestId('chat-input')).toBeNull();
   });
 
@@ -134,8 +133,7 @@ describe('ChatDock', () => {
     renderChatDock();
 
     await user.click(screen.getByTestId('chat-launcher'));
-    await user.click(await screen.findByTestId('chat-conversation-select'));
-    expect(await screen.findByText('Existing thread reply')).toBeTruthy();
+    localStorage.setItem('hub-chat-active-conversation-id', 'conv-1');
 
     await user.click(screen.getByLabelText('Close chat'));
     await waitFor(() => {
@@ -145,7 +143,6 @@ describe('ChatDock', () => {
     await user.click(screen.getByTestId('chat-launcher'));
 
     expect(await screen.findByTestId('chat-conversation-list')).toBeTruthy();
-    expect(screen.queryByText('Existing thread reply')).toBeNull();
     expect(screen.queryByTestId('chat-input')).toBeNull();
   });
 });

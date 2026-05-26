@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react';
+import { clearActiveConversationId, readChatDockOpen, writeChatDockOpen } from '../lib/persistence';
 import { ChatLauncher } from './ChatLauncher';
 import { ChatPanel } from './ChatPanel';
-import {
-  clearActiveConversationId,
-  readChatDockOpen,
-  writeChatDockOpen,
-} from '../lib/persistence';
 
 /**
  * Top-level entry point: hosts the slide-out chat panel + the floating

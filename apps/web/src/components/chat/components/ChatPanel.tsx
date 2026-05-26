@@ -123,8 +123,10 @@ export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
     [setConversationSending],
   );
 
-  const resetPanelState = useCallback(() => {
-    loadTokenRef.current += 1;
+  const resetPanelState = useCallback((invalidateRequests: boolean) => {
+    if (invalidateRequests) {
+      loadTokenRef.current += 1;
+    }
     try {
       clearActiveConversationId(localStorage);
     } catch {
@@ -144,7 +146,7 @@ export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
     }
 
     lastResetKeyRef.current = resetKey;
-    resetPanelState();
+    resetPanelState(true);
   }, [resetKey, resetPanelState]);
 
   useEffect(() => {
@@ -170,26 +172,23 @@ export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
    * whether to flip the view to 'thread' — a failed load should NOT force
    * thread view onto an empty panel.
    */
-  const loadConversation = useCallback(
-    async (id: string): Promise<ChatConversationDto | null> => {
-      const token = ++loadTokenRef.current;
-      try {
-        const full = await fetchConversation(id);
-        if (loadTokenRef.current !== token) return null;
-        setConversation(full.conversation);
-        setMessages(full.messages);
-        setInvocations(full.invocations);
-        writeActiveId(full.conversation.id);
-        setView('thread');
-        return full.conversation;
-      } catch (err) {
-        if (loadTokenRef.current !== token) return null;
-        setError(`Could not load conversation: ${String(err)}`);
-        return null;
-      }
-    },
-    [writeActiveId],
-  );
+  const loadConversation = useCallback(async (id: string): Promise<ChatConversationDto | null> => {
+    const token = ++loadTokenRef.current;
+    try {
+      const full = await fetchConversation(id);
+      if (loadTokenRef.current !== token) return null;
+      setConversation(full.conversation);
+      setMessages(full.messages);
+      setInvocations(full.invocations);
+      writeActiveConversationId(localStorage, full.conversation.id);
+      setView('thread');
+      return full.conversation;
+    } catch (err) {
+      if (loadTokenRef.current !== token) return null;
+      setError(`Could not load conversation: ${String(err)}`);
+      return null;
+    }
+  }, []);
 
   // Refresh the conversation roster whenever the panel opens. Don't auto-
   // create on mount any more; the user picks one or clicks New explicitly
@@ -219,7 +218,7 @@ export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
           }
         } else {
           if (cancelled) return;
-          resetPanelState();
+          resetPanelState(false);
         }
       } catch (err) {
         if (!cancelled) setError(`Could not load conversations: ${String(err)}`);

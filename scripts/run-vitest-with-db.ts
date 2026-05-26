@@ -11,6 +11,7 @@ const result = spawnSync(vitestBin, ['run', ...process.argv.slice(2)], {
   stdio: 'inherit',
   env: {
     ...process.env,
+    NODE_ENV: 'test',
     DB_PATH: process.env.DB_PATH ?? dbPath,
   },
 });
