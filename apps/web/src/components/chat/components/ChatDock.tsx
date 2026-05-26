@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { ChatLauncher } from './ChatLauncher';
 import { ChatPanel } from './ChatPanel';
-
-const STORAGE_KEY = 'hub-chat-open';
+import {
+  clearActiveConversationId,
+  readChatDockOpen,
+  writeChatDockOpen,
+} from '../lib/persistence';
 
 /**
  * Top-level entry point: hosts the slide-out chat panel + the floating
@@ -12,7 +15,7 @@ const STORAGE_KEY = 'hub-chat-open';
 export function ChatDock() {
   const [open, setOpen] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY) === 'true';
+      return readChatDockOpen(localStorage);
     } catch {
       return false;
     }
@@ -21,11 +24,14 @@ export function ChatDock() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, String(open));
+      writeChatDockOpen(localStorage, open);
     } catch {}
   }, [open]);
 
   const handleClose = () => {
+    try {
+      clearActiveConversationId(localStorage);
+    } catch {}
     setResetKey((key) => key + 1);
     setOpen(false);
   };

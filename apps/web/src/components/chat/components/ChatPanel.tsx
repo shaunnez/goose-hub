@@ -23,13 +23,16 @@ import {
   mergeMessagesFromEvents,
   mergeToolStatusFromEvents,
 } from '../lib/liveState';
+import {
+  clearActiveConversationId,
+  readActiveConversationId,
+  writeActiveConversationId,
+} from '../lib/persistence';
 import { resolveScopeFromPath } from '../lib/scope';
 import { useChatEvents } from '../lib/useChatEvents';
 import { ChatInput } from './ChatInput';
 import { ChatThread } from './ChatThread';
 import { ConversationList } from './ConversationList';
-
-const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 
 interface ChatPanelProps {
   open: boolean;
@@ -120,31 +123,18 @@ export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
     [setConversationSending],
   );
 
-  const readActiveId = useCallback((): string | null => {
+  const resetPanelState = useCallback(() => {
+    loadTokenRef.current += 1;
     try {
-      return localStorage.getItem(ACTIVE_CONVERSATION_STORAGE_KEY);
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const writeActiveId = useCallback((id: string | null) => {
-    try {
-      if (id == null) localStorage.removeItem(ACTIVE_CONVERSATION_STORAGE_KEY);
-      else localStorage.setItem(ACTIVE_CONVERSATION_STORAGE_KEY, id);
+      clearActiveConversationId(localStorage);
     } catch {
       // localStorage unavailable — accept the loss; selection is best-effort.
     }
-  }, []);
-
-  const resetPanelState = useCallback(() => {
-    loadTokenRef.current += 1;
-    writeActiveId(null);
     setConversation(null);
     setMessages([]);
     setInvocations([]);
     setView('list');
-  }, [writeActiveId]);
+  }, []);
 
   const lastResetKeyRef = useRef(resetKey);
 
@@ -217,7 +207,7 @@ export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
         const list = await listConversations({});
         if (cancelled || loadTokenRef.current !== openToken) return;
         setConversations(list);
-        const previousId = readActiveId();
+        const previousId = readActiveConversationId(localStorage);
         const previous = list.find((c) => c.id === previousId);
         if (previous != null) {
           // loadConversation flips the view + state on its own; we don't
@@ -238,7 +228,7 @@ export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, readActiveId, loadConversation, resetPanelState]);
+  }, [open, loadConversation, resetPanelState]);
 
   const handleNewConversation = useCallback(async () => {
     setBusy(true);
@@ -259,7 +249,11 @@ export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
       setMessages([]);
       setInvocations([]);
       setConversations((prev) => [conv, ...prev.filter((c) => c.id !== conv.id)]);
-      writeActiveId(conv.id);
+      try {
+        writeActiveConversationId(localStorage, conv.id);
+      } catch {
+        // localStorage unavailable — accept the loss; selection is best-effort.
+      }
       setView('thread');
     } catch (err) {
       if (loadTokenRef.current !== token) return;
@@ -267,7 +261,7 @@ export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
     } finally {
       setBusy(false);
     }
-  }, [resolved.scope, resolved.projectSlug, resolved.workItemId, runtime, writeActiveId]);
+  }, [resolved.scope, resolved.projectSlug, resolved.workItemId, runtime]);
 
   const handleDeleteConversation = useCallback(
     async (id: string) => {
@@ -279,7 +273,11 @@ export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
           setConversation(null);
           setMessages([]);
           setInvocations([]);
-          writeActiveId(null);
+          try {
+            clearActiveConversationId(localStorage);
+          } catch {
+            // localStorage unavailable — accept the loss; selection is best-effort.
+          }
           setView('list');
         }
       } catch (err) {
@@ -288,7 +286,7 @@ export function ChatPanel({ open, onClose, resetKey }: ChatPanelProps) {
         setBusy(false);
       }
     },
-    [conversation, writeActiveId],
+    [conversation],
   );
 
   // Subscribe to chat.* events for this conversation. The events drive two
