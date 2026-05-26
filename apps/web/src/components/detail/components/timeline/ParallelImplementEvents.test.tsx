@@ -150,4 +150,25 @@ describe('ParallelImplementEvents', () => {
     expect(rendered).not.toContain('rawProbeKey');
     expect(rendered).not.toContain('raw-value');
   });
+
+  it('renders terminal-blocked WPs as failure cards', () => {
+    const event = makeEvent('parallel-implement.wp-terminal-blocked', {
+      wpId: 'WP1',
+      wpRunId: 'pipeline-terminal-tool-failure:wp:WP1:iter:1',
+      decisionKind: 'TOOL_FAILURE',
+      errorReason: 'implement-wp emitted TOOL_FAILURE: test harness unavailable',
+      pipelineRunId: '805e37ae-2c79-40ef-b017-07b82dafbd09',
+      rawProbeKey: 'raw-value',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    const rendered = document.body.textContent ?? '';
+    expect(screen.getByText('WP1 terminal blocker')).toBeTruthy();
+    expect(rendered).toContain('test harness unavailable');
+    expect(rendered).toContain('Decision: TOOL_FAILURE');
+    expect(rendered).toContain('pipeline 805e37ae');
+    expect(rendered).not.toContain('rawProbeKey');
+    expect(rendered).not.toContain('raw-value');
+  });
 });

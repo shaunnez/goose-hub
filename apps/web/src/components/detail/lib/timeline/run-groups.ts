@@ -134,6 +134,7 @@ export function extractRunMeta(items: RenderItem[]): {
       if (
         ev.kind === 'pr.opened' ||
         ev.kind === 'parallel-implement.exhausted' ||
+        ev.kind === 'parallel-implement.wp-terminal-blocked' ||
         (ev.kind === 'state.transitioned' &&
           ((ev.payload as { to?: string; toState?: string } | null)?.to === 'factory:needs-qa' ||
             (ev.payload as { to?: string; toState?: string } | null)?.toState ===

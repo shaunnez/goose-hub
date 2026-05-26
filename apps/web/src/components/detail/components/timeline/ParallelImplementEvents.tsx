@@ -23,6 +23,7 @@ type ParallelPayload = {
   wpCount?: number;
   wpIds?: string[];
   errorReason?: string;
+  decisionKind?: string;
   diagnosis?: string;
   elapsedMs?: number;
   failedWpIds?: string[];
@@ -282,18 +283,28 @@ export function ParallelWpFailedEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as ParallelPayload | null;
   const isCommitFailure = event.kind === 'parallel-implement.wp-commit-failed';
   const isLoopCap = event.kind === 'parallel-implement.wp-loop-cap-hit';
+  const isTerminalBlocker = event.kind === 'parallel-implement.wp-terminal-blocked';
 
   return (
     <ParallelEventShell
       event={event}
       icon={<AlertTriangle size={13} className="shrink-0 text-[color:var(--danger)]" />}
       title={`${p?.wpId ?? 'Work package'} ${
-        isCommitFailure ? 'commit failed' : isLoopCap ? 'loop cap hit' : 'failed'
+        isCommitFailure
+          ? 'commit failed'
+          : isLoopCap
+            ? 'loop cap hit'
+            : isTerminalBlocker
+              ? 'terminal blocker'
+              : 'failed'
       }`}
       tone="danger"
     >
       <div className="space-y-1">
         {p?.errorReason != null && <DetailRow>{p.errorReason}</DetailRow>}
+        {isTerminalBlocker && p?.decisionKind != null && (
+          <DetailRow>Decision: {p.decisionKind}</DetailRow>
+        )}
         {isLoopCap && p?.diagnosis != null && <DetailRow>{p.diagnosis}</DetailRow>}
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
           {formatShortId(p?.wpRunId) != null && (

@@ -18,7 +18,7 @@ const { mockMinimalEnv, mockRunCommand } = vi.hoisted(() => ({
 }));
 
 vi.mock('../command-policy.js', () => ({
-  minimalEnv: (...args: unknown[]) => mockMinimalEnv(...args),
+  minimalEnv: (extras?: Record<string, string>) => mockMinimalEnv(extras),
   runCommand: (...args: unknown[]) => mockRunCommand(...args),
 }));
 

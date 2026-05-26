@@ -382,6 +382,15 @@ describe('computeIsLive', () => {
       computeIsLive([makeEvent(1, 'agent.run-started', 'r1'), makeEvent(2, 'prd.drafted', 'r1')]),
     ).toBe(false);
   });
+
+  it('returns false when parallel implement stops on a terminal WP blocker', () => {
+    expect(
+      computeIsLive([
+        makeEvent(1, 'agent.run-started', 'r1'),
+        makeEvent(2, 'parallel-implement.wp-terminal-blocked', 'r1'),
+      ]),
+    ).toBe(false);
+  });
 });
 
 describe('computeIsWritePrdStuck', () => {
@@ -1767,6 +1776,32 @@ describe('groupByDevPhase', () => {
     >;
 
     expect(pg.status).toBe('failed');
+  });
+
+  it('marks dev phase failed when parallel implement hits a terminal WP blocker', () => {
+    const PID = 'pipe-terminal-123';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'parallel-implement.wp-terminal-blocked', 'parallel-run-456:wp:WP1:iter:1', {
+        payload: {
+          pipelineRunId: PID,
+          wpId: 'WP1',
+          decisionKind: 'TOOL_FAILURE',
+          errorReason: 'test harness unavailable',
+        },
+      }),
+    ];
+
+    const result = groupEvents(events);
+    const pg = result.find((item) => item.kind === 'phase-group') as Extract<
+      (typeof result)[0],
+      { kind: 'phase-group' }
+    >;
+
+    expect(pg.status).toBe('failed');
+    expect(pg.endedAt).toBe(events[3].createdAt);
   });
 
   it('groups dev-review.* events with matching pipelineRunId into the phase-group', () => {
