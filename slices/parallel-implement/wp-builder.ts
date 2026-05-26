@@ -183,6 +183,15 @@ function latestRunTestsStatusForPath(events: AgentEvent[], path: string): string
   return null;
 }
 
+function hasSuccessfulVerificationToolCall(events: AgentEvent[]): boolean {
+  return events.some((event) => {
+    if (event.kind !== 'agent.tool-call') return false;
+    if (toolCallStatus(event) !== 'ok') return false;
+    const name = toolCallName(event);
+    return name === 'run_tests' || name === 'run_lint' || name === 'run_typecheck';
+  });
+}
+
 function implementWpAcceptanceFailure(input: {
   output: ImplementWpOutput;
   events: AgentEvent[];
@@ -194,13 +203,22 @@ function implementWpAcceptanceFailure(input: {
   if (input.output.confidence === 'low' && input.verificationRequired) {
     return 'implement-wp returned low confidence while verification was required';
   }
-  if (input.output.testsWritten.length > 0) {
-    const failedPaths = input.output.testsRun.paths.filter(
+  const requiredTestPaths = [
+    ...new Set([
+      ...input.output.testsWritten.map((test) => test.path),
+      ...input.output.testsRun.paths,
+    ]),
+  ];
+  if (requiredTestPaths.length > 0) {
+    const failedPaths = requiredTestPaths.filter(
       (path) => latestRunTestsStatusForPath(input.events, path) !== 'ok',
     );
     if (failedPaths.length > 0) {
-      return `tests were written but required run_tests did not pass for: ${failedPaths.join(', ')}`;
+      return `required run_tests did not pass for: ${failedPaths.join(', ')}`;
     }
+  }
+  if (input.verificationRequired && !hasSuccessfulVerificationToolCall(input.events)) {
+    return 'verification was required but no verification tool passed';
   }
   return null;
 }

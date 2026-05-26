@@ -220,9 +220,7 @@ function isLikelyVerificationHarnessFailure(detail: string): boolean {
   return (
     /react\.act is not a function/i.test(detail) ||
     /(?:element|html\w*element)\.prototype\.scrollto|scrollto is not a function/i.test(detail) ||
-    /testinglibrary(?:element)?error/i.test(detail) ||
     /cleanup is not a function/i.test(detail) ||
-    /failed to resolve import|cannot find module|cannot find package/i.test(detail) ||
     /referenceerror:\s*(?:window|document|element|html\w*element|localstorage|matchmedia|resizeobserver|intersectionobserver)\s+is not defined/i.test(
       detail,
     ) ||

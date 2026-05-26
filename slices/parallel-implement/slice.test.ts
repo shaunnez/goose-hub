@@ -970,6 +970,121 @@ describe('implement-wp ownership gate', () => {
     });
   });
 
+  it('requires run_tests to pass for each written test file, not just self-reported test paths', async () => {
+    const scratchWorktree = makeTempRepo([
+      'apps/web/src/foo.ts',
+      'apps/web/src/foo.test.ts',
+      'apps/web/src/unrelated.test.ts',
+    ]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add regression coverage',
+      filesWritten: [{ path: 'apps/web/src/foo.ts', reason: 'Implement behavior' }],
+      testsWritten: [{ path: 'apps/web/src/foo.test.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test apps/web/src/unrelated.test.ts',
+        paths: ['apps/web/src/unrelated.test.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const unrelatedPassingTest: AgentEvent = {
+      id: 1002,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId: 'run-wp-written-test:wp:WP1:iter:1',
+        skill: 'implement-wp',
+        tool_name: 'run_tests',
+        status: 'ok',
+        tool_input: {
+          path: 'apps/web/src/unrelated.test.ts',
+          paths: ['apps/web/src/unrelated.test.ts'],
+        },
+      },
+      runId: 'run-wp-written-test:wp:WP1:iter:1',
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']),
+      iteration: 1,
+      runId: 'run-wp-written-test',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: { run: vi.fn().mockResolvedValue({ output, events: [unrelatedPassingTest] }) },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      wpId: 'WP1',
+      errorReason: expect.stringContaining('apps/web/src/foo.test.ts'),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(true);
+  });
+
+  it('fails required verification when no verification tool passed even with high confidence', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts']);
+    const { fn: appendEvent } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Implement behavior',
+      filesWritten: [{ path: 'apps/web/src/foo.ts', reason: 'Implement behavior' }],
+      testsWritten: [],
+      testsRun: { command: 'pnpm test', paths: [] },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/src/foo.ts']),
+      iteration: 1,
+      runId: 'run-wp-required-verification',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: { run: vi.fn().mockResolvedValue({ output, events: [] }) },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+      verificationCommands: [
+        {
+          id: 'AC1-check',
+          command: 'pnpm test apps/web/src/foo.ts',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      wpId: 'WP1',
+      errorReason: 'verification was required but no verification tool passed',
+    });
+  });
+
   it('blocks ambiguous filesOwned before the WP builder starts', async () => {
     const scratchWorktree = makeTempRepo(['apps/web/src/index.ts', 'packages/admin/src/index.ts']);
     const { fn: appendEvent, events } = makeAppendEvent();
