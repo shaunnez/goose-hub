@@ -1,9 +1,9 @@
-import { detectStackFromFiles, type StackInfo } from './stack-detector.js';
 import {
-  auditAgentInstructionsFromFiles,
   type AuditResult,
   type InstructionFileReader,
+  auditAgentInstructionsFromFiles,
 } from './claude-md-auditor.js';
+import { type StackInfo, detectStackFromFiles } from './stack-detector.js';
 
 export interface InspectedGithubRepo {
   repoRef: string;
