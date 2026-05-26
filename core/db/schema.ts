@@ -356,6 +356,7 @@ export const projectSettings = sqliteTable('project_settings', {
   implementWpHighPriorityUsd: real('implement_wp_high_priority_usd'),
   implementWpManyFilesThreshold: integer('implement_wp_many_files_threshold'),
   implementWpManyFilesUsd: real('implement_wp_many_files_usd'),
+  implementWpContractKeywordsJson: text('implement_wp_contract_keywords_json'),
   implementWpContractUsd: real('implement_wp_contract_usd'),
   useMultiAgentPipeline: integer('use_multi_agent_pipeline'),
   useInvestigationSwarm: integer('use_investigation_swarm'),
@@ -384,6 +385,10 @@ export const projectSkillSettings = sqliteTable(
     modelTier: text('model_tier'),
     modelProvider: text('model_provider'),
     effort: text('effort'),
+    escalationModelTier: text('escalation_model_tier'),
+    escalationMaxBudgetUsd: real('escalation_max_budget_usd'),
+    escalationMaxTurns: integer('escalation_max_turns'),
+    escalationTimeoutMs: integer('escalation_timeout_ms'),
     updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
     updatedBy: text('updated_by'),
   },
@@ -470,10 +475,10 @@ export const projectDevReviewSettings = sqliteTable('project_dev_review_settings
 });
 
 // Per-project convergent-review settings (M19.20). `reviewer_slots` is a JSON
-// array of {model, prompt} objects — length drives reviewer count (1 or 2).
+// array of {prompt} objects — length drives reviewer count (1 or 2).
 export const projectReviewSettings = sqliteTable('project_review_settings', {
   projectId: text('project_id').primaryKey(),
-  reviewerSlots: text('reviewer_slots'), // JSON: Array<{model:'claude'|'codex', prompt:'default'|'unconstrained'}>
+  reviewerSlots: text('reviewer_slots'), // JSON: Array<{prompt:'default'|'unconstrained'}>
   updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   updatedBy: text('updated_by'),
 });

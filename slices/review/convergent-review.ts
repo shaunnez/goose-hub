@@ -6,11 +6,10 @@ import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/in
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
-import type { ReviewerSlot } from '@goose-hub/core/db/repositories/project-review-settings.js';
+import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import {
   parseReviewerSlots,
   readProjectReviewSettings,
@@ -86,7 +85,14 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
 
   const projectConfig = await getProjectBySlug(projectSlug);
   const reviewJsonSchema = toJsonSchema(ReviewOutputSchema);
-  const resolvedBudgets = resolveBudgetsForProject('review', projectConfig?.budgets, projectSlug);
+  const resolvedRuntime = resolveSkillRuntimeForProject({
+    skill: 'review',
+    projectBudgets: projectConfig?.budgets,
+    projectId: projectSlug,
+    configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
+    role: 'reviewer',
+    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+  });
 
   // Read configurable slots from DB; fall back to defaults.
   // verdictsDiverge escalation only applies when slots are explicitly configured (not defaults).
@@ -111,12 +117,12 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
       personaId: personaIds[i],
       reviewPrompt,
       reviewJsonSchema,
-      resolvedBudgets,
+      resolvedBudgets: resolvedRuntime,
       extraEventPayload: {
         reviewWorkflowRunId,
         round,
         slotIndex: i,
-        slotModel: slot.model,
+        slotModel: resolvedRuntime.provider,
         promptVariant: slot.prompt,
       },
     });
@@ -126,8 +132,8 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
   specs.forEach(assembleSpawnContext);
 
   const rawResults = await Promise.all(
-    specs.map((spec, i) =>
-      runtimeForSlot(slots[i].model)
+    specs.map((spec) =>
+      runtimeForSlot(resolvedRuntime.provider)
         .run(spec)
         .catch((err: unknown) => (err instanceof Error ? err : new Error(String(err)))),
     ),
@@ -147,7 +153,7 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
         runId: runIds[i],
         round,
         slotIndex: i,
-        slotModel: slot.model,
+        slotModel: resolvedRuntime.provider,
         promptVariant: slot.prompt,
       },
     ];
@@ -253,11 +259,13 @@ export async function runConvergentReviewWorkflow(
   const reviewWorkflowRunId = crypto.randomUUID();
   const reviewWorkflowPayload = { reviewWorkflowRunId };
   const injectedRuntime = deps.runtime;
+  const projectConfig = await getProjectBySlug(projectSlug);
   const runtimeForSlot = injectedRuntime
     ? () => injectedRuntime
-    : (model: ReviewerSlot['model']) =>
-        selectRuntime({ configRuntime: model === 'codex' ? 'codex-cli' : 'claude-cli' });
-  const projectConfig = await getProjectBySlug(projectSlug);
+    : (provider: 'claude' | 'codex') => {
+        const configRuntime = projectConfig?.agentConfig?.runtime ?? 'auto';
+        return selectRuntime({ configRuntime, skillProvider: provider });
+      };
   const maxReviewRounds = projectConfig?.maxReviewRounds ?? DEFAULT_MAX_REVIEW_ROUNDS;
 
   try {

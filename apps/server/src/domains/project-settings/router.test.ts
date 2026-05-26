@@ -422,6 +422,65 @@ describe('project settings router', () => {
     );
   });
 
+  it('writes escalation patches to project_skill_settings', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/skills/implement', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        escalationModelTier: 'opus',
+        escalationMaxBudgetUsd: 18,
+        escalationMaxTurns: 90,
+        escalationTimeoutMs: 420000,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockWriteProjectSkillSetting).toHaveBeenCalledWith(
+      'goose-hub-self',
+      'implement',
+      {
+        escalationModelTier: 'opus',
+        escalationMaxBudgetUsd: 18,
+        escalationMaxTurns: 90,
+        escalationTimeoutMs: 420000,
+      },
+      'ui',
+    );
+  });
+
+  it('writes implement-WP contract keyword patches through global settings', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/global', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ implementWpContractKeywords: ['schema', 'migration', 'auth'] }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockWriteProjectSettings).toHaveBeenCalledWith(
+      'goose-hub-self',
+      { implementWpContractKeywordsJson: JSON.stringify(['schema', 'migration', 'auth']) },
+      'ui',
+    );
+  });
+
+  it('clears implement-WP contract keyword overrides when the patch is empty', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/global', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ implementWpContractKeywords: [] }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockWriteProjectSettings).toHaveBeenCalledWith(
+      'goose-hub-self',
+      { implementWpContractKeywordsJson: null },
+      'ui',
+    );
+  });
+
   it('resolves per-skill DB tier/provider above project config and skill defaults', async () => {
     mockGetProject.mockResolvedValue({
       ...project(),

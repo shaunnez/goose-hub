@@ -259,6 +259,7 @@ describe('implement-wp budget sizing', () => {
         implementWpHighPriorityUsd: null,
         implementWpManyFilesThreshold: null,
         implementWpManyFilesUsd: null,
+        implementWpContractKeywordsJson: null,
         implementWpContractUsd: null,
       },
     );

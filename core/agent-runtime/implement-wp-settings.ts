@@ -37,6 +37,7 @@ export type ImplementWpSettingsRow = Pick<
   | 'implementWpHighPriorityUsd'
   | 'implementWpManyFilesThreshold'
   | 'implementWpManyFilesUsd'
+  | 'implementWpContractKeywordsJson'
   | 'implementWpContractUsd'
 >;
 
@@ -55,6 +56,21 @@ export const DEFAULT_IMPLEMENT_WP_SETTINGS: ImplementWpSettings = {
     },
   },
 };
+
+function parseContractKeywords(value: string | null | undefined): string[] | null {
+  if (value == null) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const keywords = parsed
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    return keywords.length > 0 ? keywords : [];
+  } catch {
+    return null;
+  }
+}
 
 export function resolveImplementWpSettings(
   budgetConfig?: Pick<BudgetConfig, 'implementWp'> | null,
@@ -114,6 +130,7 @@ export function resolveImplementWpSettings(
           sizing?.complexAdditions?.manyFilesUsd ??
           defaults.budgetSizing.complexAdditions.manyFilesUsd,
         contractKeywords:
+          parseContractKeywords(row?.implementWpContractKeywordsJson) ??
           sizing?.complexAdditions?.contractKeywords ??
           defaults.budgetSizing.complexAdditions.contractKeywords,
         contractUsd:

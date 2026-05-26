@@ -26,6 +26,7 @@ export type GlobalBudgetPatch = {
   implementWpHighPriorityUsd?: number | null;
   implementWpManyFilesThreshold?: number | null;
   implementWpManyFilesUsd?: number | null;
+  implementWpContractKeywordsJson?: string | null;
   implementWpContractUsd?: number | null;
   useMultiAgentPipeline?: number | null;
   useInvestigationSwarm?: number | null;
@@ -45,6 +46,10 @@ export type SkillBudgetPatch = {
   modelTier?: string | null;
   modelProvider?: string | null;
   effort?: string | null;
+  escalationModelTier?: string | null;
+  escalationMaxBudgetUsd?: number | null;
+  escalationMaxTurns?: number | null;
+  escalationTimeoutMs?: number | null;
 };
 
 export const DEFAULT_COACH_POLICY: CoachPolicy = {
@@ -311,6 +316,7 @@ export function resetAllProjectBudgets(projectId: string): void {
       implementWpHighPriorityUsd: null,
       implementWpManyFilesThreshold: null,
       implementWpManyFilesUsd: null,
+      implementWpContractKeywordsJson: null,
       implementWpContractUsd: null,
       updatedAt: new Date().toISOString(),
       updatedBy: 'ui',
