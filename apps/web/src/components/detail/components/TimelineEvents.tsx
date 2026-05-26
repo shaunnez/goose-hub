@@ -54,6 +54,7 @@ import {
   CompactOperationalEvent,
   ContractDriftEvent,
   DiscoveryBudgetExceededEvent,
+  DogfoodSeedAppliedEvent,
   FallbackEvent,
   InvestigationContextInjectedEvent,
   InvestigationDigestAppliedEvent,
@@ -73,6 +74,7 @@ import {
   ParallelIterationStartedEvent,
   ParallelWpCommittedEvent,
   ParallelWpFailedEvent,
+  ParallelWpPersistedEvent,
   ParallelWpStartedEvent,
   ParallelWpTimeoutEvent,
   SpecCompletedEvent,
@@ -220,6 +222,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
   const { event } = item;
 
   switch (event.kind) {
+    case 'dogfood.seed-applied':
+      return <DogfoodSeedAppliedEvent key={event.id} event={event} />;
     case 'agent.model-selected':
       return <AgentModelSelectedEvent key={event.id} event={event} />;
     case 'agent.budget-exceeded':
@@ -417,6 +421,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <ParallelWpStartedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-committed':
       return <ParallelWpCommittedEvent key={event.id} event={event} />;
+    case 'parallel-implement.wp-persisted':
+      return <ParallelWpPersistedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-failed':
     case 'parallel-implement.wp-loop-cap-hit':
     case 'parallel-implement.wp-commit-failed':
