@@ -20,8 +20,6 @@ function makeRepository() {
   const repository = new LocalDbWorkItemRepository({
     db,
     now: () => new Date('2026-05-26T00:00:00.000Z'),
-    id: () =>
-      `wi_test_${(sqlite.prepare('select count(*) as count from work_items').get() as { count: number }).count}`,
   });
   return { sqlite, repository };
 }
@@ -49,13 +47,25 @@ describe('LocalDbWorkItemRepository', () => {
       priority: 'high',
     });
 
-    expect(created.id).toBe('wi_test_0');
+    expect(created.id).toBe('local:proj#1');
     expect(created.externalId).toBe('1');
     expect(repository.getWorkItem('proj', created.id)?.title).toBe('Local DB source');
     expect(repository.getWorkItem('proj', '1')?.id).toBe(created.id);
     expect(repository.getWorkItem('proj', 'local:proj#1')?.id).toBe(created.id);
     expect(repository.listOpenWorkItems('proj')).toHaveLength(1);
     expect(repository.listOpenWorkItems('other')).toHaveLength(0);
+  });
+
+  it('allocates canonical external ids from an atomic per-project counter', () => {
+    const { repository } = trackedRepository();
+
+    const first = repository.createWorkItem({ projectId: 'proj', title: 'A' });
+    const second = repository.createWorkItem({ projectId: 'proj', title: 'B' });
+    const otherProject = repository.createWorkItem({ projectId: 'other', title: 'C' });
+
+    expect(first).toMatchObject({ id: 'local:proj#1', externalId: '1' });
+    expect(second).toMatchObject({ id: 'local:proj#2', externalId: '2' });
+    expect(otherProject).toMatchObject({ id: 'local:other#1', externalId: '1' });
   });
 
   it('updates state with history, comments, repo links, labels, and external refs', () => {

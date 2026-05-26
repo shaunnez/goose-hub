@@ -21,8 +21,6 @@ function makeSource() {
   const repository = new LocalDbWorkItemRepository({
     db,
     now: () => new Date('2026-05-26T00:00:00.000Z'),
-    id: () =>
-      `wi_${(sqlite.prepare('select count(*) as count from work_items').get() as { count: number }).count}`,
   });
   return {
     sqlite,
@@ -55,13 +53,13 @@ describe('LocalDbStateSource', () => {
     });
 
     expect(created).toMatchObject({
-      id: 'wi_0',
+      id: 'local:proj#1',
       externalId: '1',
       repoRef: 'owner/repo',
       type: 'bug',
       priority: 'high',
       state: 'factory:triaging',
-      dependsOn: ['owner/repo#7'],
+      dependsOn: ['7'],
       blocks: ['9'],
     });
     expect((await source.getItem('1')).id).toBe(created.id);
@@ -84,6 +82,25 @@ describe('LocalDbStateSource', () => {
     expect((await source.listComments(created.id)).map((comment) => comment.body)).toContain(
       'accepted',
     );
+  });
+
+  it('returns the persisted row after managed extra labels mutate metadata', async () => {
+    const { source } = trackedSource();
+
+    const created = await source.createIssue({
+      title: 'Local source',
+      body: '',
+      extraLabels: ['factory:accepted', 'schedule:next', 'priority:critical', 'type:research'],
+    });
+
+    expect(created).toMatchObject({
+      id: 'local:proj#1',
+      externalId: '1',
+      state: 'factory:accepted',
+      schedule: 'next',
+      priority: 'critical',
+      type: 'research',
+    });
   });
 
   it('rejects illegal transitions and records forced transition history', async () => {

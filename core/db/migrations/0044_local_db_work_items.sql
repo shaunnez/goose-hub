@@ -27,6 +27,20 @@ CREATE INDEX `work_items_project_schedule_idx` ON `work_items` (`project_id`,`sc
 --> statement-breakpoint
 CREATE INDEX `work_items_project_milestone_idx` ON `work_items` (`project_id`,`milestone_id`);
 --> statement-breakpoint
+CREATE TABLE `work_item_counters` (
+  `project_id` text PRIMARY KEY NOT NULL,
+  `last_external_id` integer DEFAULT 0 NOT NULL,
+  `updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) NOT NULL
+);
+--> statement-breakpoint
+INSERT INTO `work_item_counters` (`project_id`, `last_external_id`, `updated_at`)
+SELECT
+  `project_id`,
+  coalesce(max(cast(`external_id` as integer)), 0),
+  strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+FROM `work_items`
+GROUP BY `project_id`;
+--> statement-breakpoint
 CREATE TABLE `work_item_milestones` (
   `id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
   `project_id` text NOT NULL,
