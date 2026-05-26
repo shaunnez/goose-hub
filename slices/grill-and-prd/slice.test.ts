@@ -264,12 +264,6 @@ function injectedConfig(perAdvisorMaxUsd = 5) {
   };
 }
 
-function getPostedPrdJson(commentBody: string): unknown {
-  const match = commentBody.match(/```json\n([\s\S]*?)\n```/);
-  if (match == null) throw new Error('no json fence found in comment body');
-  return JSON.parse(match[1]);
-}
-
 function noopWorktreeDeps() {
   return {
     createWorktreeImpl: (_repo: string, runId: string) => `/tmp/wt/${runId}`,
