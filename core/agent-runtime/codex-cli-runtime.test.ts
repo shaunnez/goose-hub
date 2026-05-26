@@ -1,14 +1,21 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockEventStore, mockRecordAgentRun, mockRecordCost, mockRecordToolStatsForRun, mockSpawn } =
-  vi.hoisted(() => ({
-    mockEventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
-    mockRecordAgentRun: vi.fn(),
-    mockRecordCost: vi.fn(),
-    mockRecordToolStatsForRun: vi.fn(),
-    mockSpawn: vi.fn(),
-  }));
+const {
+  mockBindToolsForAgentSpec,
+  mockEventStore,
+  mockRecordAgentRun,
+  mockRecordCost,
+  mockRecordToolStatsForRun,
+  mockSpawn,
+} = vi.hoisted(() => ({
+  mockBindToolsForAgentSpec: vi.fn(),
+  mockEventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
+  mockRecordAgentRun: vi.fn(),
+  mockRecordCost: vi.fn(),
+  mockRecordToolStatsForRun: vi.fn(),
+  mockSpawn: vi.fn(),
+}));
 
 vi.mock('../cost/repository.js', () => ({
   recordCost: mockRecordCost,
@@ -19,7 +26,9 @@ vi.mock('../cost/skill-stage.js', () => ({ stageForSkill: vi.fn().mockReturnValu
 vi.mock('../db/repositories/project-settings.js', () => ({
   getRecordDecisionTool: vi.fn().mockReturnValue(false),
 }));
-vi.mock('../tool-layer/allowlist.js', () => ({ computeAllowlist: vi.fn().mockReturnValue([]) }));
+vi.mock('../tool-layer/tool-binding.js', () => ({
+  bindToolsForAgentSpec: mockBindToolsForAgentSpec,
+}));
 vi.mock('../tool-layer/decision-capture-hook.js', () => ({ deployDecisionCaptureHook: vi.fn() }));
 vi.mock('../tool-layer/pre-tool-use-hook.js', () => ({ deployHooks: vi.fn() }));
 vi.mock('../tool-layer/sandbox.js', () => ({
@@ -40,7 +49,6 @@ vi.mock('./codex-config.js', () => ({
   assertCodexAuthenticated: vi.fn(),
   buildCodexArgv: vi.fn().mockReturnValue(['exec', '--json']),
   buildCodexMcpInlineArgs: vi.fn().mockReturnValue([]),
-  codexMcpEnabledToolsForServer: vi.fn().mockReturnValue([]),
   escapeForTomlMultilineBasic: vi.fn((value: string) => value),
   resolveCodexBinary: vi.fn().mockReturnValue('/usr/local/bin/codex'),
 }));
@@ -54,14 +62,10 @@ vi.mock('node:child_process', () => ({
   spawn: mockSpawn,
 }));
 
-import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { writeCodexWorkspaceSandbox, writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
+import { type ToolBinding, bindToolsForAgentSpec } from '../tool-layer/tool-binding.js';
 import { CodexCliRuntime } from './codex-cli.js';
-import {
-  buildCodexArgv,
-  buildCodexMcpInlineArgs,
-  codexMcpEnabledToolsForServer,
-} from './codex-config.js';
+import { buildCodexArgv, buildCodexMcpInlineArgs } from './codex-config.js';
 import { estimateCostUsd } from './models.js';
 
 function makeSpec(overrides: Record<string, unknown> = {}) {
@@ -79,6 +83,34 @@ function makeSpec(overrides: Record<string, unknown> = {}) {
     workItemId: 'github:owner/repo#1',
     ...overrides,
   };
+}
+
+function makeToolBinding(overrides: Partial<ToolBinding> = {}): ToolBinding {
+  return {
+    allowlist: [],
+    enabledToolsByServer: {},
+    nativeTools: [],
+    mcpServerBundles: [],
+    mcpServerNames: [],
+    sandboxMode: 'read-only' as const,
+    fingerprints: {
+      toolBindingHash: 'binding-hash',
+      toolAllowlistHash: 'allowlist-hash',
+      mcpServerSetHash: 'server-hash',
+    },
+    ...overrides,
+  };
+}
+
+function defaultToolBindingForSpec(spec: { skill?: string; toolBundles?: ReadonlyArray<string> }) {
+  const bundles = spec.toolBundles ?? [];
+  const needsBrowser = spec.skill === 'playwright-repro' && bundles.includes('validate');
+  const needsWrite = bundles.includes('dev-tools');
+  return makeToolBinding({
+    mcpServerBundles: bundles.includes('playwright-mcp') ? ['playwright-mcp'] : [],
+    sandboxMode: needsBrowser ? 'danger-full-access' : needsWrite ? 'workspace-write' : 'read-only',
+    ...(needsBrowser ? { approvalPolicy: 'never' } : {}),
+  });
 }
 
 type FakeChild = EventEmitter & {
@@ -99,9 +131,8 @@ function makeHangingChild(): FakeChild {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(computeAllowlist).mockReturnValue([]);
+  vi.mocked(bindToolsForAgentSpec).mockImplementation(defaultToolBindingForSpec);
   vi.mocked(buildCodexMcpInlineArgs).mockReturnValue([]);
-  vi.mocked(codexMcpEnabledToolsForServer).mockReturnValue([]);
   mockEventStore.replay.mockReturnValue([]);
 });
 
@@ -241,20 +272,18 @@ describe('CodexCliRuntime timeout handling', () => {
   });
 
   it('derives Codex MCP enabled_tools from the run allowlist', async () => {
-    vi.mocked(computeAllowlist).mockReturnValue([
-      'mcp__factory-tools__read_file',
-      'mcp__factory-tools__run_tests',
-      'Bash',
-    ]);
-    vi.mocked(codexMcpEnabledToolsForServer).mockReturnValue(['read_file', 'run_tests']);
+    vi.mocked(bindToolsForAgentSpec).mockReturnValue(
+      makeToolBinding({
+        allowlist: ['Bash', 'mcp__factory-tools__read_file', 'mcp__factory-tools__run_tests'],
+        enabledToolsByServer: { 'factory-tools': ['read_file', 'run_tests'] },
+        nativeTools: ['Bash'],
+        mcpServerNames: ['factory-tools'],
+        sandboxMode: 'workspace-write',
+      }),
+    );
 
     await runSuccessfulCodexSpec({ toolBundles: ['dev-tools'] });
 
-    expect(codexMcpEnabledToolsForServer).toHaveBeenCalledWith('factory-tools', [
-      'mcp__factory-tools__read_file',
-      'mcp__factory-tools__run_tests',
-      'Bash',
-    ]);
     expect(buildCodexMcpInlineArgs).toHaveBeenCalledWith(
       expect.objectContaining({
         'factory-tools': expect.objectContaining({
@@ -293,7 +322,9 @@ describe('CodexCliRuntime timeout handling', () => {
   });
 
   it('fails fast when a streamed Bash command references a /Users path outside the workspace', async () => {
-    vi.mocked(computeAllowlist).mockReturnValue(['Bash']);
+    vi.mocked(bindToolsForAgentSpec).mockReturnValue(
+      makeToolBinding({ allowlist: ['Bash'], nativeTools: ['Bash'] }),
+    );
     const child = makeHangingChild();
     mockSpawn.mockReturnValue(child);
     const processKill = vi.spyOn(process, 'kill').mockImplementation(() => true);
@@ -409,6 +440,11 @@ describe('CodexCliRuntime timeout handling', () => {
         payload: expect.objectContaining({
           modelId: 'gpt-5.4-mini',
           runtime: 'codex-cli',
+          toolBindingHash: 'binding-hash',
+          toolAllowlistHash: 'allowlist-hash',
+          mcpServerSetHash: 'server-hash',
+          nativeToolCount: 0,
+          mcpServerNames: [],
         }),
       }),
     );
@@ -1099,7 +1135,9 @@ describe('CodexCliRuntime timeout handling', () => {
   });
 
   it('kills and rejects when streamed tool calls exceed maxTurns', async () => {
-    vi.mocked(computeAllowlist).mockReturnValue(['Bash']);
+    vi.mocked(bindToolsForAgentSpec).mockReturnValue(
+      makeToolBinding({ allowlist: ['Bash'], nativeTools: ['Bash'] }),
+    );
     const child = makeHangingChild();
     mockSpawn.mockReturnValue(child);
     const processKill = vi.spyOn(process, 'kill').mockImplementation(() => true);

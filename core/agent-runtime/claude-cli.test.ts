@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  mockBindToolsForAgentSpec,
   mockRecordAgentRun,
   mockRecordCost,
   mockRecordToolStatsForRun,
@@ -9,6 +10,19 @@ const {
   mockExecFileSync,
   mockSpawn,
 } = vi.hoisted(() => ({
+  mockBindToolsForAgentSpec: vi.fn().mockReturnValue({
+    allowlist: [],
+    enabledToolsByServer: {},
+    nativeTools: [],
+    mcpServerBundles: [],
+    mcpServerNames: [],
+    sandboxMode: 'read-only',
+    fingerprints: {
+      toolBindingHash: 'binding-hash',
+      toolAllowlistHash: 'allowlist-hash',
+      mcpServerSetHash: 'server-hash',
+    },
+  }),
   mockRecordAgentRun: vi.fn(),
   mockRecordCost: vi.fn(),
   mockRecordToolStatsForRun: vi.fn(),
@@ -27,7 +41,9 @@ vi.mock('../cost/skill-stage.js', () => ({ stageForSkill: vi.fn().mockReturnValu
 vi.mock('../db/repositories/project-settings.js', () => ({
   getRecordDecisionTool: vi.fn().mockReturnValue(false),
 }));
-vi.mock('../tool-layer/allowlist.js', () => ({ computeAllowlist: vi.fn().mockReturnValue([]) }));
+vi.mock('../tool-layer/tool-binding.js', () => ({
+  bindToolsForAgentSpec: mockBindToolsForAgentSpec,
+}));
 vi.mock('../tool-layer/pre-tool-use-hook.js', () => ({ deployHooks: vi.fn() }));
 vi.mock('../tool-layer/sandbox.js', () => ({ writeWorkspaceSandbox: vi.fn() }));
 vi.mock('./context-assembly.js', () => ({
@@ -49,6 +65,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 import { costFromCliEnvelope } from '../cost/extract.js';
+import { bindToolsForAgentSpec } from '../tool-layer/tool-binding.js';
 import { ClaudeCliRuntime } from './claude-cli.js';
 
 function makeSpec(overrides: Record<string, unknown> = {}) {
@@ -101,6 +118,19 @@ function makeHangingChild(): FakeChild {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(bindToolsForAgentSpec).mockReturnValue({
+    allowlist: [],
+    enabledToolsByServer: {},
+    nativeTools: [],
+    mcpServerBundles: [],
+    mcpServerNames: [],
+    sandboxMode: 'read-only',
+    fingerprints: {
+      toolBindingHash: 'binding-hash',
+      toolAllowlistHash: 'allowlist-hash',
+      mcpServerSetHash: 'server-hash',
+    },
+  });
   mockExecFileSync.mockReturnValue('/usr/local/bin/claude\n');
   vi.mocked(costFromCliEnvelope).mockReturnValue(null);
   mockEventStore.replay.mockReturnValue([]);
@@ -230,6 +260,11 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
         payload: expect.objectContaining({
           modelId: 'claude-haiku-4-5-20251001',
           runtime: 'claude-cli',
+          toolBindingHash: 'binding-hash',
+          toolAllowlistHash: 'allowlist-hash',
+          mcpServerSetHash: 'server-hash',
+          nativeToolCount: 0,
+          mcpServerNames: [],
         }),
       }),
     );

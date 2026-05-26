@@ -7,11 +7,11 @@ import { recordCost, recordToolStatsForRun } from '../cost/repository.js';
 import { stageForSkill } from '../cost/skill-stage.js';
 import { getRecordDecisionTool } from '../db/repositories/project-settings.js';
 import { eventStore } from '../event-stream/store.js';
-import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.js';
 import { buildFactoryMcpConfig } from '../tool-layer/mcp/build-config.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeCodexWorkspaceSandbox, writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
+import { bindToolsForAgentSpec } from '../tool-layer/tool-binding.js';
 import { normalizeToolCallAuditPayload } from '../tool-layer/tool-call-audit.js';
 import { emitBudgetExceededIfNeeded } from './budget-guard.js';
 import {
@@ -20,7 +20,6 @@ import {
   assertCodexAuthenticated,
   buildCodexArgv,
   buildCodexMcpInlineArgs,
-  codexMcpEnabledToolsForServer,
   escapeForTomlMultilineBasic,
   resolveCodexBinary,
 } from './codex-config.js';
@@ -60,7 +59,6 @@ const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
 const TIMEOUT_MS = 30_000; // 30 seconds — FACTORY_RULES rule 32
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 const OUTPUT_SCHEMAS_DIR = '.factory/output-schemas';
-const BROWSER_PROCESS_ACCESS_SKILLS = new Set(['playwright-repro', 'evidence-post']);
 const ABSOLUTE_USER_PATH_RE = /\/Users\/[^\s'"`]+/g;
 const NATIVE_PATCH_REJECTION_RE =
   /patch rejected:\s*writing is blocked by read-only sandbox|writing is blocked by read-only sandbox/i;
@@ -282,7 +280,8 @@ export class CodexCliRuntime implements AgentRuntime {
         outcome,
       });
     };
-    const allowedTools = computeAllowlist(spec);
+    const toolBinding = bindToolsForAgentSpec(spec);
+    const allowedTools = toolBinding.allowlist;
     // Per-run MCP config (ADR 0045). For Claude we pass `--mcp-config`; for
     // Codex we pass each MCP server entry as `-c mcp_servers.<n>.command=...`
     // / `.args=...` / `.env=...` since Codex CLI consumes MCP via TOML and
@@ -295,7 +294,7 @@ export class CodexCliRuntime implements AgentRuntime {
       workItemId,
       skill: spec.skill,
       personaId,
-      toolBundles: spec.toolBundles,
+      toolBundles: toolBinding.mcpServerBundles,
     });
     const codexMcpInlineArgs = buildCodexMcpInlineArgs(
       Object.fromEntries(
@@ -303,7 +302,7 @@ export class CodexCliRuntime implements AgentRuntime {
           name,
           {
             ...entry,
-            enabledTools: codexMcpEnabledToolsForServer(name, allowedTools),
+            enabledTools: toolBinding.enabledToolsByServer[name] ?? [],
             ...(name === 'factory-tools'
               ? {
                   required: true,
@@ -336,6 +335,12 @@ export class CodexCliRuntime implements AgentRuntime {
           personaId,
           modelId: model,
           runtime: 'codex-cli',
+          toolBundles: spec.toolBundles,
+          toolBindingHash: toolBinding.fingerprints.toolBindingHash,
+          toolAllowlistHash: toolBinding.fingerprints.toolAllowlistHash,
+          mcpServerSetHash: toolBinding.fingerprints.mcpServerSetHash,
+          nativeToolCount: toolBinding.nativeTools.length,
+          mcpServerNames: toolBinding.mcpServerNames,
           ...spec.extraEventPayload,
         },
         runId,
@@ -371,14 +376,8 @@ export class CodexCliRuntime implements AgentRuntime {
       runId,
       personaId,
     });
-    const needsBrowserProcessAccess =
-      spec.toolBundles.includes('validate') && BROWSER_PROCESS_ACCESS_SKILLS.has(spec.skill);
-    const needsWorkspaceWriteSandbox = spec.toolBundles.includes('dev-tools');
-    const commandSandbox = needsBrowserProcessAccess
-      ? 'danger-full-access'
-      : needsWorkspaceWriteSandbox
-        ? 'workspace-write'
-        : undefined;
+    const commandSandbox =
+      toolBinding.sandboxMode === 'read-only' ? undefined : toolBinding.sandboxMode;
 
     const argv = buildCodexArgv({
       model,
@@ -388,9 +387,9 @@ export class CodexCliRuntime implements AgentRuntime {
       effort: spec.effort,
       maxTurns: spec.budgets.maxTurns,
       commandSandbox,
-      approvalPolicy: needsBrowserProcessAccess ? 'never' : undefined,
+      approvalPolicy: toolBinding.approvalPolicy,
       bypassHookTrust: true,
-      disableShellTool: !toolAllowedByRunAllowlist('Bash', allowedTools),
+      disableShellTool: !toolBinding.nativeTools.includes('Bash'),
       outputSchemaPath,
       inlineConfig: codexMcpInlineArgs,
     });

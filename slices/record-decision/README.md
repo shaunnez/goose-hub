@@ -1,12 +1,12 @@
 # slices/record-decision
 
-M19.06: `record-decision` runtime tool — synchronous SQLite write with iteration + phase metadata.
+M19.06: decision-record persistence — synchronous SQLite write with iteration + phase metadata.
 
 Closes #563.
 
 ## What it does
 
-Adds a mid-run tool (`record-decision`) that agents can call synchronously to persist structured `DecisionRecord` entries to the `agent_decisions` SQLite table. This is an A/B evaluation against the existing two-stream decision model (live `[decision]` markers + end-of-run schema field).
+Adds decision-record persistence for the MCP `mcp__factory-tools__record_decision` tool, which agents call synchronously to persist structured `DecisionRecord` entries to the `agent_decisions` SQLite table. This is an A/B evaluation against the existing two-stream decision model (live `[decision]` markers + end-of-run schema field).
 
 Shipped behind `experimental.recordDecisionTool: true` in project config (default: false).
 
@@ -18,8 +18,7 @@ Shipped behind `experimental.recordDecisionTool: true` in project config (defaul
 | `core/db/migrations/0007_agent_decisions.sql` | — | DDL migration |
 | `core/types.ts` | `ProjectConfig.experimental.recordDecisionTool` | Feature flag |
 | `core/tool-layer/tools/record-decision.ts` | `recordDecision`, `readRunDecisions` | Business logic |
-| `core/tool-layer/bundles.ts` | `'decision-record-only'` | New bundle |
-| `core/tool-layer/allowlist.ts` | `computeAllowlist` | Role-aware holdout filtering |
+| `core/tool-layer/mcp/tools/context.ts` | `recordDecisionTool` | MCP wrapper |
 | `scripts/eval-decision-streams.ts` | — | A/B eval harness |
 
 ## `agent_decisions` table
@@ -39,9 +38,7 @@ Deduplication: `UNIQUE (run_id, kind, what)` — a second call with the same tri
 
 ## Holdout discipline
 
-`decision-record-only` bundle is stripped from `qa` and `reviewer` roles by `computeAllowlist`. This prevents holdout agents from leaking implementation-phase decisions (FACTORY_RULES rule 1).
-
-Enforcement path: `computeAllowlist(spec)` in `core/agent-runtime/claude-cli.ts` receives the full `AgentSpec` including `role`; the new role-aware branch filters the bundle before it reaches `--allowedTools`.
+The MCP `record_decision` context tool stays available to `qa` and `reviewer` so holdout runs can emit their own live decision summaries. Holdout isolation is enforced by context assembly and role-specific prompts: QA/reviewer do not receive implementation reasoning or developer decision records, but they may write their own verification/review decisions.
 
 ## Reconciliation at run end
 

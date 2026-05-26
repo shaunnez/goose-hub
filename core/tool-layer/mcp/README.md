@@ -49,9 +49,8 @@ Written to `<worktree>/.factory/mcp-config.json` at spawn time by the runtime. T
 - `core` — empty (no-tool skills)
 - `emergency-debug` — `Bash` only; opt-in
 - `playwright-mcp` — Microsoft's playwright-test MCP server tools
-- `decision-record-only` — legacy single-tool bundle, holdout-blocked
 
-Every agent-facing bundle is `mcp__factory-tools__*` only — no native `Read` / `Write` / `Edit` / `Glob` / `Grep` / `Bash`. Enforced by a slice test.
+Every agent-facing bundle is `mcp__factory-tools__*` only — no native `Read` / `Write` / `Edit` / `Glob` / `Grep` / `Bash`. Enforced by a slice test. The MCP `record_decision` context tool remains available to holdout roles for their own live decision summaries; there is no separate single-tool decision bundle.
 
 ## GitHub-backed tools
 
