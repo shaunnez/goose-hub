@@ -49,6 +49,7 @@ describe('useIssueCostsBreakdown', () => {
     expect(result.current.runCount).toBe(0);
     expect(result.current.byRun.size).toBe(0);
     expect(result.current.byStage.size).toBe(0);
+    expect(result.current.bySkill.size).toBe(0);
   });
 
   it('keys cost rows by runId and aggregates by stage', async () => {
@@ -70,6 +71,7 @@ describe('useIssueCostsBreakdown', () => {
         row({
           runId: 'r-qa-2',
           stage: 'qa',
+          skill: 'qa-test',
           costUsd: 0.06,
           inputTokens: 300,
           cachedInputTokens: 150,
@@ -77,7 +79,14 @@ describe('useIssueCostsBreakdown', () => {
           reasoningOutputTokens: 8,
           cacheHitRatio: 0.5,
         }),
-        row({ runId: 'r-dev-1', stage: 'dev', costUsd: 0.25, inputTokens: 800, outputTokens: 400 }),
+        row({
+          runId: 'r-dev-1',
+          stage: 'dev',
+          skill: 'implement',
+          costUsd: 0.25,
+          inputTokens: 800,
+          outputTokens: 400,
+        }),
       ],
     };
     vi.mocked(fetchIssueCosts).mockResolvedValueOnce(data);
@@ -102,6 +111,18 @@ describe('useIssueCostsBreakdown', () => {
     const dev = result.current.byStage.get('dev');
     expect(dev?.runCount).toBe(1);
     expect(dev?.tokens).toBe(1200);
+
+    const qaSkill = result.current.bySkill.get('qa-test');
+    expect(qaSkill?.runCount).toBe(2);
+    expect(qaSkill?.usd).toBeCloseTo(0.11, 5);
+    expect(qaSkill?.tokens).toBe(700);
+    expect(qaSkill?.cachedInputTokens).toBe(200);
+    expect(qaSkill?.reasoningOutputTokens).toBe(20);
+    expect(qaSkill?.cacheHitRatio).toBeCloseTo(0.4, 5);
+
+    const implementSkill = result.current.bySkill.get('implement');
+    expect(implementSkill?.runCount).toBe(1);
+    expect(implementSkill?.tokens).toBe(1200);
   });
 
   it("flips a stage's label to 'estimated' when any row in it is estimated", async () => {
@@ -123,5 +144,6 @@ describe('useIssueCostsBreakdown', () => {
 
     expect(result.current.totalLabel).toBe('estimated');
     expect(result.current.byStage.get('review')?.label).toBe('estimated');
+    expect(result.current.bySkill.get('qa-test')?.label).toBe('estimated');
   });
 });

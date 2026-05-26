@@ -15,9 +15,14 @@ export type StageBreakdown = {
   runCount: number;
 };
 
+export type SkillBreakdown = Omit<StageBreakdown, 'stage'> & {
+  skill: CostRowDto['skill'];
+};
+
 export interface IssueCostsBreakdown {
   byRun: Map<string, CostRowDto>;
   byStage: Map<CostRowDto['stage'], StageBreakdown>;
+  bySkill: Map<CostRowDto['skill'], SkillBreakdown>;
   total: number;
   totalTokens: number;
   hasEstimated: boolean;
@@ -29,6 +34,7 @@ export interface IssueCostsBreakdown {
 const EMPTY: Omit<IssueCostsBreakdown, 'isLoading'> = {
   byRun: new Map(),
   byStage: new Map(),
+  bySkill: new Map(),
   total: 0,
   totalTokens: 0,
   hasEstimated: false,
@@ -55,6 +61,7 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
 
     const byRun = new Map<string, CostRowDto>();
     const byStage = new Map<CostRowDto['stage'], StageBreakdown>();
+    const bySkill = new Map<CostRowDto['skill'], SkillBreakdown>();
     let totalTokens = 0;
 
     for (const row of data.rows) {
@@ -85,11 +92,37 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
           runCount: 1,
         });
       }
+
+      const existingSkill = bySkill.get(row.skill);
+      if (existingSkill) {
+        existingSkill.usd += row.costUsd;
+        existingSkill.tokens += tokens;
+        existingSkill.inputTokens += row.inputTokens;
+        existingSkill.cachedInputTokens += row.cachedInputTokens;
+        existingSkill.reasoningOutputTokens += row.reasoningOutputTokens;
+        existingSkill.cacheHitRatio =
+          existingSkill.cachedInputTokens / Math.max(existingSkill.inputTokens, 1);
+        existingSkill.runCount += 1;
+        if (row.costLabel === 'estimated') existingSkill.label = 'estimated';
+      } else {
+        bySkill.set(row.skill, {
+          skill: row.skill,
+          usd: row.costUsd,
+          tokens,
+          inputTokens: row.inputTokens,
+          cachedInputTokens: row.cachedInputTokens,
+          reasoningOutputTokens: row.reasoningOutputTokens,
+          cacheHitRatio: row.cacheHitRatio,
+          label: row.costLabel,
+          runCount: 1,
+        });
+      }
     }
 
     return {
       byRun,
       byStage,
+      bySkill,
       total: data.totalUsd,
       totalTokens,
       hasEstimated: data.hasEstimated,
