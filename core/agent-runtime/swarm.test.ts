@@ -49,6 +49,19 @@ function okResult(scoutName: string): AgentResult {
   };
 }
 
+function agentEvent(input: Pick<AgentEvent, 'kind' | 'payload' | 'runId'>): AgentEvent {
+  return {
+    id: 1,
+    projectId: 'goose-hub-self',
+    workItemId: 'github:shaunnez/goose-hub#558',
+    kind: input.kind,
+    payload: input.payload,
+    runId: input.runId,
+    personaId: 'goose-hub-self/investigator/0',
+    createdAt: new Date(0).toISOString(),
+  };
+}
+
 function makeRuntime(
   impls: Record<string, (spec: AgentSpec) => Promise<AgentResult>>,
 ): AgentRuntime {
@@ -464,6 +477,69 @@ describe('swarm.dispatchWave', () => {
     expect(broken?.errorReason).toContain('schema validation');
     expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(true);
     // 3 succeeded + 1 invalid: still advances (≤1 failure tolerated).
+    expect(result.shouldAdvance).toBe(true);
+  });
+
+  it('marks an empty scout as error when it only emitted forbidden resource probes', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-schema': () => Promise.resolve(okResult('scout-schema')),
+      'scout-code-path': () => Promise.resolve(okResult('scout-code-path')),
+      'scout-pattern': () => Promise.resolve(okResult('scout-pattern')),
+      'scout-resource-probe': () =>
+        Promise.resolve({
+          output: {
+            findings: [],
+            decisionSummaries: [
+              { kind: 'UNCERTAINTY', summary: 'Factory tools were unavailable.' },
+            ],
+            status: 'ok',
+          },
+          decisionSummaries: [],
+          events: [
+            agentEvent({
+              kind: 'agent.runtime-advisory',
+              payload: {
+                surface: 'resources/list failed',
+                toolName: 'resources/list',
+                stderr: 'resources/list failed: startup probe',
+              },
+              runId: 'parent-resource:scout:scout-resource-probe:3',
+            }),
+          ],
+        }),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-resource',
+      scoutSpecs: [
+        makeScoutSpec('scout-schema'),
+        makeScoutSpec('scout-code-path'),
+        makeScoutSpec('scout-pattern'),
+        makeScoutSpec('scout-resource-probe'),
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    const probe = result.reports.find((r) => r.scoutName === 'scout-resource-probe');
+    expect(probe?.status).toBe('error');
+    expect(probe?.errorReason).toContain('forbidden MCP resource probes');
+    expect(
+      events.some(
+        (e) =>
+          e.kind === 'swarm.scout-failed' &&
+          (e.payload as { scoutName?: string }).scoutName === 'scout-resource-probe',
+      ),
+    ).toBe(true);
+    // The existing wave policy still advances because only one scout failed.
     expect(result.shouldAdvance).toBe(true);
   });
 

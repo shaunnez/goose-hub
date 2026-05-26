@@ -46,7 +46,7 @@ Per ADR 0011 §4 and FACTORY_RULES rule 26: posting evidence is a product workfl
 
 ## Tool allowlist
 
-`validate` bundle: Read, Write, Edit, Glob, Grep, plus scoped Bash patterns for Playwright invocation, evidence I/O (`mkdir -p evidence/*`, `git add evidence/*`), commit, and push. The skill does NOT include unrestricted `Bash`.
+`validate` bundle: Factory read/search/file tools plus evidence helpers for Playwright invocation, evidence I/O, commit, and push. The skill does not include unrestricted shell access.
 
 ## Comparison strategy (v1)
 

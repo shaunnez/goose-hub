@@ -6,9 +6,10 @@ const config: SkillConfig = {
   outputSchema: ResolveConflictSchema,
   contextAllowlist: ['conflictedFiles', 'baseBranch', 'prNumber'],
   /**
-   * `dev-tools` bundle — read, write, search, bash, test. Workspace-bound
-   * paths only; bash-denylist enforced. The slice runs the actual git
-   * commands; this skill writes resolved files via the `write` tool.
+   * `dev-tools` bundle — Factory context, read/search, write/edit,
+   * verification, and git/diff tools. Workspace-bound paths only; command
+   * denylist enforced. The slice runs the actual git commands; this skill
+   * writes resolved files via `write_file` or `edit_file`.
    */
   toolBundles: ['dev-tools'],
   /**

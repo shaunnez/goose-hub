@@ -155,7 +155,7 @@ describe('path-policy', () => {
 });
 
 describe('server resources', () => {
-  it('registers workspace-files template and returns empty list for an empty workspace', async () => {
+  it('does not advertise MCP resources or resource templates', () => {
     const server = buildFactoryMcpServer({
       runId: 'run-1',
       projectId: 'demo',
@@ -176,28 +176,11 @@ describe('server resources', () => {
       };
     };
 
-    // With low-level setRequestHandler registration, the SDK's high-level resource bookkeeping
-    // (_resourceHandlersInitialized, _registeredResourceTemplates) is not used. Verify that
-    // the handlers are registered directly on server.server._requestHandlers instead.
-    expect(internals.server?._requestHandlers?.has('resources/list')).toBe(true);
-    expect(internals.server?._requestHandlers?.has('resources/read')).toBe(true);
-    expect(internals.server?._requestHandlers?.has('resources/templates/list')).toBe(true);
-
-    const listResult = await internals.server?._requestHandlers?.get('resources/list')?.(
-      { method: 'resources/list', params: {} },
-      {},
-    );
-    expect((listResult as { resources: unknown[] }).resources).toEqual([]);
-
-    const templatesResult = await internals.server?._requestHandlers?.get(
-      'resources/templates/list',
-    )?.({ method: 'resources/templates/list', params: {} }, {});
-    expect(
-      (templatesResult as { resourceTemplates: Array<{ name: string; uriTemplate: string }> })
-        .resourceTemplates,
-    ).toEqual([
-      expect.objectContaining({ name: 'workspace-files', uriTemplate: 'factory://{+path}' }),
-    ]);
+    expect(internals.server?._requestHandlers?.has('resources/list')).toBe(false);
+    expect(internals.server?._requestHandlers?.has('resources/read')).toBe(false);
+    expect(internals.server?._requestHandlers?.has('resources/templates/list')).toBe(false);
+    expect(internals._registeredResources ?? {}).toEqual({});
+    expect(internals._registeredResourceTemplates ?? {}).toEqual({});
   });
 });
 

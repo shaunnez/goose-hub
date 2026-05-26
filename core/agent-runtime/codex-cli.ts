@@ -86,6 +86,11 @@ const ADVISORY_RUNTIME_SURFACE_PATTERNS: Array<{
     toolName: 'resources/read',
     re: /resources\/read(?:\?path=[^\s]+)?(?:\s+failed|[^\n]*transient stderr)/i,
   },
+  {
+    surface: 'resources/list failed',
+    toolName: 'resources/list',
+    re: /resources\/list(?:\?path=[^\s]+)?(?:\s+failed|[^\n]*transient stderr)/i,
+  },
 ];
 
 function isPathUnderRoot(path: string, root: string): boolean {
@@ -173,7 +178,7 @@ function handleForbiddenRuntimeSurface(line: string): {
 }
 
 function parseRequestedPath(line: string): string | undefined {
-  const match = line.match(/resources\/read\?path=([^\s&]+)/i);
+  const match = line.match(/resources\/(?:read|list)\?path=([^\s&]+)/i);
   if (match == null) return undefined;
   try {
     return decodeURIComponent(match[1]);

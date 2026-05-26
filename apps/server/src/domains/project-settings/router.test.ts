@@ -152,6 +152,16 @@ describe('project settings router', () => {
     });
   });
 
+  it('keeps Claude auth status under project settings', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/claude-auth');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      loginCommand: 'claude auth login',
+    });
+  });
+
   it('returns learning loop coach policy with DB overrides resolved above config', async () => {
     mockReadProjectSettings.mockReturnValue({
       projectId: 'goose-hub-self',

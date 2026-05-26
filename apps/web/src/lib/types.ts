@@ -846,11 +846,15 @@ export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 export type ModelProvider = 'claude' | 'codex';
 export type RuntimeEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
-export interface CodexAuthStatusDto {
+export interface CliAuthStatusDto {
   status: 'connected' | 'missing';
   authPath: string;
+  credentialSource?: string;
   loginCommand: string;
 }
+
+export type ClaudeAuthStatusDto = CliAuthStatusDto;
+export type CodexAuthStatusDto = CliAuthStatusDto;
 
 export interface DevReviewConfigDto {
   enabled: boolean;

@@ -30,7 +30,7 @@ Resolves git merge conflicts in a worktree. The skill receives the worktree path
 
 ## Tool allowlist
 
-`dev-tools` bundle — `read`, `search`, `work-item-read`, `write`, `bash`, `test`. All workspace-bound, bash-denylist enforced. The skill writes resolved files directly via the `write` tool; the slice runs `git add -A && git commit` afterwards.
+`dev-tools` bundle — Factory context, read/search, write/edit, verification, and git/diff tools. All workspace-bound, command-denylist enforced. The skill writes resolved files directly via `write_file` or `edit_file`; the slice owns staging and commit afterwards.
 
 ## Model pin
 

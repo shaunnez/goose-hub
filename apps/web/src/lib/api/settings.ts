@@ -1,4 +1,5 @@
 import type {
+  ClaudeAuthStatusDto,
   CodexAuthStatusDto,
   DevReviewSettingsDto,
   LearningLoopSettingsDto,
@@ -57,6 +58,13 @@ export async function fetchCodexAuthStatus(
   signal?: AbortSignal,
 ): Promise<CodexAuthStatusDto> {
   return getJson<CodexAuthStatusDto>(`/projects/${slug}/settings/codex-auth`, signal);
+}
+
+export async function fetchClaudeAuthStatus(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<ClaudeAuthStatusDto> {
+  return getJson<ClaudeAuthStatusDto>(`/projects/${slug}/settings/claude-auth`, signal);
 }
 
 export async function fetchRuntimeProfiler(

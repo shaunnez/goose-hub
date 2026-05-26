@@ -35,7 +35,7 @@ Path contract: all output paths must be repo-root/worktree-root relative POSIX p
 
 ## Tools
 
-Use `Read`, `Glob`, and `Grep` only for source exploration. Prefer the files, route, selectors, and setup in `<reproPacket>`. Do not do broad repo discovery unless the packet is missing a route or selector required for the spec.
+Use `read_file`, `list_files`, `search_text`, and `file_exists` only for source exploration. Prefer the files, route, selectors, and setup in `<reproPacket>`. Do not do broad repo discovery unless the packet is missing a route or selector required for the spec.
 
 Do not read local assistant memory, skill, config, or session files. Never inspect `~/.codex`, `~/.agents`, `~/.claude`, sibling repos, or parent directories. If prior context is needed, use only the context provided in this run.
 

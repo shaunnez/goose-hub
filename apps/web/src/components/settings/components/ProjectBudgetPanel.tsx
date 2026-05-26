@@ -1,5 +1,6 @@
 import {
   deleteSkillBudgetSetting,
+  fetchClaudeAuthStatus,
   fetchCodexAuthStatus,
   fetchProjectSettings,
   fetchRuntimeProfiler,
@@ -8,7 +9,7 @@ import {
   resetAllProjectBudgets,
 } from '@/lib/api';
 import type {
-  CodexAuthStatusDto,
+  CliAuthStatusDto,
   ModelProvider,
   ModelTier,
   ProjectSettingsDto,
@@ -309,15 +310,30 @@ function SkillMetadataLine({ label, values }: { label: string; values: string[] 
   );
 }
 
-function CodexAuthSection({ slug }: { slug: string }) {
-  const { data, isLoading } = useQuery<CodexAuthStatusDto>({
-    queryKey: ['codex-auth-status', slug],
-    queryFn: ({ signal }) => fetchCodexAuthStatus(slug, signal),
+function CliAuthSection({
+  slug,
+  title,
+  provider,
+  queryKey,
+  queryFn,
+  fallbackCommand,
+}: {
+  slug: string;
+  title: string;
+  provider: ModelProvider;
+  queryKey: string;
+  queryFn: (slug: string, signal?: AbortSignal) => Promise<CliAuthStatusDto>;
+  fallbackCommand: string;
+}) {
+  const { data, isLoading } = useQuery<CliAuthStatusDto>({
+    queryKey: [queryKey, slug],
+    queryFn: ({ signal }) => queryFn(slug, signal),
     staleTime: 30_000,
   });
   const [copied, setCopied] = useState(false);
 
-  const command = data?.loginCommand ?? 'codex login';
+  const command = data?.loginCommand ?? fallbackCommand;
+  const credentialSource = data?.credentialSource ?? data?.authPath;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(command);
@@ -332,11 +348,9 @@ function CodexAuthSection({ slug }: { slug: string }) {
     <div className="mb-4 rounded border border-line/70 bg-bg-2/40 px-3 py-2">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-fg-2">
-            Codex CLI auth
-          </h4>
+          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-fg-2">{title}</h4>
           <p className="mt-0.5 text-[11px] text-fg-3">
-            Required for skill rows that select provider <code>codex</code>. Machine-scoped.
+            Required for skill rows that select provider <code>{provider}</code>. Machine-scoped.
           </p>
         </div>
         {isLoading ? (
@@ -345,7 +359,7 @@ function CodexAuthSection({ slug }: { slug: string }) {
           <div className="flex min-w-0 items-center gap-2 text-[12px]">
             <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-success" />
             <span className="shrink-0 text-fg">Connected</span>
-            <code className="min-w-0 break-all text-[11px] text-fg-3">{data.authPath}</code>
+            <code className="min-w-0 break-all text-[11px] text-fg-3">{credentialSource}</code>
           </div>
         ) : (
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -369,6 +383,32 @@ function CodexAuthSection({ slug }: { slug: string }) {
         )}
       </div>
     </div>
+  );
+}
+
+function ClaudeAuthSection({ slug }: { slug: string }) {
+  return (
+    <CliAuthSection
+      slug={slug}
+      title="Claude CLI auth"
+      provider="claude"
+      queryKey="claude-auth-status"
+      queryFn={fetchClaudeAuthStatus}
+      fallbackCommand="claude auth login"
+    />
+  );
+}
+
+function CodexAuthSection({ slug }: { slug: string }) {
+  return (
+    <CliAuthSection
+      slug={slug}
+      title="Codex CLI auth"
+      provider="codex"
+      queryKey="codex-auth-status"
+      queryFn={fetchCodexAuthStatus}
+      fallbackCommand="codex login"
+    />
   );
 }
 
@@ -621,6 +661,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
           Leave fields blank to inherit from config or skill defaults. Changes take effect on the
           next agent dispatch. Primary, fallback, and advisor are derived read-only values.
         </p>
+        <ClaudeAuthSection slug={slug} />
         <CodexAuthSection slug={slug} />
         <div className="text-[12px] border-y border-line">
           {data.registeredSkills.map((skill) => {

@@ -87,11 +87,25 @@ If you believe no code change is needed, stop with `confidence: low`, emit a
 `BLOCKER` decision summary explaining why the issue appears already fixed or
 non-actionable, and return without pretending to ship.
 
-The `filesWritten` list must match actual writes made via
-`mcp__factory-tools__write_file` or `mcp__factory-tools__edit_file`; do not
-report files that were only read.
+The `filesWritten` list must match actual writes made via `write_file` /
+`edit_file` (Claude names: `mcp__factory-tools__write_file` /
+`mcp__factory-tools__edit_file`); do not report files that were only read.
 
 ### 3. Red
+
+#### Frontend test harness fidelity
+
+For `apps/web` jsdom/component tests, mirror the nearest existing test file's imports and render harness before inventing a new one.
+
+Default React component test pattern in this repo:
+
+```ts
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+```
+
+Do not import directly from `@testing-library/dom`, do not hand-roll `createRoot`, and do not switch to `react-dom/client` or manual `act` unless an adjacent passing test already uses that exact pattern.
+
+If a test harness/import/runtime failure appears, compare against an adjacent passing test first. If the adjacent passing pattern still fails, stop with `confidence: low` and emit `TOOL_FAILURE` or `BLOCKER`; do not keep rewriting the harness or diagnose React/Testing Library version issues from inference alone.
 
 - Write or update targeted tests that fail with the current behavior before implementation unless this is a true chore with no behavioural surface. When existing tests encode stale behavior, update those tests so they fail against the current bug before changing implementation code.
 - Run the targeted test command via Factory test tools and record returned canonical paths.

@@ -46,6 +46,12 @@ describe('timeline sections', () => {
       resolveTimelineSection({ kind: 'agent.run-started', payload: { skill: 'implement-wp' } }),
     ).toBe('implementation');
     expect(
+      resolveTimelineSection({
+        kind: 'agent.run-completed',
+        payload: { skill: 'parallel-implement' },
+      }),
+    ).toBe('implementation');
+    expect(
       resolveTimelineSection({ kind: 'agent.run-started', payload: { skill: 'resolve-conflict' } }),
     ).toBe('conflict');
     expect(
@@ -173,6 +179,7 @@ describe('timeline sections', () => {
     expect(timelineSectionForSkill('write-prd')).toBe('prd');
     expect(timelineSectionForSkill('advise-on-prd')).toBe('prd');
     expect(timelineSectionForSkill('bug-enhance')).toBe('investigation');
+    expect(timelineSectionForSkill('parallel-implement')).toBe('implementation');
     expect(timelineSectionForSkill('prd')).toBeNull();
   });
 });

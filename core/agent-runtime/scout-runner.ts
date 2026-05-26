@@ -68,6 +68,18 @@ export const SCOUT_CONTEXT_ALLOWLIST: readonly string[] = [
   'scoutDigest',
 ];
 
+const FORBIDDEN_RESOURCE_TOOLS = new Set(['resources/read', 'resources/list']);
+const SCOUT_REAL_READ_TOOLS = new Set([
+  'read_file',
+  'read_many_files',
+  'list_dir',
+  'list_files',
+  'search_text',
+  'file_exists',
+  'file_info',
+  'repo_intel.query',
+]);
+
 export interface RunOneScoutContext {
   parentRunId: string;
   workItem: { number: number; title: string; body: string };
@@ -248,6 +260,28 @@ export async function runOneScout(
   const findings = scoutOutput.findings;
   const decisionSummaries =
     result.decisionSummaries.length > 0 ? result.decisionSummaries : scoutOutput.decisionSummaries;
+  const resourceMisuse = classifyScoutResourceMisuse({
+    findings,
+    decisionSummaries,
+    events: result.events,
+  });
+  if (resourceMisuse != null) {
+    append({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId ?? null,
+      kind: 'swarm.scout-failed',
+      payload: { runId, scoutName: spec.scoutName, errorReason: resourceMisuse },
+      runId,
+    });
+    return {
+      scoutName: spec.scoutName,
+      status: 'error',
+      findings: [],
+      decisionSummaries,
+      errorReason: resourceMisuse,
+      runId,
+    };
+  }
 
   append({
     projectId: ctx.projectId,
@@ -275,4 +309,46 @@ function isTimeoutError(err: unknown, timeoutMs: number): boolean {
   if (!(err instanceof Error)) return false;
   if (err.name === 'ScoutTimeoutError') return true;
   return err.message.includes('timed out after') && err.message.includes(`${timeoutMs}ms`);
+}
+
+function classifyScoutResourceMisuse(input: {
+  findings: ScoutFinding[];
+  decisionSummaries: DecisionSummary[];
+  events: AgentEvent[];
+}): string | null {
+  if (input.findings.length > 0) return null;
+  const emittedForbiddenResource = input.events.some((event) => {
+    const payload = event.payload as Record<string, unknown>;
+    if (event.kind === 'agent.runtime-advisory') {
+      return (
+        FORBIDDEN_RESOURCE_TOOLS.has(String(payload.toolName ?? '')) ||
+        FORBIDDEN_RESOURCE_TOOLS.has(String(payload.surface ?? '').replace(' failed', ''))
+      );
+    }
+    return (
+      event.kind === 'agent.tool-call' &&
+      FORBIDDEN_RESOURCE_TOOLS.has(String(payload.tool_name ?? ''))
+    );
+  });
+  if (!emittedForbiddenResource) return null;
+
+  const hasSuccessfulReadTool = input.events.some((event) => {
+    if (event.kind !== 'agent.tool-call') return false;
+    const payload = event.payload as Record<string, unknown>;
+    const toolName = String(payload.tool_name ?? '');
+    if (!SCOUT_REAL_READ_TOOLS.has(toolName)) return false;
+    if (payload.blocked === true) return false;
+    if (payload.status === 'failed' || payload.status === 'timed_out') return false;
+    return true;
+  });
+  const toolsUnavailable = input.decisionSummaries.some((summary) =>
+    /(?:tools?|factory tools?|read_file|list_files|search_text|file_exists)\s+(?:were\s+)?unavailable|unavailable\s+(?:tools?|factory tools?|read_file|list_files|search_text|file_exists)|missing tool/i.test(
+      summary.summary,
+    ),
+  );
+
+  if (hasSuccessfulReadTool && !toolsUnavailable) return null;
+  return toolsUnavailable
+    ? 'scout emitted forbidden MCP resource probes and reported Factory tools unavailable without findings'
+    : 'scout emitted forbidden MCP resource probes without findings or successful Factory read/search/file tool calls';
 }

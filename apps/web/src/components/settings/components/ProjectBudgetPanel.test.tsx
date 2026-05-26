@@ -8,6 +8,12 @@ const mockPatchGlobalBudgetSettings = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api', () => ({
   deleteSkillBudgetSetting: vi.fn(),
+  fetchClaudeAuthStatus: vi.fn().mockResolvedValue({
+    status: 'connected',
+    authPath: '/Users/test/.claude.json',
+    credentialSource: 'Claude Code oauth',
+    loginCommand: 'claude auth login',
+  }),
   fetchCodexAuthStatus: vi.fn().mockResolvedValue({
     status: 'connected',
     authPath: '/Users/test/.codex/auth.json',
@@ -175,6 +181,8 @@ describe('ProjectBudgetPanel', () => {
     );
 
     await waitFor(() => expect(screen.getByText('Observed runtime profile')).toBeTruthy());
+    expect(screen.getByText('Claude CLI auth')).toBeTruthy();
+    expect(screen.getByText('Codex CLI auth')).toBeTruthy();
     expect(screen.getByDisplayValue('high')).toBeTruthy();
     expect(screen.getByText(/from skill-default: holdout skill ignores/)).toBeTruthy();
     expect(screen.getByText(/from fallback: holdout skill ignores/)).toBeTruthy();

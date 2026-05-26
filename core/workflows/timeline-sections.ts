@@ -237,6 +237,9 @@ export const TIMELINE_EVENT_CLASSIFICATION = Object.freeze(
 
 const skillToSection = buildSkillSectionMap();
 const stateToSection = buildStateSectionMap();
+const SKILL_SECTION_ALIASES = new Map<string, TimelineSectionId>([
+  ['parallel-implement', 'implementation'],
+]);
 
 export function isTimelineSectionId(value: unknown): value is TimelineSectionId {
   return typeof value === 'string' && SECTION_IDS.has(value as TimelineSectionId);
@@ -246,7 +249,7 @@ export function timelineSectionForSkill(
   skill: string | null | undefined,
 ): TimelineSectionId | null {
   if (skill == null || skill.trim() === '') return null;
-  return skillToSection.get(skill) ?? null;
+  return skillToSection.get(skill) ?? SKILL_SECTION_ALIASES.get(skill) ?? null;
 }
 
 export function timelineSectionForState(

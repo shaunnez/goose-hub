@@ -20,3 +20,4 @@ coverage/
 .playwright-mcp
 investigations/
 investigate-failling-issues-prompt.md
+.pnpm-store/

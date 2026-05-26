@@ -49,7 +49,7 @@ The context contains a `<task>` block with:
 - Tools are already rooted at your scratch workspace.
 - `<stack>` — JSON payload with `testCommand`, optional `lintCommand`, and optional `typecheckCommand`
 
-Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. When a `mcp__factory-tools__*` response returns `{ path, root, packageRoot, normalizedFrom }`, copy the returned `path` value verbatim into your terminal JSON. Do not infer paths from CWD or package root.
+Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. When a Factory tool response returns `{ path, root, packageRoot, normalizedFrom }`, copy the returned `path` value verbatim into your terminal JSON. In Claude this appears as `mcp__factory-tools__*`; in Codex use the bare tool name. Do not infer paths from CWD or package root.
 
 ## What you must do
 
@@ -65,7 +65,7 @@ Path contract: all output paths must be repo-root/worktree-root relative POSIX p
 - If `<parentPrdContext>` is present, use it to avoid drifting beyond the approved PRD and to understand the parent journey, slice, implementation, and testing decisions.
 - If `<codeContext>` is present, treat those snippets as the starting source context. Use them before broad reads, and call `read_file` only when the snippet is insufficient, stale, or contradicted by surrounding code.
 - Read the files in `<wp>.filesOwned` to understand the current state.
-- Use `mcp__factory-tools__read_file` and `mcp__factory-tools__search_text` to load test files for the surfaces you will touch FIRST.
+- Use `read_file` and `search_text` (Claude names: `mcp__factory-tools__read_file`, `mcp__factory-tools__search_text`) to load test files for the surfaces you will touch FIRST.
 - Emit: `[decision] READ: Loaded WP <id> context and N relevant files`
 
 ### 2 — Plan
@@ -77,15 +77,29 @@ Path contract: all output paths must be repo-root/worktree-root relative POSIX p
 
 ### 3 — Red — failing tests first
 
+#### Frontend test harness fidelity
+
+For `apps/web` jsdom/component tests, mirror the nearest existing test file's imports and render harness before inventing a new one.
+
+Default React component test pattern in this repo:
+
+```ts
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+```
+
+Do not import directly from `@testing-library/dom`, do not hand-roll `createRoot`, and do not switch to `react-dom/client` or manual `act` unless an adjacent passing test already uses that exact pattern.
+
+If a test harness/import/runtime failure appears, compare against an adjacent passing test first. If the adjacent passing pattern still fails, stop with `confidence: low` and emit `TOOL_FAILURE` or `BLOCKER`; do not keep rewriting the harness or diagnose React/Testing Library version issues from inference alone.
+
 - Write test cases that fail with the current code. Cover the WP's acceptance criteria and
   at least one negative path.
-- Run the targeted test command via `mcp__factory-tools__run_tests` (pass only the new test file paths).
+- Run the targeted test command via `run_tests` (Claude name: `mcp__factory-tools__run_tests`; pass only the new test file paths).
 - Confirm the new tests fail and pre-existing tests still pass.
 - Emit: `[decision] RED: Wrote N failing tests for <surface>`
 
 ### 4 — Green — implementation
 
-- Write the implementation using `mcp__factory-tools__write_file` or `mcp__factory-tools__edit_file`. Use returned `path.path` values in `filesWritten` and `testsWritten`.
+- Write the implementation using `write_file` or `edit_file` (Claude names: `mcp__factory-tools__write_file`, `mcp__factory-tools__edit_file`). Use returned `path.path` values in `filesWritten` and `testsWritten`.
   Do NOT write files outside your `<wp>.filesOwned` list.
 - Re-run the targeted test command. Iterate until all targeted tests pass.
 - Emit: `[decision] GREEN: Implementation passes all targeted tests`
@@ -98,7 +112,7 @@ Only refactor if required to make the test pass cleanly.
 
 - If `stack.lintCommand` is provided, run it. Fix failures.
 - If `stack.typecheckCommand` is provided, run it. Fix errors.
-- Re-run targeted tests one final time to confirm still green. In `testsRun.paths`, return the canonical `paths[].path` values from `mcp__factory-tools__run_tests`.
+- Re-run targeted tests one final time to confirm still green. In `testsRun.paths`, return the canonical `paths[].path` values from `run_tests` / `mcp__factory-tools__run_tests`.
 - If executable checks fail because of infrastructure or tooling, retry once only. If the same infrastructure/tooling failure repeats, return `confidence: low` with a `BLOCKER` or `UNCERTAINTY` decision summary instead of searching for alternate commands.
 - Emit: `[decision] LINT: Lint and typecheck clean`
 

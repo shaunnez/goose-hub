@@ -1,10 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  ListResourceTemplatesRequestSchema,
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
 import { type FactoryContext, FactoryContextError, loadFactoryContext } from './context.js';
 import {
   ApplyPatchInput,
@@ -86,7 +81,6 @@ import {
   searchTextTool,
 } from './tools/read.js';
 import { repoIntelQueryTool } from './tools/repo-intel.js';
-import { listWorkspaceResources, readWorkspaceResource } from './tools/resources.js';
 import {
   runLintTool,
   runPackageScriptTool,
@@ -137,30 +131,6 @@ function errorResult(err: unknown): { content: JsonContent[]; isError: true } {
  */
 export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
-  // Register resources/list + resources/read via low-level setRequestHandler so we own URI
-  // parsing before the SDK's `new URL()` validation fires. This allows codex's bare and
-  // tool-shaped URIs (read_file?path=…, file_exists?path=…) to reach our converter instead
-  // of failing in the SDK URL constructor.
-  server.server.registerCapabilities({ resources: { listChanged: true } });
-  server.server.setRequestHandler(ListResourcesRequestSchema, () =>
-    Promise.resolve(listWorkspaceResources(ctx)),
-  );
-  server.server.setRequestHandler(ReadResourceRequestSchema, (req) =>
-    readWorkspaceResource(ctx, req.params.uri),
-  );
-  server.server.setRequestHandler(ListResourceTemplatesRequestSchema, () =>
-    Promise.resolve({
-      resourceTemplates: [
-        {
-          uriTemplate: 'factory://{+path}',
-          name: 'workspace-files',
-          description: 'Workspace files relative to the agent run worktree.',
-          mimeType: 'text/plain',
-        },
-      ],
-    }),
-  );
-
   server.registerTool(
     'get_project_context',
     {

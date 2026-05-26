@@ -1064,6 +1064,38 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     );
   });
 
+  it('keeps parallel implement lifecycle completion in the implementation segment', () => {
+    const PIPELINE_RUN = 'pipeline-lifecycle-123';
+    const PARALLEL_RUN = 'parallel-implement-run-456';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'parallel-implement.iteration-started', PARALLEL_RUN, {
+        payload: { pipelineRunId: PIPELINE_RUN, iteration: 1, wpCount: 1, wpIds: ['WP1'] },
+      }),
+      makeEvent(2, 'agent.run-started', PARALLEL_RUN, {
+        payload: { skill: 'parallel-implement' },
+      }),
+      makeEvent(3, 'agent.run-completed', PARALLEL_RUN, {
+        payload: { skill: 'parallel-implement', status: 'completed' },
+      }),
+    ]);
+
+    expect(
+      items.some((item) => item.kind === 'timeline-section' && item.section === 'system'),
+    ).toBe(false);
+    const implementationSection = section(items, 'implementation');
+    expect(implementationSection?.segmentId).toBe(`implementation:${PIPELINE_RUN}`);
+    expect(
+      implementationSection?.items.some(
+        (item) => item.kind === 'run-group' && item.runId === PARALLEL_RUN,
+      ),
+    ).toBe(true);
+    expect(
+      implementationSection?.items
+        .flatMap((item) => (item.kind === 'run-group' ? item.items : [item]))
+        .some((item) => item.kind === 'event' && item.event.kind === 'agent.run-completed'),
+    ).toBe(true);
+  });
+
   it('splits fix-feedback repair attempts from the original implementation pipeline segment', () => {
     const PIPELINE_RUN = 'pipeline-fix-feedback-123';
     const IMPLEMENT_RUN = 'parallel-implement-run-456';

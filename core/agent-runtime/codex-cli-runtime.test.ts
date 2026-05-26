@@ -642,7 +642,7 @@ describe('CodexCliRuntime timeout handling', () => {
     });
   });
 
-  it('does not fail on the startup resources/list probe', async () => {
+  it('records resources/list failed as a non-fatal advisory event', async () => {
     const child = makeHangingChild();
     mockSpawn.mockReturnValue(child);
 
@@ -662,15 +662,21 @@ describe('CodexCliRuntime timeout handling', () => {
     child.emit('close', 0);
 
     await expect(run).resolves.toMatchObject({ output: { ok: true } });
+
+    const calls: Parameters<typeof mockEventStore.appendEvent>[0][] =
+      mockEventStore.appendEvent.mock.calls.map((c: unknown[]) => c[0]);
+
     expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'agent.log',
+        kind: 'agent.runtime-advisory',
         payload: expect.objectContaining({
-          stream: 'stderr',
-          text: 'resources/list failed: startup probe',
+          surface: 'resources/list failed',
+          stderr: 'resources/list failed: startup probe',
+          toolName: 'resources/list',
         }),
       }),
     );
+    expect(calls.some((e) => e.kind === 'agent.run-blocked')).toBe(false);
     expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'agent.run-completed' }),
     );

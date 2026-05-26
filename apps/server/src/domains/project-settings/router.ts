@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -39,6 +40,57 @@ import { parseBody } from '#shared/middleware.js';
 import { getProject } from '#shared/projects.js';
 
 const router = new Hono();
+
+function hasEnvCredential(name: string): boolean {
+  return (process.env[name] ?? '').trim() !== '';
+}
+
+function readClaudeAuthStatus(): {
+  status: 'connected' | 'missing';
+  authPath: string;
+  credentialSource?: string;
+  loginCommand: string;
+} {
+  const authPath = join(homedir(), '.claude.json');
+  const loginCommand = 'claude auth login';
+  if (hasEnvCredential('ANTHROPIC_API_KEY')) {
+    return {
+      status: 'connected',
+      authPath: 'ANTHROPIC_API_KEY',
+      credentialSource: 'ANTHROPIC_API_KEY',
+      loginCommand,
+    };
+  }
+
+  const result = spawnSync('claude', ['auth', 'status'], {
+    encoding: 'utf8',
+    timeout: 3_000,
+  });
+  const raw = `${result.stdout ?? ''}${result.stderr ?? ''}`.trim();
+  if (raw !== '') {
+    try {
+      const parsed = JSON.parse(raw) as { loggedIn?: unknown; authMethod?: unknown };
+      if (parsed.loggedIn === true) {
+        const authMethod = typeof parsed.authMethod === 'string' ? parsed.authMethod : 'claude';
+        return {
+          status: 'connected',
+          authPath,
+          credentialSource: `Claude Code ${authMethod}`,
+          loginCommand,
+        };
+      }
+    } catch {
+      /* Claude CLI versions may change status output; fall through to missing. */
+    }
+  }
+
+  return {
+    status: 'missing',
+    authPath,
+    credentialSource: authPath,
+    loginCommand,
+  };
+}
 
 const GlobalBudgetPatchSchema = z.object({
   perWorkflowMaxUsd: z.number().min(0).max(1000).nullable().optional(),
@@ -545,6 +597,19 @@ router.delete('/:slug/settings/skills/:skill', async (c) => {
 });
 
 /**
+ * GET /projects/:slug/settings/claude-auth — read-only Claude CLI auth presence check.
+ * Status is per-machine, but it lives beside skill runtime settings because Claude is
+ * selected per skill through the provider field.
+ */
+router.get('/:slug/settings/claude-auth', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  return c.json(readClaudeAuthStatus());
+});
+
+/**
  * GET /projects/:slug/settings/codex-auth — read-only Codex CLI auth presence check.
  * Status is per-machine, but it lives beside skill runtime settings because Codex is
  * selected per skill through the provider field.
@@ -555,10 +620,12 @@ router.get('/:slug/settings/codex-auth', async (c) => {
   if (project == null) return c.json({ error: 'project not found' }, 404);
 
   const authPath = join(homedir(), '.codex', 'auth.json');
-  const status = existsSync(authPath) ? 'connected' : 'missing';
+  const hasApiKey = hasEnvCredential('OPENAI_API_KEY');
+  const status = hasApiKey || existsSync(authPath) ? 'connected' : 'missing';
   return c.json({
     status,
     authPath,
+    credentialSource: hasApiKey ? 'OPENAI_API_KEY' : authPath,
     loginCommand: 'codex login',
   });
 });

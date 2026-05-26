@@ -34,7 +34,7 @@ Read-only — outputs a single JSON object conforming to `EngineeringSpecSchema`
 
 ## Wave-protocol composition (M19.01)
 
-When the swarm (M19.01) is wired into the production workflow, the orchestrator passes Wave-1 scout reports + Wave-2 deep-agent reports to this skill via `<scout_reports>` and `<wave2_reports>`. The author cites scout findings (file:line) in `architecture`, `interfaceContracts`, and `constraints`. When the swarm is **not** wired (current default in M19.01), the author falls back to manual investigation via the `read` tool bundle — the spec format does not require the swarm to be implementable.
+When the swarm (M19.01) is wired into the production workflow, the orchestrator passes Wave-1 scout reports + Wave-2 deep-agent reports to this skill via `<scout_reports>` and `<wave2_reports>`. The author cites scout findings (file:line) in `architecture`, `interfaceContracts`, and `constraints`. When the swarm is not wired, the author falls back to manual investigation via Factory read/search tools such as `read_file`, `list_files`, and `search_text` — the spec format does not require the swarm to be implementable.
 
 ## Cross-references
 
