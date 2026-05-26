@@ -6,7 +6,7 @@
  * M13.12 (#631) shipped the three-path PRD review flow defined in ADR 0033,
  * replacing the legacy single "Reject / re-grill" button with:
  *
- *   - Approve         → prd-review → dev-ready/spec-author → done (covered by
+ *   - Approve         → prd-review → dev-ready → delivery (covered by
  *                       golden-feature.spec.ts)
  *   - Request Changes → re-runs write-prd with priorPrd + humanConcerns,
  *                       state remains prd-review, new PRD comment posted.
@@ -19,6 +19,13 @@ import { type Locator, expect, test } from '@playwright/test';
 
 const SLUG = process.env.PROJECT_SLUG ?? 'goose-hub-self';
 const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:3001';
+const CLEAN_FEATURE_BODY = [
+  'Surface: apps/web/src/components/search',
+  'Acceptance criteria:',
+  '- Search should return keyword matches for factory rules queries.',
+  '- Results should preserve current filtering behavior.',
+  '- Verify with a focused pipeline regression test.',
+].join('\n');
 
 test.use({ trace: 'on', video: 'on' });
 
@@ -37,9 +44,13 @@ async function postServer(path: string, body?: unknown): Promise<Response> {
 
 async function seedIssue(opts: {
   title: string;
+  body?: string;
   type?: string;
 }): Promise<{ issueNumber: number; workItemId: string }> {
-  const res = await postServer(`/projects/test/${SLUG}/seed-issue`, opts);
+  const res = await postServer(`/projects/test/${SLUG}/seed-issue`, {
+    ...opts,
+    body: opts.body ?? (opts.type === 'feature' ? CLEAN_FEATURE_BODY : undefined),
+  });
   return res.json() as Promise<{ issueNumber: number; workItemId: string }>;
 }
 
@@ -101,7 +112,7 @@ async function driveFeatureToPrdReview(
 }
 
 test.describe('Golden Feature — PRD revision (ADR 0033 three-path flow)', () => {
-  test('Request Changes: PRD v1 → revise → PRD v2 → approve → done', async ({ page }) => {
+  test('Request Changes: PRD v1 → revise → PRD v2 → approve → delivery', async ({ page }) => {
     test.setTimeout(240_000);
 
     const title = goldenTitle('PRD-REVISE');
@@ -145,12 +156,12 @@ test.describe('Golden Feature — PRD revision (ADR 0033 three-path flow)', () =
 
     // ── Approve PRD v2 ──────────────────────────────────────────────────────
     await page.getByTestId('prd-approve-btn').click();
-    await expect(statePill).toHaveText('done', { timeout: 60_000 });
+    await expect(statePill).toHaveText('needs-qa', { timeout: 60_000 });
 
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
 
-    await expect(page.locator('[data-event-kind="decompose.completed"]')).toBeAttached({
+    await expect(page.locator('[data-event-kind="prd.approved"]').first()).toBeAttached({
       timeout: 10_000,
     });
   });

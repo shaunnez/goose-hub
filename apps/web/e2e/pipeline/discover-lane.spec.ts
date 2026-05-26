@@ -3,12 +3,12 @@
  *
  * Tests the UI-visible Discover Lane flow: a fresh type:feature issue is seeded
  * and walked through triaging → grilling → gate-pending (grill chat) →
- * prd-review (PRD rendered) → dev-ready/spec-author using the
+ * prd-review (PRD rendered) → delivery using the
  * MOCK_AGENTS + MOCK_SOURCE harness.
  *
  * What this covers vs. the unit-level grill-prd-flow.spec.ts:
  *   - Full server round-trip: seed-issue → tick (triage) → dispatch (grill)
- *   - State-gated UI: Grill tab present in grilling state, PRD tab absent
+ *   - State-gated UI: Grill tab present in grilling state
  *   - Grill chat: agent question renders, user reply posts + transitions state
  *   - PRD tab appears once state is factory:prd-review
  *   - PRD content (title, problem, slices) renders from the mock prd.drafted event
@@ -16,7 +16,7 @@
  *
  * What is intentionally deferred (see TODO comments below):
  *   - Optional WP projection issue cards with factory:from-prd label after
- *     spec-author.
+ *     delivery.
  *   - Sprint-review issue filing (covered by slices/discover-lane-e2e/slice.test.ts).
  *
  * NOTE on triage→grilling routing (#592): the routing from factory:triaging to
@@ -30,6 +30,13 @@ import { expect, test } from '@playwright/test';
 
 const SLUG = process.env.PROJECT_SLUG ?? 'goose-hub-self';
 const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:3001';
+const CLEAN_FEATURE_BODY = [
+  'Surface: apps/web/src/components/search',
+  'Acceptance criteria:',
+  '- Search should return keyword matches for factory rules queries.',
+  '- Results should preserve current filtering behavior.',
+  '- Verify with a focused pipeline regression test.',
+].join('\n');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,10 +57,15 @@ async function postServer(path: string, body?: unknown): Promise<Response> {
 
 async function seedIssue(opts: {
   title: string;
+  body?: string;
   type?: string;
   state?: string;
 }): Promise<{ issueNumber: number; workItemId: string }> {
-  const res = await postServer(`/projects/test/${SLUG}/seed-issue`, opts);
+  const res = await postServer(`/projects/test/${SLUG}/seed-issue`, {
+    ...opts,
+    body:
+      opts.body ?? (opts.type === 'feature' && opts.state == null ? CLEAN_FEATURE_BODY : undefined),
+  });
   return res.json() as Promise<{ issueNumber: number; workItemId: string }>;
 }
 
@@ -133,7 +145,7 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
   // regresses the statePill assertion below will time-out with a clear
   // indication that the routing is broken.
   // ─────────────────────────────────────────────────────────────────────────
-  test('feature triages to grilling, grill tab visible, PRD tab absent', async ({ page }) => {
+  test('clean feature triages to grilling and shows the grill tab', async ({ page }) => {
     test.setTimeout(120_000);
 
     const { issueNumber } = await seedIssue({
@@ -145,7 +157,7 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
     const statePill = page.getByTestId('state-pill');
     await expect(statePill).toHaveText('triaging', { timeout: 15_000 });
 
-    // Tick the orchestrator: triaging → accepted → grilling (type:feature routing)
+    // Tick the orchestrator: clean type:feature routes triaging → accepted → grilling.
     await postServer(`/projects/${SLUG}/tick`);
     await expect(statePill).toHaveText('grilling', { timeout: 60_000 });
 
@@ -312,12 +324,10 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
     const slices = page.getByTestId('prd-slice');
     await expect(slices).toHaveCount(1);
 
-    // Approve PRD → dev-ready/spec-author
+    // Approve PRD → dev-ready, then the mock delivery workflow advances to needs-qa.
     const approveBtn = page.getByTestId('prd-approve-btn');
     await expect(approveBtn).toBeVisible();
     await approveBtn.click();
-    // After approve-prd: the mock delivery workflow advances the parent toward
-    // done before the UI polls.
-    await expect(statePill).toHaveText('done', { timeout: 30_000 });
+    await expect(statePill).toHaveText('needs-qa', { timeout: 30_000 });
   });
 });

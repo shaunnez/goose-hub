@@ -191,7 +191,17 @@ export async function dispatchNeedsFix(slug: string, issueNumber: number): Promi
       });
       return;
     }
-    await runFixFeedbackWorkflow(item, source, slug, item.repoRef ?? slug);
+    const mockDeps: Record<string, unknown> | undefined =
+      process.env.MOCK_AGENTS === 'true' || process.env.MOCK_OPEN_PR === 'true'
+        ? {
+            orchestratorCommitAllImpl: () => ({
+              status: 'committed',
+              sha: 'mock-fix-feedback-sha',
+            }),
+            orchestratorPushBranchImpl: () => undefined,
+          }
+        : undefined;
+    await runFixFeedbackWorkflow(item, source, slug, item.repoRef ?? slug, mockDeps);
   });
 }
 

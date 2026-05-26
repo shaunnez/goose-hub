@@ -5,22 +5,17 @@
  *
  * Flow (one issue, one trace):
  *   1. Seed a feature with a unique emoji+timestamp title.
- *   2. /tick: triaging → grilling. Confirm Grill tab visible, PRD tab absent.
+ *   2. /tick: clean feature triaging → grilling. Confirm Grill tab visible.
  *   3. /dispatch: grilling → gate-pending. Agent question rendered.
  *   4. UI reply via grill-reply-input + grill-send-btn → state returns to grilling.
  *   5. Manual transitions grilling → prd-drafting → prd-review (legal per
  *      core/state-machine/transitions.ts) to bypass the multi-round grill loop —
  *      that loop is already covered by discover-lane.spec.ts.
  *   6. Seed a PRD event so PRDSection renders content; assert it.
- *   7. Click prd-approve-btn. Legacy mock decompose-prd runs synchronously:
- *      parent goes decomposing → issues-created → done and child issues are
- *      created. The spec-first PRD approval path is covered by
- *      discover-lane.spec.ts and workflow/slice tests.
- *   8. Read parent comments to extract child issue numbers.
- *   9. Return to the board, confirm child cards exist.
- *  10. Walk the FIRST child through its dev cycle:
- *      triaging → dev-ready → needs-qa → needs-review → approved → done.
- *      Capture overview / qa / review / timeline (pr.opened) along the way.
+ *   7. Click prd-approve-btn. Current PRD approval routes the parent into
+ *      delivery: dev-ready → needs-qa.
+ *   8. Walk the parent through QA → review → approve → done and capture
+ *      overview / qa / review / timeline surfaces along the way.
  *
  * Trace + video are recorded for every run (not just retries) so the artefact
  * is the report itself.
@@ -30,6 +25,13 @@ import { type Locator, expect, test } from '@playwright/test';
 
 const SLUG = process.env.PROJECT_SLUG ?? 'goose-hub-self';
 const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:3001';
+const CLEAN_FEATURE_BODY = [
+  'Surface: apps/web/src/components/search',
+  'Acceptance criteria:',
+  '- Search should return keyword matches for factory rules queries.',
+  '- Results should preserve current filtering behavior.',
+  '- Verify with a focused pipeline regression test.',
+].join('\n');
 
 // Trace+video on every run for the golden specs (not just on-first-retry).
 test.use({ trace: 'on', video: 'on' });
@@ -51,21 +53,17 @@ async function postServer(path: string, body?: unknown): Promise<Response> {
   return res;
 }
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${SERVER_URL}${path}`);
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`GET ${path} → ${res.status}: ${text}`);
-  }
-  return res.json() as Promise<T>;
-}
-
 async function seedIssue(opts: {
   title: string;
+  body?: string;
   type?: string;
   state?: string;
 }): Promise<{ issueNumber: number; workItemId: string }> {
-  const res = await postServer(`/projects/test/${SLUG}/seed-issue`, opts);
+  const res = await postServer(`/projects/test/${SLUG}/seed-issue`, {
+    ...opts,
+    body:
+      opts.body ?? (opts.type === 'feature' && opts.state == null ? CLEAN_FEATURE_BODY : undefined),
+  });
   return res.json() as Promise<{ issueNumber: number; workItemId: string }>;
 }
 
@@ -107,7 +105,7 @@ function buildMockPrd(title: string) {
     outOfScope: ['Real GitHub roundtrip'],
     successCriteria: ['Each UI surface renders for its state'],
     acceptanceCriteria: [
-      { id: 'AC-1', statement: 'Feature reaches done with child issues.', journeyId: 'J-1' },
+      { id: 'AC-1', statement: 'Feature reaches done after delivery.', journeyId: 'J-1' },
     ],
     journeys: [
       {
@@ -117,12 +115,12 @@ function buildMockPrd(title: string) {
         steps: [
           {
             userAction: 'Approves the PRD',
-            systemResponse: 'Legacy mock decomposition creates child issues',
-            dataShown: 'Child issue list',
-            stateChange: 'Parent → done',
+            systemResponse: 'Mock delivery opens a PR for the parent issue',
+            dataShown: 'PR, QA, and review status',
+            stateChange: 'Parent enters delivery',
           },
         ],
-        successState: 'Children created and visible on the board',
+        successState: 'Feature delivered and approved',
         errorStates: [],
         edgeCases: [],
       },
@@ -133,14 +131,14 @@ function buildMockPrd(title: string) {
           when: 'Approve PRD is clicked',
           given: 'state is prd-review',
           // biome-ignore lint/suspicious/noThenProperty: BDD then clause, not Promise#then
-          then: 'legacy mock path creates child issues for delivery',
+          then: 'mock delivery completes the parent issue',
         },
       ],
     },
     verticalSlices: [
       {
-        title: 'Slice 1: child cycle',
-        goal: 'Walk a child to done',
+        title: 'Slice 1: delivery cycle',
+        goal: 'Walk the parent issue to done',
         estimatedSize: 'S',
         journeyRefs: ['J-1'],
       },
@@ -151,36 +149,12 @@ function buildMockPrd(title: string) {
   return prd;
 }
 
-// Parses `- #123 — title` lines from the parent's `## Child issues` comment.
-function parseChildIssueNumbers(commentBody: string): number[] {
-  const out: number[] = [];
-  for (const line of commentBody.split('\n')) {
-    const m = /^- #(\d+)\b/.exec(line.trim());
-    if (m) out.push(Number(m[1]));
-  }
-  return out;
-}
-
-interface CommentResponse {
-  comments: Array<{ id: string; body: string }>;
-}
-
-async function findChildIssuesComment(parentNumber: number): Promise<number[]> {
-  const data = await getJson<CommentResponse>(`/projects/${SLUG}/issues/${parentNumber}/comments`);
-  for (const c of data.comments) {
-    if (c.body.includes('## Child issues')) {
-      return parseChildIssueNumbers(c.body);
-    }
-  }
-  return [];
-}
-
 // ---------------------------------------------------------------------------
 // Test
 // ---------------------------------------------------------------------------
 
 test.describe('Golden Feature flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR)', () => {
-  test('seed → grill → PRD → decompose → child cycle → done', async ({ page }) => {
+  test('seed → grill → PRD → delivery → done', async ({ page }) => {
     test.setTimeout(180_000);
 
     const title = goldenTitle();
@@ -232,60 +206,40 @@ test.describe('Golden Feature flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR)', 
     await expect(page.getByTestId('prd-title')).toHaveText(title);
     await expect(page.getByTestId('prd-slice')).toHaveCount(1);
 
-    // ── 7. Approve PRD. Legacy mock delivery decomposes the parent into child
-    //      issues and advances the parent to done.
+    // ── 7. Approve PRD. Current delivery routes the parent through dev work.
     await page.getByTestId('prd-approve-btn').click();
-    await expect(statePill).toHaveText('done', { timeout: 30_000 });
+    await expect(statePill).toHaveText('needs-qa', { timeout: 30_000 });
 
-    // Decompose timeline event should be present.
+    // PRD approval timeline event should be present.
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('[data-event-kind="decompose.completed"]')).toBeAttached({
+    await expect(page.locator('[data-event-kind="prd.approved"]').first()).toBeAttached({
       timeout: 10_000,
     });
 
-    // ── 8. Read parent's `## Child issues` comment to find children.
-    const childNumbers = await findChildIssuesComment(issueNumber);
-    expect(childNumbers.length).toBeGreaterThan(0);
-
-    // ── 9. Return to the board; confirm at least one child card is visible.
-    await page.goto(`/projects/${SLUG}`);
-    await expect(page.getByTestId('board')).toBeVisible({ timeout: 15_000 });
-    const firstChild = childNumbers[0];
-    const childCard = page.locator(`[data-testid="issue-card"][data-issue-number="${firstChild}"]`);
-    await expect(childCard).toBeVisible({ timeout: 15_000 });
-
-    // ── 10. Walk the first child through its dev cycle.
-    await page.goto(`/projects/${SLUG}/items/${firstChild}`);
+    // ── 8. Walk the parent through QA/review/approval.
+    await page.goto(`/projects/${SLUG}/items/${issueNumber}`);
     await expect(page.getByTestId('detail-page')).toBeVisible({ timeout: 15_000 });
-    const childPill = page.getByTestId('state-pill');
-    // decompose-prd creates children directly at dev-ready (skips triage; see
-    // core/workflows/decompose-prd.ts), so the child opens at dev-ready.
-    await expect(childPill).toHaveText('dev-ready', { timeout: 15_000 });
-
-    // Dispatch fix-issue: dev-ready → needs-qa.
-    await postServer(`/projects/${SLUG}/dispatch/${firstChild}`);
-    await expect(childPill).toHaveText('needs-qa', { timeout: 60_000 });
 
     // QA: needs-qa → needs-review. QA section should render its content.
-    await postServer(`/projects/${SLUG}/run-qa/${firstChild}`);
-    await expect(childPill).toHaveText('needs-review', { timeout: 60_000 });
-    await page.goto(`/projects/${SLUG}/items/${firstChild}/qa`);
+    await postServer(`/projects/${SLUG}/run-qa/${issueNumber}`);
+    await expect(statePill).toHaveText('needs-review', { timeout: 60_000 });
+    await page.goto(`/projects/${SLUG}/items/${issueNumber}/qa`);
     await expect(page.getByTestId('qa-section')).toBeVisible({ timeout: 15_000 });
 
     // Review: needs-review → approved. Review section renders + PR link.
-    await postServer(`/projects/${SLUG}/run-review/${firstChild}`);
-    await expect(childPill).toHaveText('approved', { timeout: 60_000 });
-    await page.goto(`/projects/${SLUG}/items/${firstChild}/review`);
+    await postServer(`/projects/${SLUG}/run-review/${issueNumber}`);
+    await expect(statePill).toHaveText('approved', { timeout: 60_000 });
+    await page.goto(`/projects/${SLUG}/items/${issueNumber}/review`);
     await expect(page.getByTestId('review-section')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('review-open-pr')).toBeVisible();
 
     // Approval gate → retrospecting → done.
-    await postServer(`/projects/${SLUG}/issues/${firstChild}/approve`);
-    await expect(childPill).toHaveText('done', { timeout: 60_000 });
+    await postServer(`/projects/${SLUG}/issues/${issueNumber}/approve`);
+    await expect(statePill).toHaveText('done', { timeout: 60_000 });
 
-    // Final timeline check: pr.opened event must exist on the child.
-    await page.goto(`/projects/${SLUG}/items/${firstChild}/timeline`);
+    // Final timeline check: merge event must exist on the parent.
+    await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('[data-event-kind="pr.merged"]')).toBeAttached({
       timeout: 10_000,
