@@ -21,6 +21,15 @@ function findingRef(finding: DevReviewFinding): string {
   return `${finding.file}:${finding.line}`;
 }
 
+function dispositionMatchesFinding(
+  disposition: DevReviewResponseOutput['findingDispositions'][number],
+  finding: DevReviewFinding,
+): boolean {
+  return (
+    disposition.findingRef === findingRef(finding) && disposition.severity === finding.severity
+  );
+}
+
 function isHighSeverity(severity: string): boolean {
   return severity === 'P0' || severity === 'P1';
 }
@@ -41,6 +50,15 @@ export function evaluateDevReviewGate(input: DevReviewGateInput): DevReviewGateR
     };
   }
 
+  if (verdict.findings.length === 0) {
+    return {
+      status: 'blocked',
+      reason:
+        'Dev review reported blockers-found without findings; human review required before PR open.',
+      blockerCount: 1,
+    };
+  }
+
   const response = input.latestResponse;
   if (response == null) {
     return {
@@ -50,9 +68,8 @@ export function evaluateDevReviewGate(input: DevReviewGateInput): DevReviewGateR
     };
   }
 
-  const dispositionsByRef = new Map(response.findingDispositions.map((d) => [d.findingRef, d]));
   const missingResponse = verdict.findings.filter(
-    (finding) => !dispositionsByRef.has(findingRef(finding)),
+    (finding) => !response.findingDispositions.some((d) => dispositionMatchesFinding(d, finding)),
   );
   if (missingResponse.length > 0) {
     return {
@@ -63,8 +80,12 @@ export function evaluateDevReviewGate(input: DevReviewGateInput): DevReviewGateR
   }
 
   const dismissedHighSeverity = verdict.findings.filter((finding) => {
-    const disposition = dispositionsByRef.get(findingRef(finding));
-    return isHighSeverity(finding.severity) && disposition?.disposition === 'dismissed';
+    return (
+      isHighSeverity(finding.severity) &&
+      response.findingDispositions.some(
+        (d) => dispositionMatchesFinding(d, finding) && d.disposition === 'dismissed',
+      )
+    );
   });
   if (dismissedHighSeverity.length > 0) {
     const severities = [...new Set(dismissedHighSeverity.map((finding) => finding.severity))].join(
