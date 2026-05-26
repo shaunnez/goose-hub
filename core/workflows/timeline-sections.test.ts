@@ -48,6 +48,9 @@ describe('timeline sections', () => {
     expect(
       resolveTimelineSection({ kind: 'agent.run-started', payload: { skill: 'resolve-conflict' } }),
     ).toBe('conflict');
+    expect(
+      resolveTimelineSection({ kind: 'agent.run-started', payload: { skill: 'bug-enhance' } }),
+    ).toBe('investigation');
   });
 
   it('falls through display aliases to the durable runtime skill for section ownership', () => {
@@ -98,6 +101,23 @@ describe('timeline sections', () => {
 
     expect(resolveTimelineSection(events[0], { runMetadata: metadata })).toBe('implementation');
     expect(TIMELINE_EVENT_CLASSIFICATION['tool.violation']).toBe('runtime-inherits');
+  });
+
+  it('routes lazy bug-enhance runtime events to investigation', () => {
+    const events = [
+      { kind: 'agent.tool-call', runId: 'bug-enhance-run' },
+      {
+        kind: 'agent.run-started',
+        runId: 'bug-enhance-run',
+        payload: { skill: 'bug-enhance' },
+      },
+      { kind: 'agent.run-completed', runId: 'bug-enhance-run' },
+    ];
+    const metadata = buildTimelineRunMetadataIndex(events);
+
+    for (const event of events) {
+      expect(resolveTimelineSection(event, { runMetadata: metadata })).toBe('investigation');
+    }
   });
 
   it('maps control flow to transitions and unknown telemetry to system', () => {
@@ -152,6 +172,7 @@ describe('timeline sections', () => {
   it('keeps skill identity separate from timeline section identity', () => {
     expect(timelineSectionForSkill('write-prd')).toBe('prd');
     expect(timelineSectionForSkill('advise-on-prd')).toBe('prd');
+    expect(timelineSectionForSkill('bug-enhance')).toBe('investigation');
     expect(timelineSectionForSkill('prd')).toBeNull();
   });
 });
