@@ -38,9 +38,10 @@ Named bundles passed via `AgentSpec.toolBundles`. At spawn, `bindToolsForAgentSp
 | `core` | no tools | Prompt-only skills |
 | `emergency-debug` | `Bash` | Explicit opt-in escape hatch |
 | `playwright-mcp` | `mcp__playwright-test__*` (browser/planner/generator) | `spec-author` skill (auto-merges `apps/web/.mcp.json`) |
-| `decision-record-only` | `record-decision` | Legacy A/B surface; blocked from holdouts |
 
 Every default agent-facing bundle is composed of `mcp__factory-tools__*` names only. Native `Read`, `Write`, `Edit`, `Glob`, `Grep`, and broad `Bash` are not in default bundles; native `Bash` is available only through `emergency-debug`.
+
+`mcp__factory-tools__record_decision` is part of the context tools and stays available to holdout roles so QA/reviewer runs can emit their own live decision summaries without seeing implementation reasoning. There is no separate single-tool decision bundle; runtime code should use the MCP context tool.
 
 `ToolBinding` is the orchestrator-owned runtime contract for a run's tool surface. It contains the flat Claude allowlist, Codex `enabled_tools` grouped by MCP server, optional MCP server bundles, native tool names, sandbox/approval policy, and stable fingerprints for cache/cost analysis. Runtime code consumes this artifact instead of re-deriving bundle policy.
 

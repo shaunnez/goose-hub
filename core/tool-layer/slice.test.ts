@@ -208,37 +208,14 @@ describe('computeAllowlist', () => {
     expect(list).toHaveLength(0);
   });
 
-  it('strips decision-record-only from qa role', () => {
-    const list = computeAllowlist({
-      toolBundles: ['decision-record-only'],
-      toolExtras: [],
-      role: 'qa',
-    });
-    expect(list).not.toContain('record-decision');
-    expect(list).toHaveLength(0);
+  it('keeps MCP record_decision in read bundles for live decision signaling', () => {
+    const list = computeAllowlist({ toolBundles: ['read'], toolExtras: [] });
+    expect(list).toContain('mcp__factory-tools__record_decision');
   });
 
-  it('strips decision-record-only from reviewer role', () => {
-    const list = computeAllowlist({
-      toolBundles: ['decision-record-only'],
-      toolExtras: [],
-      role: 'reviewer',
-    });
-    expect(list).not.toContain('record-decision');
-  });
-
-  it('allows decision-record-only for non-holdout roles', () => {
-    const list = computeAllowlist({
-      toolBundles: ['decision-record-only'],
-      toolExtras: [],
-      role: 'developer',
-    });
-    expect(list).toContain('record-decision');
-  });
-
-  it('allows decision-record-only when no role specified', () => {
-    const list = computeAllowlist({ toolBundles: ['decision-record-only'], toolExtras: [] });
-    expect(list).toContain('record-decision');
+  it('ignores unknown bundle names', () => {
+    const list = computeAllowlist({ toolBundles: ['unknown-bundle'], toolExtras: [] });
+    expect(list).toEqual([]);
   });
 });
 
@@ -311,9 +288,33 @@ describe('bindToolsForAgentSpec', () => {
     expect(binding.allowlist).toContain('mcp__playwright-test__browser_navigate');
   });
 
+  it('keeps MCP record_decision available to QA holdouts', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['read', 'qa-tools'],
+      toolExtras: [],
+      role: 'qa',
+      skill: 'qa',
+    });
+
+    expect(binding.allowlist).toContain('mcp__factory-tools__record_decision');
+    expect(binding.enabledToolsByServer['factory-tools']).toContain('record_decision');
+  });
+
+  it('keeps MCP record_decision available to reviewer holdouts', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['read', 'validate'],
+      toolExtras: [],
+      role: 'reviewer',
+      skill: 'review',
+    });
+
+    expect(binding.allowlist).toContain('mcp__factory-tools__record_decision');
+    expect(binding.enabledToolsByServer['factory-tools']).toContain('record_decision');
+  });
+
   it('strips holdout-blocked capabilities from holdout roles', () => {
     const binding = bindToolsForAgentSpec({
-      toolBundles: ['decision-record-only', 'emergency-debug'],
+      toolBundles: ['emergency-debug'],
       toolExtras: ['mcp__factory-tools__write_file'],
       role: 'reviewer',
       skill: 'review',

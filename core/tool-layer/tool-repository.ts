@@ -10,7 +10,6 @@ export type ToolCapability =
   | 'git-read'
   | 'qa'
   | 'evidence'
-  | 'decision-record'
   | 'native-shell';
 
 export type ToolSurface =
@@ -83,7 +82,6 @@ export const TOOL_BUNDLE_DEFINITIONS = {
   'dev-tools': [...FT_CONTEXT, ...FT_READ, ...FT_WRITE, ...FT_VERIFY, ...FT_GIT_READ],
   'qa-tools': [...FT_CONTEXT, ...FT_READ, ...FT_GIT_READ, ...FT_QA],
   validate: [...FT_CONTEXT, ...FT_READ, ...FT_EVIDENCE],
-  'decision-record-only': ['record-decision'],
   'emergency-debug': ['Bash'],
   'playwright-mcp': [
     'mcp__playwright-test__browser_click',
@@ -119,20 +117,11 @@ export const TOOL_BUNDLE_DEFINITIONS = {
 export type BundleName = keyof typeof TOOL_BUNDLE_DEFINITIONS;
 
 const OPTIONAL_MCP_SERVER_BUNDLES = new Set<BundleName>(['playwright-mcp']);
-const HOLDOUT_FORBIDDEN_CAPABILITIES = new Set<ToolCapability>([
-  'write',
-  'decision-record',
-  'native-shell',
-]);
+const HOLDOUT_FORBIDDEN_CAPABILITIES = new Set<ToolCapability>(['write', 'native-shell']);
 
 const TOOL_DEFINITIONS = new Map<string, ToolDefinition>();
 
-for (const externalName of FT_CONTEXT) {
-  defineTool(
-    externalName,
-    externalName.endsWith('__record_decision') ? ['decision-record'] : ['context'],
-  );
-}
+for (const externalName of FT_CONTEXT) defineTool(externalName, ['context']);
 for (const externalName of FT_READ) defineTool(externalName, ['read']);
 for (const externalName of FT_WRITE) defineTool(externalName, ['write']);
 for (const externalName of FT_VERIFY) defineTool(externalName, ['verify']);
@@ -143,7 +132,6 @@ for (const externalName of TOOL_BUNDLE_DEFINITIONS['playwright-mcp']) {
   defineTool(externalName, ['evidence']);
 }
 defineNativeTool('Bash', ['native-shell']);
-defineNativeTool('record-decision', ['decision-record']);
 
 function defineTool(externalName: string, capabilities: ReadonlyArray<ToolCapability>): void {
   TOOL_DEFINITIONS.set(externalName, {
