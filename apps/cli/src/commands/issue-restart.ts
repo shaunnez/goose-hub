@@ -1,0 +1,119 @@
+import { loadProjects } from '@goose-hub/core/projects/loader.js';
+import { restartIssue } from '@goose-hub/core/projects/restart-issue.js';
+import { STATES, type StateName } from '@goose-hub/core/state-machine/states.js';
+import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
+import type { Schedule } from '@goose-hub/core/state-source/interface.js';
+import { targetProjectsRoot } from '@goose-hub/target-projects';
+
+const VALID_SCHEDULES = new Set<Schedule>(['current', 'next', 'later', 'blocked-by']);
+
+interface ParsedRestartArgs {
+  slug: string;
+  id: string;
+  state?: StateName;
+  schedule?: Schedule;
+  yes: boolean;
+}
+
+function usage(): string {
+  return [
+    'Usage: goose issue restart <project-slug> <issue-id> [--state=factory:triaging] [--schedule=current|next|later|blocked-by] [--yes]',
+    '',
+    'Without --yes, prints the restart plan without creating or archiving issues.',
+  ].join('\n');
+}
+
+function parseArgs(rawArgs: string[]): ParsedRestartArgs | null {
+  const [slug = '', id = '', ...rest] = rawArgs;
+  let state: StateName | undefined;
+  let schedule: Schedule | undefined;
+  let yes = false;
+
+  for (const arg of rest) {
+    if (arg.startsWith('--state=')) {
+      const rawState = arg.slice('--state='.length);
+      if (!(STATES as readonly string[]).includes(rawState)) {
+        console.error(`Invalid --state: ${rawState}`);
+        return null;
+      }
+      state = rawState as StateName;
+    } else if (arg.startsWith('--schedule=')) {
+      const rawSchedule = arg.slice('--schedule='.length);
+      if (!VALID_SCHEDULES.has(rawSchedule as Schedule)) {
+        console.error(`Invalid --schedule: ${rawSchedule}`);
+        return null;
+      }
+      schedule = rawSchedule as Schedule;
+    } else if (arg === '--yes') {
+      yes = true;
+    } else {
+      console.error(`Unknown argument: ${arg}`);
+      return null;
+    }
+  }
+
+  if (!slug || !id) return null;
+  return { slug, id, state, schedule, yes };
+}
+
+export async function issueRestartCommand(rawArgs: string[]): Promise<void> {
+  const args = parseArgs(rawArgs);
+  if (args == null) {
+    console.error(usage());
+    process.exit(1);
+  }
+
+  const projects = await loadProjects(targetProjectsRoot);
+  const config = projects.find((p) => p.slug === args.slug);
+  if (!config) {
+    console.error(`Unknown project: ${args.slug}`);
+    console.error(`Known projects: ${projects.map((p) => p.slug).join(', ')}`);
+    process.exit(1);
+  }
+
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    console.error('GITHUB_TOKEN is required. Set it in .env or the environment.');
+    process.exit(1);
+  }
+
+  if (config.source.kind !== 'github') {
+    console.error(
+      `goose issue restart currently supports github-labels projects only. ${args.slug} uses ${config.source.kind}.`,
+    );
+    process.exit(1);
+  }
+
+  const source = new GitHubLabelsSource(config.id, config.source.repo, token);
+  const oldItem = await source.getItem(args.id);
+  const targetState = args.state ?? 'factory:triaging';
+  const schedule = args.schedule ?? oldItem.schedule;
+
+  if (!args.yes) {
+    console.log('Issue restart plan:');
+    console.log(`  project:      ${args.slug}`);
+    console.log(`  original:     ${oldItem.repoRef}#${oldItem.externalId}`);
+    console.log(`  title:        ${oldItem.title}`);
+    console.log(`  old state:    ${oldItem.state}`);
+    console.log(`  new state:    ${targetState}`);
+    console.log(`  new schedule: ${schedule}`);
+    console.log(`  milestone:    ${oldItem.milestoneTitle ?? oldItem.milestoneId ?? '<none>'}`);
+    console.log('');
+    console.log('Re-run with --yes to create the fresh issue and archive the original.');
+    return;
+  }
+
+  const result = await restartIssue({
+    source,
+    projectId: args.slug,
+    itemId: oldItem.id,
+    targetState,
+    schedule,
+  });
+
+  console.log(`Restarted ${oldItem.repoRef}#${oldItem.externalId}.`);
+  console.log(`  fresh issue:  ${result.newItem.repoRef}#${result.newItem.externalId}`);
+  console.log('  old state:    factory:archived');
+  console.log(`  new state:    ${result.targetState}`);
+  console.log(`  new schedule: ${result.schedule}`);
+}
