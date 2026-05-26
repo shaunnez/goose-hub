@@ -145,6 +145,7 @@ function activationValue(
       return modes.playwrightReproEnabled;
     case 'evidencePost.enabled':
       return modes.evidencePostEnabled;
+    case 'workItem.missingPromotionSeed':
     case 'workItem.simpleBug':
     case 'priority.highCritical':
       return null;

@@ -35,6 +35,7 @@ export type WorkflowActivationSetting =
   | 'devReview.enabled'
   | 'review.convergent'
   | 'workItem.simpleBug'
+  | 'workItem.missingPromotionSeed'
   | 'priority.highCritical'
   | 'playwrightRepro.enabled'
   | 'evidencePost.enabled';
@@ -609,6 +610,11 @@ const bugEntry: WorkflowCatalogEntry = {
       {
         group: 'investigation',
         mode: 'conditional',
+        activation: activeWhen(
+          'workItem.missingPromotionSeed',
+          true,
+          'bug issue without promotion seed',
+        ),
         notes: 'Lazy UI/web bug grounding when no promotion seed exists.',
       },
     ),
@@ -819,6 +825,11 @@ const bugEntry: WorkflowCatalogEntry = {
           description: 'Runs bug-enhance inside investigation when no promotion seed exists.',
           kind: 'conditional',
           nodes: ['bug-enhance-skill'],
+          activation: activeWhen(
+            'workItem.missingPromotionSeed',
+            true,
+            'bug issue without promotion seed',
+          ),
         },
         {
           id: 'investigation-blocked',

@@ -766,6 +766,7 @@ export type WorkflowActivationSetting =
   | 'devReview.enabled'
   | 'review.convergent'
   | 'workItem.simpleBug'
+  | 'workItem.missingPromotionSeed'
   | 'priority.highCritical'
   | 'playwrightRepro.enabled'
   | 'evidencePost.enabled';
