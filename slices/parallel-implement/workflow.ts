@@ -25,6 +25,7 @@ import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { readProjectSettings } from '@goose-hub/core/db/repositories/project-settings.js';
+import type { RunDisposition } from '@goose-hub/core/event-stream/run-disposition.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
@@ -51,10 +52,13 @@ import {
   reattachIntegrationWorktreeAtRemoteTip,
   resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
+import type { DevReviewResponseOutput } from '@goose-hub/skills/dev-review-response/schema.js';
+import type { DevReviewOutput } from '@goose-hub/skills/dev-review/schema.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
 import { type EngineeringSpec, fileOwnedPath } from '@goose-hub/skills/spec-author/schema.js';
 import { normalizeEngineeringSpecPaths } from '../spec-author/path-normalization.js';
 import { buildPrdPlanningContext } from '../spec-author/prd-planning-context.js';
+import { type DevReviewGateInput, evaluateDevReviewGate } from './dev-review-gate.js';
 import {
   type WpDispatchResult,
   buildParallelPrBody,
@@ -300,6 +304,15 @@ export class PersistenceFailureError extends Error {
     this.name = 'PersistenceFailureError';
     this.reason = reason;
     this.causeValue = causeValue;
+  }
+}
+
+class BlockedGateError extends Error {
+  readonly gate = 'dev-review';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'BlockedGateError';
   }
 }
 
@@ -1245,6 +1258,7 @@ export async function runParallelImplementWorkflow(
     // Runs after all WPs are committed, before the PR is opened.
     // Budget guard: skip if perCycleMaxUsd <= 0.
     let devReviewResponseCommitSha: string | undefined;
+    let latestDevReviewGate: DevReviewGateInput | null = null;
     if (
       devReviewCfg.enabled &&
       shouldRunDevReview(devReviewCfg.triggerOn, workItem.priority) &&
@@ -1262,26 +1276,46 @@ export async function runParallelImplementWorkflow(
         try {
           const maxTurns = Math.max(1, Math.min(5, devReviewCfg.maxRevisionTurns));
           let turns = 0;
+          let latestDevReviewOutput: DevReviewOutput | null = null;
+          let latestDevReviewResponse: DevReviewResponseOutput | null = null;
+          let latestDevReviewResponseCommit: DevReviewGateInput['latestResponseCommit'] = null;
+          let devReviewFailureReason: string | undefined;
           while (turns < maxTurns) {
             // Each iteration = one Codex dev-review call.
             // Use turn-scoped runId so multi-turn events are distinguishable.
             const turnRunId = turns === 0 ? runId : `${runId}:turn-${turns}`;
-            const devReviewOutput = await devReviewFn({
-              runId: turnRunId,
-              projectId,
-              workItemId: workItem.id,
-              workItem: {
-                title: workItem.title,
-                body: workItem.body,
-                number: Number(workItem.externalId),
-                priority: workItem.priority,
-              },
-              worktreePath: issueWorktreePath,
-              baseBranch: workflowBase.branch,
-              stack,
-              runtime: deps.devReviewRuntime,
-              appendEvent: append,
-            });
+            let devReviewOutput: DevReviewOutput;
+            try {
+              devReviewOutput = await devReviewFn({
+                runId: turnRunId,
+                projectId,
+                workItemId: workItem.id,
+                workItem: {
+                  title: workItem.title,
+                  body: workItem.body,
+                  number: Number(workItem.externalId),
+                  priority: workItem.priority,
+                },
+                worktreePath: issueWorktreePath,
+                baseBranch: workflowBase.branch,
+                stack,
+                runtime: deps.devReviewRuntime,
+                appendEvent: append,
+              });
+            } catch (devReviewErr) {
+              const msg = errorMessage(devReviewErr);
+              append({
+                projectId,
+                workItemId: workItem.id,
+                kind: 'dev-review.error',
+                payload: { runId: turnRunId, error: msg },
+                runId: turnRunId,
+              });
+              devReviewFailureReason = `Dev review failed: ${msg}`;
+              break;
+            }
+
+            latestDevReviewOutput = devReviewOutput;
 
             if (devReviewOutput.verdict === 'no-blockers') break;
             // On the last turn, inconclusive = no more passes available; skip response.
@@ -1289,43 +1323,85 @@ export async function runParallelImplementWorkflow(
 
             // Re-fetch diff after any previous response commits so Codex sees current state.
             const currentDiff = getDiffFn(issueWorktreePath, workflowBase.branch);
-            await devReviewResponseFn({
-              runId: turnRunId,
-              projectId,
-              workItemId: workItem.id,
-              workItem: {
-                title: workItem.title,
-                body: workItem.body,
-                number: Number(workItem.externalId),
-                priority: workItem.priority,
-              },
-              prDiff: currentDiff,
-              devReviewFindings: devReviewOutput.findings,
-              worktreePath: issueWorktreePath,
-              stack,
-              runtime: deps.devReviewResponseRuntime,
-              appendEvent: append,
-            });
+            try {
+              latestDevReviewResponse = await devReviewResponseFn({
+                runId: turnRunId,
+                projectId,
+                workItemId: workItem.id,
+                workItem: {
+                  title: workItem.title,
+                  body: workItem.body,
+                  number: Number(workItem.externalId),
+                  priority: workItem.priority,
+                },
+                prDiff: currentDiff,
+                devReviewFindings: devReviewOutput.findings,
+                worktreePath: issueWorktreePath,
+                stack,
+                runtime: deps.devReviewResponseRuntime,
+                appendEvent: append,
+              });
+            } catch (responseErr) {
+              const msg = errorMessage(responseErr);
+              append({
+                projectId,
+                workItemId: workItem.id,
+                kind: 'dev-review.response-failed',
+                payload: { runId: `${turnRunId}:dev-review-response`, error: msg },
+                runId: `${turnRunId}:dev-review-response`,
+              });
+              devReviewFailureReason = `Dev review response failed: ${msg}`;
+              break;
+            }
             // Commit response edits so the next iteration's Codex diff is current.
-            const devReviewCommitResult = commitDevReviewFn(
-              issueWorktreePath,
-              `chore: dev-review-response turn-${turns} addressing/dismissing findings`,
-            );
+            let devReviewCommitResult: DevReviewGateInput['latestResponseCommit'];
+            try {
+              devReviewCommitResult = commitDevReviewFn(
+                issueWorktreePath,
+                `chore: dev-review-response turn-${turns} addressing/dismissing findings`,
+              );
+            } catch (commitErr) {
+              const msg = errorMessage(commitErr);
+              devReviewFailureReason = `Dev review response commit failed: ${msg}`;
+              break;
+            }
+            latestDevReviewResponseCommit = devReviewCommitResult;
             if (devReviewCommitResult.status === 'committed') {
               devReviewResponseCommitSha = devReviewCommitResult.sha;
             }
             turns++;
           }
+          latestDevReviewGate = {
+            latestVerdict: latestDevReviewOutput,
+            latestResponse: latestDevReviewResponse,
+            latestResponseCommit: latestDevReviewResponseCommit,
+            ...(devReviewFailureReason != null ? { failureReason: devReviewFailureReason } : {}),
+          };
         } catch (devReviewErr) {
-          // Dev-review failures are non-fatal. Log and continue to PR.
-          const msg = devReviewErr instanceof Error ? devReviewErr.message : String(devReviewErr);
-          append({
-            projectId,
-            workItemId: workItem.id,
-            kind: 'dev-review.error',
-            payload: { runId, error: msg },
-            runId,
-          });
+          latestDevReviewGate = {
+            latestVerdict: null,
+            latestResponse: null,
+            latestResponseCommit: null,
+            failureReason: `Dev review failed: ${errorMessage(devReviewErr)}`,
+          };
+        }
+        if (latestDevReviewGate != null) {
+          const gateResult = evaluateDevReviewGate(latestDevReviewGate);
+          if (gateResult.status === 'blocked') {
+            append({
+              projectId,
+              workItemId: workItem.id,
+              kind: 'gate.awaiting-human',
+              payload: {
+                gate: 'dev-review',
+                reason: gateResult.reason,
+                blockerCount: gateResult.blockerCount,
+                runDisposition: 'blocked-gate',
+              },
+              runId,
+            });
+            throw new BlockedGateError(gateResult.reason);
+          }
         }
       }
     }
@@ -1437,6 +1513,10 @@ export async function runParallelImplementWorkflow(
       error instanceof PersistenceFailureError
         ? { runDisposition: 'persistence-failed', persistenceFailureReason: error.reason }
         : undefined;
+    const blockedGate =
+      error instanceof BlockedGateError
+        ? ({ runDisposition: 'blocked-gate' satisfies RunDisposition, gate: error.gate } as const)
+        : undefined;
     append({
       projectId,
       workItemId: workItem.id,
@@ -1446,6 +1526,7 @@ export async function runParallelImplementWorkflow(
         skill: 'parallel-implement',
         error: error.message,
         ...(persistenceFailure ?? {}),
+        ...(blockedGate ?? {}),
       },
       runId,
     });

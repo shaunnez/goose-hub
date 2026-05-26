@@ -2,6 +2,14 @@ import type { AgentEventDto } from '@/lib/types';
 import { Bot, CheckCircle, Circle, XCircle } from 'lucide-react';
 import { EVENT_KIND_LABEL } from '../../lib/timeline';
 
+function formatDisposition(disposition: string | undefined): string | null {
+  if (disposition == null || disposition.length === 0) return null;
+  return disposition
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export function AgentSpawnedEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as { skill?: string } | null;
   const skill = p?.skill ?? '';
@@ -51,8 +59,14 @@ export function AgentTerminatedEvent({ event }: { event: AgentEventDto }) {
 export function AgentRunStatusEvent({ event }: { event: AgentEventDto }) {
   const isCompleted = event.kind === 'agent.run-completed';
   const isFailed = event.kind === 'agent.run-failed';
-  const p = event.payload as { runId?: string; error?: string; skill?: string } | null;
+  const p = event.payload as {
+    runId?: string;
+    error?: string;
+    skill?: string;
+    runDisposition?: string;
+  } | null;
   const skillSuffix = p?.skill != null ? `: ${p.skill}` : '';
+  const disposition = formatDisposition(p?.runDisposition);
   return (
     <li
       data-event-kind={event.kind}
@@ -71,6 +85,11 @@ export function AgentRunStatusEvent({ event }: { event: AgentEventDto }) {
           {skillSuffix}
           {isFailed && p?.error != null ? ` — ${p.error}` : ''}
         </span>
+        {disposition != null && (
+          <span className="rounded border border-fg-5/20 bg-fg-5/10 px-1.5 py-0.5 font-mono text-[10px] uppercase text-fg-3">
+            {disposition}
+          </span>
+        )}
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>

@@ -3083,6 +3083,94 @@ describe('dev-review e2e: dismissed finding captures DEV_REVIEW_DISMISSED', () =
     expect((responseCompleted?.payload as { dismissed?: number }).dismissed).toBe(1);
     expect((responseCompleted?.payload as { addressed?: number }).addressed).toBe(0);
   });
+
+  it('blocks PR opening when a P1 blocker is dismissed', async () => {
+    const wp1 = makeWp('WP1', ['core/b.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const openPRImpl = vi.fn();
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem({ priority: 'high' }),
+      spec,
+      'pipeline-run-dev-review-p1-dismissed',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        devReviewConfigOverride: {
+          enabled: true,
+          triggerOn: 'all',
+          maxRevisionTurns: 1,
+          perCycleMaxUsd: 2.0,
+          timeoutMs: 180_000,
+        },
+        runDevReviewImpl: async () => ({
+          verdict: 'blockers-found',
+          findings: [
+            {
+              severity: 'P1',
+              category: 'correctness',
+              file: 'core/b.ts',
+              line: 10,
+              summary: 'Drops failed writes',
+              suggestion: 'Persist the write before opening the PR',
+            },
+          ],
+          decisionSummaries: [{ kind: 'VERDICT', summary: 'blockers-found: 1 P1 finding' }],
+        }),
+        runDevReviewResponseImpl: async () => ({
+          findingDispositions: [
+            {
+              findingRef: 'core/b.ts:10',
+              severity: 'P1',
+              disposition: 'dismissed',
+              reason: 'Not reproducible',
+            },
+          ],
+          decisionSummaries: [
+            {
+              kind: 'DEV_REVIEW_DISMISSED',
+              summary: 'Dismissed P1 at core/b.ts:10',
+              evidence: 'core/b.ts:10',
+            },
+          ],
+        }),
+        commitDevReviewResponseImpl: () => ({ status: 'committed', sha: 'sha-dev-review' }),
+        createIssueWorktreeImpl: () => '/tmp/issue-wt',
+        createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha2',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: () => undefined,
+        getLastStatusImpl: (_runId, wpId) => {
+          const seen = events.some(
+            (e) =>
+              (e.kind as string).includes('wp-committed') &&
+              (e.payload as { wpId?: string }).wpId === wpId,
+          );
+          return seen ? 'ok' : null;
+        },
+        openPRImpl,
+        getDiffImpl: () => 'diff --git a/core/b.ts b/core/b.ts\n',
+        appendEvent,
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    expect(openPRImpl).not.toHaveBeenCalled();
+    expect(events.find((event) => event.kind === 'gate.awaiting-human')?.payload).toMatchObject({
+      gate: 'dev-review',
+      reason: expect.stringContaining('P1'),
+    });
+    expect(events.find((event) => event.kind === 'agent.run-failed')?.payload).toMatchObject({
+      skill: 'parallel-implement',
+      runDisposition: 'blocked-gate',
+    });
+    expect(events.find((event) => event.kind === 'pr.opened')).toBeUndefined();
+  });
 });
 
 // ─── E2E spec 3: budget zero → dev-review.budget-skipped → workflow continues ─

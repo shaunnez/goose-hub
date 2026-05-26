@@ -14,6 +14,7 @@ type TierPayload = {
   evidence?: string[];
   findingCount?: number;
   findings?: { tier?: string; severity?: string; description?: string }[];
+  failureCategory?: string;
   runId?: string;
 };
 
@@ -90,6 +91,24 @@ function statusTone(status: VerificationStatus | undefined): string {
   return 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400';
 }
 
+function formatFailureCategory(category: string | undefined): string | null {
+  if (category == null || category.length === 0) return null;
+  return category
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function FailureCategoryBadge({ category }: { category?: string }) {
+  const label = formatFailureCategory(category);
+  if (label == null) return null;
+  return (
+    <span className="rounded border border-yellow-500/20 bg-yellow-500/10 px-1.5 py-0.5 font-mono text-[10px] uppercase text-yellow-400">
+      {label}
+    </span>
+  );
+}
+
 function StatusRow({
   label,
   status,
@@ -146,6 +165,7 @@ export function QaFailedEvent({ event }: { event: AgentEventDto }) {
       <div className="flex items-center gap-2 mb-2 text-[11px] text-fg-3">
         <XCircle size={13} className="shrink-0 text-[color:var(--danger)]" />
         <span className="font-mono uppercase tracking-wider">QA {tierLabel} failed</span>
+        <FailureCategoryBadge category={p?.failureCategory} />
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
@@ -228,6 +248,7 @@ export function QaCompletedEvent({ event }: { event: AgentEventDto }) {
     verdict?: string;
     overallScore?: number;
     threshold?: number;
+    failureCategory?: string;
     tierResults?: {
       structural?: TierResult;
       functional?: TierResult;
@@ -278,6 +299,7 @@ export function QaCompletedEvent({ event }: { event: AgentEventDto }) {
             Agent skipped
           </span>
         )}
+        <FailureCategoryBadge category={p?.failureCategory} />
         {score != null && (
           <span className="text-[11.5px] text-fg-3 font-mono">
             <span className={score >= threshold ? 'text-green-400' : 'text-[color:var(--danger)]'}>
@@ -322,6 +344,7 @@ export function QaVerificationBlockedEvent({ event }: { event: AgentEventDto }) 
     findings?: string[];
     reason?: string;
     agentSkipped?: boolean;
+    failureCategory?: string;
   } | null;
   const findings = p?.findings ?? [];
   return (
@@ -351,6 +374,7 @@ export function QaVerificationBlockedEvent({ event }: { event: AgentEventDto }) 
             Agent skipped
           </span>
         )}
+        <FailureCategoryBadge category={p?.failureCategory} />
       </div>
       {findings.length > 0 && (
         <ul className="flex flex-col gap-1.5">

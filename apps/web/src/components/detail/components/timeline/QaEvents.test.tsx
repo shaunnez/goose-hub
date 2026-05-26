@@ -57,12 +57,14 @@ describe('QA timeline events', () => {
       tier: 3,
       evidence: ['carry-forward-ok-wps: WP1'],
       findingCount: 1,
+      failureCategory: 'regression-unrelated',
       runId: '0eca3ecb-034d-4467-8573-7c691ec8b6e2',
     });
 
     render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
 
     expect(screen.getByText('QA Regression failed')).toBeTruthy();
+    expect(screen.getByText('Regression Unrelated')).toBeTruthy();
     expect(screen.getByText('1 finding')).toBeTruthy();
     expect(screen.getByText('carry-forward-ok-wps: WP1')).toBeTruthy();
     expect(document.body.textContent).not.toContain('"tier"');
@@ -164,5 +166,33 @@ describe('QA timeline events', () => {
     expect(screen.getByText('Max retries 2')).toBeTruthy();
     expect(screen.getByText('run 7684da8c')).toBeTruthy();
     expect(document.body.textContent).not.toContain('"maxRetries"');
+  });
+
+  it('renders qa.completed failure category badges', () => {
+    const event = makeEvent('qa.completed', {
+      verdict: 'fail',
+      overallScore: 40,
+      threshold: 70,
+      failureCategory: 'product',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('QA completed')).toBeTruthy();
+    expect(screen.getByText('Product')).toBeTruthy();
+  });
+
+  it('renders verification-blocked failure category badges', () => {
+    const event = makeEvent('qa.verification-blocked', {
+      failedTier: 2,
+      reason: 'malformed-verification-command',
+      agentSkipped: true,
+      failureCategory: 'orchestration',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('QA verification blocked')).toBeTruthy();
+    expect(screen.getByText('Orchestration')).toBeTruthy();
   });
 });
