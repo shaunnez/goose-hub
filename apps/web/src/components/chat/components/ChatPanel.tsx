@@ -415,6 +415,16 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     [navigate, onClose],
   );
 
+  const handleClose = useCallback(() => {
+    loadTokenRef.current += 1;
+    writeActiveId(null);
+    setConversation(null);
+    setMessages([]);
+    setInvocations([]);
+    setView('list');
+    onClose();
+  }, [onClose, writeActiveId]);
+
   const toggleView = useCallback(() => {
     setView((v) => (v === 'thread' ? 'list' : conversation != null ? 'thread' : 'list'));
   }, [conversation]);
@@ -463,7 +473,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         </select>
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleClose}
           aria-label="Close chat"
           className="p-1 text-fg-2 hover:text-fg rounded"
         >
