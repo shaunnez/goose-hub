@@ -176,6 +176,7 @@ export async function runOneScout(
     ...resolvedBudget.budgets,
     ...(ctx.scoutTimeoutMs != null ? { timeoutMs: ctx.scoutTimeoutMs } : {}),
   };
+  const runtime = ctx.resolveScoutRuntime?.(resolvedBudget, spec.scoutName) ?? ctx.runtime;
   const spawnSpec: AgentSpec = {
     runId,
     role: 'investigator',
@@ -204,7 +205,6 @@ export async function runOneScout(
   let errorReason: string | undefined;
 
   try {
-    const runtime = ctx.resolveScoutRuntime?.(resolvedBudget, spec.scoutName) ?? ctx.runtime;
     result = await runtime.run(spawnSpec);
   } catch (err) {
     if (isTimeoutError(err, budgets.timeoutMs)) {
@@ -283,9 +283,101 @@ export async function runOneScout(
   }
 
   const scoutOutput = normalizeScoutOutput(parsed.data);
-  const findings = scoutOutput.findings;
-  const decisionSummaries =
+  let findings = scoutOutput.findings;
+  let decisionSummaries =
     result.decisionSummaries.length > 0 ? result.decisionSummaries : scoutOutput.decisionSummaries;
+  const seedFile = firstInvestigationSeedCandidateFile(fullContext);
+  if (
+    findings.length === 0 &&
+    !hasSuccessfulFactoryEvidenceCall(result.events) &&
+    seedFile != null
+  ) {
+    const retrySpec = buildEvidenceRetrySpec(spawnSpec, seedFile);
+    assembleSpawnContext(retrySpec);
+    try {
+      const retryResult = await runtime.run(retrySpec);
+      const retryParsed = safeParseOutputForSchema(ScoutOutputSchema, retryResult.output);
+      if (!retryParsed.success) {
+        const reason = `scout output failed schema validation: ${retryParsed.error.issues
+          .map((i) => `${i.path.join('.')}: ${i.message}`)
+          .join('; ')}`;
+        append({
+          projectId: ctx.projectId,
+          workItemId: ctx.workItemId ?? null,
+          kind: 'swarm.scout-failed',
+          payload: { runId, scoutName: spec.scoutName, errorReason: reason },
+          runId,
+        });
+        return {
+          scoutName: spec.scoutName,
+          status: 'error',
+          findings: [],
+          decisionSummaries: retryResult.decisionSummaries ?? decisionSummaries,
+          errorReason: reason,
+          runId,
+        };
+      }
+      const retryOutput = normalizeScoutOutput(retryParsed.data);
+      const retryFindings = retryOutput.findings;
+      if (retryFindings.length > 0 || hasSuccessfulFactoryEvidenceCall(retryResult.events)) {
+        result = retryResult;
+        findings = retryFindings;
+        decisionSummaries =
+          retryResult.decisionSummaries.length > 0
+            ? retryResult.decisionSummaries
+            : retryOutput.decisionSummaries;
+      }
+    } catch (err) {
+      if (isTimeoutError(err, budgets.timeoutMs)) {
+        timedOut = true;
+      } else {
+        errorReason = err instanceof Error ? err.message : String(err);
+      }
+    }
+  }
+
+  if (timedOut) {
+    append({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId ?? null,
+      kind: 'agent.cancelled',
+      payload: { runId, reason: 'timeout', elapsedMs: Date.now() - start },
+      runId,
+    });
+    append({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId ?? null,
+      kind: 'swarm.scout-timeout',
+      payload: { runId, scoutName: spec.scoutName, scoutTimeoutMs: budgets.timeoutMs },
+      runId,
+    });
+    return {
+      scoutName: spec.scoutName,
+      status: 'timeout',
+      findings: [],
+      decisionSummaries: [],
+      runId,
+    };
+  }
+
+  if (errorReason != null) {
+    append({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId ?? null,
+      kind: 'swarm.scout-failed',
+      payload: { runId, scoutName: spec.scoutName, errorReason },
+      runId,
+    });
+    return {
+      scoutName: spec.scoutName,
+      status: 'error',
+      findings: [],
+      decisionSummaries,
+      errorReason,
+      runId,
+    };
+  }
+
   if (findings.length === 0 && !hasSuccessfulFactoryEvidenceCall(result.events)) {
     append({
       projectId: ctx.projectId,
@@ -323,6 +415,39 @@ export async function runOneScout(
     findings,
     decisionSummaries,
     runId,
+  };
+}
+
+function firstInvestigationSeedCandidateFile(context: Record<string, unknown>): string | null {
+  const seed = payloadRecord(context.investigationSeed);
+  const candidates = Array.isArray(seed?.candidateFiles) ? seed.candidateFiles : [];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+    const record = payloadRecord(candidate);
+    if (typeof record?.path === 'string' && record.path.length > 0) return record.path;
+  }
+  return null;
+}
+
+function buildEvidenceRetrySpec(spawnSpec: AgentSpec, seedFile: string): AgentSpec {
+  const instruction = `Evidence retry: ignore resources/list advisory noise and perform one read_file or search_text call against the seeded file '${seedFile}' before returning JSON.`;
+  const context =
+    spawnSpec.context != null &&
+    typeof spawnSpec.context === 'object' &&
+    !Array.isArray(spawnSpec.context)
+      ? {
+          ...(spawnSpec.context as Record<string, unknown>),
+          scoutFocus: `${String((spawnSpec.context as Record<string, unknown>).scoutFocus ?? '')}\n\n${instruction}`,
+        }
+      : spawnSpec.context;
+  return {
+    ...spawnSpec,
+    runId: `${spawnSpec.runId}:evidence-retry`,
+    context,
+    appendSystemPrompt:
+      spawnSpec.appendSystemPrompt != null && spawnSpec.appendSystemPrompt.length > 0
+        ? `${spawnSpec.appendSystemPrompt}\n\n${instruction}`
+        : instruction,
   };
 }
 
