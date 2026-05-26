@@ -44,6 +44,25 @@ function getRunId(item: RenderItem): string | null {
   return null;
 }
 
+function isAnsweredGrillTransition(
+  event: AgentEventDto,
+  payload: {
+    discoverSessionId?: unknown;
+    from?: unknown;
+    skill?: unknown;
+    to?: unknown;
+    workflowSkill?: unknown;
+  } | null,
+): boolean {
+  if (event.kind !== 'state.transitioned') return false;
+  if (payload?.from !== 'factory:gate-pending' || payload.to !== 'factory:grilling') return false;
+  if (typeof payload.discoverSessionId === 'string' && payload.discoverSessionId.trim() !== '') {
+    return true;
+  }
+  if (payload?.skill === 'grill-me' || payload?.workflowSkill === 'grill-me') return true;
+  return event.runId?.endsWith(':grill-me') ?? false;
+}
+
 export function extractRunMeta(items: RenderItem[]): {
   skill: string | null;
   startedAt: string | null;
@@ -71,10 +90,13 @@ export function extractRunMeta(items: RenderItem[]): {
     if (item.kind !== 'event') continue;
     const ev = item.event;
     const p = ev.payload as {
+      discoverSessionId?: string;
       displaySkill?: string;
+      from?: string;
       modelId?: string;
       runtime?: string;
       skill?: string;
+      to?: string;
       workflowSkill?: string;
     } | null;
 
@@ -118,6 +140,9 @@ export function extractRunMeta(items: RenderItem[]): {
     } else if (ev.kind === 'grill.question-posted' || ev.kind === 'grill.completed') {
       // grill-me runs don't emit agent.run-completed - these are the terminal events
       if (endedAt == null) endedAt = ev.createdAt;
+    } else if (isAnsweredGrillTransition(ev, p)) {
+      // grill reply submissions transition back into grilling without agent.run-completed.
+      if (endedAt == null || ms > new Date(endedAt).getTime()) endedAt = ev.createdAt;
     } else if (ev.kind === 'decompose.completed') {
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'parallel-implement.iteration-started') {

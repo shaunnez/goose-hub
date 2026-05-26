@@ -361,6 +361,39 @@ describe('TimelineSection — expand/collapse all', () => {
     ).toBeNull();
   });
 
+  it('marks a grill discover segment complete after the answered transition', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [
+        makeRunEvent(1, 'discover-run:grill-me', 'agent.run-started', {
+          skill: 'grill-me',
+          discoverSessionId: 'discover-123',
+        }),
+        makeRunEvent(2, 'discover-run:grill-me', 'agent.decision-summary-live', {
+          skill: 'grill-me',
+          discoverSessionId: 'discover-123',
+          summary: 'Question asked',
+        }),
+        makeRunEvent(3, 'discover-run:grill-me', 'state.transitioned', {
+          from: 'factory:gate-pending',
+          to: 'factory:grilling',
+          discoverSessionId: 'discover-123',
+          skill: 'grill-me',
+        }),
+      ],
+      hasMore: false,
+    });
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    await screen.findByTestId('timeline-expand-all');
+    fireEvent.click(screen.getByTestId('timeline-expand-all'));
+
+    expect(await screen.findByText('Complete')).toBeTruthy();
+    expect(screen.queryByText('Live')).toBeNull();
+  });
+
   it('does not create its own EventSource', async () => {
     const { fetchEventsPage } = await import('@/lib/api');
     vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
