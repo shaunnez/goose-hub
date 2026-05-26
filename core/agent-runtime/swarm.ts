@@ -33,8 +33,19 @@ export type WaveStatus = 'ok' | 'incomplete' | 'halted';
 export interface WaveResult {
   status: WaveStatus;
   reports: ScoutReport[];
-  /** Names of scouts whose `status` is `'error'` or `'timeout'`. */
+  /** Names of scouts whose logical `outcome` is `'failed'` or `'timeout'`. */
   failedScouts: string[];
+  /** Names of scouts that determined their domain does not apply. */
+  skippedScouts: string[];
+  /** Count of semantically useful ok scout reports. Skips do not count. */
+  okCount: number;
+  /** Human-facing wave summary for timeline display. */
+  summary:
+    | 'completed'
+    | 'completed-with-skips'
+    | 'completed-with-failed-scout'
+    | 'incomplete'
+    | 'halted';
   /** True if the caller may advance (≤1 failure AND enough successful scouts). */
   shouldAdvance: boolean;
   /** True if 2+ failures triggered halt → escalate `factory:needs-human`. */
@@ -143,25 +154,45 @@ export async function dispatchWave(opts: DispatchWaveOptions): Promise<WaveResul
     heartbeat.stop();
   }
 
-  const failedScouts = reports.filter((r) => r.status !== 'ok').map((r) => r.scoutName);
-  const okCount = reports.length - failedScouts.length;
+  const outcomeFor = (report: ScoutReport) =>
+    report.outcome ??
+    (report.status === 'timeout' ? 'timeout' : report.status === 'error' ? 'failed' : 'ok');
+  const failedScouts = reports
+    .filter((report) => {
+      const outcome = outcomeFor(report);
+      return outcome === 'failed' || outcome === 'timeout';
+    })
+    .map((r) => r.scoutName);
+  const skippedScouts = reports
+    .filter((report) => outcomeFor(report) === 'skipped')
+    .map((r) => r.scoutName);
+  const okCount = reports.filter((report) => outcomeFor(report) === 'ok').length;
 
   let status: WaveStatus;
   let shouldAdvance: boolean;
   let shouldEscalate: boolean;
+  let summary: WaveResult['summary'];
 
   if (failedScouts.length >= MAX_TOLERATED_FAILURES + 1) {
     status = 'halted';
     shouldAdvance = false;
     shouldEscalate = true;
+    summary = 'halted';
   } else if (okCount < minSuccessfulScouts) {
     status = 'incomplete';
     shouldAdvance = false;
     shouldEscalate = false;
+    summary = 'incomplete';
   } else {
     status = 'ok';
     shouldAdvance = true;
     shouldEscalate = false;
+    summary =
+      failedScouts.length > 0
+        ? 'completed-with-failed-scout'
+        : skippedScouts.length > 0
+          ? 'completed-with-skips'
+          : 'completed';
   }
 
   const eventKind: EventKind =
@@ -180,9 +211,20 @@ export async function dispatchWave(opts: DispatchWaveOptions): Promise<WaveResul
       scoutCount: reports.length,
       okCount,
       failedScouts,
+      skippedScouts,
+      summary,
     },
     runId: opts.parentRunId,
   });
 
-  return { status, reports, failedScouts, shouldAdvance, shouldEscalate };
+  return {
+    status,
+    reports,
+    failedScouts,
+    skippedScouts,
+    okCount,
+    summary,
+    shouldAdvance,
+    shouldEscalate,
+  };
 }

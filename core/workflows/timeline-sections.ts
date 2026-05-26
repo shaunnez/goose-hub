@@ -196,6 +196,7 @@ const DIRECT_TIMELINE_EVENT_KINDS = new Set<string>([
   'prd.lifecycle-routed',
   'swarm.heartbeat',
   'swarm.scout-completed',
+  'swarm.scout-skipped',
   'swarm.scout-timeout',
   'swarm.scout-failed',
   'swarm.wave-completed',

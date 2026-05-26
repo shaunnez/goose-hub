@@ -114,6 +114,7 @@ import {
   SwarmHeartbeatEvent,
   SwarmScoutCompletedEvent,
   SwarmScoutFailedEvent,
+  SwarmScoutSkippedEvent,
   SwarmScoutTimeoutEvent,
   SwarmWaveEvent,
 } from './timeline/SwarmEvents';
@@ -403,6 +404,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <SwarmHeartbeatEvent key={event.id} event={event} />;
     case 'swarm.scout-completed':
       return <SwarmScoutCompletedEvent key={event.id} event={event} />;
+    case 'swarm.scout-skipped':
+      return <SwarmScoutSkippedEvent key={event.id} event={event} />;
     case 'swarm.scout-failed':
       return <SwarmScoutFailedEvent key={event.id} event={event} />;
     case 'swarm.scout-timeout':

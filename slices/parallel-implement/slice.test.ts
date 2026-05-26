@@ -200,6 +200,7 @@ describe('parallel-implement WP spec context handoff', () => {
       functionalRequirements: [
         { id: 'FR1', statement: 'Overview workflow summary displays pipeline status.' },
         { id: 'FR2', statement: 'Costs summary displays cost totals.' },
+        { id: 'FR3', statement: 'WP10 displays unrelated future workflow data.' },
       ],
       interfaceContracts: [
         {
@@ -273,6 +274,11 @@ describe('parallel-implement WP spec context handoff', () => {
           crossCutting: false,
         },
         {
+          id: 'AC10',
+          statement: 'WP10 handles unrelated future workflow data.',
+          crossCutting: false,
+        },
+        {
           id: 'AC3',
           statement: 'No overview regression.',
           crossCutting: true,
@@ -331,6 +337,9 @@ describe('parallel-implement WP spec context handoff', () => {
         'apps/web/src/components/detail/overview-section.tsx',
       ]),
     ).toBe(true);
+    expect(commandMentionsWpFile('pnpm vitest run captcha.spec.ts', ['core/api.ts'])).toBe(false);
+    expect(commandMentionsWpFile('pnpm vitest run roadmap.spec.ts', ['core/map.ts'])).toBe(false);
+    expect(commandMentionsWpFile('pnpm vitest run oauth.spec.ts', ['core/auth.ts'])).toBe(false);
   });
 });
 
@@ -715,6 +724,97 @@ describe('parallel-implement repo-relative path normalization', () => {
 
       expect(result.status).toBe('success');
       expect(prewarmed).toEqual([issueWorktree, scratchWorktree]);
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
+  it('blocks a WP before spawning implement-wp when dependency preflight fails', async () => {
+    const repoPath = makeTempRepo(['apps/web/src/foo.ts']);
+    const issueWorktree = makeTempRepo(['apps/web/src/foo.ts']);
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts']);
+    const spec = makeSpec([makeWp('WP1', ['apps/web/src/foo.ts'])]);
+    const verified: string[] = [];
+    const iterations: Array<{ wpId: string; status: string; errorReason?: string }> = [];
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const stateSource = makeStateSource();
+    let runtimeCalled = false;
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        makeWorkItem({ priority: 'medium' }),
+        spec,
+        'pipeline-run-preflight',
+        stateSource,
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: {
+            run: async () => {
+              runtimeCalled = true;
+              throw new Error('runtime should not be called');
+            },
+          },
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          createIssueWorktreeImpl: () => issueWorktree,
+          createWpWorktreeImpl: () => scratchWorktree,
+          prewarmWorktreeImpl: () => undefined,
+          verifyWorktreeDependenciesImpl: (worktreePath) => {
+            verified.push(worktreePath);
+            if (worktreePath === scratchWorktree) {
+              throw new Error(
+                'worktree dependencies unavailable: @goose-hub/web playwright binary not resolvable',
+              );
+            }
+          },
+          cleanupWpWorktreesImpl: () => undefined,
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: (_runId, wpId, _iteration, status, errorReason) => {
+            iterations.push({ wpId, status, errorReason });
+          },
+          getLastStatusImpl: () => null,
+          appendEvent,
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+        },
+      );
+
+      expect(result.status).toBe('failed');
+      if (result.status !== 'failed') throw new Error('expected dependency preflight failure');
+      expect(result.errorReason).toContain('@goose-hub/web playwright binary not resolvable');
+      expect(runtimeCalled).toBe(false);
+      expect(verified).toEqual([issueWorktree, scratchWorktree]);
+      expect(iterations).toContainEqual({
+        wpId: 'WP1',
+        status: 'failed',
+        errorReason:
+          'worktree dependencies unavailable: @goose-hub/web playwright binary not resolvable',
+      });
+      expect(events.find((event) => event.kind === 'parallel-implement.wp-failed')).toMatchObject({
+        payload: {
+          wpId: 'WP1',
+          failureKind: 'terminal-blocker',
+          decisionKind: 'BLOCKER',
+        },
+      });
+      expect(
+        events.find((event) => event.kind === 'parallel-implement.wp-terminal-blocked'),
+      ).toMatchObject({
+        payload: {
+          wpId: 'WP1',
+          decisionKind: 'BLOCKER',
+        },
+      });
     } finally {
       replaySpy.mockRestore();
     }

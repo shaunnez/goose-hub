@@ -89,6 +89,7 @@ export interface RunOneWpBuilderOptions {
   verificationCommands?: ExecutableCheck[];
   parentPrdContext?: PrdPlanningContext;
   implementWpControl?: ImplementWpControlConfig;
+  verifyWorktreeDependenciesFn?: (worktreePath: string) => void;
 }
 
 type CodeSnippet = {
@@ -523,6 +524,37 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     payload: { wpId: wp.id, iteration, wpRunId, scratchPath: opts.scratchWorktreePath },
     runId: wpRunId,
   });
+  if (opts.verifyWorktreeDependenciesFn != null) {
+    try {
+      opts.verifyWorktreeDependenciesFn(opts.scratchWorktreePath);
+    } catch (err) {
+      const reason =
+        err instanceof Error
+          ? err.message
+          : 'worktree dependencies unavailable: verification tooling not resolvable';
+      opts.appendEvent({
+        projectId,
+        workItemId: workItemId ?? null,
+        kind: 'parallel-implement.wp-failed',
+        payload: {
+          wpId: wp.id,
+          wpRunId,
+          errorReason: reason,
+          failureKind: 'terminal-blocker',
+          decisionKind: 'BLOCKER',
+        },
+        runId: wpRunId,
+      });
+      opts.recordIterationFn(runId, wp.id, iteration, 'failed', reason);
+      return {
+        status: 'failed',
+        wpId: wp.id,
+        errorReason: reason,
+        runId: wpRunId,
+        acceptanceFailure: { kind: 'terminal-blocker', reason, decisionKind: 'BLOCKER' },
+      };
+    }
+  }
   if (opts.investigation != null) {
     opts.appendEvent({
       projectId,

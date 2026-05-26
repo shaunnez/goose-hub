@@ -231,7 +231,7 @@ export function normalizeRunCacheKey(input: {
           canonicalPath,
           input.args.glob ?? '',
           input.args.contextLines ?? 0,
-          input.args.maxMatches ?? 200,
+          input.args.maxMatches ?? 20,
         ],
         [canonicalPath],
       );

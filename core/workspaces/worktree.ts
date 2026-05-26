@@ -21,6 +21,19 @@ export type IntegrationWorktree = {
   previousHeadSha: string;
 };
 
+export class WorktreeDependencyPreflightError extends Error {
+  readonly command: readonly string[];
+  readonly cwd: string;
+
+  constructor(message: string, opts: { command: readonly string[]; cwd: string; cause?: unknown }) {
+    super(message);
+    this.name = 'WorktreeDependencyPreflightError';
+    this.command = opts.command;
+    this.cwd = opts.cwd;
+    this.cause = opts.cause;
+  }
+}
+
 /**
  * Resolves the worktree path for a given runId.
  * Pattern: ~/.factory/workspaces/<runId>/
@@ -254,6 +267,29 @@ export function prewarmWorktree(worktreePath: string, filter?: string): void {
     cwd: worktreePath,
     stdio: 'pipe',
   });
+}
+
+export function assertPnpmPackageExecutableAvailable(
+  worktreePath: string,
+  packageFilter: string,
+  executable: string,
+): void {
+  const args = ['--filter', packageFilter, 'exec', executable, '--version'];
+  try {
+    execFileSync('pnpm', args, {
+      cwd: worktreePath,
+      stdio: 'pipe',
+    });
+  } catch (err) {
+    throw new WorktreeDependencyPreflightError(
+      `worktree dependencies unavailable: ${packageFilter} ${executable} binary not resolvable`,
+      { command: ['pnpm', ...args], cwd: worktreePath, cause: err },
+    );
+  }
+}
+
+export function assertGooseHubWebPlaywrightReady(worktreePath: string): void {
+  assertPnpmPackageExecutableAvailable(worktreePath, '@goose-hub/web', 'playwright');
 }
 
 /**

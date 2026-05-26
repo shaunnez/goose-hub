@@ -88,6 +88,7 @@ export const EVENT_KINDS = [
   'prd.lifecycle-routed',
   'swarm.heartbeat',
   'swarm.scout-completed',
+  'swarm.scout-skipped',
   'swarm.scout-timeout',
   'swarm.scout-failed',
   'swarm.wave-completed',

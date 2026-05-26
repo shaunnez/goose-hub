@@ -54,11 +54,19 @@ function commandReferenceTokensForPath(path: string): string[] {
   return [...tokens].filter((token) => token.length >= 3);
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function textContainsBoundaryToken(text: string, token: string): boolean {
+  return new RegExp(`(^|[^A-Za-z0-9])${escapeRegExp(token)}([^A-Za-z0-9]|$)`, 'i').test(text);
+}
+
 export function commandMentionsWpFile(command: string, filesOwned: string[]): boolean {
-  const normalizedCommand = command.replace(/\\/g, '/').toLowerCase();
+  const normalizedCommand = command.replace(/\\/g, '/');
   return filesOwned.some((path) =>
     commandReferenceTokensForPath(path).some((token) =>
-      normalizedCommand.includes(token.replace(/\\/g, '/').toLowerCase()),
+      textContainsBoundaryToken(normalizedCommand, token.replace(/\\/g, '/')),
     ),
   );
 }
@@ -92,8 +100,7 @@ function verificationCommandsFromSpec(spec: EngineeringSpec): ExecutableCheck[] 
 }
 
 function textMentionsAnyToken(text: string, tokens: string[]): boolean {
-  const lower = text.toLowerCase();
-  return tokens.some((token) => lower.includes(token.toLowerCase()));
+  return tokens.some((token) => textContainsBoundaryToken(text, token));
 }
 
 function relevanceTokensForWp(input: {

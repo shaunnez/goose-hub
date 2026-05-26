@@ -1,7 +1,8 @@
 import { resumeIssue } from '@/lib/api';
+import type { CostLabel, CostRowDto } from '@/lib/types';
 import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import { AlertTriangle, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   type RenderItem,
   type TimelineContext,
@@ -66,9 +67,21 @@ export function RunGroupWrapper({
   const groupEventList = items
     .filter((item): item is Extract<RenderItem, { kind: 'event' }> => item.kind === 'event')
     .map((item) => item.event);
+  const scoutSemanticEvent = [...groupEventList]
+    .reverse()
+    .find((event) =>
+      [
+        'swarm.scout-failed',
+        'swarm.scout-timeout',
+        'swarm.scout-skipped',
+        'swarm.scout-completed',
+      ].includes(event.kind),
+    );
   const isFailed = groupEventList.some(
     (event) =>
       event.kind === 'agent.run-failed' ||
+      event.kind === 'swarm.scout-failed' ||
+      event.kind === 'swarm.scout-timeout' ||
       event.kind === 'qa.verification-blocked' ||
       event.kind === 'parallel-implement.exhausted' ||
       event.kind === 'parallel-implement.wp-failed' ||
@@ -132,10 +145,13 @@ export function RunGroupWrapper({
   const canResume =
     context != null && (isFailed || isStalled || isWritePrdStuck) && isLatestRun && !resumed;
 
-  const costRow = context?.runCosts?.get(runId);
-  const runTokens = costRow ? costRow.inputTokens + costRow.outputTokens : 0;
-  const displayModelId = costRow?.modelId ?? modelId;
-  const displayRuntime = runtime ?? costRow?.provider ?? null;
+  const runCost = useMemo(
+    () => aggregateRunGroupCosts(runId, groupEventList, context?.runCosts),
+    [runId, groupEventList, context?.runCosts],
+  );
+  const runTokens = runCost ? runCost.inputTokens + runCost.outputTokens : 0;
+  const displayModelId = runCost?.modelId ?? modelId;
+  const displayRuntime = runtime ?? runCost?.provider ?? null;
 
   const handleResume = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -149,25 +165,39 @@ export function RunGroupWrapper({
     }
   };
 
-  const statusBadge = isStalled ? (
-    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
-      <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-      Stalled
-    </span>
-  ) : isLive ? (
-    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
-      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-      Live
-    </span>
-  ) : isFailed ? (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-[color:var(--danger)] border border-red-500/20">
-      {isOrphaned ? 'Orphaned' : 'Failed'}
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-fg-5/10 text-fg-3 border border-line/50">
-      Complete
-    </span>
-  );
+  const statusBadge =
+    scoutSemanticEvent?.kind === 'swarm.scout-skipped' ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-fg-5/10 text-fg-3 border border-line/50">
+        Skipped
+      </span>
+    ) : scoutSemanticEvent?.kind === 'swarm.scout-failed' ||
+      scoutSemanticEvent?.kind === 'swarm.scout-timeout' ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-[color:var(--danger)] border border-red-500/20">
+        {scoutSemanticEvent.kind === 'swarm.scout-timeout' ? 'Timeout' : 'Failed'}
+      </span>
+    ) : scoutSemanticEvent?.kind === 'swarm.scout-completed' ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-fg-5/10 text-fg-3 border border-line/50">
+        Complete
+      </span>
+    ) : isStalled ? (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+        <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+        Stalled
+      </span>
+    ) : isLive ? (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+        Live
+      </span>
+    ) : isFailed ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-[color:var(--danger)] border border-red-500/20">
+        {isOrphaned ? 'Orphaned' : 'Failed'}
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-fg-5/10 text-fg-3 border border-line/50">
+        Complete
+      </span>
+    );
 
   const metaLine =
     isLive && !isStalled ? (
@@ -220,15 +250,15 @@ export function RunGroupWrapper({
           )}
           <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
           <span className="w-[72px] shrink-0 flex justify-start">{statusBadge}</span>
-          {costRow && (
+          {runCost && (
             <span className="shrink-0">
               <CostBadge
                 tokens={runTokens}
-                usd={costRow.costUsd}
-                label={costRow.costLabel}
+                usd={runCost.costUsd}
+                label={runCost.costLabel}
                 size="sm"
-                cacheHitRatio={costRow.cacheHitRatio}
-                reasoningOutputTokens={costRow.reasoningOutputTokens}
+                cacheHitRatio={runCost.cacheHitRatio}
+                reasoningOutputTokens={runCost.reasoningOutputTokens}
               />
             </span>
           )}
@@ -295,4 +325,57 @@ export function RunGroupWrapper({
       </details>
     </li>
   );
+}
+
+function aggregateRunGroupCosts(
+  runId: string,
+  events: Array<{ runId?: string | null }>,
+  runCosts: Map<string, CostRowDto> | undefined,
+): Pick<
+  CostRowDto,
+  | 'inputTokens'
+  | 'cachedInputTokens'
+  | 'outputTokens'
+  | 'reasoningOutputTokens'
+  | 'costUsd'
+  | 'costLabel'
+  | 'cacheHitRatio'
+  | 'modelId'
+  | 'provider'
+> | null {
+  if (runCosts == null) return null;
+  const runIds = new Set<string>([runId]);
+  for (const event of events) {
+    if (event.runId != null && event.runId.trim() !== '') runIds.add(event.runId);
+  }
+
+  const rows = [...runIds].map((id) => runCosts.get(id)).filter((row) => row != null);
+  if (rows.length === 0) return null;
+
+  let inputTokens = 0;
+  let cachedInputTokens = 0;
+  let outputTokens = 0;
+  let reasoningOutputTokens = 0;
+  let costUsd = 0;
+  let costLabel: CostLabel = 'exact';
+  for (const row of rows) {
+    inputTokens += row.inputTokens;
+    cachedInputTokens += row.cachedInputTokens;
+    outputTokens += row.outputTokens;
+    reasoningOutputTokens += row.reasoningOutputTokens;
+    costUsd += row.costUsd;
+    if (row.costLabel === 'estimated') costLabel = 'estimated';
+  }
+
+  return {
+    inputTokens,
+    cachedInputTokens,
+    outputTokens,
+    reasoningOutputTokens,
+    costUsd,
+    costLabel,
+    cacheHitRatio: cachedInputTokens / Math.max(inputTokens, 1),
+    modelId: rows[0].modelId,
+    provider: rows[0].provider,
+  };
 }
