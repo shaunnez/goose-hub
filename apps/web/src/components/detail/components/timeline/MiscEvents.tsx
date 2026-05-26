@@ -166,7 +166,14 @@ type DogfoodSeedAppliedPayload = {
   seedId?: string;
   baseBranch?: string;
   seedCommit?: string;
-  truthSignal?: string | boolean | number;
+  truthSignal?:
+    | string
+    | boolean
+    | number
+    | {
+        testFile?: string;
+        testName?: string;
+      };
 };
 
 function formatShortId(value: string | undefined): string | null {
@@ -204,6 +211,17 @@ function payloadString(payload: CompactOperationalPayload | null, key: string): 
 function payloadNumber(payload: CompactOperationalPayload | null, key: string): number | null {
   const value = payload?.[key];
   return typeof value === 'number' ? value : null;
+}
+
+function formatTruthSignal(value: DogfoodSeedAppliedPayload['truthSignal']): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  const parts = [value.testName, value.testFile].filter(
+    (part): part is string => typeof part === 'string' && part.length > 0,
+  );
+  return parts.length > 0 ? parts.join(' · ') : null;
 }
 
 function factoryResourceFromStderr(stderr: string | null): string | null {
@@ -300,6 +318,7 @@ export function SystemNoteEvent({ event }: { event: AgentEventDto }) {
 export function DogfoodSeedAppliedEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as DogfoodSeedAppliedPayload | null;
   const shortSeedCommit = formatShortId(p?.seedCommit);
+  const truthSignal = formatTruthSignal(p?.truthSignal);
 
   return (
     <li
@@ -316,7 +335,7 @@ export function DogfoodSeedAppliedEvent({ event }: { event: AgentEventDto }) {
         {p?.seedId != null && <span className="font-mono">{p.seedId}</span>}
         {p?.baseBranch != null && <span>{p.baseBranch}</span>}
         {shortSeedCommit != null && <span className="font-mono">{shortSeedCommit}</span>}
-        {p?.truthSignal != null && <span>truth {String(p.truthSignal)}</span>}
+        {truthSignal != null && <span>truth {truthSignal}</span>}
       </div>
     </li>
   );

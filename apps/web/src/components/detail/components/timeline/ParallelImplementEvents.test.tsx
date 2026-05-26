@@ -132,7 +132,7 @@ describe('ParallelImplementEvents', () => {
       wpId: 'WP2',
       pushedSha: 'f88f39a1080dc0ddc84c6e3bc9996ce1d9893368',
       integrationBranch: 'factory/run/805e37ae-2c79-40ef-b017-07b82dafbd09',
-      filesPersisted: 4,
+      filesPersisted: ['apps/web/src/Button.tsx', 'apps/web/src/Button.test.tsx'],
       persistMode: 'direct-integration-commit',
       pipelineRunId: '805e37ae-2c79-40ef-b017-07b82dafbd09',
       rawProbeKey: 'raw-value',
@@ -144,7 +144,7 @@ describe('ParallelImplementEvents', () => {
     const rendered = document.body.textContent ?? '';
     expect(rendered).toContain('f88f39a1');
     expect(rendered).toContain('factory/run/805e37ae-2c79-40ef-b017-07b82dafbd09');
-    expect(rendered).toContain('4 files persisted');
+    expect(rendered).toContain('2 files persisted');
     expect(rendered).toContain('direct-integration-commit');
     expect(rendered).not.toContain('"pushedSha"');
     expect(rendered).not.toContain('rawProbeKey');

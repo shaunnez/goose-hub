@@ -17,7 +17,7 @@ type ParallelPayload = {
   commitSha?: string;
   pushedSha?: string;
   integrationBranch?: string;
-  filesPersisted?: number;
+  filesPersisted?: string[] | number;
   persistMode?: string;
   pipelineRunId?: string;
   wpCount?: number;
@@ -53,6 +53,12 @@ function formatElapsed(ms: number | undefined): string | null {
   const seconds = Math.round(ms / 1000);
   if (seconds < 60) return `${seconds}s`;
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+function formatFilesPersisted(value: string[] | number | undefined): string | null {
+  const count = Array.isArray(value) ? value.length : value;
+  if (typeof count !== 'number') return null;
+  return `${count} file${count === 1 ? '' : 's'} persisted`;
 }
 
 function PipelineChip({ pipelineRunId }: { pipelineRunId?: string }) {
@@ -246,6 +252,7 @@ export function ParallelWpCommittedEvent({ event }: { event: AgentEventDto }) {
 export function ParallelWpPersistedEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as ParallelPayload | null;
   const shortSha = formatShortId(p?.pushedSha);
+  const filesPersisted = formatFilesPersisted(p?.filesPersisted);
 
   return (
     <ParallelEventShell
@@ -257,11 +264,7 @@ export function ParallelWpPersistedEvent({ event }: { event: AgentEventDto }) {
       <div className="space-y-1">
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
           {shortSha != null && <span className="font-mono text-fg-2">{shortSha}</span>}
-          {typeof p?.filesPersisted === 'number' && (
-            <span>
-              {p.filesPersisted} file{p.filesPersisted === 1 ? '' : 's'} persisted
-            </span>
-          )}
+          {filesPersisted != null && <span>{filesPersisted}</span>}
           {p?.persistMode != null && <span>{p.persistMode}</span>}
           <PipelineChip pipelineRunId={p?.pipelineRunId} />
         </div>

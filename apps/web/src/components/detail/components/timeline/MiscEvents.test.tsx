@@ -32,7 +32,10 @@ describe('Misc timeline events', () => {
       seedId: 'seed-issue-1061',
       baseBranch: 'main',
       seedCommit: 'df129a7113e7344f045166b5e5dc0b7214632c8d',
-      truthSignal: 'green',
+      truthSignal: {
+        testFile: 'apps/web/src/lib/logger.test.ts',
+        testName: 'drops metadata from browser logs',
+      },
       rawProbeKey: 'raw-value',
     });
 
@@ -43,8 +46,10 @@ describe('Misc timeline events', () => {
     expect(rendered).toContain('seed-issue-1061');
     expect(rendered).toContain('main');
     expect(rendered).toContain('df129a71');
-    expect(rendered).toContain('truth green');
+    expect(rendered).toContain('truth drops metadata from browser logs');
+    expect(rendered).toContain('apps/web/src/lib/logger.test.ts');
     expect(rendered).not.toContain('"seedCommit"');
+    expect(rendered).not.toContain('[object Object]');
     expect(rendered).not.toContain('rawProbeKey');
     expect(rendered).not.toContain('raw-value');
   });
