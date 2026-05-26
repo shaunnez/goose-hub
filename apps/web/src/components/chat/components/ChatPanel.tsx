@@ -64,6 +64,7 @@ export function ChatPanel({ open, onClose, restoreLastConversationOnOpen = true 
   //  * the open-panel roster effect clobbering a thread the user just clicked
   //    "New" to create while the list was still in flight.
   const loadTokenRef = useRef(0);
+  const previousOpenRef = useRef(open);
   const activeConversationIdRef = useRef<string | null>(null);
   const inFlightRunByConversationRef = useRef<Map<string, string>>(new Map());
 
@@ -137,6 +138,22 @@ export function ChatPanel({ open, onClose, restoreLastConversationOnOpen = true 
     }
   }, []);
 
+  const resetToListView = useCallback(() => {
+    setConversation(null);
+    setMessages([]);
+    setInvocations([]);
+    setView('list');
+  }, []);
+
+  useEffect(() => {
+    const openChanged = previousOpenRef.current !== open;
+    previousOpenRef.current = open;
+    if (restoreLastConversationOnOpen) return;
+    if (!openChanged && !open) return;
+    loadTokenRef.current += 1;
+    resetToListView();
+  }, [open, restoreLastConversationOnOpen, resetToListView]);
+
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;
     let cancelled = false;
@@ -198,10 +215,7 @@ export function ChatPanel({ open, onClose, restoreLastConversationOnOpen = true 
         if (cancelled || loadTokenRef.current !== openToken) return;
         setConversations(list);
         if (!restoreLastConversationOnOpen) {
-          setConversation(null);
-          setMessages([]);
-          setInvocations([]);
-          setView('list');
+          resetToListView();
           return;
         }
         const previousId = readActiveId();
@@ -228,7 +242,7 @@ export function ChatPanel({ open, onClose, restoreLastConversationOnOpen = true 
     return () => {
       cancelled = true;
     };
-  }, [open, readActiveId, loadConversation, restoreLastConversationOnOpen]);
+  }, [open, readActiveId, loadConversation, resetToListView, restoreLastConversationOnOpen]);
 
   const handleNewConversation = useCallback(async () => {
     setBusy(true);

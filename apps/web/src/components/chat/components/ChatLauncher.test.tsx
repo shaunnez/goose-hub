@@ -57,7 +57,9 @@ function click(element: Element | null) {
   if (element == null) {
     throw new Error('Expected clickable element');
   }
-  element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  flushSync(() => {
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
 }
 
 const mountedRoots: Array<{ unmount: () => void }> = [];
