@@ -12,12 +12,13 @@ import {
 } from './verify.js';
 
 const REAL_PROJECT_SLUG = 'goose-hub-self';
-const { mockRunCommand } = vi.hoisted(() => ({
+const { mockMinimalEnv, mockRunCommand } = vi.hoisted(() => ({
+  mockMinimalEnv: vi.fn((extras: Record<string, string> = {}) => extras),
   mockRunCommand: vi.fn(),
 }));
 
 vi.mock('../command-policy.js', () => ({
-  minimalEnv: () => ({}),
+  minimalEnv: (...args: unknown[]) => mockMinimalEnv(...args),
   runCommand: (...args: unknown[]) => mockRunCommand(...args),
 }));
 
@@ -25,6 +26,7 @@ let workspace: string;
 let ctx: FactoryContext;
 
 beforeEach(() => {
+  mockMinimalEnv.mockClear();
   mockRunCommand.mockResolvedValue({
     status: 'ok',
     exitCode: 0,
@@ -84,6 +86,21 @@ describe('runTypecheckTool', () => {
 });
 
 describe('runTestsTool', () => {
+  it('runs tests with NODE_ENV=test so React test builds expose act()', async () => {
+    writeFileSync(join(workspace, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+    writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'demo' }));
+    writeFileSync(join(workspace, 'README.md'), '# demo\n');
+
+    await runTestsTool(ctx, {});
+
+    expect(mockMinimalEnv).toHaveBeenCalledWith({ NODE_ENV: 'test' });
+    expect(mockRunCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: { NODE_ENV: 'test' },
+      }),
+    );
+  });
+
   it('returns raw and canonical test paths for a targeted test run', async () => {
     writeFileSync(join(workspace, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
     writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'demo' }));

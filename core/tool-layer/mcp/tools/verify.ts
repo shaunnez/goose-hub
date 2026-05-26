@@ -202,7 +202,7 @@ export async function runTestsTool(
     runId: ctx.runId,
     displayOutput: true,
     timeoutMs: TEST_TIMEOUT_MS,
-    env: minimalEnv(),
+    env: minimalEnv({ NODE_ENV: 'test' }),
   });
 
   if (result.status === 'ok') {

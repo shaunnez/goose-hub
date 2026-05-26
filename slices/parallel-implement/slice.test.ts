@@ -888,6 +888,102 @@ describe('parallel-implement repo-relative path normalization', () => {
 });
 
 describe('implement-wp ownership gate', () => {
+  it('stops retrying when a WP returns a terminal TOOL_FAILURE decision', async () => {
+    const repoPath = makeTempRepo(['core/a.ts']);
+    const issueWorktree = makeTempRepo(['core/a.ts']);
+    const scratchWorktree = makeTempRepo(['core/a.ts']);
+    const spec = makeSpec([makeWp('WP1', ['core/a.ts'])]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const stateSource = makeStateSource();
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+    const iterations: Array<{ wpId: string; status: string; reason?: string }> = [];
+    let runtimeCalls = 0;
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        makeWorkItem({ priority: 'medium' }),
+        spec,
+        'pipeline-terminal-tool-failure',
+        stateSource,
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: {
+            run: async () => {
+              runtimeCalls++;
+              const output: ImplementWpOutput = {
+                wpId: 'WP1',
+                plan: 'Cannot verify while harness is unavailable',
+                filesWritten: [],
+                testsWritten: [],
+                testsRun: { command: 'not run', paths: [] },
+                confidence: 'high',
+                decisionSummaries: [{ kind: 'TOOL_FAILURE', summary: 'test harness unavailable' }],
+              };
+              return { output, decisionSummaries: [], events: [] };
+            },
+          },
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          createIssueWorktreeImpl: () => issueWorktree,
+          createWpWorktreeImpl: () => scratchWorktree,
+          cleanupWpWorktreesImpl: () => undefined,
+          orchestratorCommitWpImpl: vi.fn(),
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: (_runId, wpId, _iteration, status, reason) => {
+            iterations.push({ wpId, status, reason });
+          },
+          getLastStatusImpl: (_runId, wpId) => {
+            const last = [...iterations].reverse().find((entry) => entry.wpId === wpId);
+            return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+          },
+          openPRImpl: vi.fn(),
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+          appendEvent,
+        },
+      );
+
+      expect(result).toMatchObject({
+        status: 'failed',
+        errorReason: expect.stringContaining('TOOL_FAILURE'),
+      });
+      expect(runtimeCalls).toBe(1);
+      expect(
+        events.filter((event) => event.kind === 'parallel-implement.iteration-started'),
+      ).toHaveLength(1);
+      expect(
+        events.some(
+          (event) =>
+            event.kind === 'parallel-implement.iteration-started' &&
+            (event.payload as { iteration?: number }).iteration === 2,
+        ),
+      ).toBe(false);
+      const terminalEvent = events.find(
+        (event) => event.kind === 'parallel-implement.wp-terminal-blocked',
+      );
+      expect(terminalEvent?.payload).toMatchObject({
+        wpId: 'WP1',
+        decisionKind: 'TOOL_FAILURE',
+        errorReason: expect.stringContaining('test harness unavailable'),
+      });
+      expect(stateSource.comment).toHaveBeenCalledWith(
+        '560',
+        expect.stringContaining('Parallel implement stopped on terminal WP blocker'),
+      );
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
   it('fails schema-valid WPs that wrote tests without passing matching run_tests', async () => {
     const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']);
     const { fn: appendEvent, events } = makeAppendEvent();
