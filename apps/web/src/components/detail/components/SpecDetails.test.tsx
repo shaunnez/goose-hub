@@ -98,23 +98,16 @@ const SPEC: EngineeringSpecDto = {
 };
 
 describe('SpecDetails', () => {
-  it('renders collapsed header regardless of lifecycle state', () => {
-    render(<SpecDetails spec={SPEC} itemState="factory:investigation-complete" />);
-    expect(screen.getByText('Engineering Spec')).toBeTruthy();
-    expect(screen.getByText('2 work packages · 5 AC')).toBeTruthy();
-    expect(screen.queryByText('Build the authentication flow with token refresh.')).toBeNull();
-  });
-
-  it('renders collapsed header when state is factory:dev-ready', () => {
-    render(<SpecDetails spec={SPEC} itemState="factory:dev-ready" />);
+  it('renders a collapsed accordion header by default', () => {
+    render(<SpecDetails spec={SPEC} />);
     expect(screen.getByText('Engineering Spec')).toBeTruthy();
     expect(screen.getByText('2 work packages · 5 AC')).toBeTruthy();
     expect(screen.queryByText('Build the authentication flow with token refresh.')).toBeNull();
   });
 
   it('expands to show all populated engineering spec sections', async () => {
-    render(<SpecDetails spec={SPEC} itemState="factory:dev-ready" />);
-    await userEvent.click(screen.getByText('Engineering Spec'));
+    render(<SpecDetails spec={SPEC} />);
+    await userEvent.click(screen.getByRole('button', { name: /engineering spec/i }));
     expect(screen.getByText('Build the authentication flow with token refresh.')).toBeTruthy();
     expect(screen.getByText('Move refresh validation into session middleware.')).toBeTruthy();
     expect(screen.getAllByText('WP1').length).toBeGreaterThan(1);
@@ -140,8 +133,8 @@ describe('SpecDetails', () => {
   });
 
   it('does not render legacy verifyCommand text for canonical criteria without executable checks', async () => {
-    render(<SpecDetails spec={SPEC} itemState="factory:dev-ready" />);
-    await userEvent.click(screen.getByText('Engineering Spec'));
+    render(<SpecDetails spec={SPEC} />);
+    await userEvent.click(screen.getByRole('button', { name: /engineering spec/i }));
     expect(screen.getByText('Expired tokens are rejected.')).toBeTruthy();
     expect(screen.queryByText(/verifyCommand/i)).toBeNull();
     expect(screen.queryByText(/missing/i)).toBeNull();
