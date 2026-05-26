@@ -17,6 +17,7 @@ export function ChatDock() {
       return false;
     }
   });
+  const [restoreActiveConversationOnOpen, setRestoreActiveConversationOnOpen] = useState(true);
 
   useEffect(() => {
     try {
@@ -26,8 +27,25 @@ export function ChatDock() {
 
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} />
-      <ChatLauncher open={open} onToggle={() => setOpen((o) => !o)} />
+      <ChatPanel
+        open={open}
+        onClose={() => {
+          setRestoreActiveConversationOnOpen(true);
+          setOpen(false);
+        }}
+        restoreActiveConversationOnOpen={restoreActiveConversationOnOpen}
+      />
+      <ChatLauncher
+        open={open}
+        onToggle={() => {
+          if (open) {
+            setRestoreActiveConversationOnOpen(false);
+            setOpen(false);
+            return;
+          }
+          setOpen(true);
+        }}
+      />
     </>
   );
 }
