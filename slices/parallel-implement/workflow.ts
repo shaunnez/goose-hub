@@ -45,6 +45,7 @@ import {
   revertWpChanges,
 } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import {
+  assertGooseHubWebPlaywrightReady,
   type cleanupWorktree,
   createIntegrationWorktree,
   createWorktree,
@@ -92,6 +93,8 @@ export interface ParallelImplementDeps {
   createIssueWorktreeImpl?: typeof createWorktree;
   /** Override dependency prewarm for tests or alternate package managers. */
   prewarmWorktreeImpl?: typeof prewarmWorktree;
+  /** Override post-prewarm dependency verification for tests or alternate package managers. */
+  verifyWorktreeDependenciesImpl?: (worktreePath: string) => void;
   resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
   createIntegrationWorktreeImpl?: typeof createIntegrationWorktree;
   reattachIntegrationWorktreeAtRemoteTipImpl?: typeof reattachIntegrationWorktreeAtRemoteTip;
@@ -577,6 +580,15 @@ export async function runParallelImplementWorkflow(
     (deps.createIssueWorktreeImpl == null && deps.createWpWorktreeImpl == null
       ? prewarmWorktree
       : () => undefined);
+  const shouldRunDefaultWorktreeDependencyPreflight =
+    deps.prewarmWorktreeImpl == null &&
+    deps.createIssueWorktreeImpl == null &&
+    deps.createWpWorktreeImpl == null;
+  const verifyWorktreeDepsFn =
+    deps.verifyWorktreeDependenciesImpl ??
+    (shouldRunDefaultWorktreeDependencyPreflight
+      ? assertGooseHubWebPlaywrightReady
+      : () => undefined);
   const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBase;
   const cleanupWpsFn = deps.cleanupWpWorktreesImpl ?? cleanupAllWpWorktrees;
   // cleanupIssueWorktreeImpl is available for test injection but unused in production:
@@ -812,6 +824,21 @@ export async function runParallelImplementWorkflow(
     issueWorktreePath = integrationWorktree.worktreePath;
     integrationHeadSha = latestPersisted?.pushedSha ?? integrationWorktree.previousHeadSha;
     prewarmWtFn(issueWorktreePath);
+    try {
+      verifyWorktreeDepsFn(issueWorktreePath);
+    } catch (err) {
+      const reason =
+        err instanceof Error
+          ? err.message
+          : 'worktree dependencies unavailable: verification tooling not resolvable';
+      await stateSource.comment(
+        workItem.externalId,
+        buildAgentComment('Dev', 'Failed', 'Parallel implement dependency preflight failed', [
+          reason,
+        ]),
+      );
+      return { status: 'failed', devRunId: runId, errorReason: reason };
+    }
 
     const allWpResults: WpDispatchResult[] = [...persistedByWp.values()].map((checkpoint) => ({
       wpId: checkpoint.wpId,
@@ -886,6 +913,7 @@ export async function runParallelImplementWorkflow(
             verificationCommands,
             parentPrdContext,
             implementWpControl,
+            verifyWorktreeDependenciesFn: verifyWorktreeDepsFn,
           }),
         );
 

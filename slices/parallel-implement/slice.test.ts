@@ -559,6 +559,97 @@ describe('parallel-implement repo-relative path normalization', () => {
     }
   });
 
+  it('blocks a WP before spawning implement-wp when dependency preflight fails', async () => {
+    const repoPath = makeTempRepo(['apps/web/src/foo.ts']);
+    const issueWorktree = makeTempRepo(['apps/web/src/foo.ts']);
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts']);
+    const spec = makeSpec([makeWp('WP1', ['apps/web/src/foo.ts'])]);
+    const verified: string[] = [];
+    const iterations: Array<{ wpId: string; status: string; errorReason?: string }> = [];
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const stateSource = makeStateSource();
+    let runtimeCalled = false;
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        makeWorkItem({ priority: 'medium' }),
+        spec,
+        'pipeline-run-preflight',
+        stateSource,
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: {
+            run: async () => {
+              runtimeCalled = true;
+              throw new Error('runtime should not be called');
+            },
+          },
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          createIssueWorktreeImpl: () => issueWorktree,
+          createWpWorktreeImpl: () => scratchWorktree,
+          prewarmWorktreeImpl: () => undefined,
+          verifyWorktreeDependenciesImpl: (worktreePath) => {
+            verified.push(worktreePath);
+            if (worktreePath === scratchWorktree) {
+              throw new Error(
+                'worktree dependencies unavailable: @goose-hub/web playwright binary not resolvable',
+              );
+            }
+          },
+          cleanupWpWorktreesImpl: () => undefined,
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: (_runId, wpId, _iteration, status, errorReason) => {
+            iterations.push({ wpId, status, errorReason });
+          },
+          getLastStatusImpl: () => null,
+          appendEvent,
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+        },
+      );
+
+      expect(result.status).toBe('failed');
+      if (result.status !== 'failed') throw new Error('expected dependency preflight failure');
+      expect(result.errorReason).toContain('@goose-hub/web playwright binary not resolvable');
+      expect(runtimeCalled).toBe(false);
+      expect(verified).toEqual([issueWorktree, scratchWorktree]);
+      expect(iterations).toContainEqual({
+        wpId: 'WP1',
+        status: 'failed',
+        errorReason:
+          'worktree dependencies unavailable: @goose-hub/web playwright binary not resolvable',
+      });
+      expect(events.find((event) => event.kind === 'parallel-implement.wp-failed')).toMatchObject({
+        payload: {
+          wpId: 'WP1',
+          failureKind: 'terminal-blocker',
+          decisionKind: 'BLOCKER',
+        },
+      });
+      expect(
+        events.find((event) => event.kind === 'parallel-implement.wp-terminal-blocked'),
+      ).toMatchObject({
+        payload: {
+          wpId: 'WP1',
+          decisionKind: 'BLOCKER',
+        },
+      });
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
   it('commits only observed changed files, so uncreated filesOwned paths do not break WP commit', async () => {
     const repoPath = makeGitRepo({ 'apps/web/src/foo.ts': 'export const foo = 1;\n' });
     const issueWorktree = makeTempRepo();

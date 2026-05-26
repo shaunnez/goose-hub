@@ -232,6 +232,32 @@ describe('Tier 2 (Functional) — golden test', () => {
     ]);
   });
 
+  it('normalizes filtered web Playwright repo-root paths to package-relative paths', async () => {
+    const commands: string[] = [];
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'pipeline smoke',
+          command:
+            'pnpm --filter @goose-hub/web exec playwright test apps/web/e2e/pipeline/golden-feature.spec.ts',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp', {
+      runVerificationCommandImpl: async (command) => {
+        commands.push(command);
+        return { passed: true, output: '' };
+      },
+    });
+
+    expect(result.passed).toBe(true);
+    expect(commands).toEqual([
+      'pnpm --filter @goose-hub/web exec playwright test e2e/pipeline/golden-feature.spec.ts',
+    ]);
+  });
+
   it('classifies a bare test file path as verification infrastructure failure', async () => {
     const spec = makeSpec({
       verificationTooling: [

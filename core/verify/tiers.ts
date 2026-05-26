@@ -160,6 +160,10 @@ export function verifyStructural(
 const BARE_REPO_PATH_PATTERN = /^(?:\.\/)?[\w@./-]+\.[A-Za-z0-9]+$/;
 const LAUNCH_ERROR_MARKER = 'GOOSE_VERIFICATION_COMMAND_LAUNCH_ERROR';
 const ROOT_WEB_PLAYWRIGHT_PREFIX = 'pnpm exec playwright test apps/web/e2e/';
+const FILTERED_WEB_PLAYWRIGHT_REPO_PATH_PREFIX =
+  'pnpm --filter @goose-hub/web exec playwright test apps/web/e2e/';
+const FILTERED_WEB_PLAYWRIGHT_PACKAGE_PATH_PREFIX =
+  'pnpm --filter @goose-hub/web exec playwright test e2e/';
 
 export function isBareVerificationPath(command: unknown): boolean {
   if (typeof command !== 'string') return false;
@@ -230,11 +234,22 @@ function isLikelyVerificationHarnessFailure(detail: string): boolean {
 
 function normalizeVerificationCommand(command: string): string {
   const trimmed = command.trim();
-  if (!trimmed.startsWith(ROOT_WEB_PLAYWRIGHT_PREFIX)) {
+  if (trimmed.startsWith(FILTERED_WEB_PLAYWRIGHT_PACKAGE_PATH_PREFIX)) {
     return command;
   }
+  if (trimmed.startsWith(FILTERED_WEB_PLAYWRIGHT_REPO_PATH_PREFIX)) {
+    return normalizeWebPlaywrightCommand(
+      trimmed.slice(FILTERED_WEB_PLAYWRIGHT_REPO_PATH_PREFIX.length),
+    );
+  }
+  if (trimmed.startsWith(ROOT_WEB_PLAYWRIGHT_PREFIX)) {
+    return normalizeWebPlaywrightCommand(trimmed.slice(ROOT_WEB_PLAYWRIGHT_PREFIX.length));
+  }
 
-  const webSpecAndArgs = trimmed.slice(ROOT_WEB_PLAYWRIGHT_PREFIX.length);
+  return command;
+}
+
+function normalizeWebPlaywrightCommand(webSpecAndArgs: string): string {
   const specPath = webSpecAndArgs.split(/\s+/, 1)[0] ?? '';
   const packageRelative = `e2e/${webSpecAndArgs}`;
 

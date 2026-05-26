@@ -1,6 +1,9 @@
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  WorktreeDependencyPreflightError,
+  assertGooseHubWebPlaywrightReady,
+  assertPnpmPackageExecutableAvailable,
   cleanupWorktree,
   createIntegrationWorktree,
   createWorktree,
@@ -74,6 +77,40 @@ describe('createWorktree', () => {
       throw new Error('git worktree add failed');
     });
     expect(() => createWorktree('/repo/path', 'run-abc-123')).toThrow('git worktree add failed');
+  });
+});
+
+describe('worktree dependency preflight', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(execFileSync).mockReturnValue(Buffer.from('Version 1.56.0\n'));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('checks a pnpm package executable with package-scoped exec', () => {
+    assertPnpmPackageExecutableAvailable('/worktree', '@goose-hub/web', 'playwright');
+
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'pnpm',
+      ['--filter', '@goose-hub/web', 'exec', 'playwright', '--version'],
+      expect.objectContaining({ cwd: '/worktree', stdio: 'pipe' }),
+    );
+  });
+
+  it('wraps missing package executables as worktree dependency preflight errors', () => {
+    vi.mocked(execFileSync).mockImplementation(() => {
+      throw new Error('playwright: command not found');
+    });
+
+    expect(() => assertGooseHubWebPlaywrightReady('/worktree')).toThrow(
+      WorktreeDependencyPreflightError,
+    );
+    expect(() => assertGooseHubWebPlaywrightReady('/worktree')).toThrow(
+      'worktree dependencies unavailable: @goose-hub/web playwright binary not resolvable',
+    );
   });
 });
 
