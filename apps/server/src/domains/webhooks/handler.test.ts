@@ -1,4 +1,6 @@
 import { createHmac } from 'node:crypto';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ──────────────────────────────────────────────────────────────
@@ -169,6 +171,36 @@ describe('POST /webhooks/github', () => {
         42,
         'factory:investigating',
       ),
+    );
+  });
+
+  it('records local-db label changes without dispatching GitHub label workflows', async () => {
+    vi.mocked(loadProjects).mockResolvedValueOnce([
+      {
+        id: 'local-proj',
+        slug: 'local-proj',
+        repos: ['shaunnez/goose-hub'],
+        source: { kind: 'local-db', stateMachine: 'db' },
+      } as never,
+    ]);
+    const appendSpy = vi.spyOn(eventStore, 'appendEvent');
+    const body = JSON.stringify({
+      action: 'labeled',
+      label: { name: 'factory:investigating' },
+      issue: { number: 42 },
+      repository: { full_name: 'shaunnez/goose-hub' },
+    });
+
+    const res = await postWebhook(body, { event: 'issues' });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ action: 'recorded', slug: 'local-proj' });
+    expect(mockDispatchForLabel).not.toHaveBeenCalled();
+    expect(appendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'local-proj',
+        kind: 'github.label.changed',
+      }),
     );
   });
 

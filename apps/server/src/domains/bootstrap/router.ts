@@ -13,7 +13,7 @@
 
 import { Hono } from 'hono';
 import { parseBody } from '#shared/middleware.js';
-import { previewBootstrapService, runBootstrapService } from './service.js';
+import { activateLocalDbProject, previewBootstrapService, runBootstrapService } from './service.js';
 
 const router = new Hono();
 
@@ -40,6 +40,18 @@ router.post('/bootstrap/run', async (c) => {
   }>(c);
   if (!body.ok) return body.error;
   const result = await runBootstrapService(body.data);
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404 | 500 | 502);
+});
+
+router.post('/bootstrap/activate', async (c) => {
+  const body = await parseBody<{ slug?: string }>(c);
+  if (!body.ok) return body.error;
+  if (typeof body.data.slug !== 'string' || body.data.slug.trim().length === 0) {
+    return c.json({ error: 'slug is required' }, 400);
+  }
+  const result = await activateLocalDbProject(body.data.slug.trim());
   return result.ok
     ? c.json(result.data)
     : c.json({ error: result.error }, result.status as 400 | 404 | 500 | 502);

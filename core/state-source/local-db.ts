@@ -1,6 +1,8 @@
+import { mirrorGithubLabels } from '../integrations/github/label-mirror.js';
 import type { StateName } from '../state-machine/states.js';
 import { STATES } from '../state-machine/states.js';
 import { isLegalTransition } from '../state-machine/transitions.js';
+import type { LocalDbSourceConfig } from '../types.js';
 import { parseDependencies } from './dependency-parser.js';
 import type {
   Artifact,
@@ -72,11 +74,13 @@ export class LocalDbStateSource implements StateSource {
     readonly projectId: string,
     readonly repoRef: string,
     private readonly repository = new LocalDbWorkItemRepository(),
+    private readonly integrations?: LocalDbSourceConfig['integrations'],
   ) {}
 
   private toWorkItem(row: LocalDbWorkItemRow): WorkItem {
     const repoLinks = this.repository.listRepoLinks(this.projectId, row.id);
-    const repoRef = repoLinks[0]?.repoRef ?? this.repoRef;
+    const repoRef =
+      (repoLinks.find((link) => link.role === 'primary') ?? repoLinks[0])?.repoRef ?? this.repoRef;
     return {
       id: row.id,
       externalId: row.externalId,
@@ -155,6 +159,7 @@ export class LocalDbStateSource implements StateSource {
       actor: 'goose-hub',
     });
     if (note != null && note.length > 0) await this.comment(itemId, note);
+    await this.mirrorLabelsBestEffort(itemId);
   }
 
   async forceState(itemId: string, to: StateName): Promise<void> {
@@ -165,6 +170,7 @@ export class LocalDbStateSource implements StateSource {
       mode: 'forced',
       actor: 'goose-hub',
     });
+    await this.mirrorLabelsBestEffort(itemId);
   }
 
   async comment(itemId: string, body: string): Promise<void> {
@@ -188,6 +194,7 @@ export class LocalDbStateSource implements StateSource {
     if (group === 'schedule' && !SCHEDULES.has(value as Schedule)) return;
     if (group === 'type' && !TYPES.has(value as WorkItemType)) return;
     this.repository.setMetadata(this.projectId, itemId, group, value);
+    await this.mirrorLabelsBestEffort(itemId);
   }
 
   async addLabels(itemId: string, labels: string[]): Promise<void> {
@@ -284,10 +291,33 @@ export class LocalDbStateSource implements StateSource {
       .filter((ref) => ref.provider === 'github' && ref.kind === 'pull_request');
     const ref = prRefs[prRefs.length - 1];
     if (ref == null || ref.repoRef == null) return '';
-    return '';
+    const token = process.env.GITHUB_TOKEN ?? '';
+    if (token.length === 0) return '';
+    const response = await fetch(
+      `https://api.github.com/repos/${ref.repoRef}/pulls/${ref.externalId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3.diff',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      },
+    );
+    if (!response.ok) return '';
+    return response.text();
   }
 
   async watchForUpdates(_callback: (event: SourceEvent) => void): Promise<Subscription> {
     return { unsubscribe() {} };
+  }
+
+  private async mirrorLabelsBestEffort(itemId: string): Promise<void> {
+    const item = await this.getItem(itemId);
+    await mirrorGithubLabels({
+      projectId: this.projectId,
+      item,
+      config: this.integrations,
+      repository: this.repository,
+    });
   }
 }

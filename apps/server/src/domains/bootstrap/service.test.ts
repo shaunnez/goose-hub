@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockBootstrapProject, mockInspectGithubRepo } = vi.hoisted(() => ({
-  mockBootstrapProject: vi.fn(),
-  mockInspectGithubRepo: vi.fn(),
-}));
+const { mockBootstrapProject, mockGetProject, mockImportIssues, mockInspectGithubRepo } =
+  vi.hoisted(() => ({
+    mockBootstrapProject: vi.fn(),
+    mockGetProject: vi.fn(),
+    mockImportIssues: vi.fn(),
+    mockInspectGithubRepo: vi.fn(),
+  }));
 
 vi.mock('@goose-hub/core/workflows/bootstrap-project.js', async () => {
   const actual = await vi.importActual<
@@ -19,7 +22,15 @@ vi.mock('@goose-hub/core/bootstrap/github-repo-inspector.js', () => ({
   inspectGithubRepo: mockInspectGithubRepo,
 }));
 
-import { previewBootstrapService, runBootstrapService } from './service.js';
+vi.mock('@goose-hub/core/integrations/github/import-issues.js', () => ({
+  importGitHubIssuesToLocalDb: mockImportIssues,
+}));
+
+vi.mock('#shared/projects.js', () => ({
+  getProject: mockGetProject,
+}));
+
+import { activateLocalDbProject, previewBootstrapService, runBootstrapService } from './service.js';
 
 const ORIGINAL_TOKEN = process.env.GITHUB_TOKEN;
 const ORIGINAL_MOCK = process.env.MOCK_BOOTSTRAP;
@@ -28,6 +39,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.GITHUB_TOKEN = 'test-token';
   Reflect.deleteProperty(process.env, 'MOCK_BOOTSTRAP');
+  mockGetProject.mockResolvedValue(null);
+  mockImportIssues.mockResolvedValue({ imported: 0, updated: 0, skipped: 0, repoRefs: [] });
 });
 
 afterEach(() => {
@@ -36,6 +49,54 @@ afterEach(() => {
   if (ORIGINAL_MOCK === undefined) Reflect.deleteProperty(process.env, 'MOCK_BOOTSTRAP');
   else process.env.MOCK_BOOTSTRAP = ORIGINAL_MOCK;
   vi.unstubAllGlobals();
+});
+
+describe('activateLocalDbProject', () => {
+  it('runs idempotent GitHub import for local-db projects', async () => {
+    const cfg = {
+      id: 'widgets',
+      slug: 'widgets',
+      source: {
+        kind: 'local-db',
+        stateMachine: 'db',
+        integrations: {
+          github: { repos: ['octo/widgets'], importIssues: true, mirrorLabels: true },
+        },
+      },
+      repos: ['octo/widgets'],
+    };
+    mockGetProject.mockResolvedValue(cfg);
+    mockImportIssues.mockResolvedValue({
+      imported: 2,
+      updated: 1,
+      skipped: 0,
+      repoRefs: ['octo/widgets'],
+    });
+
+    const result = await activateLocalDbProject('widgets');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        reposLinked: 1,
+        issuesImported: 2,
+        issuesUpdated: 1,
+        mirrorLabels: true,
+      },
+    });
+    expect(mockImportIssues).toHaveBeenCalledWith(
+      expect.objectContaining({ projectConfig: cfg, token: 'test-token' }),
+    );
+  });
+
+  it('rejects activation for non-local-db projects', async () => {
+    mockGetProject.mockResolvedValue({ id: 'x', source: { kind: 'github', repo: 'o/r' } });
+
+    const result = await activateLocalDbProject('x');
+
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect(mockImportIssues).not.toHaveBeenCalled();
+  });
 });
 
 describe('previewBootstrapService', () => {

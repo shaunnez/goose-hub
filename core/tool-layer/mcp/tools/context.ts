@@ -2,6 +2,7 @@ import type { z } from 'zod';
 import { eventStore } from '../../../event-stream/store.js';
 import { getProjectBySlug } from '../../../projects/loader.js';
 import type { WorkItem } from '../../../state-source/interface.js';
+import { listLocalDbRepoLinks } from '../../../workspaces/repo-affinity.js';
 import { recordDecision } from '../../tools/record-decision.js';
 import { emitToolCall } from '../audit.js';
 import type { FactoryContext } from '../context.js';
@@ -31,6 +32,14 @@ export interface GetProjectContextResult {
   mode: string;
   activeMilestone: string | null;
   repos: ReadonlyArray<string>;
+  repositories: ReadonlyArray<{
+    id: string;
+    repoRef: string;
+    localPath: string | null;
+    defaultBranch: string;
+    role: string;
+    selectedForWorkItem: boolean;
+  }>;
 }
 
 export interface GetStackCommandsResult {
@@ -65,6 +74,9 @@ export async function getProjectContext(
       `No project config found for slug '${ctx.projectId}'.`,
     );
   }
+  const linkedRepoRefs = new Set(
+    listLocalDbRepoLinks(project.id, ctx.workItemId).map((link) => link.repoRef),
+  );
 
   const result: GetProjectContextResult = {
     id: project.id,
@@ -73,6 +85,17 @@ export async function getProjectContext(
     mode: project.mode,
     activeMilestone: project.activeMilestone ?? null,
     repos: project.repos ?? [],
+    repositories: (project.repositories ?? []).map((repo) => ({
+      id: repo.id,
+      repoRef: repo.repoRef,
+      localPath: repo.localPath ?? null,
+      defaultBranch: repo.defaultBranch,
+      role: repo.role ?? 'unknown',
+      selectedForWorkItem:
+        linkedRepoRefs.has(repo.repoRef) ||
+        (ctx.workItemId.length > 0 &&
+          (ctx.workItemId.includes(repo.repoRef) || ctx.workspaceRoot === repo.localPath)),
+    })),
   };
 
   emitToolCall(ctx, { tool: 'get_project_context', input: {}, status: 'ok' });

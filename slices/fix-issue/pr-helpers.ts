@@ -193,6 +193,7 @@ export function buildPrBody(opts: {
   workItem: WorkItem;
   implementOutput: ImplementOutputShape;
   observedChangedFiles?: ObservedChangedFilesPacket;
+  closesIssueNumber?: number | null;
 }): string {
   // Body intentionally contains NO implementation reasoning (FACTORY_RULES
   // rule 1 — QA / Reviewer holdouts read this on M8). Lists files written
@@ -209,6 +210,11 @@ export function buildPrBody(opts: {
     .map((t) => `- \`${t.path}\` (${t.cases} cases)`)
     .join('\n');
 
+  const closingLine =
+    opts.closesIssueNumber == null
+      ? `Local Work Item: ${opts.workItem.id}`
+      : `Closes #${opts.closesIssueNumber}`;
+
   return `## Summary
 
 ${opts.workItem.title}
@@ -219,7 +225,7 @@ ${filesList || '_no files reported_'}
 ## Tests
 ${testsList || '_no tests reported_'}
 
-Closes #${opts.workItem.externalId}
+${closingLine}
 `;
 }
 
