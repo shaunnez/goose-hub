@@ -75,6 +75,22 @@ function makeEvent(id: number, kind: string): AgentEventDto {
   };
 }
 
+function makeDiscoverEvent(
+  id: number,
+  kind: string,
+  options: { payload?: Record<string, unknown>; runId?: string; createdAt?: string } = {},
+): AgentEventDto {
+  return {
+    id,
+    projectId: 'proj',
+    workItemId: 'wi-1',
+    kind,
+    payload: options.payload ?? {},
+    runId: options.runId,
+    createdAt: options.createdAt ?? new Date(Date.now() + id * 1000).toISOString(),
+  };
+}
+
 describe('groupEvents — agent.log collapsing', () => {
   it('groups 5 consecutive agent.log events into one log-group', () => {
     const logs = [1, 2, 3, 4, 5].map(makeLogEvent);
@@ -524,6 +540,36 @@ describe('groupEvents — run-group metadata', () => {
       expect(result[0].phase).toBe('grill');
       expect(result[0].items).toHaveLength(2);
     }
+  });
+
+  it('marks an answered discover grill phase as completed even while the run group remains live', () => {
+    const discoverSessionId = 'discover-session-answered';
+    const workflowRunId = 'discover-workflow-answered';
+    const result = groupEvents([
+      makeDiscoverEvent(1, 'agent.run-started', {
+        runId: `${workflowRunId}:grill-me`,
+        payload: { skill: 'grill-me', workflowRunId, discoverSessionId },
+      }),
+      makeDiscoverEvent(2, 'agent.tool-call', {
+        runId: `${workflowRunId}:grill-me`,
+        payload: { workflowRunId, discoverSessionId },
+      }),
+      makeDiscoverEvent(3, 'state.transitioned', {
+        payload: {
+          from: 'factory:gate-pending',
+          to: 'factory:grilling',
+          by: 'ui',
+          discoverSessionId,
+        },
+      }),
+    ]);
+
+    const grill = result.find(
+      (item): item is Extract<(typeof result)[number], { kind: 'phase-group' }> =>
+        item.kind === 'phase-group' && item.phase === 'grill',
+    );
+
+    expect(grill?.status).toBe('completed');
   });
 
   it('infers fix-feedback display skill from the completion marker for legacy runs', () => {

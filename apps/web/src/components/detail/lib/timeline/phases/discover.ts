@@ -60,6 +60,9 @@ function resolveDiscoverPhaseStatus(
   if (phase === 'grill') {
     if (events.some((event) => event.kind === 'grill.completed')) return 'completed';
     if (events.some((event) => event.kind === 'grill.question-posted')) return 'completed';
+    if (events.some((event) => event.kind === 'state.transitioned' && isGrillPhaseEvent(event))) {
+      return 'completed';
+    }
   } else if (
     events.some((event) =>
       ['prd.drafted', 'prd.approved', 'prd.rejected', 'prd.revised', 'prd.declined'].includes(
