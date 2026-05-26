@@ -63,6 +63,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   //  * the open-panel roster effect clobbering a thread the user just clicked
   //    "New" to create while the list was still in flight.
   const loadTokenRef = useRef(0);
+  const wasOpenRef = useRef(open);
   const activeConversationIdRef = useRef<string | null>(null);
   const inFlightRunByConversationRef = useRef<Map<string, string>>(new Map());
 
@@ -135,6 +136,22 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       // localStorage unavailable — accept the loss; selection is best-effort.
     }
   }, []);
+
+  const resetActiveConversation = useCallback(() => {
+    loadTokenRef.current += 1;
+    writeActiveId(null);
+    setConversation(null);
+    setMessages([]);
+    setInvocations([]);
+    setView('list');
+  }, [writeActiveId]);
+
+  useEffect(() => {
+    if (!open && wasOpenRef.current) {
+      resetActiveConversation();
+    }
+    wasOpenRef.current = open;
+  }, [open, resetActiveConversation]);
 
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;
