@@ -14,7 +14,10 @@ import {
 import type { Result } from '#shared/middleware.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
-import { resolveWorkItemForRoute } from '#shared/work-item-resolution.js';
+import {
+  resolveCanonicalWorkItemForRoute,
+  resolveWorkItemForRoute,
+} from '#shared/work-item-resolution.js';
 import type { LegalTargetsDto } from '../interventions/dto.js';
 import { getLastPersonaIdsByWorkItem } from './internal.js';
 
@@ -346,7 +349,7 @@ export async function getIssueSpec(
     } | null;
   }>
 > {
-  const resolved = await resolveWorkItemForRoute(slug, id);
+  const resolved = await resolveCanonicalWorkItemForRoute(slug, id);
   if (!resolved.ok) return resolved;
   const workItemId = resolved.data.canonicalWorkItemId;
   const record = getEngineeringSpec(slug, workItemId);
@@ -392,7 +395,7 @@ export async function getIssuePrd(
     } | null;
   }>
 > {
-  const resolved = await resolveWorkItemForRoute(slug, id);
+  const resolved = await resolveCanonicalWorkItemForRoute(slug, id);
   if (!resolved.ok) return resolved;
   const workItemId = resolved.data.canonicalWorkItemId;
   const prd = await resolveLatestPrd({
@@ -422,11 +425,9 @@ export async function getIssueArtifact(
     };
   }>
 > {
-  const source = await getSourceForSlug(slug);
-  if (source == null) return { ok: false, error: 'project not found', status: 404 };
-
-  const item = await source.getItem(id);
-  const expectedWorkItemId = (item as { id: string }).id;
+  const resolved = await resolveCanonicalWorkItemForRoute(slug, id);
+  if (!resolved.ok) return resolved;
+  const expectedWorkItemId = resolved.data.canonicalWorkItemId;
   const artifact = getArtifact(artifactKey);
   if (artifact == null) return { ok: false, error: 'artifact not found', status: 404 };
   if (artifact.projectId !== slug) return { ok: false, error: 'artifact not found', status: 404 };
@@ -458,7 +459,7 @@ export async function getIssueEvents(
   id: string,
   opts?: { limit?: number; before?: number; after?: number },
 ): Promise<Result<{ events: unknown[]; hasMore: boolean }>> {
-  const resolved = await resolveWorkItemForRoute(slug, id);
+  const resolved = await resolveCanonicalWorkItemForRoute(slug, id);
   if (!resolved.ok) return resolved;
   const workItemId = resolved.data.canonicalWorkItemId;
 

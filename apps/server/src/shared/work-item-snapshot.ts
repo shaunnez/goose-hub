@@ -4,7 +4,10 @@ import type { CostLabel, Stage } from '@goose-hub/core/cost/types.js';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getIssueWorktreeDiff } from '../domains/issues/diff.js';
 import { isValidSlug } from './source.js';
-import { resolveWorkItemForRoute } from './work-item-resolution.js';
+import {
+  resolveCanonicalWorkItemForRoute,
+  resolveWorkItemForRoute,
+} from './work-item-resolution.js';
 
 export const WORK_ITEM_SNAPSHOT_SECTIONS = [
   'issue',
@@ -80,7 +83,7 @@ export async function canonicalizeWorkItemId(
 ): Promise<string> {
   if (!isValidSlug(projectSlug)) throw new Error(`invalid project slug '${projectSlug}'`);
   const issueNumber = issueNumberFromWorkItemId(workItemIdOrNumber);
-  const resolved = await resolveWorkItemForRoute(projectSlug, issueNumber);
+  const resolved = await resolveCanonicalWorkItemForRoute(projectSlug, issueNumber);
   if (!resolved.ok) throw new Error(`project not found: ${projectSlug}`);
   return resolved.data.canonicalWorkItemId;
 }

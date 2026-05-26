@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { mockGetProject } = vi.hoisted(() => ({
+  mockGetProject: vi.fn(),
+}));
+
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return {
@@ -53,7 +57,7 @@ vi.mock('../../shared/source.js', () => ({
   isValidSlug: (slug: string) => /^[a-z0-9-]+$/.test(slug),
 }));
 vi.mock('../../shared/projects.js', () => ({
-  getProject: vi.fn().mockResolvedValue({ source: { kind: 'github', repo: 'owner/repo' } }),
+  getProject: mockGetProject,
 }));
 vi.mock('../../shared/cache.js', () => ({
   getCached: vi.fn().mockImplementation((_k, _t, f) => f()),
@@ -136,8 +140,54 @@ const mockSource: MockSource = {
   listComments: vi.fn().mockResolvedValue([]),
 };
 
+function defaultMockItem(itemId: string) {
+  return {
+    id: `github:owner/repo#${itemId}`,
+    externalId: itemId,
+    repoRef: 'owner/repo',
+    title: 'Issue',
+    body: '',
+    type: 'feature',
+    priority: 'medium',
+    mode: 'supervised',
+    state: 'factory:triaging',
+    schedule: 'current',
+    exec: 'serial',
+    dependsOn: [],
+    blocks: [],
+  };
+}
+
+function mockLocalDbProject(): void {
+  mockGetProject.mockResolvedValueOnce({
+    id: 'test-proj',
+    source: { kind: 'local-db', stateMachine: 'db' },
+    repos: ['owner/repo'],
+  } as never);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mockGetProject.mockReset();
+  vi.mocked(getSourceForSlug).mockReset();
+  mockSource.getItem
+    .mockReset()
+    .mockImplementation(async (itemId: string) => defaultMockItem(itemId));
+  mockSource.listComments.mockReset().mockResolvedValue([]);
+  mockSource.transitionState.mockReset().mockResolvedValue(undefined);
+  mockSource.comment.mockReset().mockResolvedValue(undefined);
+  mockSource.setMilestone.mockReset().mockResolvedValue(undefined);
+  mockSource.setLabelInGroup.mockReset().mockResolvedValue(undefined);
+  mockSource.listOpenWork.mockReset().mockResolvedValue([]);
+  mockGetProject.mockImplementation(async (slug) =>
+    slug === 'unknown'
+      ? null
+      : ({
+          id: 'test-proj',
+          source: { kind: 'github', repo: 'owner/repo', stateMachine: 'labels' },
+          repos: ['owner/repo'],
+        } as never),
+  );
   vi.mocked(getSourceForSlug).mockResolvedValue(mockSource as never);
   vi.mocked(getArtifact).mockReturnValue(null);
   vi.mocked(getEngineeringSpec).mockReturnValue(null);
@@ -321,6 +371,7 @@ describe('getIssueSpec', () => {
   });
 
   it('looks up Engineering Spec rows with local-db canonical work item ids', async () => {
+    mockLocalDbProject();
     mockSource.getItem.mockResolvedValueOnce({
       id: 'wi_local_42',
       externalId: '42',
@@ -1181,6 +1232,7 @@ describe('getIssueEvents', () => {
   });
 
   it('queries timeline events with local-db canonical work item ids', async () => {
+    mockLocalDbProject();
     mockSource.getItem.mockResolvedValueOnce({
       id: 'wi_local_1',
       externalId: '1',

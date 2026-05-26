@@ -7,14 +7,14 @@ const {
   mockGetToolStatsForWorkItem,
   mockGetProject,
   mockResolveGlobalSettings,
-  mockResolveWorkItemForRoute,
+  mockResolveCanonicalWorkItemForRoute,
 } = vi.hoisted(() => ({
   mockGetCostSummary: vi.fn(),
   mockGetCostsForWorkItem: vi.fn(),
   mockGetToolStatsForWorkItem: vi.fn(),
   mockGetProject: vi.fn(),
   mockResolveGlobalSettings: vi.fn(),
-  mockResolveWorkItemForRoute: vi.fn(),
+  mockResolveCanonicalWorkItemForRoute: vi.fn(),
 }));
 
 vi.mock('@goose-hub/core/agent-runtime/resolve-for-project.js', () => ({
@@ -32,7 +32,7 @@ vi.mock('#shared/projects.js', () => ({
 }));
 
 vi.mock('#shared/work-item-resolution.js', () => ({
-  resolveWorkItemForRoute: mockResolveWorkItemForRoute,
+  resolveCanonicalWorkItemForRoute: mockResolveCanonicalWorkItemForRoute,
 }));
 
 import { costsRouter } from './router.js';
@@ -44,7 +44,7 @@ function makeApp() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockResolveGlobalSettings.mockReturnValue({ dailyTokens: 50_000_000 });
-  mockResolveWorkItemForRoute.mockResolvedValue({
+  mockResolveCanonicalWorkItemForRoute.mockResolvedValue({
     ok: true,
     data: { canonicalWorkItemId: 'github:shaunnez/goose-hub#42' },
   });
@@ -101,7 +101,7 @@ describe('GET /:slug/costs/summary', () => {
 
 describe('GET /:slug/issues/:id/costs', () => {
   it('returns 404 when project is not configured', async () => {
-    mockResolveWorkItemForRoute.mockResolvedValue({
+    mockResolveCanonicalWorkItemForRoute.mockResolvedValue({
       ok: false,
       error: 'project not found',
       status: 404,
@@ -114,7 +114,7 @@ describe('GET /:slug/issues/:id/costs', () => {
   });
 
   it('uses the canonical work item id from route resolution', async () => {
-    mockResolveWorkItemForRoute.mockResolvedValue({
+    mockResolveCanonicalWorkItemForRoute.mockResolvedValue({
       ok: true,
       data: { canonicalWorkItemId: 'github:shaunnez/goose-hub#42' },
     });
@@ -135,7 +135,7 @@ describe('GET /:slug/issues/:id/costs', () => {
   });
 
   it('uses local-db canonical ids without synthesizing GitHub ids', async () => {
-    mockResolveWorkItemForRoute.mockResolvedValue({
+    mockResolveCanonicalWorkItemForRoute.mockResolvedValue({
       ok: true,
       data: { canonicalWorkItemId: 'wi_local_7' },
     });

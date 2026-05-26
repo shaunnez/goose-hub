@@ -5,11 +5,22 @@ const { mockGetSourceForSlug } = vi.hoisted(() => ({
   mockGetSourceForSlug: vi.fn(),
 }));
 
+const { mockGetProject } = vi.hoisted(() => ({
+  mockGetProject: vi.fn(),
+}));
+
 vi.mock('./source.js', () => ({
   getSourceForSlug: mockGetSourceForSlug,
 }));
 
-import { resolveWorkItemForRoute } from './work-item-resolution.js';
+vi.mock('./projects.js', () => ({
+  getProject: mockGetProject,
+}));
+
+import {
+  resolveCanonicalWorkItemForRoute,
+  resolveWorkItemForRoute,
+} from './work-item-resolution.js';
 
 function makeSource(item: WorkItem): StateSource {
   return {
@@ -84,6 +95,10 @@ describe('resolveWorkItemForRoute', () => {
   it('returns local-db Work Item ids without synthesizing GitHub ids', async () => {
     const item = { ...baseItem, id: 'wi_local_1', externalId: '1' };
     const source = makeSource(item);
+    mockGetProject.mockResolvedValue({
+      id: 'local-proj',
+      source: { kind: 'local-db', stateMachine: 'db' },
+    });
     mockGetSourceForSlug.mockResolvedValue(source);
 
     const result = await resolveWorkItemForRoute('local-proj', '1');
@@ -100,10 +115,64 @@ describe('resolveWorkItemForRoute', () => {
     });
   });
 
+  it('resolves GitHub canonical ids without fetching the live issue', async () => {
+    mockGetProject.mockResolvedValue({
+      id: 'proj',
+      source: { kind: 'github', repo: 'owner/repo', stateMachine: 'labels' },
+    });
+
+    const result = await resolveCanonicalWorkItemForRoute('proj', '42');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        routeId: '42',
+        canonicalWorkItemId: 'github:owner/repo#42',
+        externalId: '42',
+        repoRef: 'owner/repo',
+        projectId: 'proj',
+        isLocalDb: false,
+      },
+    });
+    expect(mockGetSourceForSlug).not.toHaveBeenCalled();
+  });
+
+  it('uses the local source for canonical local-db ids', async () => {
+    const item = { ...baseItem, id: 'local:local-proj#1', externalId: '1' };
+    const source = makeSource(item);
+    mockGetProject.mockResolvedValue({
+      id: 'local-proj',
+      source: { kind: 'local-db', stateMachine: 'db' },
+    });
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const result = await resolveCanonicalWorkItemForRoute('local-proj', '1');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        canonicalWorkItemId: 'local:local-proj#1',
+        projectId: 'proj',
+        isLocalDb: true,
+      },
+    });
+    expect(source.getItem).toHaveBeenCalledWith('1');
+  });
+
   it('returns a 404 when the project has no source', async () => {
     mockGetSourceForSlug.mockResolvedValue(null);
 
     await expect(resolveWorkItemForRoute('missing', '1')).resolves.toEqual({
+      ok: false,
+      error: 'project not found',
+      status: 404,
+    });
+  });
+
+  it('returns a 404 when canonical resolution has no project config', async () => {
+    mockGetProject.mockResolvedValue(null);
+
+    await expect(resolveCanonicalWorkItemForRoute('missing', '1')).resolves.toEqual({
       ok: false,
       error: 'project not found',
       status: 404,

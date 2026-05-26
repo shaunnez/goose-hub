@@ -4,7 +4,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
-import { resolveWorkItemForRoute } from '#shared/work-item-resolution.js';
+import { resolveCanonicalWorkItemForRoute } from '#shared/work-item-resolution.js';
 
 interface TriageEventPayload {
   triage: { type: string; priority: string };
@@ -40,10 +40,10 @@ export async function getIssueTriage(
   slug: string,
   id: string,
 ): Promise<Result<{ triage: unknown }>> {
-  const resolved = await resolveWorkItemForRoute(slug, id);
+  const resolved = await resolveCanonicalWorkItemForRoute(slug, id);
   if (!resolved.ok) return resolved;
   const { canonicalWorkItemId: workItemId } = resolved.data;
-  const projectId = resolved.data.source.projectId;
+  const projectId = resolved.data.projectId;
 
   const allEvents = eventStore.replay({ projectId, workItemId });
   const triageEvent = allEvents.filter((e) => e.kind === 'agent.triage-complete').at(-1);
@@ -83,10 +83,10 @@ export async function overrideIssueRepo(
     return { ok: false, error: `repo '${repo}' not in allowlist`, status: 400 };
   }
 
-  const resolved = await resolveWorkItemForRoute(slug, id);
+  const resolved = await resolveCanonicalWorkItemForRoute(slug, id);
   if (!resolved.ok) return resolved;
   const { canonicalWorkItemId: workItemId } = resolved.data;
-  const projectId = resolved.data.source.projectId;
+  const projectId = resolved.data.projectId;
 
   eventStore.appendEvent({ projectId, workItemId, kind: 'agent.repo-override', payload: { repo } });
 
