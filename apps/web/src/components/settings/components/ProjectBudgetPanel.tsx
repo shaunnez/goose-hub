@@ -2,14 +2,17 @@ import {
   deleteSkillBudgetSetting,
   fetchClaudeAuthStatus,
   fetchCodexAuthStatus,
+  fetchDevReviewSettings,
   fetchProjectSettings,
   fetchRuntimeProfiler,
+  patchDevReviewSettings,
   patchGlobalBudgetSettings,
   patchSkillBudgetSetting,
   resetAllProjectBudgets,
 } from '@/lib/api';
 import type {
   CliAuthStatusDto,
+  DevReviewSettingsDto,
   ModelProvider,
   ModelTier,
   ProjectSettingsDto,
@@ -206,6 +209,50 @@ function NumericInput({
   );
 }
 
+function TextInput({
+  value,
+  placeholder,
+  overridden,
+  subtitle,
+  onCommit,
+}: {
+  value: string;
+  placeholder: string;
+  overridden: boolean;
+  subtitle?: string | null;
+  onCommit: (val: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
+        <input
+          type="text"
+          value={draft}
+          placeholder={placeholder}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => onCommit(draft)}
+          className={[
+            'w-full max-w-72 min-w-0 rounded border px-2 py-0.5 text-[12px] font-mono bg-bg text-fg',
+            overridden ? 'border-accent' : 'border-line',
+          ].join(' ')}
+        />
+        {overridden && (
+          <span className="shrink-0 text-[10px] text-accent font-medium">override</span>
+        )}
+      </div>
+      {subtitle != null && subtitle !== '' && (
+        <span className="text-[10px] text-fg-3 font-mono break-words">{subtitle}</span>
+      )}
+    </div>
+  );
+}
+
 function RuntimeSelect({
   value,
   options,
@@ -264,6 +311,29 @@ function RuntimeModelCell({
       <span className="font-mono text-fg break-all leading-snug">{value.modelId}</span>
       <span className="text-[10px] text-fg-3 font-mono break-all">
         {value.provider}:{value.tier}
+      </span>
+    </div>
+  );
+}
+
+function RuntimeEscalationCell({
+  value,
+}: {
+  value:
+    | {
+        modelId: string;
+        budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs: number };
+      }
+    | null
+    | undefined;
+}) {
+  if (value == null) return <span className="text-fg-3">—</span>;
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="font-mono text-fg break-all leading-snug">{value.modelId}</span>
+      <span className="text-[10px] text-fg-3 font-mono break-all">
+        {value.budgets.maxTurns} turns | ${value.budgets.maxBudgetUsd.toFixed(2)} |{' '}
+        {value.budgets.timeoutMs} ms
       </span>
     </div>
   );
@@ -523,9 +593,15 @@ export function ProjectBudgetPanel({ slug }: Props) {
     queryFn: ({ signal }) => fetchProjectSettings(slug, signal),
     staleTime: 10_000,
   });
+  const { data: devReviewSettings } = useQuery<DevReviewSettingsDto>({
+    queryKey: ['dev-review-settings', slug],
+    queryFn: ({ signal }) => fetchDevReviewSettings(slug, signal),
+    staleTime: 10_000,
+  });
 
   const patchGlobal = useMutation({
-    mutationFn: (patch: Record<string, number | null>) => patchGlobalBudgetSettings(slug, patch),
+    mutationFn: (patch: Record<string, number | string[] | null>) =>
+      patchGlobalBudgetSettings(slug, patch),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['project-settings', slug] }),
   });
 
@@ -543,6 +619,14 @@ export function ProjectBudgetPanel({ slug }: Props) {
   const deleteSkill = useMutation({
     mutationFn: (skill: string) => deleteSkillBudgetSetting(slug, skill),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['project-settings', slug] }),
+  });
+
+  const patchDevReview = useMutation({
+    mutationFn: (patch: Parameters<typeof patchDevReviewSettings>[1]) =>
+      patchDevReviewSettings(slug, patch),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dev-review-settings', slug] });
+    },
   });
 
   const resetAll = useMutation({
@@ -649,6 +733,27 @@ export function ProjectBudgetPanel({ slug }: Props) {
               </Fragment>
             );
           })}
+          <span className="text-[12px] text-fg-2 flex items-center gap-1.5 pt-1">
+            Contract keywords
+          </span>
+          <TextInput
+            value={(
+              dbImplementWp?.implementWpContractKeywords ??
+              data.resolvedImplementWp.contractKeywords
+            ).join(', ')}
+            placeholder={data.implementWpDefaults.contractKeywords.join(', ')}
+            overridden={dbImplementWp?.implementWpContractKeywords != null}
+            subtitle={`default: ${data.implementWpDefaults.contractKeywords.join(', ')}`}
+            onCommit={(val) => {
+              const keywords = val
+                .split(',')
+                .map((keyword) => keyword.trim())
+                .filter((keyword) => keyword.length > 0);
+              patchGlobal.mutate({
+                implementWpContractKeywords: keywords.length > 0 ? keywords : null,
+              });
+            }}
+          />
         </div>
       </section>
 
@@ -669,6 +774,30 @@ export function ProjectBudgetPanel({ slug }: Props) {
             const defaults = skillDefaults[skill];
             const metadata = data.skillMetadata?.[skill];
             const resolved = data.resolvedSkillRuntimes?.[skill];
+            const showEscalation =
+              defaults?.escalation != null ||
+              resolved?.resolvedEscalation != null ||
+              row?.escalationModelTier != null ||
+              row?.escalationMaxBudgetUsd != null ||
+              row?.escalationMaxTurns != null ||
+              row?.escalationTimeoutMs != null;
+            const devReviewEffective =
+              skill === 'dev-review'
+                ? {
+                    maxRevisionTurns:
+                      devReviewSettings?.dbOverride?.maxRevisionTurns ??
+                      devReviewSettings?.config?.maxRevisionTurns ??
+                      1,
+                    perCycleMaxUsd:
+                      devReviewSettings?.dbOverride?.perCycleMaxUsd ??
+                      devReviewSettings?.config?.perCycleMaxUsd ??
+                      2,
+                    timeoutMs:
+                      devReviewSettings?.dbOverride?.timeoutMs ??
+                      devReviewSettings?.config?.timeoutMs ??
+                      180_000,
+                  }
+                : null;
             const hasAny =
               row != null &&
               (row.maxTurns != null ||
@@ -676,7 +805,11 @@ export function ProjectBudgetPanel({ slug }: Props) {
                 row.timeoutMs != null ||
                 row.modelTier != null ||
                 row.provider != null ||
-                row.effort != null);
+                row.effort != null ||
+                row.escalationModelTier != null ||
+                row.escalationMaxBudgetUsd != null ||
+                row.escalationMaxTurns != null ||
+                row.escalationTimeoutMs != null);
             return (
               <div
                 key={skill}
@@ -792,6 +925,133 @@ export function ProjectBudgetPanel({ slug }: Props) {
                       }
                     />
                   </SkillRuntimeField>
+                  {showEscalation && (
+                    <>
+                      <SkillRuntimeField label="Escalation tier">
+                        <RuntimeSelect
+                          value={row?.escalationModelTier ?? null}
+                          options={TIERS}
+                          defaultValue={defaults?.escalation?.modelTier}
+                          overridden={row?.escalationModelTier != null}
+                          subtitle={
+                            resolved?.resolvedEscalation != null
+                              ? `resolved: ${resolved.resolvedEscalation.modelId}`
+                              : undefined
+                          }
+                          onCommit={(val) =>
+                            patchSkill.mutate({
+                              skill,
+                              patch: { escalationModelTier: val as ModelTier | null },
+                            })
+                          }
+                        />
+                      </SkillRuntimeField>
+                      <SkillRuntimeField label="Escalation budget">
+                        <NumericInput
+                          value={row?.escalationMaxBudgetUsd ?? null}
+                          placeholder={
+                            defaults?.escalation != null
+                              ? defaults.escalation.maxBudgetUsd.toFixed(2)
+                              : 'default'
+                          }
+                          isFloat
+                          overridden={row?.escalationMaxBudgetUsd != null}
+                          subtitle={
+                            defaults?.escalation != null
+                              ? `default: $${defaults.escalation.maxBudgetUsd.toFixed(2)}`
+                              : null
+                          }
+                          onCommit={(val) =>
+                            patchSkill.mutate({ skill, patch: { escalationMaxBudgetUsd: val } })
+                          }
+                        />
+                      </SkillRuntimeField>
+                      <SkillRuntimeField label="Escalation turns">
+                        <NumericInput
+                          value={row?.escalationMaxTurns ?? null}
+                          placeholder={
+                            defaults?.escalation?.maxTurns != null
+                              ? String(defaults.escalation.maxTurns)
+                              : defaults != null
+                                ? String(defaults.maxTurns)
+                                : 'default'
+                          }
+                          overridden={row?.escalationMaxTurns != null}
+                          subtitle={
+                            defaults?.escalation?.maxTurns != null
+                              ? `default: ${defaults.escalation.maxTurns}`
+                              : defaults != null
+                                ? `inherits base: ${defaults.maxTurns}`
+                                : null
+                          }
+                          onCommit={(val) =>
+                            patchSkill.mutate({ skill, patch: { escalationMaxTurns: val } })
+                          }
+                        />
+                      </SkillRuntimeField>
+                      <SkillRuntimeField label="Escalation timeout">
+                        <NumericInput
+                          value={row?.escalationTimeoutMs ?? null}
+                          placeholder={
+                            defaults?.escalation?.timeoutMs != null
+                              ? String(defaults.escalation.timeoutMs)
+                              : defaults != null
+                                ? String(defaults.timeoutMs)
+                                : 'default'
+                          }
+                          overridden={row?.escalationTimeoutMs != null}
+                          subtitle={
+                            defaults?.escalation?.timeoutMs != null
+                              ? `default: ${defaults.escalation.timeoutMs} ms`
+                              : defaults != null
+                                ? `inherits base: ${defaults.timeoutMs} ms`
+                                : null
+                          }
+                          onCommit={(val) =>
+                            patchSkill.mutate({ skill, patch: { escalationTimeoutMs: val } })
+                          }
+                        />
+                      </SkillRuntimeField>
+                      <SkillRuntimeField label="Escalation" wide>
+                        <RuntimeEscalationCell value={resolved?.resolvedEscalation} />
+                      </SkillRuntimeField>
+                    </>
+                  )}
+                  {devReviewEffective != null && (
+                    <>
+                      <div className="basis-full text-[11px] font-semibold uppercase tracking-wider text-fg-2">
+                        Dev-review loop controls
+                      </div>
+                      <SkillRuntimeField label="Revision turns">
+                        <NumericInput
+                          value={devReviewEffective.maxRevisionTurns}
+                          placeholder="1"
+                          overridden={devReviewSettings?.dbOverride?.maxRevisionTurns != null}
+                          subtitle="1-5 developer response turns"
+                          onCommit={(val) => patchDevReview.mutate({ maxRevisionTurns: val })}
+                        />
+                      </SkillRuntimeField>
+                      <SkillRuntimeField label="Cycle budget">
+                        <NumericInput
+                          value={devReviewEffective.perCycleMaxUsd}
+                          placeholder="2.00"
+                          isFloat
+                          overridden={devReviewSettings?.dbOverride?.perCycleMaxUsd != null}
+                          subtitle="0 skips dev-review"
+                          onCommit={(val) => patchDevReview.mutate({ perCycleMaxUsd: val })}
+                        />
+                      </SkillRuntimeField>
+                      <SkillRuntimeField label="Loop timeout">
+                        <NumericInput
+                          value={devReviewEffective.timeoutMs}
+                          placeholder="180000"
+                          overridden={devReviewSettings?.dbOverride?.timeoutMs != null}
+                          subtitle="dev-review timeout ms"
+                          onCommit={(val) => patchDevReview.mutate({ timeoutMs: val })}
+                        />
+                      </SkillRuntimeField>
+                    </>
+                  )}
                   <SkillRuntimeField label="Primary" wide>
                     <RuntimeModelCell value={resolved?.resolvedPrimary} />
                   </SkillRuntimeField>

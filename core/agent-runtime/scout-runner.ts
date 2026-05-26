@@ -6,6 +6,20 @@ import { safeParseOutputForSchema } from './output-normalization.js';
 import { resolveBudgetsForProject } from './resolve-for-project.js';
 import { ScoutOutputSchema, normalizeScoutOutput } from './scout-output.js';
 
+const SCOUT_NO_EVIDENCE_REASON =
+  'scout returned no findings and made no successful Factory read/search/file tool calls';
+
+const FACTORY_EVIDENCE_TOOL_NAMES = new Set([
+  'file_exists',
+  'file_info',
+  'list_dir',
+  'list_files',
+  'read_file',
+  'read_many_files',
+  'repo_intel.query',
+  'search_text',
+]);
+
 /** Per-scout findings. Mirrors `ScoutOutputSchema` in each scout's schema.ts. */
 export interface ScoutFinding {
   file: string;
@@ -68,18 +82,6 @@ export const SCOUT_CONTEXT_ALLOWLIST: readonly string[] = [
   'scoutDigest',
 ];
 
-const FORBIDDEN_RESOURCE_TOOLS = new Set(['resources/read', 'resources/list']);
-const SCOUT_REAL_READ_TOOLS = new Set([
-  'read_file',
-  'read_many_files',
-  'list_dir',
-  'list_files',
-  'search_text',
-  'file_exists',
-  'file_info',
-  'repo_intel.query',
-]);
-
 export interface RunOneScoutContext {
   parentRunId: string;
   workItem: { number: number; title: string; body: string };
@@ -96,6 +98,30 @@ export interface RunOneScoutContext {
     appendSystemPrompt?: string;
     outputJsonSchema?: Record<string, unknown>;
   };
+}
+
+function payloadRecord(value: unknown): Record<string, unknown> | null {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function normalizedToolName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  if (value.startsWith('mcp__factory-tools__')) {
+    return value.slice('mcp__factory-tools__'.length);
+  }
+  return value;
+}
+
+function hasSuccessfulFactoryEvidenceCall(events: readonly AgentEvent[]): boolean {
+  return events.some((event) => {
+    if (event.kind !== 'agent.tool-call') return false;
+    const payload = payloadRecord(event.payload);
+    if (payload == null) return false;
+    if (payload.blocked === true || payload.status !== 'ok') return false;
+    const toolName = normalizedToolName(payload.tool_name ?? payload.toolName ?? payload.tool);
+    return toolName != null && FACTORY_EVIDENCE_TOOL_NAMES.has(toolName);
+  });
 }
 
 export async function runOneScout(
@@ -260,17 +286,12 @@ export async function runOneScout(
   const findings = scoutOutput.findings;
   const decisionSummaries =
     result.decisionSummaries.length > 0 ? result.decisionSummaries : scoutOutput.decisionSummaries;
-  const resourceMisuse = classifyScoutResourceMisuse({
-    findings,
-    decisionSummaries,
-    events: result.events,
-  });
-  if (resourceMisuse != null) {
+  if (findings.length === 0 && !hasSuccessfulFactoryEvidenceCall(result.events)) {
     append({
       projectId: ctx.projectId,
       workItemId: ctx.workItemId ?? null,
       kind: 'swarm.scout-failed',
-      payload: { runId, scoutName: spec.scoutName, errorReason: resourceMisuse },
+      payload: { runId, scoutName: spec.scoutName, errorReason: SCOUT_NO_EVIDENCE_REASON },
       runId,
     });
     return {
@@ -278,7 +299,7 @@ export async function runOneScout(
       status: 'error',
       findings: [],
       decisionSummaries,
-      errorReason: resourceMisuse,
+      errorReason: SCOUT_NO_EVIDENCE_REASON,
       runId,
     };
   }
@@ -309,46 +330,4 @@ function isTimeoutError(err: unknown, timeoutMs: number): boolean {
   if (!(err instanceof Error)) return false;
   if (err.name === 'ScoutTimeoutError') return true;
   return err.message.includes('timed out after') && err.message.includes(`${timeoutMs}ms`);
-}
-
-function classifyScoutResourceMisuse(input: {
-  findings: ScoutFinding[];
-  decisionSummaries: DecisionSummary[];
-  events: AgentEvent[];
-}): string | null {
-  if (input.findings.length > 0) return null;
-  const emittedForbiddenResource = input.events.some((event) => {
-    const payload = event.payload as Record<string, unknown>;
-    if (event.kind === 'agent.runtime-advisory') {
-      return (
-        FORBIDDEN_RESOURCE_TOOLS.has(String(payload.toolName ?? '')) ||
-        FORBIDDEN_RESOURCE_TOOLS.has(String(payload.surface ?? '').replace(' failed', ''))
-      );
-    }
-    return (
-      event.kind === 'agent.tool-call' &&
-      FORBIDDEN_RESOURCE_TOOLS.has(String(payload.tool_name ?? ''))
-    );
-  });
-  if (!emittedForbiddenResource) return null;
-
-  const hasSuccessfulReadTool = input.events.some((event) => {
-    if (event.kind !== 'agent.tool-call') return false;
-    const payload = event.payload as Record<string, unknown>;
-    const toolName = String(payload.tool_name ?? '');
-    if (!SCOUT_REAL_READ_TOOLS.has(toolName)) return false;
-    if (payload.blocked === true) return false;
-    if (payload.status === 'failed' || payload.status === 'timed_out') return false;
-    return true;
-  });
-  const toolsUnavailable = input.decisionSummaries.some((summary) =>
-    /(?:tools?|factory tools?|read_file|list_files|search_text|file_exists)\s+(?:were\s+)?unavailable|unavailable\s+(?:tools?|factory tools?|read_file|list_files|search_text|file_exists)|missing tool/i.test(
-      summary.summary,
-    ),
-  );
-
-  if (hasSuccessfulReadTool && !toolsUnavailable) return null;
-  return toolsUnavailable
-    ? 'scout emitted forbidden MCP resource probes and reported Factory tools unavailable without findings'
-    : 'scout emitted forbidden MCP resource probes without findings or successful Factory read/search/file tool calls';
 }

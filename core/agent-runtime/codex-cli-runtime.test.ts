@@ -642,7 +642,7 @@ describe('CodexCliRuntime timeout handling', () => {
     });
   });
 
-  it('records resources/list failed as a non-fatal advisory event', async () => {
+  it('records resources/list failed as a non-fatal advisory and filters it from stderr logs', async () => {
     const child = makeHangingChild();
     mockSpawn.mockReturnValue(child);
 
@@ -677,6 +677,59 @@ describe('CodexCliRuntime timeout handling', () => {
       }),
     );
     expect(calls.some((e) => e.kind === 'agent.run-blocked')).toBe(false);
+    expect(
+      calls.some(
+        (e) =>
+          e.kind === 'agent.log' &&
+          (e.payload as { stream?: string; text?: string }).stream === 'stderr' &&
+          (e.payload as { text?: string }).text?.includes('resources/list failed'),
+      ),
+    ).toBe(false);
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+  });
+
+  it('records resources/templates/list failed as a non-fatal advisory and filters it from stderr logs', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"ok":true}' },
+        })}\n`,
+      ),
+    );
+    child.stderr.emit(
+      'data',
+      Buffer.from('resources/templates/list failed: startup template probe\n'),
+    );
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+    const calls: Parameters<typeof mockEventStore.appendEvent>[0][] =
+      mockEventStore.appendEvent.mock.calls.map((c: unknown[]) => c[0]);
+    expect(
+      calls.some(
+        (e) =>
+          e.kind === 'agent.runtime-advisory' &&
+          (e.payload as { surface?: string }).surface === 'resources/templates/list failed',
+      ),
+    ).toBe(true);
+    expect(
+      calls.some(
+        (e) =>
+          e.kind === 'agent.log' &&
+          (e.payload as { stream?: string; text?: string }).stream === 'stderr' &&
+          (e.payload as { text?: string }).text?.includes('resources/templates/list failed'),
+      ),
+    ).toBe(false);
     expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'agent.run-completed' }),
     );

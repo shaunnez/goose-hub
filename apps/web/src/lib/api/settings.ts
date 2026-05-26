@@ -24,7 +24,7 @@ export async function fetchProjectSettings(
 
 export async function patchGlobalBudgetSettings(
   slug: string,
-  patch: Record<string, number | null>,
+  patch: Record<string, number | string[] | null>,
 ): Promise<void> {
   await patchJson(`/projects/${slug}/settings/global`, patch);
 }
@@ -39,6 +39,10 @@ export async function patchSkillBudgetSetting(
     modelTier: ModelTier | null;
     provider: ModelProvider | null;
     effort: RuntimeEffort | null;
+    escalationModelTier: ModelTier | null;
+    escalationMaxBudgetUsd: number | null;
+    escalationMaxTurns: number | null;
+    escalationTimeoutMs: number | null;
   }>,
 ): Promise<void> {
   await patchJson(`/projects/${slug}/settings/skills/${encodeURIComponent(skill)}`, patch);

@@ -49,14 +49,46 @@ function okResult(scoutName: string): AgentResult {
   };
 }
 
-function agentEvent(input: Pick<AgentEvent, 'kind' | 'payload' | 'runId'>): AgentEvent {
+function emptyResult(events: AgentResult['events'] = []): AgentResult {
+  return {
+    output: {
+      findings: [],
+      decisionSummaries: [{ kind: 'READ', summary: 'scout completed without findings' }],
+      status: 'ok',
+    },
+    decisionSummaries: [{ kind: 'READ', summary: 'scout completed without findings' }],
+    events,
+  };
+}
+
+function runtimeAdvisoryEvent(
+  runId: string,
+  surface: 'resources/list failed' | 'resources/templates/list failed' | 'resources/read failed',
+): AgentResult['events'][number] {
   return {
     id: 1,
     projectId: 'goose-hub-self',
-    workItemId: 'github:shaunnez/goose-hub#558',
-    kind: input.kind,
-    payload: input.payload,
-    runId: input.runId,
+    workItemId: 'github:owner/repo#558',
+    kind: 'agent.runtime-advisory',
+    payload: { runId, surface, toolName: surface.replace(' failed', '') },
+    runId,
+    personaId: 'goose-hub-self/investigator/0',
+    createdAt: new Date(0).toISOString(),
+  };
+}
+
+function toolCallEvent(
+  runId: string,
+  toolName: string,
+  status?: 'ok' | 'failed' | 'timed_out',
+): AgentResult['events'][number] {
+  return {
+    id: 2,
+    projectId: 'goose-hub-self',
+    workItemId: 'github:owner/repo#558',
+    kind: 'agent.tool-call',
+    payload: { run_id: runId, tool_name: toolName, ...(status != null ? { status } : {}) },
+    runId,
     personaId: 'goose-hub-self/investigator/0',
     createdAt: new Date(0).toISOString(),
   };
@@ -480,69 +512,6 @@ describe('swarm.dispatchWave', () => {
     expect(result.shouldAdvance).toBe(true);
   });
 
-  it('marks an empty scout as error when it only emitted forbidden resource probes', async () => {
-    const { fn: appendEvent, events } = makeFakeAppendEvent();
-    const runtime = makeRuntime({
-      'scout-schema': () => Promise.resolve(okResult('scout-schema')),
-      'scout-code-path': () => Promise.resolve(okResult('scout-code-path')),
-      'scout-pattern': () => Promise.resolve(okResult('scout-pattern')),
-      'scout-resource-probe': () =>
-        Promise.resolve({
-          output: {
-            findings: [],
-            decisionSummaries: [
-              { kind: 'UNCERTAINTY', summary: 'Factory tools were unavailable.' },
-            ],
-            status: 'ok',
-          },
-          decisionSummaries: [],
-          events: [
-            agentEvent({
-              kind: 'agent.runtime-advisory',
-              payload: {
-                surface: 'resources/list failed',
-                toolName: 'resources/list',
-                stderr: 'resources/list failed: startup probe',
-              },
-              runId: 'parent-resource:scout:scout-resource-probe:3',
-            }),
-          ],
-        }),
-    });
-
-    const result = await dispatchWave({
-      parentRunId: 'parent-resource',
-      scoutSpecs: [
-        makeScoutSpec('scout-schema'),
-        makeScoutSpec('scout-code-path'),
-        makeScoutSpec('scout-pattern'),
-        makeScoutSpec('scout-resource-probe'),
-      ],
-      workItem: makeWorkItem(),
-      worktreePath: '/tmp/wt',
-      projectId: 'goose-hub-self',
-      personaId: 'goose-hub-self/investigator/0',
-      runtime,
-      appendEvent,
-      scoutTimeoutMs: 1_000,
-      heartbeatIntervalMs: 60_000,
-      resolveScoutBudget: testBudgetResolver,
-    });
-
-    const probe = result.reports.find((r) => r.scoutName === 'scout-resource-probe');
-    expect(probe?.status).toBe('error');
-    expect(probe?.errorReason).toContain('forbidden MCP resource probes');
-    expect(
-      events.some(
-        (e) =>
-          e.kind === 'swarm.scout-failed' &&
-          (e.payload as { scoutName?: string }).scoutName === 'scout-resource-probe',
-      ),
-    ).toBe(true);
-    // The existing wave policy still advances because only one scout failed.
-    expect(result.shouldAdvance).toBe(true);
-  });
-
   it('succeeds when a scout returns a decisionSummaries kind not in the enum (coerced to UNKNOWN)', async () => {
     const { fn: appendEvent, events } = makeFakeAppendEvent();
     const runtime = makeRuntime({
@@ -584,6 +553,193 @@ describe('swarm.dispatchWave', () => {
     const patternReport = result.reports.find((r) => r.scoutName === 'scout-pattern');
     expect(patternReport?.status).toBe('ok');
     expect(patternReport?.decisionSummaries.some((d) => d.kind === 'UNKNOWN')).toBe(true);
+    expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(false);
+    expect(result.shouldAdvance).toBe(true);
+  });
+
+  it('fails an empty scout with only resources/list advisory for no evidence, not resource misuse', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-schema': (spec) =>
+        Promise.resolve(emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/list failed')])),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-list-advisory',
+      scoutSpecs: [makeScoutSpec('scout-schema')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(result.reports[0]).toMatchObject({
+      status: 'error',
+      errorReason:
+        'scout returned no findings and made no successful Factory read/search/file tool calls',
+    });
+    const failed = events.find((e) => e.kind === 'swarm.scout-failed');
+    expect(failed?.payload as { errorReason?: string }).toMatchObject({
+      errorReason:
+        'scout returned no findings and made no successful Factory read/search/file tool calls',
+    });
+    expect((failed?.payload as { errorReason?: string }).errorReason).not.toContain(
+      'forbidden MCP resource probes',
+    );
+  });
+
+  it('fails an empty scout with only resources/templates/list advisory for no evidence, not resource misuse', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-schema': (spec) =>
+        Promise.resolve(
+          emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/templates/list failed')]),
+        ),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-template-advisory',
+      scoutSpecs: [makeScoutSpec('scout-schema')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(result.reports[0]?.status).toBe('error');
+    const failed = events.find((e) => e.kind === 'swarm.scout-failed');
+    expect((failed?.payload as { errorReason?: string }).errorReason).toBe(
+      'scout returned no findings and made no successful Factory read/search/file tool calls',
+    );
+  });
+
+  it('fails an empty scout with resources/read advisory and no successful evidence calls', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-schema': (spec) =>
+        Promise.resolve(emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/read failed')])),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-read-advisory',
+      scoutSpecs: [makeScoutSpec('scout-schema')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(result.reports[0]).toMatchObject({
+      status: 'error',
+      errorReason:
+        'scout returned no findings and made no successful Factory read/search/file tool calls',
+    });
+    expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(true);
+  });
+
+  it('fails an empty scout when Factory evidence calls only have pre-execution audits', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-schema': (spec) =>
+        Promise.resolve(emptyResult([toolCallEvent(spec.runId, 'read_file')])),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-pre-tool-audit',
+      scoutSpecs: [makeScoutSpec('scout-schema')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(result.reports[0]).toMatchObject({
+      status: 'error',
+      errorReason:
+        'scout returned no findings and made no successful Factory read/search/file tool calls',
+    });
+    expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(true);
+  });
+
+  it('fails an empty scout when Factory evidence calls timed out', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-schema': (spec) =>
+        Promise.resolve(emptyResult([toolCallEvent(spec.runId, 'search_text', 'timed_out')])),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-timed-out-evidence',
+      scoutSpecs: [makeScoutSpec('scout-schema')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(result.reports[0]).toMatchObject({
+      status: 'error',
+      errorReason:
+        'scout returned no findings and made no successful Factory read/search/file tool calls',
+    });
+    expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(true);
+  });
+
+  it('keeps an empty scout ok when resource discovery advisories accompany successful evidence calls', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-schema': (spec) =>
+        Promise.resolve(
+          emptyResult([
+            runtimeAdvisoryEvent(spec.runId, 'resources/list failed'),
+            runtimeAdvisoryEvent(spec.runId, 'resources/templates/list failed'),
+            toolCallEvent(spec.runId, 'read_file', 'ok'),
+            toolCallEvent(spec.runId, 'search_text', 'ok'),
+          ]),
+        ),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-evidence',
+      scoutSpecs: [makeScoutSpec('scout-schema')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+      minSuccessfulScouts: 1,
+    });
+
+    expect(result.reports[0]?.status).toBe('ok');
     expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(false);
     expect(result.shouldAdvance).toBe(true);
   });

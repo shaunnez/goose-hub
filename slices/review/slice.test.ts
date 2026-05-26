@@ -4,9 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ─────────────────────────────────────────────────────────────
 
+const mockReadProjectSkillSettings = vi.hoisted(() => vi.fn().mockReturnValue(new Map()));
+
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
-  readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+  readProjectSkillSettings: mockReadProjectSkillSettings,
 }));
 const mockReadProjectReviewSettings = vi.fn().mockReturnValue(null);
 vi.mock('@goose-hub/core/db/repositories/project-review-settings.js', () => ({
@@ -175,6 +177,7 @@ beforeEach(() => {
   mockExecSync.mockReset();
   mockExecSync.mockReturnValue('');
   mockAccumulatePersonaStats.mockClear();
+  mockReadProjectSkillSettings.mockReturnValue(new Map());
   mockReadProjectReviewSettings.mockReturnValue(null);
   vi.clearAllMocks();
 });
@@ -1078,10 +1081,7 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       });
 
       mockReadProjectReviewSettings.mockReturnValue({
-        reviewerSlots: JSON.stringify([
-          { model: 'claude', prompt: 'default' },
-          { model: 'codex', prompt: 'unconstrained' },
-        ]),
+        reviewerSlots: JSON.stringify([{ prompt: 'default' }, { prompt: 'unconstrained' }]),
       });
 
       // Slot A (claude/default): approved
@@ -1109,6 +1109,46 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       );
       // Must escalate after round 1 only (2 slot calls — no further rounds)
       expect(mockRun).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses the review skill runtime provider for reviewer slots', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource({
+        getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+      });
+
+      mockReadProjectReviewSettings.mockReturnValue({
+        reviewerSlots: JSON.stringify([{ prompt: 'default' }, { prompt: 'unconstrained' }]),
+      });
+      mockReadProjectSkillSettings.mockReturnValue(
+        new Map([
+          [
+            'review',
+            {
+              projectId: 'test-project',
+              skillName: 'review',
+              modelTier: 'sonnet',
+              modelProvider: 'claude',
+              updatedAt: '2026-05-26T00:00:00Z',
+            },
+          ],
+        ]),
+      );
+
+      mockRun.mockResolvedValue(makeApprovedResultNoFindings());
+
+      const { runConvergentReviewWorkflow } = await import('./workflow.js');
+      const { ClaudeCliRuntime } = await import('@goose-hub/core/agent-runtime/claude-cli.js');
+      const { CodexCliRuntime } = await import('@goose-hub/core/agent-runtime/codex-cli.js');
+      await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(ClaudeCliRuntime).toHaveBeenCalled();
+      expect(CodexCliRuntime).not.toHaveBeenCalled();
+      const firstSpec = mockRun.mock.calls[0][0] as AgentSpec;
+      expect(firstSpec.extraEventPayload).toMatchObject({
+        slotModel: 'claude',
+        promptVariant: 'default',
+      });
     });
   });
 

@@ -6,7 +6,6 @@ import { projectReviewSettings } from '../schema.js';
 export type ProjectReviewSettingsRow = typeof projectReviewSettings.$inferSelect;
 
 export type ReviewerSlot = {
-  model: 'claude' | 'codex';
   prompt: 'default' | 'unconstrained';
 };
 
@@ -26,7 +25,15 @@ export function readProjectReviewSettings(projectId: string): ProjectReviewSetti
 export function parseReviewerSlots(row: ProjectReviewSettingsRow | null): ReviewerSlot[] | null {
   if (!row?.reviewerSlots) return null;
   try {
-    return JSON.parse(row.reviewerSlots) as ReviewerSlot[];
+    const parsed = JSON.parse(row.reviewerSlots) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const slots = parsed.flatMap((entry): ReviewerSlot[] => {
+      if (entry == null || typeof entry !== 'object') return [];
+      const prompt = (entry as { prompt?: unknown }).prompt;
+      if (prompt !== 'default' && prompt !== 'unconstrained') return [];
+      return [{ prompt }];
+    });
+    return slots.length > 0 ? slots.slice(0, 2) : null;
   } catch {
     logger.warn('parseReviewerSlots: invalid JSON, ignoring', { projectId: row.projectId });
     return null;

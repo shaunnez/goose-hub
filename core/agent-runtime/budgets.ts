@@ -282,10 +282,22 @@ export interface DbSkillOverride {
   modelTier?: ModelTier | string | null;
   modelProvider?: string | null;
   effort?: RuntimeEffort | string | null;
+  escalationModelTier?: ModelTier | string | null;
+  escalationMaxBudgetUsd?: number | null;
+  escalationMaxTurns?: number | null;
+  escalationTimeoutMs?: number | null;
 }
 
 function isRuntimeEffort(value: unknown): value is RuntimeEffort {
   return value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh';
+}
+
+function isModelTier(value: unknown): value is ModelTier {
+  return value === 'haiku' || value === 'sonnet' || value === 'opus';
+}
+
+function isModelProvider(value: unknown): value is ModelProvider {
+  return value === 'claude' || value === 'codex';
 }
 
 /**
@@ -377,11 +389,48 @@ export function resolveEscalatedBudgets(
   },
   dbPerWorkflowMaxUsd?: number | null,
   dbPerAgentMaxUsd?: number | null,
+  dbOverride?: DbSkillOverride | null,
 ): ResolvedBudget | null {
   const base = SKILL_BUDGETS[skill];
   const override = projectBudgets?.skillBudgetOverrides?.[skill];
 
-  const escalation = override?.escalation ?? base?.escalation;
+  const inheritedEscalation = override?.escalation ?? base?.escalation;
+  const hasDbEscalation =
+    isModelTier(dbOverride?.escalationModelTier) ||
+    dbOverride?.escalationMaxBudgetUsd != null ||
+    dbOverride?.escalationMaxTurns != null ||
+    dbOverride?.escalationTimeoutMs != null;
+  const escalation =
+    hasDbEscalation && inheritedEscalation != null
+      ? {
+          ...inheritedEscalation,
+          ...(isModelTier(dbOverride?.escalationModelTier)
+            ? { modelTier: dbOverride.escalationModelTier }
+            : {}),
+          ...(dbOverride?.escalationMaxBudgetUsd != null
+            ? { maxBudgetUsd: dbOverride.escalationMaxBudgetUsd }
+            : {}),
+          ...(dbOverride?.escalationMaxTurns != null
+            ? { maxTurns: dbOverride.escalationMaxTurns }
+            : {}),
+          ...(dbOverride?.escalationTimeoutMs != null
+            ? { timeoutMs: dbOverride.escalationTimeoutMs }
+            : {}),
+        }
+      : hasDbEscalation &&
+          isModelTier(dbOverride?.escalationModelTier) &&
+          dbOverride?.escalationMaxBudgetUsd != null
+        ? {
+            modelTier: dbOverride.escalationModelTier,
+            maxBudgetUsd: dbOverride.escalationMaxBudgetUsd,
+            ...(dbOverride.escalationMaxTurns != null
+              ? { maxTurns: dbOverride.escalationMaxTurns }
+              : {}),
+            ...(dbOverride.escalationTimeoutMs != null
+              ? { timeoutMs: dbOverride.escalationTimeoutMs }
+              : {}),
+          }
+        : inheritedEscalation;
   if (escalation == null) return null;
 
   const baseTurns = override?.maxTurns ?? base?.maxTurns ?? 10;
@@ -402,9 +451,12 @@ export function resolveEscalatedBudgets(
   }
 
   const effort = isRuntimeEffort(override?.effort) ? override.effort : undefined;
+  const provider = isModelProvider(dbOverride?.modelProvider)
+    ? dbOverride.modelProvider
+    : (override?.provider ?? base?.provider ?? 'claude');
   return {
     budgets: { maxTurns, maxBudgetUsd, timeoutMs },
-    modelOverride: defaultModelForTierAndProvider(escalation.modelTier, 'claude'),
+    modelOverride: defaultModelForTierAndProvider(escalation.modelTier, provider),
     ...(effort != null ? { effort } : {}),
   };
 }

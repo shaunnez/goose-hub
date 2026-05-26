@@ -124,6 +124,10 @@ describe('timeline sections', () => {
     for (const event of events) {
       expect(resolveTimelineSection(event, { runMetadata: metadata })).toBe('investigation');
     }
+
+    expect(
+      resolveTimelineSection({ kind: 'agent.tool-call', runId: 'investigate-1:bug-enhance' }),
+    ).toBe('investigation');
   });
 
   it('maps control flow to transitions and unknown telemetry to system', () => {

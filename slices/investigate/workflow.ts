@@ -395,6 +395,7 @@ export async function runInvestigateWorkflow(
             title: workItem.title,
             body: workItem.body,
             workspaceDir: worktreePath,
+            parentRunId: runId,
           });
           const hasUsable = enhancement.groundedHints != null;
           if (hasUsable && enhancement.groundedHints != null) {

@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { SKILL_BUDGETS } from '@goose-hub/core/agent-runtime/budgets.js';
+import { SKILL_BUDGETS, resolveEscalatedBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { resolveImplementWpSettings } from '@goose-hub/core/agent-runtime/implement-wp-settings.js';
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { deriveSkillRuntimeResponse } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
@@ -111,6 +111,7 @@ const GlobalBudgetPatchSchema = z.object({
   implementWpHighPriorityUsd: z.number().min(0).max(100).nullable().optional(),
   implementWpManyFilesThreshold: z.number().int().min(0).max(100).nullable().optional(),
   implementWpManyFilesUsd: z.number().min(0).max(100).nullable().optional(),
+  implementWpContractKeywords: z.array(z.string().trim().min(1)).max(20).nullable().optional(),
   implementWpContractUsd: z.number().min(0).max(100).nullable().optional(),
   qaE2eMode: z.enum(['off', 'ui-changed', 'always']).nullable().optional(),
   playwrightReproEnabled: z.number().int().min(0).max(1).nullable().optional(),
@@ -124,6 +125,10 @@ const SkillBudgetPatchSchema = z.object({
   modelTier: z.enum(['haiku', 'sonnet', 'opus']).nullable().optional(),
   provider: z.enum(['claude', 'codex']).nullable().optional(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh']).nullable().optional(),
+  escalationModelTier: z.enum(['haiku', 'sonnet', 'opus']).nullable().optional(),
+  escalationMaxBudgetUsd: z.number().min(0).max(100).nullable().optional(),
+  escalationMaxTurns: z.number().int().min(1).max(500).nullable().optional(),
+  escalationTimeoutMs: z.number().int().min(5_000).max(3_600_000).nullable().optional(),
 });
 
 const DevReviewPatchSchema = z.object({
@@ -138,7 +143,6 @@ const DevReviewPatchSchema = z.object({
 });
 
 const ReviewerSlotSchema = z.object({
-  model: z.enum(['claude', 'codex']),
   prompt: z.enum(['default', 'unconstrained']),
 });
 
@@ -211,8 +215,23 @@ function flattenImplementWpSettings(settings: ReturnType<typeof resolveImplement
     highPriorityUsd: settings.budgetSizing.complexAdditions.highPriorityUsd,
     manyFilesThreshold: settings.budgetSizing.complexAdditions.manyFilesThreshold,
     manyFilesUsd: settings.budgetSizing.complexAdditions.manyFilesUsd,
+    contractKeywords: settings.budgetSizing.complexAdditions.contractKeywords,
     contractUsd: settings.budgetSizing.complexAdditions.contractUsd,
   };
+}
+
+function parseKeywordsJson(value: string | null | undefined): string[] | null {
+  if (value == null) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  } catch {
+    return null;
+  }
 }
 
 function dbImplementWpOverrides(row: ReturnType<typeof readProjectSettings>) {
@@ -228,6 +247,7 @@ function dbImplementWpOverrides(row: ReturnType<typeof readProjectSettings>) {
     implementWpHighPriorityUsd: row.implementWpHighPriorityUsd,
     implementWpManyFilesThreshold: row.implementWpManyFilesThreshold,
     implementWpManyFilesUsd: row.implementWpManyFilesUsd,
+    implementWpContractKeywords: parseKeywordsJson(row.implementWpContractKeywordsJson),
     implementWpContractUsd: row.implementWpContractUsd,
   };
   if (!Object.values(values).some((value) => value != null)) return null;
@@ -369,6 +389,10 @@ router.get('/:slug/settings', async (c) => {
       modelTier: string | null;
       provider: string | null;
       effort: RuntimeEffort | null;
+      escalationModelTier: string | null;
+      escalationMaxBudgetUsd: number | null;
+      escalationMaxTurns: number | null;
+      escalationTimeoutMs: number | null;
       updatedAt: string | null;
     }
   > = {};
@@ -386,6 +410,10 @@ router.get('/:slug/settings', async (c) => {
         row.effort === 'xhigh'
           ? row.effort
           : null,
+      escalationModelTier: row.escalationModelTier ?? null,
+      escalationMaxBudgetUsd: row.escalationMaxBudgetUsd ?? null,
+      escalationMaxTurns: row.escalationMaxTurns ?? null,
+      escalationTimeoutMs: row.escalationTimeoutMs ?? null,
       updatedAt: row.updatedAt,
     };
   }
@@ -402,6 +430,12 @@ router.get('/:slug/settings', async (c) => {
       modelTier: string;
       modelProvider: string;
       effort: RuntimeEffort | null;
+      escalation: {
+        modelTier: string;
+        maxBudgetUsd: number;
+        maxTurns: number | null;
+        timeoutMs: number | null;
+      } | null;
     }
   > = {};
   const skillMetadata: Record<
@@ -421,6 +455,14 @@ router.get('/:slug/settings', async (c) => {
       modelTier: budget.modelTier,
       modelProvider: hint?.provider ?? budget.provider ?? 'claude',
       effort: budget.effort ?? null,
+      escalation: budget.escalation
+        ? {
+            modelTier: budget.escalation.modelTier,
+            maxBudgetUsd: budget.escalation.maxBudgetUsd,
+            maxTurns: budget.escalation.maxTurns ?? null,
+            timeoutMs: budget.escalation.timeoutMs ?? null,
+          }
+        : null,
     };
     skillMetadata[skill] = {
       description: hint?.description ?? null,
@@ -439,6 +481,7 @@ router.get('/:slug/settings', async (c) => {
       resolvedPrimary: unknown;
       resolvedFallback: unknown;
       resolvedAdvisor: unknown;
+      resolvedEscalation: unknown;
       selectionReason: string;
       resolutionTrace: unknown;
     }
@@ -457,6 +500,13 @@ router.get('/:slug/settings', async (c) => {
       fallbackTier: hint?.modelTier,
       fallbackProvider: hint?.provider,
     });
+    const escalation = resolveEscalatedBudgets(
+      skill,
+      project.budgets,
+      globalRow?.perWorkflowMaxUsd,
+      globalRow?.perAgentMaxUsd,
+      skillRows.get(skill),
+    );
     resolvedSkillRuntimes[skill] = {
       source: resolved.source,
       effectiveTier: resolved.tier,
@@ -465,6 +515,13 @@ router.get('/:slug/settings', async (c) => {
       resolvedPrimary: resolved.resolvedPrimary,
       resolvedFallback: resolved.resolvedFallback,
       resolvedAdvisor: resolved.resolvedAdvisor,
+      resolvedEscalation:
+        escalation != null
+          ? {
+              modelId: escalation.modelOverride,
+              budgets: escalation.budgets,
+            }
+          : null,
       selectionReason: resolved.selectionReason,
       resolutionTrace: resolved.runtimeTrace,
     };
@@ -556,7 +613,27 @@ router.patch('/:slug/settings/global', async (c) => {
     return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
   }
 
-  writeProjectSettings(project.id, parsed.data, 'ui');
+  const { implementWpContractKeywords, ...patch } = parsed.data;
+  writeProjectSettings(
+    project.id,
+    {
+      ...patch,
+      ...(implementWpContractKeywords !== undefined
+        ? {
+            implementWpContractKeywordsJson:
+              implementWpContractKeywords == null
+                ? null
+                : (() => {
+                    const keywords = [
+                      ...new Set(implementWpContractKeywords.map((keyword) => keyword.trim())),
+                    ].filter((keyword) => keyword.length > 0);
+                    return keywords.length > 0 ? JSON.stringify(keywords) : null;
+                  })(),
+          }
+        : {}),
+    },
+    'ui',
+  );
   return c.json({ ok: true });
 });
 

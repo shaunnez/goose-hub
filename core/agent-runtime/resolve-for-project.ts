@@ -1,4 +1,7 @@
-import { readProjectSettings } from '../db/repositories/project-settings.js';
+import {
+  readProjectSettings,
+  readProjectSkillSettings,
+} from '../db/repositories/project-settings.js';
 import {
   type ResolvedBudget,
   type SkillBudgetOverride,
@@ -91,10 +94,12 @@ export function resolveEscalatedBudgetsForProject(
   projectId: string,
 ): ResolvedBudget | null {
   const globalRow = readProjectSettings(projectId);
+  const skillRow = readProjectSkillSettings(projectId).get(skill);
   return resolveEscalatedBudgets(
     skill,
     projectBudgets,
     globalRow?.perWorkflowMaxUsd,
     globalRow?.perAgentMaxUsd,
+    skillRow,
   );
 }

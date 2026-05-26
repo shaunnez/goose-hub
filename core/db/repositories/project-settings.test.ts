@@ -28,6 +28,7 @@ function makeProjectSettingsRow(overrides: Partial<ProjectSettingsRow> = {}): Pr
     implementWpHighPriorityUsd: null,
     implementWpManyFilesThreshold: null,
     implementWpManyFilesUsd: null,
+    implementWpContractKeywordsJson: null,
     implementWpContractUsd: null,
     useMultiAgentPipeline: null,
     useInvestigationSwarm: null,
