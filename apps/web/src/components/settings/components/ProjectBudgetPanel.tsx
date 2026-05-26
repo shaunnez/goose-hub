@@ -64,6 +64,74 @@ const GLOBAL_FIELDS: Array<{
   },
 ];
 
+const IMPLEMENT_WP_FIELDS: Array<{
+  key: Exclude<
+    keyof NonNullable<ProjectSettingsDto['dbImplementWpOverrides']>,
+    'updatedAt' | 'updatedBy'
+  >;
+  defaultKey: keyof ProjectSettingsDto['implementWpDefaults'];
+  label: string;
+  isFloat?: boolean;
+}> = [
+  {
+    key: 'implementWpEditTestLoopMaxCycles',
+    defaultKey: 'editTestLoopMaxCycles',
+    label: 'Edit-test loop cycles',
+  },
+  { key: 'implementWpBugMaxTurns', defaultKey: 'bugMaxTurns', label: 'Bug max turns' },
+  {
+    key: 'implementWpBugMaxBudgetUsd',
+    defaultKey: 'bugMaxBudgetUsd',
+    label: 'Bug budget USD',
+    isFloat: true,
+  },
+  {
+    key: 'implementWpFeatureMaxTurns',
+    defaultKey: 'featureMaxTurns',
+    label: 'Feature max turns',
+  },
+  {
+    key: 'implementWpFeatureMaxBudgetUsd',
+    defaultKey: 'featureMaxBudgetUsd',
+    label: 'Feature budget USD',
+    isFloat: true,
+  },
+  {
+    key: 'implementWpComplexMaxTurns',
+    defaultKey: 'complexMaxTurns',
+    label: 'Complex max turns',
+  },
+  {
+    key: 'implementWpComplexMaxBudgetUsd',
+    defaultKey: 'complexMaxBudgetUsd',
+    label: 'Complex budget USD',
+    isFloat: true,
+  },
+  {
+    key: 'implementWpHighPriorityUsd',
+    defaultKey: 'highPriorityUsd',
+    label: 'High priority USD',
+    isFloat: true,
+  },
+  {
+    key: 'implementWpManyFilesThreshold',
+    defaultKey: 'manyFilesThreshold',
+    label: 'Many-files threshold',
+  },
+  {
+    key: 'implementWpManyFilesUsd',
+    defaultKey: 'manyFilesUsd',
+    label: 'Many-files USD',
+    isFloat: true,
+  },
+  {
+    key: 'implementWpContractUsd',
+    defaultKey: 'contractUsd',
+    label: 'Contract keyword USD',
+    isFloat: true,
+  },
+];
+
 const TIERS: ModelTier[] = ['haiku', 'sonnet', 'opus'];
 const PROVIDERS: ModelProvider[] = ['claude', 'codex'];
 const EFFORTS: RuntimeEffort[] = ['low', 'medium', 'high', 'xhigh'];
@@ -448,13 +516,17 @@ export function ProjectBudgetPanel({ slug }: Props) {
 
   const configBudgets = data.configBudgets as Record<string, number>;
   const dbGlobal = data.dbGlobalOverrides;
-  const hasAnyOverride = dbGlobal != null || Object.keys(data.dbSkillOverrides ?? {}).length > 0;
+  const dbImplementWp = data.dbImplementWpOverrides;
+  const hasAnyOverride =
+    dbGlobal != null ||
+    dbImplementWp != null ||
+    Object.keys(data.dbSkillOverrides ?? {}).length > 0;
   const skillDefaults = data.skillDefaults ?? {};
 
   function confirmReset() {
     if (!hasAnyOverride) return;
     const ok = window.confirm(
-      'Reset all skill runtime overrides for this project? Global caps and every per-skill override will be cleared. The project will fall back to config and skill defaults.',
+      'Reset all runtime overrides for this project? Global caps, Implement-WP controls, and every per-skill override will be cleared. The project will fall back to config and skill defaults.',
     );
     if (ok) resetAll.mutate();
   }
@@ -499,6 +571,39 @@ export function ProjectBudgetPanel({ slug }: Props) {
                   isFloat={isFloat}
                   overridden={isOverridden}
                   subtitle={configVal != null ? `default: ${configVal}` : null}
+                  onCommit={(val) => patchGlobal.mutate({ [key]: val })}
+                />
+              </Fragment>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Implement-WP workflow controls */}
+      <section>
+        <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2 mb-3">
+          Implement-WP controls
+        </h3>
+        <p className="text-[11px] text-fg-3 mb-4">
+          Workflow-level sizing for parallel work-package implementation. Blank fields inherit from
+          project config, then WS4 defaults.
+        </p>
+        <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 items-start">
+          {IMPLEMENT_WP_FIELDS.map(({ key, defaultKey, label, isFloat }) => {
+            const defaultVal = data.implementWpDefaults[defaultKey];
+            const dbVal = dbImplementWp?.[key] ?? null;
+            const isOverridden = dbVal != null;
+            return (
+              <Fragment key={key}>
+                <span className="text-[12px] text-fg-2 flex items-center gap-1.5 pt-1">
+                  {label}
+                </span>
+                <NumericInput
+                  value={dbVal}
+                  placeholder={String(defaultVal)}
+                  isFloat={isFloat}
+                  overridden={isOverridden}
+                  subtitle={`default: ${isFloat ? `$${defaultVal.toFixed(2)}` : defaultVal}`}
                   onCommit={(val) => patchGlobal.mutate({ [key]: val })}
                 />
               </Fragment>

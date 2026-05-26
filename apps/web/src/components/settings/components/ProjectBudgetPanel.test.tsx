@@ -1,8 +1,10 @@
 /** @vitest-environment jsdom */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectBudgetPanel } from './ProjectBudgetPanel';
+
+const mockPatchGlobalBudgetSettings = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api', () => ({
   deleteSkillBudgetSetting: vi.fn(),
@@ -16,6 +18,47 @@ vi.mock('@/lib/api', () => ({
     configBudgets: {},
     dbGlobalOverrides: null,
     dbPipelineFlags: null,
+    implementWpDefaults: {
+      editTestLoopMaxCycles: 3,
+      bugMaxTurns: 70,
+      bugMaxBudgetUsd: 4,
+      featureMaxTurns: 100,
+      featureMaxBudgetUsd: 6,
+      complexMaxTurns: 130,
+      complexMaxBudgetUsd: 8,
+      highPriorityUsd: 1,
+      manyFilesThreshold: 3,
+      manyFilesUsd: 1,
+      contractUsd: 1,
+    },
+    resolvedImplementWp: {
+      editTestLoopMaxCycles: 2,
+      bugMaxTurns: 70,
+      bugMaxBudgetUsd: 4,
+      featureMaxTurns: 100,
+      featureMaxBudgetUsd: 6,
+      complexMaxTurns: 130,
+      complexMaxBudgetUsd: 8,
+      highPriorityUsd: 1,
+      manyFilesThreshold: 3,
+      manyFilesUsd: 1,
+      contractUsd: 1,
+    },
+    dbImplementWpOverrides: {
+      implementWpEditTestLoopMaxCycles: 2,
+      implementWpBugMaxTurns: null,
+      implementWpBugMaxBudgetUsd: null,
+      implementWpFeatureMaxTurns: null,
+      implementWpFeatureMaxBudgetUsd: null,
+      implementWpComplexMaxTurns: null,
+      implementWpComplexMaxBudgetUsd: null,
+      implementWpHighPriorityUsd: null,
+      implementWpManyFilesThreshold: null,
+      implementWpManyFilesUsd: null,
+      implementWpContractUsd: null,
+      updatedAt: '2026-05-20T00:00:00Z',
+      updatedBy: 'ui',
+    },
     dbSkillOverrides: {
       qa: {
         maxTurns: null,
@@ -108,10 +151,14 @@ vi.mock('@/lib/api', () => ({
       },
     ],
   }),
-  patchGlobalBudgetSettings: vi.fn(),
+  patchGlobalBudgetSettings: mockPatchGlobalBudgetSettings,
   patchSkillBudgetSetting: vi.fn(),
   resetAllProjectBudgets: vi.fn(),
 }));
+
+beforeEach(() => {
+  mockPatchGlobalBudgetSettings.mockClear();
+});
 
 afterEach(() => cleanup());
 
@@ -135,5 +182,31 @@ describe('ProjectBudgetPanel', () => {
     expect(await screen.findByText('p95 reads 12')).toBeTruthy();
     expect(await screen.findByText('p95 bytes 8.0 KB')).toBeTruthy();
     expect(await screen.findByText('This skill looks stable and inexpensive.')).toBeTruthy();
+  });
+
+  it('renders implement-WP controls and patches workflow-level keys', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={client}>
+        <ProjectBudgetPanel slug="goose-hub-self" />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('Implement-WP controls')).toBeTruthy());
+    expect(screen.getByText('Edit-test loop cycles')).toBeTruthy();
+    expect(screen.getByDisplayValue('2')).toBeTruthy();
+
+    const featureBudget = screen.getByPlaceholderText('6');
+    fireEvent.change(featureBudget, { target: { value: '7.5' } });
+    fireEvent.blur(featureBudget);
+
+    await waitFor(() =>
+      expect(mockPatchGlobalBudgetSettings).toHaveBeenCalledWith('goose-hub-self', {
+        implementWpFeatureMaxBudgetUsd: 7.5,
+      }),
+    );
   });
 });

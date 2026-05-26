@@ -10,6 +10,7 @@ import {
   findHoldoutContextLeaks,
 } from '@goose-hub/core/agent-runtime/context-assembly.js';
 import { shouldRunDevReview } from '@goose-hub/core/agent-runtime/dev-review-advisor.js';
+import { resolveImplementWpBudgetConfig } from '@goose-hub/core/agent-runtime/implement-wp-settings.js';
 import type {
   AgentResult,
   AgentRuntime,
@@ -23,7 +24,7 @@ import type { DevReviewOutput } from '@goose-hub/skills/dev-review/schema.js';
 import type { ImplementWpOutput } from '@goose-hub/skills/implement-wp/schema.js';
 import type { EngineeringSpec, WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
 import { runParallelImplementWorkflow } from './workflow.js';
-import { resolveImplementWpBudget } from './wp-budget.js';
+import { resolveImplementWpBudget, resolveImplementWpControl } from './wp-budget.js';
 import { runOneWpBuilder } from './wp-builder.js';
 
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
@@ -230,6 +231,55 @@ describe('implement-wp budget sizing', () => {
         },
       }),
     ).toMatchObject({ maxTurns: 130, maxBudgetUsd: 7 });
+  });
+
+  it('uses DB overrides for loop-cap and budget sizing before WS4 defaults', () => {
+    const budgetConfig = resolveImplementWpBudgetConfig(
+      {
+        perAgentMaxUsd: 10,
+        perWorkflowMaxUsd: 10,
+        implementWp: {
+          editTestLoopMaxCycles: 4,
+          budgetSizing: {
+            bug: { maxTurns: 80, maxBudgetUsd: 5 },
+            feature: { maxTurns: 110, maxBudgetUsd: 7 },
+          },
+        },
+      },
+      {
+        perAgentMaxUsd: null,
+        perWorkflowMaxUsd: null,
+        implementWpEditTestLoopMaxCycles: 2,
+        implementWpBugMaxTurns: null,
+        implementWpBugMaxBudgetUsd: 3.5,
+        implementWpFeatureMaxTurns: null,
+        implementWpFeatureMaxBudgetUsd: 9,
+        implementWpComplexMaxTurns: null,
+        implementWpComplexMaxBudgetUsd: null,
+        implementWpHighPriorityUsd: null,
+        implementWpManyFilesThreshold: null,
+        implementWpManyFilesUsd: null,
+        implementWpContractUsd: null,
+      },
+    );
+
+    expect(resolveImplementWpControl(budgetConfig)).toEqual({ editTestLoopMaxCycles: 2 });
+    expect(
+      resolveImplementWpBudget({
+        defaultBudgets: { maxTurns: 150, maxBudgetUsd: 10, timeoutMs: 900_000 },
+        workItem: makeWorkItem({ type: 'bug', priority: 'medium' }),
+        wp: makeWp('WP1', ['core/a.ts']),
+        budgetConfig,
+      }),
+    ).toMatchObject({ maxTurns: 80, maxBudgetUsd: 3.5 });
+    expect(
+      resolveImplementWpBudget({
+        defaultBudgets: { maxTurns: 150, maxBudgetUsd: 10, timeoutMs: 900_000 },
+        workItem: makeWorkItem({ type: 'feature', priority: 'medium' }),
+        wp: makeWp('WP2', ['core/b.ts']),
+        budgetConfig,
+      }),
+    ).toMatchObject({ maxTurns: 110, maxBudgetUsd: 9 });
   });
 });
 

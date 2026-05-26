@@ -1,3 +1,8 @@
+import {
+  DEFAULT_IMPLEMENT_WP_SETTINGS,
+  type ImplementWpBudgetConfig,
+  resolveImplementWpBudgetConfig,
+} from '@goose-hub/core/agent-runtime/implement-wp-settings.js';
 import type { AgentBudgets } from '@goose-hub/core/agent-runtime/interface.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { BudgetConfig } from '@goose-hub/core/types.js';
@@ -7,24 +12,13 @@ export interface ImplementWpControlConfig {
   editTestLoopMaxCycles: number;
 }
 
-const DEFAULT_BUDGET_SIZING = {
-  bug: { maxTurns: 70, maxBudgetUsd: 4 },
-  feature: { maxTurns: 100, maxBudgetUsd: 6 },
-  complex: { maxTurns: 130, maxBudgetUsd: 8 },
-  complexAdditions: {
-    highPriorityUsd: 1,
-    manyFilesThreshold: 3,
-    manyFilesUsd: 1,
-    contractKeywords: ['schema', 'migration', 'api'],
-    contractUsd: 1,
-  },
-};
-
 export function resolveImplementWpControl(
   budgetConfig?: Pick<BudgetConfig, 'implementWp'>,
 ): ImplementWpControlConfig {
   return {
-    editTestLoopMaxCycles: budgetConfig?.implementWp?.editTestLoopMaxCycles ?? 3,
+    editTestLoopMaxCycles:
+      budgetConfig?.implementWp?.editTestLoopMaxCycles ??
+      DEFAULT_IMPLEMENT_WP_SETTINGS.editTestLoopMaxCycles,
   };
 }
 
@@ -32,21 +26,25 @@ export function resolveImplementWpBudget(input: {
   defaultBudgets: AgentBudgets;
   workItem: WorkItem;
   wp: WorkPackage;
-  budgetConfig?: Pick<BudgetConfig, 'perAgentMaxUsd' | 'perWorkflowMaxUsd' | 'implementWp'>;
+  budgetConfig?: ImplementWpBudgetConfig;
 }): AgentBudgets {
+  const mergedBudgetConfig = resolveImplementWpBudgetConfig(input.budgetConfig);
   const sizing = {
-    bug: { ...DEFAULT_BUDGET_SIZING.bug, ...input.budgetConfig?.implementWp?.budgetSizing?.bug },
+    bug: {
+      ...DEFAULT_IMPLEMENT_WP_SETTINGS.budgetSizing.bug,
+      ...mergedBudgetConfig.implementWp?.budgetSizing?.bug,
+    },
     feature: {
-      ...DEFAULT_BUDGET_SIZING.feature,
-      ...input.budgetConfig?.implementWp?.budgetSizing?.feature,
+      ...DEFAULT_IMPLEMENT_WP_SETTINGS.budgetSizing.feature,
+      ...mergedBudgetConfig.implementWp?.budgetSizing?.feature,
     },
     complex: {
-      ...DEFAULT_BUDGET_SIZING.complex,
-      ...input.budgetConfig?.implementWp?.budgetSizing?.complex,
+      ...DEFAULT_IMPLEMENT_WP_SETTINGS.budgetSizing.complex,
+      ...mergedBudgetConfig.implementWp?.budgetSizing?.complex,
     },
     complexAdditions: {
-      ...DEFAULT_BUDGET_SIZING.complexAdditions,
-      ...input.budgetConfig?.implementWp?.budgetSizing?.complexAdditions,
+      ...DEFAULT_IMPLEMENT_WP_SETTINGS.budgetSizing.complexAdditions,
+      ...mergedBudgetConfig.implementWp?.budgetSizing?.complexAdditions,
     },
   };
 
@@ -77,9 +75,9 @@ export function resolveImplementWpBudget(input: {
     maxTurns = Math.max(maxTurns, sizing.complex.maxTurns);
   }
 
-  const workflowCap = input.budgetConfig?.perWorkflowMaxUsd;
+  const workflowCap = mergedBudgetConfig.perWorkflowMaxUsd;
   if (workflowCap != null) maxBudgetUsd = Math.min(maxBudgetUsd, workflowCap);
-  const agentCap = input.budgetConfig?.perAgentMaxUsd;
+  const agentCap = mergedBudgetConfig.perAgentMaxUsd;
   if (agentCap != null) maxBudgetUsd = Math.min(maxBudgetUsd, agentCap);
 
   maxBudgetUsd = Math.min(maxBudgetUsd, input.defaultBudgets.maxBudgetUsd);
