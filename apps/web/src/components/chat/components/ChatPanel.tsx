@@ -34,11 +34,12 @@ const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 interface ChatPanelProps {
   open: boolean;
   onClose: () => void;
+  restoreLastConversationOnOpen?: boolean;
 }
 
 type View = 'thread' | 'list';
 
-export function ChatPanel({ open, onClose }: ChatPanelProps) {
+export function ChatPanel({ open, onClose, restoreLastConversationOnOpen = true }: ChatPanelProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const resolved = useMemo(() => resolveScopeFromPath(location.pathname), [location.pathname]);
@@ -196,6 +197,13 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         const list = await listConversations({});
         if (cancelled || loadTokenRef.current !== openToken) return;
         setConversations(list);
+        if (!restoreLastConversationOnOpen) {
+          setConversation(null);
+          setMessages([]);
+          setInvocations([]);
+          setView('list');
+          return;
+        }
         const previousId = readActiveId();
         const previous = list.find((c) => c.id === previousId);
         if (previous != null) {
@@ -220,7 +228,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, readActiveId, loadConversation]);
+  }, [open, readActiveId, loadConversation, restoreLastConversationOnOpen]);
 
   const handleNewConversation = useCallback(async () => {
     setBusy(true);
