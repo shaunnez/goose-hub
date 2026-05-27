@@ -17,6 +17,7 @@ export function ChatDock() {
       return false;
     }
   });
+  const [panelInstanceKey, setPanelInstanceKey] = useState(0);
 
   useEffect(() => {
     try {
@@ -34,6 +35,7 @@ export function ChatDock() {
 
   const handleLauncherClose = () => {
     clearActiveConversationSelection();
+    setPanelInstanceKey((current) => current + 1);
     setOpen(false);
   };
 
@@ -47,7 +49,7 @@ export function ChatDock() {
 
   return (
     <>
-      <ChatPanel open={open} onClose={handlePanelClose} />
+      <ChatPanel key={panelInstanceKey} open={open} onClose={handlePanelClose} />
       <ChatLauncher open={open} onToggle={handleLauncherToggle} />
     </>
   );

@@ -62,10 +62,21 @@ function message(overrides: Partial<ChatMessageDto> = {}): ChatMessageDto {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe('ChatDock', () => {
   it('resets the active conversation when the launcher closes the dock', async () => {
     const existingConversation = conversation();
-    listConversations.mockResolvedValue([existingConversation]);
+    const reopenList = deferred<ChatConversationDto[]>();
+    listConversations
+      .mockResolvedValueOnce([existingConversation])
+      .mockImplementationOnce(() => reopenList.promise);
     fetchConversation.mockResolvedValue({
       conversation: existingConversation,
       messages: [message()],
@@ -94,6 +105,11 @@ describe('ChatDock', () => {
     });
 
     fireEvent.click(screen.getByTestId('chat-launcher'));
+
+    expect(screen.getByTestId('chat-conversation-list')).toBeTruthy();
+    expect(screen.queryByText('Thread message')).toBeNull();
+
+    reopenList.resolve([existingConversation]);
 
     await waitFor(() => {
       expect(screen.getByTestId('chat-conversation-list')).toBeTruthy();
