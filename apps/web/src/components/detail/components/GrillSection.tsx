@@ -66,7 +66,8 @@ function buildGrillCompletedEvent(input: {
         : null;
   if (workflowRunId == null) return null;
 
-  const maxId = input.events?.reduce((highest, event) => Math.max(highest, event.id), 0) ?? 0;
+  const syntheticId =
+    (input.events?.reduce((lowest, event) => Math.min(lowest, event.id), 0) ?? 0) - 1;
   const rounds =
     typeof latestPayload?.roundNumber === 'number' ? latestPayload.roundNumber : undefined;
   const discoverSessionId =
@@ -75,7 +76,8 @@ function buildGrillCompletedEvent(input: {
       : undefined;
 
   return {
-    id: maxId + 1,
+    // Synthetic timeline markers must not advance the shared event cursor.
+    id: syntheticId,
     projectId: input.events?.[0]?.projectId ?? input.projectSlug,
     workItemId: input.issueId,
     kind: 'grill.completed',

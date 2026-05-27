@@ -248,7 +248,8 @@ describe('GrillSection', () => {
     await waitFor(() => {
       const events = client.getQueryData<AgentEventDto[]>(['events', 'proj', '42']);
       expect(events).toBeTruthy();
-      expect(events?.[0]).toMatchObject({
+      expect(events?.[0]?.id).toBe(2);
+      expect(events?.at(-1)).toMatchObject({
         kind: 'grill.completed',
         workItemId: '42',
         runId: workflowRunId,
@@ -260,6 +261,7 @@ describe('GrillSection', () => {
           refinedIntent: 'Better means fewer drop-offs.',
         },
       });
+      expect(events?.at(-1)?.id).toBeLessThan(0);
     });
   });
 
