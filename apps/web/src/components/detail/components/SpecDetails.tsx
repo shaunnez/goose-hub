@@ -40,10 +40,12 @@ function MonoList({ values }: { values: string[] }) {
 export function SpecDetails({
   spec,
   defaultOpen = false,
+  resetKey,
 }: {
   spec: EngineeringSpecDto;
   itemState?: string;
   defaultOpen?: boolean;
+  resetKey?: string;
 }) {
   const wpCount = spec.workPackages.length;
   const hasArchitecture =
@@ -60,6 +62,7 @@ export function SpecDetails({
       title="Engineering Spec"
       icon={Package}
       defaultOpen={defaultOpen}
+      resetKey={resetKey}
       badge={`${wpCount} work package${wpCount !== 1 ? 's' : ''} · ${spec.acceptanceCriteriaCount} AC`}
     >
       <Section title="Objective">

@@ -12,9 +12,11 @@ const SOURCE_LABEL: Record<AcceptanceContractDto['source'], string> = {
 export function AcceptanceContractDetails({
   contract,
   defaultOpen = false,
+  resetKey,
 }: {
   contract: AcceptanceContractDto | null | undefined;
   defaultOpen?: boolean;
+  resetKey?: string;
 }) {
   if (contract == null || contract.criteria.length === 0) return null;
 
@@ -23,6 +25,7 @@ export function AcceptanceContractDetails({
       title="Acceptance Criteria"
       icon={ClipboardCheck}
       defaultOpen={defaultOpen}
+      resetKey={resetKey}
       badge={`${SOURCE_LABEL[contract.source]} · ${contract.criteria.length} AC`}
       contentTestId="acceptance-contract-content"
     >

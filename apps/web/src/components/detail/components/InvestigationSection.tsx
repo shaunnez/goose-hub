@@ -161,6 +161,29 @@ export function InvestigationSection({
       : investigate.confidence === 'medium'
         ? 'plausible'
         : 'weak';
+  const hasFindingsSummary = investigate.findings.trim().length > 0;
+  const hasKeyFiles = investigate.keyFiles.length > 0;
+  const findingsAccordionContent = hasFindingsSummary || hasKeyFiles;
+  const accordionResetKey = `${projectSlug}:${id}:${latest.runId ?? latest.id}`;
+
+  function renderKeyFileCards() {
+    return investigate.keyFiles.map((f) => {
+      const basename = f.path.split('/').pop() ?? f.path;
+      return (
+        <FindingCard
+          key={f.path}
+          severity={investigate.confidence}
+          title={basename}
+          body={f.reason ? <span>{f.reason}</span> : <span className="text-fg-2">—</span>}
+          filePath={f.path}
+          viewUrl={githubBase != null ? `${githubBase}/${f.path}` : undefined}
+          conf={conf}
+          personaInitials={initials}
+          personaName={personaLabel}
+        />
+      );
+    });
+  }
 
   return (
     <div data-testid="investigation-section" className="px-8 py-6 flex flex-col gap-5">
@@ -232,63 +255,64 @@ export function InvestigationSection({
       </div>
 
       {/* Root-cause finding card */}
-      {investigate.findings.trim().length > 0 && (
-        <InvestigationAccordionSection title="Findings" defaultOpen>
-          <FindingCard
-            severity={investigate.confidence}
-            title="Root cause hypothesis"
-            body={
-              <div
-                data-testid="findings-content"
-                className="prose prose-sm prose-invert max-w-none text-[13px] text-fg-2 [&_p]:mb-2 [&_ul]:mb-2 [&_li]:ml-4 [&_li]:list-disc [&_code]:font-mono [&_code]:text-[12px]"
-                // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml
-                dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(investigate.findings) }}
-              />
-            }
-            conf={conf}
-            personaInitials={initials}
-            personaName={personaLabel}
-          />
+      {findingsAccordionContent && (
+        <InvestigationAccordionSection
+          title="Findings"
+          defaultOpen
+          resetKey={accordionResetKey}
+          contentTestId="findings-accordion-content"
+        >
+          {hasFindingsSummary && (
+            <FindingCard
+              severity={investigate.confidence}
+              title="Root cause hypothesis"
+              body={
+                <div
+                  data-testid="findings-content"
+                  className="prose prose-sm prose-invert max-w-none text-[13px] text-fg-2 [&_p]:mb-2 [&_ul]:mb-2 [&_li]:ml-4 [&_li]:list-disc [&_code]:font-mono [&_code]:text-[12px]"
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml
+                  dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(investigate.findings) }}
+                />
+              }
+              conf={conf}
+              personaInitials={initials}
+              personaName={personaLabel}
+            />
+          )}
+          {hasKeyFiles && !hasFindingsSummary && (
+            <div data-testid="findings-key-files-list" className="flex flex-col gap-3">
+              {renderKeyFileCards()}
+            </div>
+          )}
         </InvestigationAccordionSection>
       )}
 
       {/* Key files as long finding cards */}
-      {investigate.keyFiles.length > 0 && (
+      {hasKeyFiles && hasFindingsSummary && (
         <InvestigationAccordionSection
           title="Key Files"
           badge={`${investigate.keyFiles.length} file${investigate.keyFiles.length !== 1 ? 's' : ''}`}
+          resetKey={accordionResetKey}
         >
           <div data-testid="key-files-list" className="flex flex-col gap-3">
-            {investigate.keyFiles.map((f) => {
-              const basename = f.path.split('/').pop() ?? f.path;
-              return (
-                <FindingCard
-                  key={f.path}
-                  severity={investigate.confidence}
-                  title={basename}
-                  body={f.reason ? <span>{f.reason}</span> : <span className="text-fg-2">—</span>}
-                  filePath={f.path}
-                  viewUrl={githubBase != null ? `${githubBase}/${f.path}` : undefined}
-                  conf={conf}
-                  personaInitials={initials}
-                  personaName={personaLabel}
-                />
-              );
-            })}
+            {renderKeyFileCards()}
           </div>
         </InvestigationAccordionSection>
       )}
 
-      <AcceptanceContractDetails contract={acceptanceContract} />
+      <AcceptanceContractDetails contract={acceptanceContract} resetKey={accordionResetKey} />
 
       {/* Engineering spec */}
-      {spec != null && <SpecDetails spec={spec} itemState={itemState} />}
+      {spec != null && (
+        <SpecDetails spec={spec} itemState={itemState} resetKey={accordionResetKey} />
+      )}
 
       {/* Open questions */}
       {investigate.openQuestions.length > 0 && (
         <InvestigationAccordionSection
           title="Open Questions"
           badge={`${investigate.openQuestions.length} unresolved`}
+          resetKey={accordionResetKey}
         >
           <ul data-testid="open-questions-list" className="space-y-1 list-disc list-inside">
             {investigate.openQuestions.map((q) => (
@@ -305,6 +329,7 @@ export function InvestigationSection({
         <InvestigationAccordionSection
           title="Investigation Trail"
           badge="What was looked at, in order"
+          resetKey={accordionResetKey}
         >
           <ol data-testid="investigation-trail" className="flex flex-col gap-2">
             {investigate.decisionSummaries.map((s, i) => (
@@ -346,6 +371,7 @@ export function InvestigationSection({
         <InvestigationAccordionSection
           title="Human Review Notes"
           badge={`${humanNotes.length} note${humanNotes.length !== 1 ? 's' : ''}`}
+          resetKey={accordionResetKey}
         >
           <div data-testid="investigation-human-notes" className="space-y-2">
             {humanNotes.map((note) => (
@@ -371,57 +397,69 @@ export function InvestigationSection({
 
       {/* Playwright captures (bug items only) */}
       {itemType === 'bug' && (
-        <InvestigationAccordionSection title="Bug Repro Capture">
+        <InvestigationAccordionSection title="Bug Repro Capture" resetKey={accordionResetKey}>
           <PlaywrightCaptureSection projectSlug={projectSlug} id={id} itemType={itemType} />
         </InvestigationAccordionSection>
       )}
 
       {/* Human proceed gate */}
       {canProceed && (
-        <div
-          data-testid="investigation-proceed-gate"
-          className={`rounded-md border px-4 py-4 space-y-3 ${
-            itemState === 'factory:gate-pending'
-              ? 'border-yellow-500/30 bg-yellow-500/5'
-              : 'border-line bg-bg-elev/40'
-          }`}
+        <InvestigationAccordionSection
+          title="Proceed Gate"
+          badge={
+            itemState === 'factory:gate-pending' ? 'Human review required' : 'Ready to proceed'
+          }
+          defaultOpen={itemState === 'factory:gate-pending'}
+          resetKey={accordionResetKey}
+          testId="investigation-proceed-gate"
+          contentTestId="investigation-proceed-gate-content"
         >
-          <div className="flex items-center gap-2">
-            <h4 className="text-[11px] font-medium text-fg-3 uppercase tracking-wide">
-              {itemState === 'factory:gate-pending' ? 'Human review required' : 'Ready to proceed'}
-            </h4>
-            {itemState === 'factory:gate-pending' && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 font-medium">
-                low confidence
-              </span>
-            )}
-          </div>
-          {itemState === 'factory:gate-pending' && (
-            <p className="text-[12px] text-fg-3">
-              Investigation confidence is low. Review the open questions above before proceeding.
-            </p>
-          )}
-          <textarea
-            data-testid="investigation-notes-input"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Optional notes or answers to open questions…"
-            rows={3}
-            className="w-full rounded border border-line bg-bg px-3 py-2 text-[12px] text-fg placeholder:text-fg-2 focus:outline-none focus:border-[color:var(--accent)] resize-none"
-          />
-          {proceedError != null && (
-            <p className="text-[11px] text-[color:var(--danger)]">{proceedError}</p>
-          )}
-          <button
-            type="button"
-            data-testid="investigation-proceed-button"
-            onClick={handleProceed}
-            disabled={proceeding}
-            className="px-3 py-1.5 rounded text-[11px] font-medium bg-[color:var(--accent)]/15 text-[color:var(--accent)] border border-[color:var(--accent)]/30 hover:bg-[color:var(--accent)]/25 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          <div
+            className={`rounded-md border px-4 py-4 space-y-3 ${
+              itemState === 'factory:gate-pending'
+                ? 'border-yellow-500/30 bg-yellow-500/5'
+                : 'border-line bg-bg-elev/40'
+            }`}
           >
-            {proceeding ? 'Proceeding…' : 'Proceed to dev-ready'}
-          </button>
-        </div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-[11px] font-medium text-fg-3 uppercase tracking-wide">
+                {itemState === 'factory:gate-pending'
+                  ? 'Human review required'
+                  : 'Ready to proceed'}
+              </h4>
+              {itemState === 'factory:gate-pending' && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 font-medium">
+                  low confidence
+                </span>
+              )}
+            </div>
+            {itemState === 'factory:gate-pending' && (
+              <p className="text-[12px] text-fg-3">
+                Investigation confidence is low. Review the open questions above before proceeding.
+              </p>
+            )}
+            <textarea
+              data-testid="investigation-notes-input"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optional notes or answers to open questions…"
+              rows={3}
+              className="w-full rounded border border-line bg-bg px-3 py-2 text-[12px] text-fg placeholder:text-fg-2 focus:outline-none focus:border-[color:var(--accent)] resize-none"
+            />
+            {proceedError != null && (
+              <p className="text-[11px] text-[color:var(--danger)]">{proceedError}</p>
+            )}
+            <button
+              type="button"
+              data-testid="investigation-proceed-button"
+              onClick={handleProceed}
+              disabled={proceeding}
+              className="px-3 py-1.5 rounded text-[11px] font-medium bg-[color:var(--accent)]/15 text-[color:var(--accent)] border border-[color:var(--accent)]/30 hover:bg-[color:var(--accent)]/25 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {proceeding ? 'Proceeding…' : 'Proceed to dev-ready'}
+            </button>
+          </div>
+        </InvestigationAccordionSection>
       )}
     </div>
   );

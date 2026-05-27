@@ -87,4 +87,37 @@ describe('InvestigationAccordionSection', () => {
     expect(header.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByTestId('section-content')).toBeNull();
   });
+
+  it('resets open state when the accordion identity changes', async () => {
+    const { rerender } = render(
+      <InvestigationAccordionSection
+        title="Findings"
+        defaultOpen={false}
+        resetKey="issue-1"
+        contentTestId="section-content"
+      >
+        <div>Issue one.</div>
+      </InvestigationAccordionSection>,
+    );
+
+    const header = screen.getByRole('button', { name: /findings/i });
+    await userEvent.click(header);
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+
+    rerender(
+      <InvestigationAccordionSection
+        title="Findings"
+        defaultOpen={false}
+        resetKey="issue-2"
+        contentTestId="section-content"
+      >
+        <div>Issue two.</div>
+      </InvestigationAccordionSection>,
+    );
+
+    expect(screen.getByRole('button', { name: /findings/i }).getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+    expect(screen.queryByTestId('section-content')).toBeNull();
+  });
 });

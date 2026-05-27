@@ -382,4 +382,51 @@ describe('InvestigationSection', () => {
     fireEvent.click(getAccordionButton('Bug Repro Capture'));
     expect(screen.getByTestId('playwright-capture-content')).toBeTruthy();
   });
+
+  it('shows the findings accordion even when only key files exist', () => {
+    renderSection({
+      events: [
+        investigationEvent({
+          payload: {
+            investigate: {
+              ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> })
+                .investigate,
+              findings: '',
+              keyFiles: [{ path: 'src/auth/login.ts', reason: 'Only grounded evidence available' }],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(getAccordionButton('Findings').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('findings-key-files-list')).toBeTruthy();
+    expect(screen.getByText('src/auth/login.ts')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /key files/i })).toBeNull();
+  });
+
+  it('renders the proceed gate as a collapsed accordion for ready investigations', () => {
+    renderSection({
+      events: [INVESTIGATION_EVENT],
+      itemState: 'factory:investigation-complete',
+    });
+
+    expect(getAccordionButton('Proceed Gate').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('investigation-proceed-gate-content')).toBeNull();
+
+    fireEvent.click(getAccordionButton('Proceed Gate'));
+    expect(screen.getByTestId('investigation-proceed-gate-content')).toBeTruthy();
+    expect(screen.getByTestId('investigation-notes-input')).toBeTruthy();
+  });
+
+  it('opens the proceed gate by default when human review is required', () => {
+    renderSection({
+      events: [INVESTIGATION_EVENT],
+      itemState: 'factory:gate-pending',
+    });
+
+    expect(getAccordionButton('Proceed Gate').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('investigation-proceed-gate-content')).toBeTruthy();
+    expect(screen.getByText(/Investigation confidence is low\./)).toBeTruthy();
+  });
 });
