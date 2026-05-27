@@ -859,9 +859,20 @@ function hasGrillActivity(events: AgentEventDto[]): boolean {
   );
 }
 
+function hasAnsweredGrillFlow(events: AgentEventDto[]): boolean {
+  if (!hasGrillActivity(events)) return false;
+  return events.some((event) => {
+    const payload = event.payload as { from?: string; to?: string } | null;
+    return (
+      event.kind === 'state.transitioned' &&
+      payload?.from === 'factory:gate-pending' &&
+      payload.to === 'factory:grilling'
+    );
+  });
+}
+
 function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs-human' | 'failed' {
   const events = items.flatMap(eventFromRenderItem);
-  const hasAnsweredGrillFlow = hasGrillActivity(events);
   if (events.some((event) => event.kind === 'review.wave-failed')) return 'failed';
   if (events.some((event) => event.kind === 'agent.run-failed')) return 'failed';
   if (events.some((event) => event.kind === 'review.escalated')) return 'needs-human';
@@ -884,8 +895,9 @@ function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs
   const verdict = (completed?.payload as { verdict?: string } | null)?.verdict;
   if (verdict === 'needs-human') return 'needs-human';
   if (verdict === 'approved' || verdict === 'needs-fix') return 'completed';
+  const answeredGrillFlow = hasAnsweredGrillFlow(events);
   if (
-    hasAnsweredGrillFlow &&
+    answeredGrillFlow &&
     events.some((event) => {
       const payload = event.payload as { to?: string; toState?: string } | null;
       return (

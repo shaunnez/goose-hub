@@ -19,6 +19,17 @@ function makeReviewItems(...events: AgentEventDto[]): RenderItem[] {
 }
 
 describe('groupByReviewWorkflow grill completion status', () => {
+  function makeAnsweredGrillEvents(reviewWorkflowRunId: string): AgentEventDto[] {
+    return [
+      makeEvent(1, 'question.asked', { reviewWorkflowRunId }),
+      makeEvent(2, 'state.transitioned', {
+        reviewWorkflowRunId,
+        from: 'factory:gate-pending',
+        to: 'factory:grilling',
+      }),
+    ];
+  }
+
   it('keeps unrelated review workflows live when they only transition into a post-grill state', () => {
     const reviewWorkflowRunId = 'review-non-grill-transition';
 
@@ -44,8 +55,8 @@ describe('groupByReviewWorkflow grill completion status', () => {
 
     const result = groupByReviewWorkflow(
       makeReviewItems(
-        makeEvent(1, 'question.asked', { reviewWorkflowRunId }),
-        makeEvent(2, 'state.transitioned', {
+        ...makeAnsweredGrillEvents(reviewWorkflowRunId),
+        makeEvent(3, 'state.transitioned', {
           reviewWorkflowRunId,
           to: 'factory:prd-drafting',
         }),
@@ -60,6 +71,25 @@ describe('groupByReviewWorkflow grill completion status', () => {
     expect(result[0].endedAt).toBe(result[0].lastEventAt);
   });
 
+  it('keeps grill review groups live until a reply resumes grilling', () => {
+    const reviewWorkflowRunId = 'review-grill-unanswered';
+
+    const result = groupByReviewWorkflow(
+      makeReviewItems(
+        makeEvent(1, 'question.asked', { reviewWorkflowRunId }),
+        makeEvent(2, 'state.transitioned', {
+          reviewWorkflowRunId,
+          to: 'factory:prd-drafting',
+        }),
+      ),
+    );
+
+    expect(result[0]?.kind).toBe('review-group');
+    if (result[0]?.kind !== 'review-group') return;
+
+    expect(result[0].status).toBe('live');
+  });
+
   it.each([
     ['review.wave-failed', 'failed'],
     ['agent.run-failed', 'failed'],
@@ -69,7 +99,8 @@ describe('groupByReviewWorkflow grill completion status', () => {
     const result = groupByReviewWorkflow(
       makeReviewItems(
         makeEvent(1, kind, { reviewWorkflowRunId }),
-        makeEvent(2, 'state.transitioned', {
+        ...makeAnsweredGrillEvents(reviewWorkflowRunId),
+        makeEvent(3, 'state.transitioned', {
           reviewWorkflowRunId,
           to: 'factory:prd-drafting',
         }),
@@ -95,7 +126,8 @@ describe('groupByReviewWorkflow grill completion status', () => {
     const result = groupByReviewWorkflow(
       makeReviewItems(
         makeEvent(1, kind, payload),
-        makeEvent(2, 'state.transitioned', {
+        ...makeAnsweredGrillEvents(reviewWorkflowRunId),
+        makeEvent(3, 'state.transitioned', {
           reviewWorkflowRunId,
           to: 'factory:prd-drafting',
         }),
