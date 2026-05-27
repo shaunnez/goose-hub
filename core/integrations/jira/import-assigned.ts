@@ -7,7 +7,7 @@ import type { ProjectConfig } from '../../types.js';
 import type { AtlassianSearchPage, JiraProviderAdapter } from '../atlassian/adapters.js';
 import type { JiraIssueCardDto } from '../atlassian/dtos.js';
 import { type ProviderResult, providerFailure } from '../atlassian/errors.js';
-import { executeJiraQuery } from '../atlassian/query.js';
+import { resolveJiraQuery } from '../atlassian/query.js';
 import { importJiraIssueDetailToLocalDb } from './import-issue.js';
 
 export interface ImportAssignedJiraIssuesToLocalDbInput {
@@ -64,7 +64,7 @@ export async function importAssignedJiraIssuesToLocalDb(
   const user = await input.adapter.getCurrentUser();
   if (!user.ok) return user;
 
-  const page = await executeJiraQuery<AtlassianSearchPage<JiraIssueCardDto>>({
+  const resolved = resolveJiraQuery({
     config: {
       baseUrl: jira.baseUrl,
       projectKeys: jira.projectKeys,
@@ -78,8 +78,13 @@ export async function importAssignedJiraIssuesToLocalDb(
     },
     caps: { maxResults: 50, maxLookbackDays: 90 },
     now: input.now?.() ?? new Date(),
-    adapter: input.adapter,
   });
+  if (!resolved.ok) return resolved;
+  if (resolved.query.level === 'L0') {
+    return providerFailure('validation', 'Assigned Jira import must use a scoped search query');
+  }
+
+  const page = await input.adapter.searchIssues(resolved.query.search);
   if (!page.ok) return page;
 
   const repository = input.repository ?? new LocalDbWorkItemRepository();
@@ -141,6 +146,8 @@ export async function importAssignedJiraIssuesToLocalDb(
     currentAccountId: user.data.accountId,
     returnedKeys,
     syncNow,
+    searchUpdated: resolved.query.search.updated,
+    mayBePartial: page.data.hasMore,
   });
 
   return {
@@ -159,7 +166,11 @@ function markStaleAssignedRefs(input: {
   currentAccountId: string;
   returnedKeys: Set<string>;
   syncNow: string;
+  searchUpdated: { from: string; to: string };
+  mayBePartial: boolean;
 }): number {
+  if (input.mayBePartial) return 0;
+
   let stale = 0;
   const refs = input.repository.listExternalRefsByKind({
     projectId: input.cfg.id,
@@ -171,6 +182,7 @@ function markStaleAssignedRefs(input: {
     const metadata = metadataRecord(ref);
     const assigned = metadataRecordValue(metadata.assignedToMe);
     if (assigned.accountId !== input.currentAccountId) continue;
+    if (!isMetadataUpdatedWithinRange(metadata.updated, input.searchUpdated)) continue;
 
     input.repository.upsertExternalRef({
       projectId: input.cfg.id,
@@ -200,4 +212,16 @@ function metadataRecord(ref: LocalDbExternalRefRow): Record<string, unknown> {
 function metadataRecordValue(value: unknown): Record<string, unknown> {
   if (value == null || typeof value !== 'object' || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
+}
+
+function isMetadataUpdatedWithinRange(
+  value: unknown,
+  range: { from: string; to: string },
+): boolean {
+  if (typeof value !== 'string') return false;
+  const updated = Date.parse(value);
+  const from = Date.parse(range.from);
+  const to = Date.parse(range.to);
+  if (!Number.isFinite(updated) || !Number.isFinite(from) || !Number.isFinite(to)) return false;
+  return updated >= from && updated <= to;
 }

@@ -181,6 +181,8 @@ function jiraExternalRefMetadata(issue: JiraIssueDetailDto, syncedAt: Date) {
     issueType: issue.issueType ?? null,
     priority: issue.priority ?? null,
     project: issue.project ?? null,
+    created: issue.created ?? null,
+    updated: issue.updated ?? null,
     labels: issue.labels,
     components: issue.components,
     linkedKeys: issue.linkedKeys,

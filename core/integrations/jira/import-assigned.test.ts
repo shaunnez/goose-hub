@@ -254,6 +254,107 @@ describe('importAssignedJiraIssuesToLocalDb', () => {
     });
   });
 
+  it('does not stale missing assigned refs when the Jira search page is partial', async () => {
+    const { sqlite, repository } = makeRepository();
+    handles.push(sqlite);
+    await importAssignedJiraIssuesToLocalDb({
+      projectConfig,
+      adapter: assignedAdapter({
+        page: {
+          provider: 'jira',
+          tier: 'card',
+          issues: [jiraCard('TAS-123'), jiraCard('TAS-456')],
+          totalCount: 2,
+          hasMore: false,
+        },
+      }),
+      repository,
+      now: () => new Date('2026-05-27T01:00:00.000Z'),
+    });
+
+    const result = await importAssignedJiraIssuesToLocalDb({
+      projectConfig,
+      adapter: assignedAdapter({
+        page: {
+          provider: 'jira',
+          tier: 'card',
+          issues: [jiraCard('TAS-123')],
+          totalCount: 51,
+          hasMore: true,
+        },
+      }),
+      repository,
+      now: () => new Date('2026-05-27T02:00:00.000Z'),
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { counts: { imported: 0, updated: 1, skipped: 0, stale: 0, failed: 0 } },
+    });
+    const ref = repository.getExternalRef({
+      projectId: 'proj',
+      provider: 'jira',
+      kind: 'issue',
+      repoRef: null,
+      externalId: 'TAS-456',
+    });
+    expect(ref).not.toBeNull();
+    if (ref == null) throw new Error('expected Jira ref');
+    expect(parseExternalRefMetadata(ref)).toMatchObject({ stale: false, hidden: false });
+  });
+
+  it('does not stale missing assigned refs outside the current updated-date query window', async () => {
+    const { sqlite, repository } = makeRepository();
+    handles.push(sqlite);
+    await importAssignedJiraIssuesToLocalDb({
+      projectConfig,
+      adapter: assignedAdapter({
+        page: {
+          provider: 'jira',
+          tier: 'card',
+          issues: [jiraCard('TAS-123'), jiraCard('TAS-456')],
+          totalCount: 2,
+          hasMore: false,
+        },
+        details: {
+          'TAS-456': jiraDetail('TAS-456', { updated: '2026-01-01T00:00:00.000Z' }),
+        },
+      }),
+      repository,
+      now: () => new Date('2026-05-27T01:00:00.000Z'),
+    });
+
+    const result = await importAssignedJiraIssuesToLocalDb({
+      projectConfig,
+      adapter: assignedAdapter({
+        page: {
+          provider: 'jira',
+          tier: 'card',
+          issues: [jiraCard('TAS-123')],
+          totalCount: 1,
+          hasMore: false,
+        },
+      }),
+      repository,
+      now: () => new Date('2026-05-27T02:00:00.000Z'),
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { counts: { imported: 0, updated: 1, skipped: 0, stale: 0, failed: 0 } },
+    });
+    const ref = repository.getExternalRef({
+      projectId: 'proj',
+      provider: 'jira',
+      kind: 'issue',
+      repoRef: null,
+      externalId: 'TAS-456',
+    });
+    expect(ref).not.toBeNull();
+    if (ref == null) throw new Error('expected Jira ref');
+    expect(parseExternalRefMetadata(ref)).toMatchObject({ stale: false, hidden: false });
+  });
+
   it('reports per-issue failures and does not stale returned-but-failed keys', async () => {
     const { sqlite, repository } = makeRepository();
     handles.push(sqlite);
