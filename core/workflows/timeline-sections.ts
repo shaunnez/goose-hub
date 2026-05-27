@@ -145,6 +145,9 @@ export const RUNTIME_INHERIT_TIMELINE_EVENT_KINDS = new Set<string>([
 ]);
 
 const INTENTIONALLY_SYSTEM_EVENT_KINDS = new Set<string>([
+  'github.issue.opened',
+  'github.label.changed',
+  'github.label-mirror-warning',
   'milestone.activated',
   'system.note',
   'project.budget-exceeded',
