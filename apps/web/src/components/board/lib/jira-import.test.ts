@@ -1,6 +1,6 @@
 import type { ProjectSummary } from '@/lib/types';
 import { describe, expect, it } from 'vitest';
-import { canUseManualJiraImport } from './jira-import';
+import { canUseAssignedToMeJiraImport, canUseManualJiraImport } from './jira-import';
 
 function project(source: ProjectSummary['source']): ProjectSummary {
   return {
@@ -42,5 +42,39 @@ describe('canUseManualJiraImport', () => {
       ),
     ).toBe(false);
     expect(canUseManualJiraImport(project({ kind: 'local-db' }))).toBe(false);
+  });
+});
+
+describe('canUseAssignedToMeJiraImport', () => {
+  it('allows only local-db projects with enabled assigned-to-me Jira import', () => {
+    expect(
+      canUseAssignedToMeJiraImport(
+        project({
+          kind: 'local-db',
+          integrations: {
+            jira: {
+              enabled: true,
+              importMode: 'assigned-to-me',
+            },
+          },
+        }),
+      ),
+    ).toBe(true);
+    expect(canUseAssignedToMeJiraImport(project({ kind: 'github', repo: 'owner/repo' }))).toBe(
+      false,
+    );
+    expect(
+      canUseAssignedToMeJiraImport(
+        project({
+          kind: 'local-db',
+          integrations: {
+            jira: {
+              enabled: true,
+              importMode: 'manual',
+            },
+          },
+        }),
+      ),
+    ).toBe(false);
   });
 });

@@ -27,6 +27,29 @@ export interface ImportJiraIssueToLocalDbResult {
   title: string;
 }
 
+export interface JiraImportMetadataPatch {
+  assignedToMe?: {
+    accountId: string;
+    displayName?: string;
+  };
+  stale?: boolean;
+  hidden?: boolean;
+  staleReason?: string | null;
+  lastAssignedSyncAt?: string;
+}
+
+export interface ImportJiraIssueDetailToLocalDbInput {
+  projectConfig: ProjectConfig;
+  detail: JiraIssueDetailDto;
+  milestone?: {
+    id: string;
+    title?: string | null;
+  };
+  repository?: LocalDbWorkItemRepository;
+  now?: () => Date;
+  metadataPatch?: JiraImportMetadataPatch;
+}
+
 export async function importJiraIssueToLocalDb(
   input: ImportJiraIssueToLocalDbInput,
 ): Promise<ProviderResult<ImportJiraIssueToLocalDbResult>> {
@@ -53,9 +76,31 @@ export async function importJiraIssueToLocalDb(
   });
   if (!detail.ok) return detail;
 
-  const jiraKey = detail.data.key;
+  return importJiraIssueDetailToLocalDb({
+    projectConfig: cfg,
+    detail: detail.data,
+    milestone: input.milestone,
+    repository: input.repository,
+    now: input.now,
+  });
+}
+
+export async function importJiraIssueDetailToLocalDb(
+  input: ImportJiraIssueDetailToLocalDbInput,
+): Promise<ProviderResult<ImportJiraIssueToLocalDbResult>> {
+  const cfg = input.projectConfig;
+  const jira = cfg.source.kind === 'local-db' ? cfg.source.integrations?.jira : undefined;
+  if (cfg.source.kind !== 'local-db' || jira?.enabled !== true) {
+    return providerFailure('validation', 'Jira integration is not enabled for this project');
+  }
+
+  const jiraKey = input.detail.key;
   if (jiraKey == null || jiraKey.trim().length === 0) {
     return providerFailure('validation', 'Jira issue detail is missing a key');
+  }
+  const projectKey = jiraKey.includes('-') ? jiraKey.split('-')[0] : jiraKey;
+  if (!jira.projectKeys.includes(projectKey)) {
+    return providerFailure('validation', `Jira project key '${projectKey}' is not configured`);
   }
 
   const repository = input.repository ?? new LocalDbWorkItemRepository();
@@ -66,7 +111,7 @@ export async function importJiraIssueToLocalDb(
     repoRef: null,
     externalId: jiraKey,
   });
-  const mapped = mapJiraIssueToWorkItem(detail.data);
+  const mapped = mapJiraIssueToWorkItem(input.detail);
   const row =
     existing == null
       ? repository.createWorkItem({
@@ -95,8 +140,11 @@ export async function importJiraIssueToLocalDb(
     kind: 'issue',
     repoRef: null,
     externalId: jiraKey,
-    url: detail.data.url,
-    metadata: jiraExternalRefMetadata(detail.data, input.now?.() ?? new Date()),
+    url: input.detail.url,
+    metadata: {
+      ...jiraExternalRefMetadata(input.detail, input.now?.() ?? new Date()),
+      ...(input.metadataPatch ?? {}),
+    },
   });
 
   return {
@@ -106,7 +154,7 @@ export async function importJiraIssueToLocalDb(
       itemId: row.id,
       externalId: row.externalId,
       jiraKey,
-      jiraUrl: detail.data.url,
+      jiraUrl: input.detail.url,
       title: row.title,
     },
   };
@@ -133,6 +181,8 @@ function jiraExternalRefMetadata(issue: JiraIssueDetailDto, syncedAt: Date) {
     issueType: issue.issueType ?? null,
     priority: issue.priority ?? null,
     project: issue.project ?? null,
+    created: issue.created ?? null,
+    updated: issue.updated ?? null,
     labels: issue.labels,
     components: issue.components,
     linkedKeys: issue.linkedKeys,

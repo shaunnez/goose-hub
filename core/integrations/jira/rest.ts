@@ -1,6 +1,14 @@
-import type { JiraProviderAdapter } from '../atlassian/adapters.js';
-import type { AtlassianArtifactRef, JiraIssueDetailDto } from '../atlassian/dtos.js';
-import { JiraIssueDetailSchema } from '../atlassian/dtos.js';
+import type {
+  AtlassianSearchPage,
+  JiraIssueSearchRequest,
+  JiraProviderAdapter,
+} from '../atlassian/adapters.js';
+import type {
+  AtlassianArtifactRef,
+  JiraIssueCardDto,
+  JiraIssueDetailDto,
+} from '../atlassian/dtos.js';
+import { JiraIssueCardSchema, JiraIssueDetailSchema } from '../atlassian/dtos.js';
 import {
   type ProviderResult,
   mapHttpStatusToProviderErrorKind,
@@ -50,6 +58,12 @@ interface JiraRestIssue {
     updated?: unknown;
     issuelinks?: unknown;
   };
+}
+
+interface JiraRestSearchResponse {
+  issues?: unknown;
+  total?: unknown;
+  isLast?: unknown;
 }
 
 export function createJiraRestAdapterFromEnv(
@@ -115,14 +129,102 @@ export function createJiraRestAdapter(options: JiraRestAdapterOptions): JiraProv
         );
       }
     },
-    async searchIssues() {
-      return providerFailure('query', 'Jira search is not implemented for manual import');
+    async searchIssues(
+      input: JiraIssueSearchRequest,
+    ): Promise<ProviderResult<AtlassianSearchPage<JiraIssueCardDto>>> {
+      const url = new URL(`${baseUrl}/rest/api/3/search/jql`);
+      url.searchParams.set('jql', buildJql(input));
+      url.searchParams.set('maxResults', String(input.maxResults));
+      url.searchParams.set(
+        'fields',
+        ['summary', 'status', 'issuetype', 'priority', 'assignee', 'created', 'updated'].join(','),
+      );
+
+      let response: Response;
+      try {
+        response = await fetchImpl(url.toString(), {
+          headers: {
+            Accept: 'application/json',
+            Authorization: authorization,
+          },
+        });
+      } catch (err) {
+        return providerFailure('connection', `Failed to connect to Jira: ${String(err)}`);
+      }
+
+      if (!response.ok) {
+        return providerFailure(
+          mapHttpStatusToProviderErrorKind(response.status, 'read'),
+          response.statusText || `Jira search failed with ${response.status}`,
+          { status: response.status },
+        );
+      }
+
+      let raw: unknown;
+      try {
+        raw = await response.json();
+      } catch (err) {
+        return providerFailure(
+          'connection',
+          `Failed to parse Jira search response: ${String(err)}`,
+        );
+      }
+
+      try {
+        return {
+          ok: true,
+          data: mapSearchResponse(raw, input, baseUrl),
+        };
+      } catch (err) {
+        return providerFailure(
+          'validation',
+          `Jira search response failed validation: ${String(err)}`,
+        );
+      }
     },
     async getCurrentUser() {
-      return providerFailure(
-        'auth',
-        'Jira current-user lookup is not implemented for manual import',
-      );
+      let response: Response;
+      try {
+        response = await fetchImpl(`${baseUrl}/rest/api/3/myself`, {
+          headers: {
+            Accept: 'application/json',
+            Authorization: authorization,
+          },
+        });
+      } catch (err) {
+        return providerFailure('connection', `Failed to connect to Jira: ${String(err)}`);
+      }
+
+      if (!response.ok) {
+        return providerFailure(
+          mapHttpStatusToProviderErrorKind(response.status, 'read'),
+          response.statusText || `Jira current-user lookup failed with ${response.status}`,
+          { status: response.status },
+        );
+      }
+
+      let raw: unknown;
+      try {
+        raw = await response.json();
+      } catch (err) {
+        return providerFailure(
+          'connection',
+          `Failed to parse Jira current-user response: ${String(err)}`,
+        );
+      }
+
+      const user = raw as { accountId?: unknown; displayName?: unknown };
+      const accountId = stringValue(user.accountId);
+      if (accountId.length === 0) {
+        return providerFailure('validation', 'Jira current-user response is missing accountId');
+      }
+      return {
+        ok: true,
+        data: {
+          accountId,
+          displayName: stringValue(user.displayName) || undefined,
+        },
+      };
     },
   };
 }
@@ -189,6 +291,64 @@ function mapRestIssue(
     components: arrayOfNamedValues(fields.components),
     linkedKeys: linkedIssueKeys(fields.issuelinks),
   };
+}
+
+function mapSearchResponse(
+  raw: unknown,
+  input: JiraIssueSearchRequest,
+  baseUrl: string,
+): AtlassianSearchPage<JiraIssueCardDto> {
+  const response = raw as JiraRestSearchResponse;
+  const issues = Array.isArray(response.issues) ? response.issues : [];
+  const cards = issues.map((issue) => JiraIssueCardSchema.parse(mapRestIssueCard(issue, baseUrl)));
+  const total = numberValue(response.total) ?? cards.length;
+  return {
+    provider: 'jira',
+    tier: 'card',
+    issues: cards,
+    totalCount: total,
+    hasMore:
+      typeof response.isLast === 'boolean'
+        ? !response.isLast
+        : cards.length < total && cards.length >= input.maxResults,
+  };
+}
+
+function mapRestIssueCard(raw: unknown, baseUrl: string): JiraIssueCardDto {
+  const issue = raw as JiraRestIssue;
+  const fields = issue.fields ?? {};
+  const key = stringValue(issue.key);
+  return {
+    provider: 'jira',
+    resourceKind: 'issue',
+    tier: 'card',
+    id: stringValue(issue.id) || key,
+    key,
+    title: stringValue(fields.summary) || key,
+    status: stringValue(fields.status?.name) || 'Unknown',
+    url: `${baseUrl}/browse/${encodeURIComponent(key)}`,
+    project: key.includes('-') ? key.split('-')[0] : undefined,
+    issueType: stringValue(fields.issuetype?.name) || undefined,
+    priority: stringValue(fields.priority?.name) || undefined,
+    assignee: mapAssignee(fields.assignee),
+    created: stringValue(fields.created) || undefined,
+    updated: stringValue(fields.updated) || undefined,
+  };
+}
+
+function buildJql(input: JiraIssueSearchRequest): string {
+  const clauses = [
+    `project in (${input.projects.map(jqlString).join(',')})`,
+    input.assignee != null ? `assignee = ${jqlString(input.assignee.accountId)}` : undefined,
+    `updated >= ${jqlString(input.updated.from)}`,
+    `updated <= ${jqlString(input.updated.to)}`,
+    input.text != null ? `text ~ ${jqlString(input.text)}` : undefined,
+  ].filter((clause): clause is string => clause != null);
+  return `${clauses.join(' AND ')} ORDER BY updated DESC`;
+}
+
+function jqlString(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
 function offloadArtifactRef(input: {
@@ -292,4 +452,8 @@ function linkedIssueKeys(value: unknown): string[] {
 
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

@@ -11,8 +11,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Download, Eye, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { canUseManualJiraImport } from '../lib/jira-import';
+import { canUseAssignedToMeJiraImport, canUseManualJiraImport } from '../lib/jira-import';
 import { BoardColumn } from './BoardColumn';
+import { JiraAssignedImportAction } from './JiraAssignedImportAction';
 import { JiraImportDialog } from './JiraImportDialog';
 
 interface BoardProps {
@@ -29,6 +30,7 @@ export function Board({ projectSlug }: BoardProps) {
   const { data: budgetStatus } = useProjectBudgetStatus(projectSlug);
   const currentProject = projects.find((project) => project.slug === projectSlug);
   const showJiraImport = canUseManualJiraImport(currentProject);
+  const showAssignedJiraImport = canUseAssignedToMeJiraImport(currentProject);
 
   const {
     data: items = [],
@@ -158,6 +160,20 @@ export function Board({ projectSlug }: BoardProps) {
           >
             <Download size={12} /> Import Jira
           </button>
+        )}
+        {showAssignedJiraImport && (
+          <JiraAssignedImportAction
+            projectSlug={projectSlug}
+            milestoneNumber={resolvedMilestone}
+            onImported={() => {
+              void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
+              if (resolvedMilestone != null) {
+                void queryClient.invalidateQueries({
+                  queryKey: ['milestone-issues', projectSlug, resolvedMilestone],
+                });
+              }
+            }}
+          />
         )}
         {hiddenLanes.length > 0 && (
           <details className="relative">
