@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ChatLauncher } from './ChatLauncher';
-import { ChatPanel } from './ChatPanel';
+import { ChatPanel, clearActiveConversationSelection } from './ChatPanel';
 
 const STORAGE_KEY = 'hub-chat-open';
 
@@ -24,10 +24,31 @@ export function ChatDock() {
     } catch {}
   }, [open]);
 
+  const handlePanelClose = () => {
+    setOpen(false);
+  };
+
+  const handleLauncherOpen = () => {
+    setOpen(true);
+  };
+
+  const handleLauncherClose = () => {
+    clearActiveConversationSelection();
+    setOpen(false);
+  };
+
+  const handleLauncherToggle = () => {
+    if (open) {
+      handleLauncherClose();
+      return;
+    }
+    handleLauncherOpen();
+  };
+
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} />
-      <ChatLauncher open={open} onToggle={() => setOpen((o) => !o)} />
+      <ChatPanel open={open} onClose={handlePanelClose} />
+      <ChatLauncher open={open} onToggle={handleLauncherToggle} />
     </>
   );
 }

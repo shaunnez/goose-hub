@@ -31,6 +31,14 @@ import { ConversationList } from './ConversationList';
 
 const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 
+export function clearActiveConversationSelection(): void {
+  try {
+    localStorage.removeItem(ACTIVE_CONVERSATION_STORAGE_KEY);
+  } catch {
+    // localStorage unavailable — accept the loss; selection is best-effort.
+  }
+}
+
 interface ChatPanelProps {
   open: boolean;
   onClose: () => void;
@@ -129,7 +137,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
 
   const writeActiveId = useCallback((id: string | null) => {
     try {
-      if (id == null) localStorage.removeItem(ACTIVE_CONVERSATION_STORAGE_KEY);
+      if (id == null) clearActiveConversationSelection();
       else localStorage.setItem(ACTIVE_CONVERSATION_STORAGE_KEY, id);
     } catch {
       // localStorage unavailable — accept the loss; selection is best-effort.
