@@ -61,6 +61,7 @@ describe('LocalDbStateSource', () => {
       state: 'factory:triaging',
       dependsOn: ['7'],
       blocks: ['9'],
+      externalRefs: [],
     });
     expect((await source.getItem('1')).id).toBe(created.id);
     expect((await source.listOpenWork()).map((item) => item.id)).toEqual([created.id]);

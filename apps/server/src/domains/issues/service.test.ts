@@ -93,6 +93,7 @@ import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
 import {
   commentOnIssue,
+  createIssue,
   getIssue,
   getIssueArtifact,
   getIssueLegalTargets,
@@ -113,6 +114,7 @@ type MockSource = {
   listOpenWork: ReturnType<typeof vi.fn>;
   getItem: ReturnType<typeof vi.fn>;
   listComments: ReturnType<typeof vi.fn>;
+  createIssue: ReturnType<typeof vi.fn>;
 };
 
 const mockSource: MockSource = {
@@ -123,6 +125,7 @@ const mockSource: MockSource = {
   setMilestone: vi.fn().mockResolvedValue(undefined),
   setLabelInGroup: vi.fn().mockResolvedValue(undefined),
   listOpenWork: vi.fn().mockResolvedValue([]),
+  createIssue: vi.fn(),
   getItem: vi.fn(async (itemId: string) => ({
     id: `github:owner/repo#${itemId}`,
     externalId: itemId,
@@ -180,6 +183,22 @@ beforeEach(() => {
   mockSource.setMilestone.mockReset().mockResolvedValue(undefined);
   mockSource.setLabelInGroup.mockReset().mockResolvedValue(undefined);
   mockSource.listOpenWork.mockReset().mockResolvedValue([]);
+  mockSource.createIssue.mockReset().mockResolvedValue({
+    id: 'local:test-proj#1',
+    externalId: '1',
+    repoRef: 'owner/repo',
+    title: 'Local item',
+    body: '',
+    type: 'feature',
+    priority: 'medium',
+    mode: 'supervised',
+    state: 'factory:triaging',
+    schedule: 'current',
+    exec: 'serial',
+    dependsOn: [],
+    blocks: [],
+    externalRefs: [],
+  });
   mockGetProject.mockImplementation(async (slug) =>
     slug === 'unknown'
       ? null
@@ -193,6 +212,59 @@ beforeEach(() => {
   vi.mocked(getArtifact).mockReturnValue(null);
   vi.mocked(getArtifactSlice).mockReturnValue(null);
   vi.mocked(getEngineeringSpec).mockReturnValue(null);
+});
+
+describe('createIssue', () => {
+  it('creates a local-db Work Item without requiring external refs', async () => {
+    mockGetProject.mockResolvedValueOnce({
+      id: 'test-proj',
+      source: { kind: 'local-db', stateMachine: 'db' },
+      repos: ['owner/repo'],
+    } as never);
+
+    const result = await createIssue('local-proj', {
+      title: '  Local-only task  ',
+      body: 'Track this locally.',
+      type: 'chore',
+      priority: 'high',
+      milestoneNumber: 2,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        item: {
+          canonicalWorkItemId: 'local:test-proj#1',
+          externalRefs: [],
+        },
+      },
+    });
+    expect(mockSource.createIssue).toHaveBeenCalledWith({
+      title: 'Local-only task',
+      body: 'Track this locally.',
+      type: 'chore',
+      priority: 'high',
+      milestoneId: '2',
+    });
+  });
+
+  it('rejects issue creation for non-local-db projects', async () => {
+    const result = await createIssue('github-proj', { title: 'Do not create remotely' });
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'local Work Item creation requires a local-db project',
+      status: 400,
+    });
+    expect(mockSource.createIssue).not.toHaveBeenCalled();
+  });
+
+  it('validates title before calling the source', async () => {
+    const result = await createIssue('local-proj', { title: '   ' });
+
+    expect(result).toEqual({ ok: false, error: 'title is required', status: 400 });
+    expect(mockSource.createIssue).not.toHaveBeenCalled();
+  });
 });
 
 describe('getIssueSpec', () => {

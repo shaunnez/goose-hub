@@ -24,7 +24,8 @@ beforeEach(() => {
 });
 
 const BASE_ITEM: WorkItemDto = {
-  id: '1',
+  id: 'github:shaunnez/goose-hub#42',
+  canonicalWorkItemId: 'github:shaunnez/goose-hub#42',
   externalId: '42',
   repoRef: 'shaunnez/goose-hub',
   title: 'Fix the login bug',
@@ -38,6 +39,18 @@ const BASE_ITEM: WorkItemDto = {
   exec: 'serial',
   dependsOn: [],
   blocks: [],
+  externalRefs: [
+    {
+      id: 1,
+      provider: 'github',
+      kind: 'issue',
+      repoRef: 'shaunnez/goose-hub',
+      externalId: '42',
+      url: 'https://github.com/shaunnez/goose-hub/issues/42',
+      metadata: null,
+      createdAt: new Date().toISOString(),
+    },
+  ],
   createdAt: new Date(Date.now() - 3600000).toISOString(),
 };
 
@@ -157,6 +170,26 @@ describe('IssueCard', () => {
     vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
     renderCard({ ...BASE_ITEM, schedule: 'current' });
     expect(screen.queryByTestId('blocked-indicator')).toBeNull();
+  });
+
+  it('shows local-only when no external refs are linked', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
+    renderCard({
+      ...BASE_ITEM,
+      id: 'local:proj#1',
+      canonicalWorkItemId: 'local:proj#1',
+      externalId: '1',
+      externalRefs: [],
+    });
+    expect(screen.getByTestId('local-only-indicator')).toBeTruthy();
+    expect(screen.getByText('Local-only')).toBeTruthy();
+  });
+
+  it('does not show local-only for GitHub Work Items with normalized empty refs', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
+    renderCard({ ...BASE_ITEM, externalRefs: [] });
+
+    expect(screen.queryByTestId('local-only-indicator')).toBeNull();
   });
 
   it('blocked indicator tooltip lists same-repo dep as short ref', () => {

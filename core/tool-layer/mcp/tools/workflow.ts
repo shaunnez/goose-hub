@@ -17,7 +17,7 @@
  * dead code if that refactor never happens.
  */
 import type { z } from 'zod';
-import { openPR } from '../../../connectors/github/open-pr.js';
+import { openLocalDbPR, openPR } from '../../../connectors/github/open-pr.js';
 import { transitionAndEmitState } from '../../../event-stream/state-transition.js';
 import type { StateName } from '../../../state-machine/states.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
@@ -177,8 +177,8 @@ export interface OpenPrResult {
 
 /**
  * Pushes the current branch to origin and opens a pull request via the
- * GitHub REST API. Caller must ensure body contains `Closes #N` (the
- * underlying `openPR` connector validates this).
+ * GitHub REST API. GitHub-backed Work Items keep `Closes #N`; local-db
+ * Work Items use a non-closing local reference.
  *
  * Workflow-owned — not exposed to agents. Branch name is derived from
  * the current HEAD's branch (read via `git rev-parse --abbrev-ref HEAD`)
@@ -199,30 +199,41 @@ export async function openPrTool(
   const branchName = branchResult.stdout.trim();
 
   const source = await getStateSourceForProject(ctx.projectId);
+  const isLocalWorkItem = ctx.workItemId.startsWith('local:');
   const issueMatch = ctx.workItemId.match(/#(\d+)$/);
-  if (issueMatch == null) {
+  if (!isLocalWorkItem && issueMatch == null) {
     throw new GitMutationError(
       null,
       '',
       `open_pr: cannot derive issue number from workItemId '${ctx.workItemId}'.`,
     );
   }
-  const issueNumber = Number.parseInt(issueMatch[1], 10);
+  const issueNumber = issueMatch == null ? null : Number.parseInt(issueMatch[1], 10);
 
-  const result = await openPR({
-    worktreePath: ctx.workspaceRoot,
-    repo: source.repoRef,
-    issueNumber,
-    title: input.title,
-    body: input.body ?? `Closes #${issueNumber}`,
-    branchName,
-    baseBranch: input.base,
-    token: resolveGitHubToken(),
-  });
+  const result = isLocalWorkItem
+    ? await openLocalDbPR({
+        worktreePath: ctx.workspaceRoot,
+        repo: source.repoRef,
+        title: input.title,
+        body: input.body ?? `Local Work Item: ${ctx.workItemId}`,
+        branchName,
+        baseBranch: input.base,
+        token: resolveGitHubToken(),
+      })
+    : await openPR({
+        worktreePath: ctx.workspaceRoot,
+        repo: source.repoRef,
+        issueNumber: issueNumber ?? 0,
+        title: input.title,
+        body: input.body ?? `Closes #${issueNumber}`,
+        branchName,
+        baseBranch: input.base,
+        token: resolveGitHubToken(),
+      });
 
   emitToolCall(ctx, {
     tool: 'open_pr',
-    input: { issueNumber, branchName, base: input.base ?? 'main' },
+    input: { workItemId: ctx.workItemId, issueNumber, branchName, base: input.base ?? 'main' },
     status: 'ok',
   });
   return { prNumber: result.prNumber, prUrl: result.prUrl };
