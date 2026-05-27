@@ -81,6 +81,10 @@ If a WP owns production `.ts` or `.tsx` files, that same WP must also include a
 relevant `*.test.ts`, `*.test.tsx`, `*.spec.ts`, or `*.spec.tsx` file in
 `filesOwned`. Do not put the test file only in `verificationTooling` or
 `acceptanceCriteria`; it must be owned by the WP that owns the production edit.
+For ordinary product fixes, this paired coverage should be unit/component
+coverage near the changed surface. Do not assign `apps/web/e2e/*.spec.ts` to an
+implement WP unless the work item or WP is explicitly about e2e/test
+infrastructure. Browser/e2e validation is owned by QA/evidence workflows.
 
 Test-only WPs are allowed. Files that are not implementation surfaces, such as
 `*.config.ts`, `*.d.ts`, `*types.ts`, `*interfaces.ts`, `*schema.ts`,

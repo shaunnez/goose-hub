@@ -271,7 +271,7 @@ export function QaCompletedEvent({ event }: { event: AgentEventDto }) {
   const tierRows: { key: 'structural' | 'functional' | 'regression'; label: string }[] = [
     { key: 'structural', label: 'Structural' },
     { key: 'functional', label: 'Functional' },
-    { key: 'regression', label: 'Regression (playwright)' },
+    { key: 'regression', label: 'Regression suite' },
   ];
 
   return (

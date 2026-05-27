@@ -133,6 +133,38 @@ describe('runTestsTool', () => {
       },
     });
   });
+
+  it('rejects Playwright e2e spec paths because e2e is QA/evidence-owned', async () => {
+    writeFileSync(join(workspace, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+    writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'demo' }));
+    writeFileSync(join(workspace, 'README.md'), '# demo\n');
+    mkdirSync(join(workspace, 'apps/web/e2e'), { recursive: true });
+    writeFileSync(join(workspace, 'apps/web/e2e/issue-1107.spec.ts'), 'test("x", () => {});\n');
+
+    mockRunCommand.mockClear();
+    const result = await runTestsTool(ctx, { path: 'apps/web/e2e/issue-1107.spec.ts' });
+
+    expect(result.status).toBe('failed');
+    expect(result.stderr).toContain('QA/evidence-owned');
+    expect(mockRunCommand).not.toHaveBeenCalled();
+    expect(result.paths?.map((path) => path.path)).toEqual(['apps/web/e2e/issue-1107.spec.ts']);
+  });
+
+  it('rejects Playwright e2e directory paths because e2e is QA/evidence-owned', async () => {
+    writeFileSync(join(workspace, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+    writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'demo' }));
+    writeFileSync(join(workspace, 'README.md'), '# demo\n');
+    mkdirSync(join(workspace, 'apps/web/e2e/pipeline'), { recursive: true });
+    writeFileSync(join(workspace, 'apps/web/e2e/pipeline/seed.spec.ts'), 'test("x", () => {});\n');
+
+    mockRunCommand.mockClear();
+    const result = await runTestsTool(ctx, { path: 'apps/web/e2e/pipeline' });
+
+    expect(result.status).toBe('failed');
+    expect(result.stderr).toContain('QA/evidence-owned');
+    expect(mockRunCommand).not.toHaveBeenCalled();
+    expect(result.paths?.map((path) => path.path)).toEqual(['apps/web/e2e/pipeline']);
+  });
 });
 
 describe('runTargetedCommandTool', () => {
@@ -196,6 +228,33 @@ describe('runTestsTool retry cap', () => {
     const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
     expect(mockRunCommand).toHaveBeenCalledOnce();
     expect(next.status).toBe('failed');
+  });
+
+  it('resets the cap after a source edit, allowing one final exact test rerun', async () => {
+    const { invalidateRunCacheForPaths } = await import('../run-cache.js');
+    mockFailed();
+    for (let i = 0; i < 3; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    invalidateRunCacheForPaths(ctx.runId, ['apps/web/src/foo.ts']);
+
+    mockRunCommand.mockClear();
+    const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    expect(mockRunCommand).toHaveBeenCalledOnce();
+    expect(next.status).toBe('failed');
+  });
+
+  it('does not reset a capped test path after an unrelated edit', async () => {
+    const { invalidateRunCacheForPaths } = await import('../run-cache.js');
+    mockFailed();
+    for (let i = 0; i < 3; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    invalidateRunCacheForPaths(ctx.runId, ['apps/web/src/other.ts']);
+
+    mockRunCommand.mockClear();
+    const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    expect(mockRunCommand).not.toHaveBeenCalled();
+    expect(next.status).toBe('failed');
+    expect(next.stderr).toMatch(/retry cap/i);
   });
 
   it('counters are isolated per path', async () => {

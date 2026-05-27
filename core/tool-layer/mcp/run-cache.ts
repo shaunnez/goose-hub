@@ -286,13 +286,13 @@ export function invalidateRunCacheForPaths(runId: string, rawPaths: string[]): v
     }
   }
   if (duplicateMap?.size === 0) duplicateCounters.delete(runId);
-  // Writes invalidate the retry cap for any path they touch — and for the
-  // full-suite sentinel, since the next full run may now produce different
-  // results.
+  // Keep retry caps strict for unrelated edits while allowing one clean rerun
+  // after the failing test, a sibling source file, or the full-suite sentinel
+  // has actually changed.
   for (const [retryKey] of retryMap ?? []) {
     if (
       retryKey === TEST_RETRY_ALL_KEY ||
-      changedPaths.some((changedPath) => pathsOverlap(retryKey, changedPath))
+      changedPaths.some((changedPath) => retryKeyInvalidatedByChange(retryKey, changedPath))
     ) {
       retryMap?.delete(retryKey);
     }
@@ -455,6 +455,21 @@ function pathsOverlap(left: string, right: string): boolean {
   const b = normalizePathForOverlap(right);
   if (a === '.' || b === '.') return true;
   return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+}
+
+function implementationBase(path: string): string | null {
+  const normalized = normalizePathForOverlap(path);
+  const testBase = normalized.replace(/\.(test|spec)\.(ts|tsx)$/, '');
+  if (testBase !== normalized) return testBase;
+  const sourceBase = normalized.replace(/\.(ts|tsx)$/, '');
+  return sourceBase !== normalized ? sourceBase : null;
+}
+
+function retryKeyInvalidatedByChange(retryKey: string, changedPath: string): boolean {
+  if (pathsOverlap(retryKey, changedPath)) return true;
+  const retryBase = implementationBase(retryKey);
+  const changedBase = implementationBase(changedPath);
+  return retryBase != null && changedBase != null && retryBase === changedBase;
 }
 
 function cloneResult<T>(result: T): T {
