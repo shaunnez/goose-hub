@@ -1,6 +1,12 @@
+/** @vitest-environment jsdom */
 import type { AgentEventDto } from '@/lib/types';
-import { describe, expect, it } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { createElement } from 'react';
+import { afterEach, describe, expect, it } from 'vitest';
 import { getAgentLogDisplayText, groupEvents } from '../lib/timeline';
+import { renderTimelineItem } from './TimelineEvents';
+
+afterEach(cleanup);
 
 function makeLogEvent(id: number): AgentEventDto {
   return {
@@ -670,5 +676,46 @@ describe('groupEvents — run-group metadata', () => {
     if (result[0].kind === 'run-group') {
       expect(result[0].skill).toBe('implement');
     }
+  });
+});
+
+describe('renderTimelineItem — decision summary status', () => {
+  it('renders a formerly live grill decision summary as completed after a terminal grill event', () => {
+    const decisionSummaryEvent: AgentEventDto = {
+      id: 1,
+      projectId: 'proj',
+      workItemId: 'wi-1',
+      kind: 'agent.decision-summary-live',
+      payload: { kind: 'INSIGHT', summary: 'Use the existing workflow.' },
+      runId: 'run-grill',
+      createdAt: '2026-05-27T00:00:00.000Z',
+    };
+
+    const grillCompletedEvent: AgentEventDto = {
+      id: 2,
+      projectId: 'proj',
+      workItemId: 'wi-1',
+      kind: 'grill.completed',
+      payload: { response: 'Yes' },
+      runId: 'workflow-grill',
+      createdAt: '2026-05-27T00:01:00.000Z',
+    };
+
+    render(
+      createElement(
+        'ul',
+        null,
+        renderTimelineItem({ kind: 'event', event: decisionSummaryEvent }, 0, {
+          slug: 'proj',
+          issueId: 'wi-1',
+          latestRunId: 'run-grill',
+          events: [decisionSummaryEvent, grillCompletedEvent],
+        }),
+      ),
+    );
+
+    expect(screen.queryByText('Live decision')).toBeNull();
+    expect(screen.getByText('Decision summary')).toBeTruthy();
+    expect(screen.getByText('Use the existing workflow.')).toBeTruthy();
   });
 });

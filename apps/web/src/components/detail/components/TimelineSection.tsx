@@ -124,7 +124,14 @@ export function TimelineSection({ projectSlug, id }: TimelineSectionProps) {
     ) || items.some((item: RenderItem) => item.kind === 'timeline-section');
   const latestRunId =
     allRunItems.find((item: RenderItem) => item.kind === 'run-group')?.runId ?? null;
-  const context = { slug: projectSlug, issueId: id, latestRunId, runCosts, expandSignal };
+  const context = {
+    slug: projectSlug,
+    issueId: id,
+    latestRunId,
+    events: visibleEvents,
+    runCosts,
+    expandSignal,
+  };
 
   const sendSignal = (open: boolean) => setExpandSignal((prev) => ({ tick: prev.tick + 1, open }));
 

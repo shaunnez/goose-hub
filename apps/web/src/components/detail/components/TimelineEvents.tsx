@@ -1,4 +1,5 @@
 import type { RenderItem, TimelineContext } from '../lib/timeline';
+import { resolveDecisionSummaryStatus } from '../lib/timeline/state';
 import { AgentImplementCompleteEvent } from './timeline/AgentImplementCompleteEvent';
 import { AgentInvestigationCompleteEvent } from './timeline/AgentInvestigationCompleteEvent';
 import {
@@ -9,10 +10,7 @@ import {
 import { AgentToolCallEvent } from './timeline/AgentToolCallEvent';
 import { AgentToolResultEvent } from './timeline/AgentToolResultEvent';
 import { AgentTriageCompleteEvent } from './timeline/AgentTriageCompleteEvent';
-import {
-  AgentDecisionSummaryEvent,
-  AgentDecisionSummaryLiveEvent,
-} from './timeline/DecisionSummaryEvents';
+import { AgentDecisionSummaryEventRow } from './timeline/DecisionSummaryEvents';
 import { DecomposeCompletedEvent } from './timeline/DecomposeEvents';
 import {
   DevReviewBudgetSkippedEvent,
@@ -221,6 +219,7 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     );
   }
   const { event } = item;
+  const decisionSummaryStatus = resolveDecisionSummaryStatus(event, context?.events ?? [event]);
 
   switch (event.kind) {
     case 'dogfood.seed-applied':
@@ -285,9 +284,13 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     case 'agent.spawned':
       return <AgentSpawnedEvent key={event.id} event={event} />;
     case 'agent.decision-summary':
-      return <AgentDecisionSummaryEvent key={event.id} event={event} />;
+      return (
+        <AgentDecisionSummaryEventRow key={event.id} event={event} status={decisionSummaryStatus} />
+      );
     case 'agent.decision-summary-live':
-      return <AgentDecisionSummaryLiveEvent key={event.id} event={event} />;
+      return (
+        <AgentDecisionSummaryEventRow key={event.id} event={event} status={decisionSummaryStatus} />
+      );
     case 'agent.disclosure':
       return <AgentDisclosureEvent key={event.id} event={event} />;
     case 'agent.log':
