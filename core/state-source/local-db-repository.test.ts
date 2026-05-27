@@ -162,6 +162,99 @@ describe('LocalDbWorkItemRepository', () => {
     );
   });
 
+  it('creates, updates, lists, and resolves Jira issue external refs without repo identity', () => {
+    const { repository } = trackedRepository();
+    const item = repository.createWorkItem({ projectId: 'proj', title: 'Imported Jira issue' });
+
+    const first = repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: item.id,
+      provider: 'jira',
+      kind: 'issue',
+      externalId: 'TAS-123',
+      url: 'https://company.atlassian.net/browse/TAS-123',
+      metadata: { status: 'To Do', priority: 'High' },
+    });
+    const second = repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: item.id,
+      provider: 'jira',
+      kind: 'issue',
+      externalId: 'TAS-123',
+      url: 'https://company.atlassian.net/browse/TAS-123?focusedCommentId=456',
+      metadata: { status: 'In Progress', priority: 'High' },
+    });
+
+    expect(second.id).toBe(first.id);
+    expect(
+      repository.getWorkItemByExternalRef({
+        projectId: 'proj',
+        provider: 'jira',
+        kind: 'issue',
+        externalId: 'TAS-123',
+      })?.id,
+    ).toBe(item.id);
+    expect(repository.listExternalRefs('proj', item.id)).toEqual([
+      expect.objectContaining({
+        provider: 'jira',
+        kind: 'issue',
+        repoRef: null,
+        externalId: 'TAS-123',
+        url: 'https://company.atlassian.net/browse/TAS-123?focusedCommentId=456',
+        metadataJson: JSON.stringify({ status: 'In Progress', priority: 'High' }),
+      }),
+    ]);
+  });
+
+  it('creates, updates, lists, and resolves Bitbucket pull request refs by repo identity', () => {
+    const { repository } = trackedRepository();
+    const item = repository.createWorkItem({ projectId: 'proj', title: 'Linked Bitbucket PR' });
+
+    const first = repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: item.id,
+      provider: 'bitbucket',
+      kind: 'pull_request',
+      repoRef: 'workspace/repo',
+      externalId: '45',
+      url: 'https://bitbucket.org/workspace/repo/pull-requests/45',
+      metadata: { branch: 'feature/local-state', state: 'OPEN' },
+    });
+    const second = repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: item.id,
+      provider: 'bitbucket',
+      kind: 'pull_request',
+      repoRef: 'workspace/repo',
+      externalId: '45',
+      url: 'https://bitbucket.org/workspace/repo/pull-requests/45/diff',
+      metadata: { branch: 'feature/local-state', state: 'MERGED' },
+    });
+
+    expect(second.id).toBe(first.id);
+    expect(
+      repository.getWorkItemByExternalRef({
+        projectId: 'proj',
+        provider: 'bitbucket',
+        kind: 'pull_request',
+        repoRef: 'workspace/repo',
+        externalId: '45',
+      })?.id,
+    ).toBe(item.id);
+    expect(repository.listExternalRefsByKind({ projectId: 'proj', provider: 'bitbucket' })).toEqual(
+      [
+        expect.objectContaining({
+          provider: 'bitbucket',
+          kind: 'pull_request',
+          repoRef: 'workspace/repo',
+          externalId: '45',
+          url: 'https://bitbucket.org/workspace/repo/pull-requests/45/diff',
+          metadataJson: JSON.stringify({ branch: 'feature/local-state', state: 'MERGED' }),
+        }),
+      ],
+    );
+  });
+
   it('creates and assigns local milestones', () => {
     const { repository } = trackedRepository();
     const milestone = repository.createMilestone('proj', 'M1: Local DB');
