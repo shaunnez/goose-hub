@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import { cleanup, render, screen } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { OverviewWorkflowCard } from '../lib/overview-workflow-summary';
 import { WorkflowSummaryCard } from './WorkflowSummaryCard';
@@ -23,7 +24,7 @@ const CARD: OverviewWorkflowCard = {
 
 describe('WorkflowSummaryCard', () => {
   it('renders compact metrics, status, and cost footer', () => {
-    render(<WorkflowSummaryCard card={CARD} />);
+    renderCard();
 
     expect(screen.getByText('Review')).toBeTruthy();
     expect(screen.getByText('Approved')).toBeTruthy();
@@ -34,17 +35,34 @@ describe('WorkflowSummaryCard', () => {
   });
 
   it('renders a usable section link when hrefSection exists', () => {
-    render(<WorkflowSummaryCard card={CARD} />);
+    renderCard();
 
     const link = screen.getByRole('link', { name: /open review section/i });
-    expect(link.getAttribute('href')).toBe('#review');
+    expect(link.getAttribute('href')).toBe('/projects/proj/items/42/review');
   });
 
   it('renders a readable static card when hrefSection is missing', () => {
-    render(<WorkflowSummaryCard card={{ ...CARD, hrefSection: undefined }} />);
+    renderCard({ ...CARD, hrefSection: undefined });
 
     expect(screen.queryByRole('link', { name: /open review section/i })).toBeNull();
     expect(screen.getByText('Review')).toBeTruthy();
     expect(screen.getByText('Approved')).toBeTruthy();
   });
+
+  it('maps snapshot-only section keys onto detail routes', () => {
+    renderCard({ ...CARD, key: 'triage', title: 'Triage', hrefSection: 'triage' });
+
+    const link = screen.getByRole('link', { name: /open triage section/i });
+    expect(link.getAttribute('href')).toBe('/projects/proj/items/42/repo');
+  });
 });
+
+function renderCard(card: OverviewWorkflowCard = CARD) {
+  return render(
+    <MemoryRouter initialEntries={['/projects/proj/items/42']}>
+      <Routes>
+        <Route path="/projects/:slug/items/:id" element={<WorkflowSummaryCard card={card} />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}

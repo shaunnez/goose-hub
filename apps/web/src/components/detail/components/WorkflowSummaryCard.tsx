@@ -1,6 +1,7 @@
 import { cn } from '@/lib/cn';
 import { ChevronRight } from 'lucide-react';
 import type { JSX } from 'react';
+import { useParams } from 'react-router-dom';
 import type {
   OverviewWorkflowCard,
   OverviewWorkflowStatusTone,
@@ -21,7 +22,17 @@ const TONE_CLASSES: Record<OverviewWorkflowStatusTone, string> = {
   muted: 'border-line bg-bg-elev-2 text-fg-3',
 };
 
+const SECTION_ROUTE_KEY: Record<string, string> = {
+  triage: 'repo',
+  retro: 'retrospective',
+};
+
 export function WorkflowSummaryCard({ card }: WorkflowSummaryCardProps): JSX.Element {
+  const { slug = 'goose-hub-self', id = '' } = useParams<{ slug: string; id: string }>();
+  const routeSection =
+    card.hrefSection == null ? null : (SECTION_ROUTE_KEY[card.hrefSection] ?? card.hrefSection);
+  const href = routeSection == null ? null : `/projects/${slug}/items/${id}/${routeSection}`;
+
   const content = (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -38,7 +49,7 @@ export function WorkflowSummaryCard({ card }: WorkflowSummaryCardProps): JSX.Ele
             </span>
           </div>
         </div>
-        {card.hrefSection ? <ChevronRight size={14} className="mt-0.5 shrink-0 text-fg-4" /> : null}
+        {href ? <ChevronRight size={14} className="mt-0.5 shrink-0 text-fg-4" /> : null}
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2.5">
@@ -66,10 +77,10 @@ export function WorkflowSummaryCard({ card }: WorkflowSummaryCardProps): JSX.Ele
   const className =
     'rounded-lg border border-line bg-bg-elev px-4 py-3 transition-colors hover:border-line/80';
 
-  if (card.hrefSection) {
+  if (href) {
     return (
       <a
-        href={`#${card.hrefSection}`}
+        href={href}
         aria-label={`Open ${card.title} section`}
         className={cn(className, 'block focus:outline-none focus:ring-2 focus:ring-accent/30')}
       >

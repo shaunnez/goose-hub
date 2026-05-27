@@ -292,8 +292,15 @@ describe('buildOverviewWorkflowCards', () => {
       item: makeItem(),
       events: [
         makeEvent({
+          kind: 'agent.tool-call',
+          id: 6,
+          runId: 'older-run',
+          payload: { tool_name: 'Read' },
+        }),
+        makeEvent({
           kind: 'agent.investigation-complete',
           id: 8,
+          runId: 'older-run',
           createdAt: '2026-05-20T03:00:00Z',
           payload: {
             investigate: {
@@ -305,11 +312,34 @@ describe('buildOverviewWorkflowCards', () => {
             },
           },
         }),
-        makeEvent({ kind: 'agent.tool-call', id: 9, payload: { tool_name: 'Read' } }),
-        makeEvent({ kind: 'agent.tool-call', id: 10, payload: { tool_name: 'Grep' } }),
+        makeEvent({
+          kind: 'agent.tool-call',
+          id: 9,
+          runId: 'latest-run',
+          payload: { tool_name: 'Read' },
+        }),
+        makeEvent({
+          kind: 'agent.tool-call',
+          id: 10,
+          runId: 'latest-run',
+          payload: { tool_name: 'Grep' },
+        }),
+        makeEvent({
+          kind: 'agent.tool-call',
+          id: 11,
+          runId: 'post-review-run',
+          payload: { tool_name: 'Read' },
+        }),
+        makeEvent({
+          kind: 'agent.tool-call',
+          id: 12,
+          runId: 'post-review-run',
+          payload: { tool_name: 'Grep' },
+        }),
         makeEvent({
           kind: 'agent.investigation-complete',
           id: 7,
+          runId: 'latest-run',
           createdAt: '2026-05-20T04:00:00Z',
           payload: {
             investigate: {

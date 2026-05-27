@@ -108,6 +108,8 @@ function buildInvestigationCard({
   const event = latestEvent(events, ['agent.investigation-complete']);
   const payload = event ? extractInvestigationPayload(event) : null;
   const repro = extractReproStatus(event);
+  const runScopedEvents =
+    event?.runId != null ? events.filter((entry) => entry.runId === event.runId) : [];
 
   return {
     key: 'investigation',
@@ -118,8 +120,8 @@ function buildInvestigationCard({
       metric('Confidence', payload?.investigate.confidence ?? 'N/A'),
       metric('Key files', payload ? String(payload.investigate.keyFiles.length) : 'N/A'),
       metric('Questions', payload ? String(payload.investigate.openQuestions.length) : 'N/A'),
-      metric('Reads', event ? String(countToolCalls(events, READ_TOOLS)) : 'N/A'),
-      metric('Searches', event ? String(countToolCalls(events, SEARCH_TOOLS)) : 'N/A'),
+      metric('Reads', event ? String(countToolCalls(runScopedEvents, READ_TOOLS)) : 'N/A'),
+      metric('Searches', event ? String(countToolCalls(runScopedEvents, SEARCH_TOOLS)) : 'N/A'),
       metric('Repro', repro),
     ],
     footer: footerFor(costs.byStage.get('investigate')),
