@@ -759,6 +759,8 @@ describe('validateEngineeringSpec — TDD contract (wp-missing-test-file)', () =
     expect(prompt).toContain('`*.spec.ts`');
     expect(prompt).toContain('Do not put the test file only in `verificationTooling`');
     expect(prompt).toContain('Test-only WPs are allowed');
+    expect(prompt).toContain('Do not assign `apps/web/e2e/*.spec.ts`');
+    expect(prompt).toContain('QA/evidence workflows');
   });
 
   it('rejects WP with production .ts files but no test file', () => {
@@ -939,6 +941,52 @@ describe('validateEngineeringSpec — TDD contract (wp-missing-test-file)', () =
       (e) => e.rule === 'wp-missing-test-file',
     );
     expect(testFileErrors).toHaveLength(0);
+  });
+
+  it('rejects ordinary product WP ownership of apps/web/e2e specs', () => {
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: [
+            'apps/web/src/components/HealthBadge.tsx',
+            'apps/web/e2e/issue-1107.spec.ts',
+          ],
+          changes: 'Add HealthBadge component and browser regression coverage.',
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+      interfaceContracts: [],
+    });
+
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'wp-e2e-owned-for-product')).toBe(true);
+  });
+
+  it('allows e2e spec ownership for explicit e2e test-infra WPs', () => {
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP-e2e',
+          filesOwned: ['apps/web/e2e/issue-1107.spec.ts'],
+          changes: 'Update Playwright e2e test infrastructure for the browser flow.',
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [{ batch: 0, wpIds: ['WP-e2e'] }],
+      interfaceContracts: [],
+    });
+
+    const result = validateEngineeringSpec(spec);
+    const e2eErrors = (result.ok ? [] : result.errors).filter(
+      (e) => e.rule === 'wp-e2e-owned-for-product',
+    );
+    expect(e2eErrors).toHaveLength(0);
   });
 });
 

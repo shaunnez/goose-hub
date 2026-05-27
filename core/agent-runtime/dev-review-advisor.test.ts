@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { getArtifact } from '../agent-artifacts/repository.js';
 import { db } from '../db/db.js';
 import { agentArtifacts } from '../db/schema.js';
-import { preparePrDiffContext, runDevReviewResponse } from './dev-review-advisor.js';
+import { preparePrDiffContext, runDevReview, runDevReviewResponse } from './dev-review-advisor.js';
 import { buildDiffDigest } from './diff-digest.js';
 import type { AgentSpec } from './interface.js';
 
@@ -216,6 +216,47 @@ describe('preparePrDiffContext', () => {
 });
 
 describe('runDevReviewResponse runtime resolution', () => {
+  it('runs dev-review inside the integration worktree', async () => {
+    const runtimeCalls: AgentSpec[] = [];
+    const runtime = {
+      async run(spec: AgentSpec) {
+        runtimeCalls.push(spec);
+        return {
+          output: {
+            verdict: 'no-blockers',
+            findings: [],
+            decisionSummaries: [{ kind: 'VERDICT', summary: 'No blockers found.' }],
+          },
+          decisionSummaries: [],
+          events: [],
+        };
+      },
+    };
+
+    await runDevReview({
+      runId: RUN_ID,
+      projectId: PROJECT,
+      workItemId: WORK_ITEM,
+      workItem: { title: 'Fix ordering', body: 'body', number: 77, priority: 'high' },
+      worktreePath: process.cwd(),
+      baseBranch: 'HEAD',
+      stack: { testCommand: 'pnpm test' },
+      runtime,
+      appendEvent: (input) => ({
+        ...input,
+        workItemId: input.workItemId ?? null,
+        id: 1,
+        createdAt: new Date().toISOString(),
+      }),
+    });
+
+    expect(runtimeCalls).toHaveLength(1);
+    expect(runtimeCalls[0]).toMatchObject({
+      skill: 'dev-review',
+      workspaceDir: process.cwd(),
+    });
+  });
+
   it('honours project skill provider settings when no runtime is injected', async () => {
     await runDevReviewResponse({
       runId: RUN_ID,

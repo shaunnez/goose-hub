@@ -51,6 +51,8 @@ function asTierResult(tier: 1 | 2 | 3, vt: VerifyTierResult): TierResult {
   return {
     passed: vt.passed,
     findings: vt.findings.map((f) => mapVerifyFinding(tier, f)),
+    ...(vt.command != null ? { command: vt.command } : {}),
+    ...(vt.output != null ? { output: vt.output } : {}),
   };
 }
 
