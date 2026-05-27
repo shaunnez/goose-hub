@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { addComment, fetchComments, proceedToPrd, transitionState } from '@/lib/api';
-import type { IssueCommentDto } from '@/lib/types';
+import type { AgentEventDto, IssueCommentDto } from '@/lib/types';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,6 +29,25 @@ function comment(id: number, body: string, author = 'shaun'): IssueCommentDto {
   return { id, body, authorLogin: author, createdAt: '2026-05-07T10:00:00Z' };
 }
 
+function event(
+  id: number,
+  kind: string,
+  workItemId: string | null,
+  payload: Record<string, unknown>,
+  runId?: string | null,
+): AgentEventDto {
+  return {
+    id,
+    projectId: 'proj-id',
+    workItemId,
+    kind,
+    payload,
+    runId: runId ?? null,
+    personaId: null,
+    createdAt: '2026-05-07T10:00:00Z',
+  };
+}
+
 // React-style mutable holder so the optimistic-reply test can stash a
 // promise resolver from inside the addComment mock without TS narrowing the
 // outer `let` binding to `null`.
@@ -36,7 +55,10 @@ const pendingResolver: { current: (() => void) | null } = { current: null };
 
 function render_(jsx: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{jsx}</QueryClientProvider>);
+  return {
+    client,
+    ...render(<QueryClientProvider client={client}>{jsx}</QueryClientProvider>),
+  };
 }
 
 describe('GrillSection', () => {
@@ -164,6 +186,80 @@ describe('GrillSection', () => {
         'factory:gate-pending',
         'factory:grilling',
       );
+    });
+  });
+
+  it('adds a terminal grill.completed event to the cached timeline after a reply succeeds', async () => {
+    const workflowRunId = 'discover-workflow-1';
+    const discoverSessionId = 'discover-session-1';
+
+    vi.mocked(fetchComments).mockResolvedValue([comment(1, `${GRILL_QUESTION_MARKER}\nQ?`)]);
+    vi.mocked(addComment).mockResolvedValueOnce(undefined);
+    vi.mocked(transitionState).mockResolvedValueOnce({
+      status: 200,
+      data: { ok: true },
+    });
+
+    const { client } = render_(
+      <GrillSection projectSlug="proj" externalId="42" id="42" state="factory:gate-pending" />,
+    );
+    client.setQueryData<AgentEventDto[]>(
+      ['events', 'proj', '42'],
+      [
+        event(2, 'grill.question-posted', '42', {
+          displaySkill: 'grill-me',
+          workflowRunId,
+          discoverSessionId,
+          roundNumber: 1,
+        }),
+        event(
+          1,
+          'agent.run-started',
+          '42',
+          { skill: 'grill-me', workflowRunId, discoverSessionId },
+          `${workflowRunId}:grill-me`,
+        ),
+      ],
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('grill-reply-input')).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByTestId('grill-reply-input'), {
+      target: { value: 'Better means fewer drop-offs.' },
+    });
+    fireEvent.click(screen.getByTestId('grill-send-btn'));
+
+    await waitFor(() => {
+      expect(addComment).toHaveBeenCalledWith(
+        'proj',
+        '42',
+        `${GRILL_REPLY_MARKER}\nBetter means fewer drop-offs.`,
+      );
+      expect(transitionState).toHaveBeenCalledWith(
+        'proj',
+        '42',
+        'factory:gate-pending',
+        'factory:grilling',
+      );
+    });
+
+    await waitFor(() => {
+      const events = client.getQueryData<AgentEventDto[]>(['events', 'proj', '42']);
+      expect(events).toBeTruthy();
+      expect(events?.[0]).toMatchObject({
+        kind: 'grill.completed',
+        workItemId: '42',
+        runId: workflowRunId,
+        payload: {
+          displaySkill: 'grill-me',
+          workflowRunId,
+          discoverSessionId,
+          rounds: 1,
+          refinedIntent: 'Better means fewer drop-offs.',
+        },
+      });
     });
   });
 

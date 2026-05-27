@@ -1,6 +1,6 @@
 import { addComment, fetchComments, proceedToPrd, transitionState } from '@/lib/api';
 import { renderMarkdownToHtml } from '@/lib/markdown';
-import type { IssueCommentDto } from '@/lib/types';
+import type { AgentEventDto, IssueCommentDto } from '@/lib/types';
 import { timeAgo } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, MessageCircleQuestion } from 'lucide-react';
@@ -13,6 +13,7 @@ import {
   stripGrillMarker,
   stripRecommendedAnswer,
 } from '../lib/grill-comments';
+import { upsertIssueEvent } from '../lib/live-events';
 import { SectionEmptyState } from './SectionEmptyState';
 
 interface GrillSectionProps {
@@ -24,6 +25,71 @@ interface GrillSectionProps {
 
 interface OptimisticReply extends IssueCommentDto {
   __optimistic: true;
+}
+
+type GrillWorkflowPayload = {
+  discoverSessionId?: unknown;
+  displaySkill?: unknown;
+  roundNumber?: unknown;
+  skill?: unknown;
+  workflowRunId?: unknown;
+};
+
+function buildGrillCompletedEvent(input: {
+  events: AgentEventDto[] | undefined;
+  issueId: string;
+  projectSlug: string;
+  replyBody: string;
+}): AgentEventDto | null {
+  const latestGrillEvent = input.events?.find((event) => {
+    const payload = event.payload as GrillWorkflowPayload | null;
+    const workflowRunId =
+      typeof payload?.workflowRunId === 'string'
+        ? payload.workflowRunId
+        : event.kind === 'grill.question-posted' && typeof event.runId === 'string'
+          ? event.runId
+          : null;
+    const grillIdentity =
+      payload?.displaySkill === 'grill-me' ||
+      payload?.skill === 'grill-me' ||
+      event.kind === 'grill.question-posted';
+    return workflowRunId != null && grillIdentity;
+  });
+  if (latestGrillEvent == null) return null;
+
+  const latestPayload = latestGrillEvent.payload as GrillWorkflowPayload | null;
+  const workflowRunId =
+    typeof latestPayload?.workflowRunId === 'string'
+      ? latestPayload.workflowRunId
+      : typeof latestGrillEvent.runId === 'string'
+        ? latestGrillEvent.runId
+        : null;
+  if (workflowRunId == null) return null;
+
+  const maxId = input.events?.reduce((highest, event) => Math.max(highest, event.id), 0) ?? 0;
+  const rounds =
+    typeof latestPayload?.roundNumber === 'number' ? latestPayload.roundNumber : undefined;
+  const discoverSessionId =
+    typeof latestPayload?.discoverSessionId === 'string'
+      ? latestPayload.discoverSessionId
+      : undefined;
+
+  return {
+    id: maxId + 1,
+    projectId: input.events?.[0]?.projectId ?? input.projectSlug,
+    workItemId: input.issueId,
+    kind: 'grill.completed',
+    payload: {
+      displaySkill: 'grill-me',
+      workflowRunId,
+      discoverSessionId,
+      rounds,
+      refinedIntent: stripGrillMarker(input.replyBody),
+    },
+    runId: workflowRunId,
+    personaId: latestGrillEvent.personaId ?? null,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 export function GrillSection({ projectSlug, externalId, id, state }: GrillSectionProps) {
@@ -56,7 +122,16 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
         await transitionState(projectSlug, id, 'factory:gate-pending', 'factory:grilling');
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      const completedEvent = buildGrillCompletedEvent({
+        events: queryClient.getQueryData<AgentEventDto[]>(['events', projectSlug, id]),
+        issueId: id,
+        projectSlug,
+        replyBody: variables.body,
+      });
+      if (completedEvent != null) {
+        upsertIssueEvent(queryClient, projectSlug, id, completedEvent);
+      }
       setText('');
       setOptimisticReplies([]);
       void queryClient.invalidateQueries({ queryKey: ['comments', projectSlug, id] });
