@@ -845,13 +845,7 @@ function reviewWorkflowRunIdsForItem(
   return [...ids];
 }
 
-const GRILL_COMPLETED_STATES = new Set([
-  'factory:prd-drafting',
-  'factory:prd-review',
-  'factory:decomposing',
-  'factory:issues-created',
-  'factory:done',
-]);
+const GRILL_ACTIVE_STATES = new Set(['factory:gate-pending', 'factory:grilling']);
 
 function hasGrillActivity(events: AgentEventDto[]): boolean {
   return events.some(
@@ -859,14 +853,43 @@ function hasGrillActivity(events: AgentEventDto[]): boolean {
   );
 }
 
-function hasAnsweredGrillFlow(events: AgentEventDto[]): boolean {
+function getOrderedEvents(events: AgentEventDto[]): AgentEventDto[] {
+  return [...events].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id - b.id,
+  );
+}
+
+function getTransitionDestination(event: AgentEventDto): string | null {
+  if (event.kind !== 'state.transitioned') return null;
+  const payload = event.payload as { to?: string; toState?: string } | null;
+  return payload?.to ?? payload?.toState ?? null;
+}
+
+function findAnsweredGrillResumeIndex(orderedEvents: AgentEventDto[]): number {
+  const latestQuestionIndex = orderedEvents.findLastIndex(
+    (event) => event.kind === 'question.asked',
+  );
+  if (latestQuestionIndex < 0) return -1;
+
+  return orderedEvents.findIndex(
+    (event, index) =>
+      index > latestQuestionIndex && getTransitionDestination(event) === 'factory:grilling',
+  );
+}
+
+function hasCompletedAnsweredGrillFlow(events: AgentEventDto[]): boolean {
   if (!hasGrillActivity(events)) return false;
-  return events.some((event) => {
-    const payload = event.payload as { from?: string; to?: string } | null;
+  const orderedEvents = getOrderedEvents(events);
+  const answeredResumeIndex = findAnsweredGrillResumeIndex(orderedEvents);
+  if (answeredResumeIndex < 0) return false;
+
+  return orderedEvents.some((event, index) => {
+    if (index <= answeredResumeIndex) return false;
+    const destination = getTransitionDestination(event);
     return (
-      event.kind === 'state.transitioned' &&
-      payload?.from === 'factory:gate-pending' &&
-      payload.to === 'factory:grilling'
+      destination != null &&
+      !GRILL_ACTIVE_STATES.has(destination) &&
+      destination !== 'factory:needs-human'
     );
   });
 }
@@ -895,18 +918,7 @@ function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs
   const verdict = (completed?.payload as { verdict?: string } | null)?.verdict;
   if (verdict === 'needs-human') return 'needs-human';
   if (verdict === 'approved' || verdict === 'needs-fix') return 'completed';
-  const answeredGrillFlow = hasAnsweredGrillFlow(events);
-  if (
-    answeredGrillFlow &&
-    events.some((event) => {
-      const payload = event.payload as { to?: string; toState?: string } | null;
-      return (
-        event.kind === 'state.transitioned' &&
-        (GRILL_COMPLETED_STATES.has(payload?.to ?? '') ||
-          GRILL_COMPLETED_STATES.has(payload?.toState ?? ''))
-      );
-    })
-  ) {
+  if (hasCompletedAnsweredGrillFlow(events)) {
     return 'completed';
   }
   return 'live';

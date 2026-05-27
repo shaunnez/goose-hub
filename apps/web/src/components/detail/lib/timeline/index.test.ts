@@ -19,13 +19,16 @@ function makeReviewItems(...events: AgentEventDto[]): RenderItem[] {
 }
 
 describe('groupByReviewWorkflow grill completion status', () => {
-  function makeAnsweredGrillEvents(reviewWorkflowRunId: string): AgentEventDto[] {
+  function makeAnsweredGrillEvents(
+    reviewWorkflowRunId: string,
+    transitionPayload: Record<string, unknown> = {},
+  ): AgentEventDto[] {
     return [
       makeEvent(1, 'question.asked', { reviewWorkflowRunId }),
       makeEvent(2, 'state.transitioned', {
         reviewWorkflowRunId,
-        from: 'factory:gate-pending',
         to: 'factory:grilling',
+        ...transitionPayload,
       }),
     ];
   }
@@ -69,6 +72,44 @@ describe('groupByReviewWorkflow grill completion status', () => {
 
     expect(result[0].status).toBe('completed');
     expect(result[0].endedAt).toBe(result[0].lastEventAt);
+  });
+
+  it('marks a grill review group completed when grilling resumes from a different state', () => {
+    const reviewWorkflowRunId = 'review-grill-resumed';
+
+    const result = groupByReviewWorkflow(
+      makeReviewItems(
+        ...makeAnsweredGrillEvents(reviewWorkflowRunId, { from: 'factory:reviewing' }),
+        makeEvent(3, 'state.transitioned', {
+          reviewWorkflowRunId,
+          to: 'factory:any-post-grill-state',
+        }),
+      ),
+    );
+
+    expect(result[0]?.kind).toBe('review-group');
+    if (result[0]?.kind !== 'review-group') return;
+
+    expect(result[0].status).toBe('completed');
+  });
+
+  it('marks a grill review group completed when the resume transition omits from', () => {
+    const reviewWorkflowRunId = 'review-grill-no-from';
+
+    const result = groupByReviewWorkflow(
+      makeReviewItems(
+        ...makeAnsweredGrillEvents(reviewWorkflowRunId),
+        makeEvent(3, 'state.transitioned', {
+          reviewWorkflowRunId,
+          to: 'factory:post-grill-follow-up',
+        }),
+      ),
+    );
+
+    expect(result[0]?.kind).toBe('review-group');
+    if (result[0]?.kind !== 'review-group') return;
+
+    expect(result[0].status).toBe('completed');
   });
 
   it('keeps grill review groups live until a reply resumes grilling', () => {
