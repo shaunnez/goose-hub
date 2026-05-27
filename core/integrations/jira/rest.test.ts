@@ -98,4 +98,98 @@ describe('Jira REST adapter', () => {
       error: { kind: 'auth', status: 401 },
     });
   });
+
+  it('resolves the current Jira user from the myself endpoint', async () => {
+    const fetchImpl = vi.fn(async () =>
+      response(200, {
+        accountId: 'ada-1',
+        displayName: 'Ada Lovelace',
+      }),
+    );
+    const adapter = createJiraRestAdapter({
+      baseUrl: 'https://company.atlassian.net',
+      email: 'ada@example.com',
+      apiToken: 'secret-token',
+      fetchImpl,
+    });
+
+    await expect(adapter.getCurrentUser()).resolves.toEqual({
+      ok: true,
+      data: { accountId: 'ada-1', displayName: 'Ada Lovelace' },
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://company.atlassian.net/rest/api/3/myself',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: 'application/json',
+        }),
+      }),
+    );
+  });
+
+  it('searches assigned Jira issues with internally built JQL and maps card DTOs', async () => {
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      response(200, {
+        issues: [
+          {
+            id: '10001',
+            key: 'TAS-123',
+            fields: {
+              summary: 'Assigned issue',
+              status: { name: 'In Progress' },
+              issuetype: { name: 'Task' },
+              priority: { name: 'Medium' },
+              assignee: { displayName: 'Ada Lovelace', accountId: 'ada-1' },
+              created: '2026-05-26T00:00:00.000Z',
+              updated: '2026-05-27T00:00:00.000Z',
+            },
+          },
+        ],
+        total: 1,
+        isLast: true,
+      }),
+    );
+    const adapter = createJiraRestAdapter({
+      baseUrl: 'https://company.atlassian.net',
+      email: 'ada@example.com',
+      apiToken: 'secret-token',
+      fetchImpl,
+    });
+
+    await expect(
+      adapter.searchIssues({
+        level: 'L2',
+        projects: ['TAS', 'OPS'],
+        maxResults: 25,
+        updated: {
+          from: '2026-04-27T00:00:00.000Z',
+          to: '2026-05-27T00:00:00.000Z',
+        },
+        assignee: { accountId: 'ada-1' },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        provider: 'jira',
+        tier: 'card',
+        issues: [{ key: 'TAS-123', title: 'Assigned issue' }],
+        totalCount: 1,
+        hasMore: false,
+      },
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining('/rest/api/3/search/jql?'),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Accept: 'application/json' }),
+      }),
+    );
+    const firstCall = fetchImpl.mock.calls[0];
+    if (firstCall == null) throw new Error('expected Jira search fetch call');
+    const url = new URL(String(firstCall[0]));
+    expect(url.searchParams.get('maxResults')).toBe('25');
+    expect(url.searchParams.get('fields')).toContain('summary');
+    expect(url.searchParams.get('jql')).toBe(
+      'project in ("TAS","OPS") AND assignee = "ada-1" AND updated >= "2026-04-27T00:00:00.000Z" AND updated <= "2026-05-27T00:00:00.000Z" ORDER BY updated DESC',
+    );
+  });
 });

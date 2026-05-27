@@ -1,11 +1,13 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockImportJiraIssue } = vi.hoisted(() => ({
+const { mockImportAssignedJiraIssues, mockImportJiraIssue } = vi.hoisted(() => ({
+  mockImportAssignedJiraIssues: vi.fn(),
   mockImportJiraIssue: vi.fn(),
 }));
 
 vi.mock('./service.js', () => ({
+  importAssignedJiraIssues: mockImportAssignedJiraIssues,
   importJiraIssue: mockImportJiraIssue,
 }));
 
@@ -17,6 +19,31 @@ function makeApp() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe('POST /projects/:slug/integrations/jira/import-assigned-to-me', () => {
+  it('returns assigned sync result counts from the service', async () => {
+    mockImportAssignedJiraIssues.mockResolvedValue({
+      ok: true,
+      data: {
+        counts: { imported: 1, updated: 2, skipped: 0, stale: 1, failed: 1 },
+        failures: [{ jiraKey: 'TAS-404', error: 'Jira issue not found' }],
+      },
+    });
+
+    const res = await makeApp().request('/projects/proj/integrations/jira/import-assigned-to-me', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ maxResults: 25 }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      counts: { imported: 1, updated: 2, stale: 1, failed: 1 },
+      failures: [{ jiraKey: 'TAS-404' }],
+    });
+    expect(mockImportAssignedJiraIssues).toHaveBeenCalledWith('proj', { maxResults: 25 });
+  });
 });
 
 describe('POST /projects/:slug/integrations/jira/import', () => {
