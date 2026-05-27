@@ -196,9 +196,9 @@ describe('runTestsTool retry cap', () => {
     });
   }
 
-  it('blocks the 4th consecutive failed run on the same path and emits tool.violation', async () => {
+  it('blocks the 3rd consecutive failed run on the same path and emits tool.violation', async () => {
     mockFailed();
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       const result = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
       expect(result.status).toBe('failed');
     }
@@ -220,7 +220,7 @@ describe('runTestsTool retry cap', () => {
   it('resets the cap after a write/edit invalidates the same path', async () => {
     const { invalidateRunCacheForPaths } = await import('../run-cache.js');
     mockFailed();
-    for (let i = 0; i < 3; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
 
     invalidateRunCacheForPaths(ctx.runId, ['apps/web/src/foo.test.ts']);
 
@@ -233,7 +233,7 @@ describe('runTestsTool retry cap', () => {
   it('resets the cap after a source edit, allowing one final exact test rerun', async () => {
     const { invalidateRunCacheForPaths } = await import('../run-cache.js');
     mockFailed();
-    for (let i = 0; i < 3; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
 
     invalidateRunCacheForPaths(ctx.runId, ['apps/web/src/foo.ts']);
 
@@ -246,7 +246,7 @@ describe('runTestsTool retry cap', () => {
   it('does not reset a capped test path after an unrelated edit', async () => {
     const { invalidateRunCacheForPaths } = await import('../run-cache.js');
     mockFailed();
-    for (let i = 0; i < 3; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
 
     invalidateRunCacheForPaths(ctx.runId, ['apps/web/src/other.ts']);
 
@@ -260,7 +260,7 @@ describe('runTestsTool retry cap', () => {
   it('counters are isolated per path', async () => {
     mockFailed();
     writeFileSync(join(workspace, 'apps/web/src/bar.test.ts'), 'test("y", () => {});\n');
-    for (let i = 0; i < 3; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
 
     mockRunCommand.mockClear();
     const other = await runTestsTool(ctx, { path: 'src/bar.test.ts' });
@@ -308,17 +308,8 @@ describe('runTestsTool retry cap', () => {
       durationMs: 18,
       truncated: false,
     });
-    mockRunCommand.mockResolvedValueOnce({
-      status: 'failed',
-      exitCode: 1,
-      stdout: vitestJson('bar.test.ts'),
-      stderr: '',
-      durationMs: 18,
-      truncated: false,
-    });
 
     await runTestsTool(ctx, { path: 'src/foo.test.ts' });
-    await runTestsTool(ctx, { path: 'src/bar.test.ts' });
     const blocked = await runTestsTool(ctx, { path: 'src/bar.test.ts' });
 
     expect(blocked.status).toBe('failed');
@@ -389,7 +380,7 @@ describe('runTestsTool retry cap', () => {
 
   it('a successful run clears the failure counter for that path', async () => {
     mockFailed();
-    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    await runTestsTool(ctx, { path: 'src/foo.test.ts' });
 
     mockRunCommand.mockResolvedValueOnce({
       status: 'ok',
@@ -404,11 +395,11 @@ describe('runTestsTool retry cap', () => {
 
     mockFailed();
     mockRunCommand.mockClear();
-    // Now should permit at least 3 more failures before blocking.
-    for (let i = 0; i < 3; i++) {
+    // Now should permit at least 2 more failures before blocking.
+    for (let i = 0; i < 2; i++) {
       const result = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
       expect(result.status).toBe('failed');
     }
-    expect(mockRunCommand).toHaveBeenCalledTimes(3);
+    expect(mockRunCommand).toHaveBeenCalledTimes(2);
   });
 });

@@ -142,13 +142,13 @@ export function readCount(runId: string, canonicalPath: string): number {
 
 /**
  * Maximum consecutive `run_tests` failures permitted on the same path
- * without an intervening Edit/Write. Hit, and the 4th attempt is blocked
+ * without an intervening Edit/Write. Hit, and the 3rd attempt is blocked
  * with a synthetic failure so the agent must inspect and edit before
  * looping again. Tuneable for flaky suites via env.
  */
 export function testRetryCap(env: NodeJS.ProcessEnv = process.env): number {
   const value = Number.parseInt(env.FACTORY_RUN_TESTS_RETRY_CAP ?? '', 10);
-  return Number.isFinite(value) && value >= 1 ? value : 3;
+  return Number.isFinite(value) && value >= 1 ? value : 2;
 }
 
 export interface TestFailureSignatureRecord {

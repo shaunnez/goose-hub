@@ -473,6 +473,63 @@ describe('runFixFeedbackWorkflow', () => {
     );
   });
 
+  it('skips prompt-contract regression failures without launching repair', async () => {
+    const workItem = makeWorkItem();
+    const compareBaseline = vi.fn();
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makePrOpenedEvent(),
+      {
+        ...makeQaCompletedEvent(false),
+        payload: {
+          verdict: 'fail',
+          overallScore: 0,
+          threshold: 70,
+          deterministic: true,
+          agentSkipped: true,
+          failureCategory: 'regression-unrelated',
+          tierResults: {
+            structural: { passed: true, findings: [] },
+            functional: { passed: true, findings: [] },
+            regression: {
+              passed: false,
+              command: 'pnpm test',
+              findings: [
+                {
+                  tier: 'regression',
+                  severity: 'error',
+                  description:
+                    'Regression [escalate]: FAIL skills/implement/slice.test.ts > implement prompt > bounds frontend evidence discovery when e2e support is missing or unclear',
+                  suggestion: 'Update brittle prompt contract assertion.',
+                },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo', {
+      baselineRegressionComparisonImpl: compareBaseline,
+    });
+
+    expect(compareBaseline).not.toHaveBeenCalled();
+    expect(mockClaudeCliRun).not.toHaveBeenCalled();
+    expect(stateSource.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-fix',
+      'factory:needs-human',
+    );
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.fix-feedback-skipped',
+        payload: expect.objectContaining({
+          reason: 'prompt-contract-regression',
+          sourceFeedback: expect.stringContaining('prompt-contract'),
+        }),
+      }),
+    );
+  });
+
   it('repairs regression-unrelated QA failures when baseline comparison is head-only', async () => {
     const workItem = makeWorkItem();
     const compareBaseline = vi.fn().mockResolvedValue({

@@ -354,6 +354,33 @@ function formatRegressionUnrelatedFeedback(payload: QaPayload): string {
   return lines.join('\n');
 }
 
+function hasPromptContractRegression(payload: QaPayload): boolean {
+  const text = [
+    ...(payload.findings ?? []).map((finding) =>
+      typeof finding === 'string' ? finding : finding.description,
+    ),
+    ...(payload.tierResults?.regression?.findings ?? []).map((finding) => finding.description),
+  ]
+    .join('\n')
+    .toLowerCase();
+  return (
+    text.includes('skills/implement/slice.test') &&
+    (text.includes('implement prompt') || text.includes('prompt contract'))
+  );
+}
+
+function formatPromptContractRegressionFeedback(payload: QaPayload): string {
+  const lines = [
+    'QA regression suite failed on a prompt-contract test rather than this issue-specific implementation surface.',
+    'Failure category: prompt-contract-regression',
+  ];
+  const regressionFindings = payload.tierResults?.regression?.findings ?? [];
+  for (const finding of regressionFindings.slice(0, 5)) {
+    lines.push(`- ${finding.description}`);
+  }
+  return lines.join('\n');
+}
+
 function regressionCommandForPayload(payload: QaPayload): string | null {
   const command = payload.tierResults?.regression?.command;
   return typeof command === 'string' && command.trim().length > 0 ? command.trim() : null;
@@ -530,6 +557,17 @@ async function findLatestSourceFailure(
       };
     }
     if (payload.failureCategory === 'regression-unrelated') {
+      if (hasPromptContractRegression(payload)) {
+        return {
+          kind: 'qa',
+          runId: sourceRunId(qaEvent),
+          feedback: formatPromptContractRegressionFeedback(payload),
+          actionable: false,
+          baselineRedGlobal: true,
+          skipReason: 'prompt-contract-regression',
+          payload,
+        };
+      }
       return {
         kind: 'qa',
         runId: sourceRunId(qaEvent),

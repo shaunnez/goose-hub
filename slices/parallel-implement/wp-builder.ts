@@ -166,6 +166,7 @@ function toolCallPaths(event: AgentEvent): string[] {
     add((canonical as { path?: unknown }).path);
   }
   add(input.path);
+  add(input.spec);
   addArray(input.paths);
   addArray(input.rawPaths);
   return [...paths];
@@ -183,6 +184,23 @@ function pathsMatch(left: string, right: string): boolean {
 
 function pathsExactlyMatch(left: string, right: string): boolean {
   return normalizePathForCompare(left) === normalizePathForCompare(right);
+}
+
+function pathCoversPath(candidate: string, target: string): boolean {
+  const a = normalizePathForCompare(candidate);
+  const b = normalizePathForCompare(target);
+  return a === b || b.startsWith(`${a}/`);
+}
+
+function isPlaywrightSpecPath(path: string): boolean {
+  const normalized = normalizePathForCompare(path);
+  return /^apps\/web\/e2e\/.+\.spec\.tsx?$/.test(normalized);
+}
+
+function isE2ePackageScript(event: AgentEvent): boolean {
+  if (toolCallName(event) !== 'run_package_script') return false;
+  const script = toolCallInput(event).script;
+  return typeof script === 'string' && /\be2e\b/i.test(script);
 }
 
 function isTerminalDecisionKind(kind: unknown): kind is TerminalDecisionKind {
@@ -260,11 +278,88 @@ function latestExactRunTestsStatusForPathAfterLastEdit(
   return null;
 }
 
+function latestCoveringRunTestsStatusForPathAfterLastEdit(
+  events: AgentEvent[],
+  path: string,
+): string | null {
+  let lastEditIndex = -1;
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    if (toolCallStatus(event) !== 'ok') continue;
+    if (!isEditToolCall(event)) continue;
+    const editedPaths = toolCallPaths(event);
+    if (editedPaths.length === 0 || editedPaths.some((candidate) => pathsMatch(candidate, path))) {
+      lastEditIndex = i;
+    }
+  }
+
+  for (let i = events.length - 1; i > lastEditIndex; i--) {
+    const event = events[i];
+    if (toolCallName(event) !== 'run_tests') continue;
+    if (toolCallStatus(event) !== 'ok') continue;
+    const paths = toolCallPaths(event);
+    if (paths.length === 0 || paths.some((candidate) => pathCoversPath(candidate, path))) {
+      return 'ok';
+    }
+  }
+  return null;
+}
+
+function latestPlaywrightVerificationStatusForPathAfterLastEdit(
+  events: AgentEvent[],
+  path: string,
+): string | null {
+  let lastEditIndex = -1;
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    if (toolCallStatus(event) !== 'ok') continue;
+    if (!isEditToolCall(event)) continue;
+    const editedPaths = toolCallPaths(event);
+    if (editedPaths.length === 0 || editedPaths.some((candidate) => pathsMatch(candidate, path))) {
+      lastEditIndex = i;
+    }
+  }
+
+  for (let i = events.length - 1; i > lastEditIndex; i--) {
+    const event = events[i];
+    if (toolCallStatus(event) !== 'ok') continue;
+    const name = toolCallName(event);
+    if (name === 'run_playwright_spec') {
+      const paths = toolCallPaths(event);
+      if (paths.some((candidate) => pathsExactlyMatch(candidate, path))) return 'ok';
+      continue;
+    }
+    if (isE2ePackageScript(event)) return 'ok';
+  }
+  return null;
+}
+
+function writtenTestVerificationStatusAfterLastEdit(
+  events: AgentEvent[],
+  path: string,
+): string | null {
+  if (isPlaywrightSpecPath(path)) {
+    return latestPlaywrightVerificationStatusForPathAfterLastEdit(events, path);
+  }
+  return (
+    latestExactRunTestsStatusForPathAfterLastEdit(events, path) ??
+    latestCoveringRunTestsStatusForPathAfterLastEdit(events, path)
+  );
+}
+
+function isRetryCapFinalVerificationFailure(failure: ImplementWpAcceptanceFailure | null): boolean {
+  if (failure?.kind !== 'terminal-blocker') return false;
+  return /(?:final|exact-file|rerun|verification).*(?:retry cap|locked out|refused|harness retry)/i.test(
+    failure.reason,
+  );
+}
+
 function hasSuccessfulVerificationToolCall(events: AgentEvent[]): boolean {
   return events.some((event) => {
     if (event.kind !== 'agent.tool-call') return false;
     if (toolCallStatus(event) !== 'ok') return false;
     const name = toolCallName(event);
+    if (name === 'run_playwright_spec' || isE2ePackageScript(event)) return true;
     return name === 'run_tests' || name === 'run_lint' || name === 'run_typecheck';
   });
 }
@@ -275,31 +370,56 @@ function implementWpAcceptanceFailure(input: {
   verificationRequired: boolean;
 }): ImplementWpAcceptanceFailure | null {
   const terminalFailure = terminalDecisionFailure(input.output, input.events);
-  if (terminalFailure != null) {
+  const retryCapFinalVerificationFailure = isRetryCapFinalVerificationFailure(terminalFailure);
+  const writtenTestPaths = [...new Set(input.output.testsWritten.map((test) => test.path))];
+  let writtenTestsCoveredByParentPass = false;
+  if (writtenTestPaths.length > 0) {
+    const failedWrittenTestPaths = writtenTestPaths.filter(
+      (path) => writtenTestVerificationStatusAfterLastEdit(input.events, path) !== 'ok',
+    );
+    if (failedWrittenTestPaths.length > 0) {
+      const playwrightPaths = failedWrittenTestPaths.filter(isPlaywrightSpecPath);
+      const unitTestPaths = failedWrittenTestPaths.filter((path) => !isPlaywrightSpecPath(path));
+      const reasonParts = [];
+      if (unitTestPaths.length > 0) {
+        reasonParts.push(
+          `written test files need exact-file run_tests success after their last edit: ${unitTestPaths.join(', ')}`,
+        );
+      }
+      if (playwrightPaths.length > 0) {
+        reasonParts.push(
+          `written Playwright specs need run_playwright_spec or an e2e package-script success after their last edit: ${playwrightPaths.join(', ')}`,
+        );
+      }
+      return {
+        kind: 'verification-failed',
+        reason: reasonParts.join('; '),
+      };
+    }
+    writtenTestsCoveredByParentPass = true;
+  }
+  if (
+    terminalFailure != null &&
+    !(retryCapFinalVerificationFailure && writtenTestsCoveredByParentPass)
+  ) {
     return terminalFailure;
   }
-  if (input.output.confidence === 'low' && input.verificationRequired) {
+  if (
+    input.output.confidence === 'low' &&
+    input.verificationRequired &&
+    !(retryCapFinalVerificationFailure && writtenTestsCoveredByParentPass)
+  ) {
     return {
       kind: 'low-confidence',
       reason: 'implement-wp returned low confidence while verification was required',
     };
   }
-  const writtenTestPaths = [...new Set(input.output.testsWritten.map((test) => test.path))];
-  if (writtenTestPaths.length > 0) {
-    const failedWrittenTestPaths = writtenTestPaths.filter(
-      (path) => latestExactRunTestsStatusForPathAfterLastEdit(input.events, path) !== 'ok',
-    );
-    if (failedWrittenTestPaths.length > 0) {
-      return {
-        kind: 'verification-failed',
-        reason: `written test files need exact-file run_tests success after their last edit: ${failedWrittenTestPaths.join(', ')}`,
-      };
-    }
-  }
   const reportedRunPaths = [...new Set(input.output.testsRun.paths)];
   if (reportedRunPaths.length > 0) {
-    const failedPaths = reportedRunPaths.filter(
-      (path) => latestRunTestsStatusForPath(input.events, path) !== 'ok',
+    const failedPaths = reportedRunPaths.filter((path) =>
+      isPlaywrightSpecPath(path)
+        ? latestPlaywrightVerificationStatusForPathAfterLastEdit(input.events, path) !== 'ok'
+        : latestRunTestsStatusForPath(input.events, path) !== 'ok',
     );
     if (failedPaths.length > 0) {
       return {

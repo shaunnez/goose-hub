@@ -470,7 +470,7 @@ describe('implement prompt', () => {
     expect(prompt).toContain(
       'Do not inspect old e2e specs, Playwright config, or screenshot conventions',
     );
-    expect(prompt).toContain('ship the implementation plus targeted tests');
+    expect(prompt).toMatch(/Ship the implementation plus targeted .*tests/);
   });
 
   it('documents per-field self-quality score ranges', () => {
