@@ -845,6 +845,14 @@ function reviewWorkflowRunIdsForItem(
   return [...ids];
 }
 
+const GRILL_COMPLETED_STATES = new Set([
+  'factory:prd-drafting',
+  'factory:prd-review',
+  'factory:decomposing',
+  'factory:issues-created',
+  'factory:done',
+]);
+
 function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs-human' | 'failed' {
   const events = items.flatMap(eventFromRenderItem);
   if (events.some((event) => event.kind === 'review.wave-failed')) return 'failed';
@@ -869,6 +877,18 @@ function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs
   const verdict = (completed?.payload as { verdict?: string } | null)?.verdict;
   if (verdict === 'needs-human') return 'needs-human';
   if (verdict === 'approved' || verdict === 'needs-fix') return 'completed';
+  if (
+    events.some((event) => {
+      const payload = event.payload as { to?: string; toState?: string } | null;
+      return (
+        event.kind === 'state.transitioned' &&
+        (GRILL_COMPLETED_STATES.has(payload?.to ?? '') ||
+          GRILL_COMPLETED_STATES.has(payload?.toState ?? ''))
+      );
+    })
+  ) {
+    return 'completed';
+  }
   return 'live';
 }
 
