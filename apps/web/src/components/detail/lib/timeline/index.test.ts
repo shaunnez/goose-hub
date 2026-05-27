@@ -19,6 +19,26 @@ function makeReviewItems(...events: AgentEventDto[]): RenderItem[] {
 }
 
 describe('groupByReviewWorkflow grill completion status', () => {
+  it('keeps unrelated review workflows live when they only transition into a post-grill state', () => {
+    const reviewWorkflowRunId = 'review-non-grill-transition';
+
+    const result = groupByReviewWorkflow(
+      makeReviewItems(
+        makeEvent(1, 'review.started', { reviewWorkflowRunId }),
+        makeEvent(2, 'state.transitioned', {
+          reviewWorkflowRunId,
+          to: 'factory:prd-drafting',
+        }),
+      ),
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('review-group');
+    if (result[0]?.kind !== 'review-group') return;
+
+    expect(result[0].status).toBe('live');
+  });
+
   it('marks a grill review group as completed after transitioning to a post-grill state', () => {
     const reviewWorkflowRunId = 'review-grill-complete';
 

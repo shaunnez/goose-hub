@@ -853,8 +853,15 @@ const GRILL_COMPLETED_STATES = new Set([
   'factory:done',
 ]);
 
+function hasGrillActivity(events: AgentEventDto[]): boolean {
+  return events.some(
+    (event) => event.kind === 'question.asked' || eventSkill(event) === 'grill-me',
+  );
+}
+
 function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs-human' | 'failed' {
   const events = items.flatMap(eventFromRenderItem);
+  const hasAnsweredGrillFlow = hasGrillActivity(events);
   if (events.some((event) => event.kind === 'review.wave-failed')) return 'failed';
   if (events.some((event) => event.kind === 'agent.run-failed')) return 'failed';
   if (events.some((event) => event.kind === 'review.escalated')) return 'needs-human';
@@ -878,6 +885,7 @@ function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs
   if (verdict === 'needs-human') return 'needs-human';
   if (verdict === 'approved' || verdict === 'needs-fix') return 'completed';
   if (
+    hasAnsweredGrillFlow &&
     events.some((event) => {
       const payload = event.payload as { to?: string; toState?: string } | null;
       return (
