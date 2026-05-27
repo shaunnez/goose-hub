@@ -7,9 +7,11 @@ import type { WorkItemDto } from '@/lib/types';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useLaneVisibility } from '@/state/lane-visibility';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Eye, RefreshCw } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { ChevronDown, Download, Eye, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BoardColumn } from './BoardColumn';
+import { JiraImportDialog } from './JiraImportDialog';
 
 interface BoardProps {
   projectSlug: string;
@@ -17,6 +19,8 @@ interface BoardProps {
 
 export function Board({ projectSlug }: BoardProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [jiraImportOpen, setJiraImportOpen] = useState(false);
   const { hidden, toggle, reset } = useLaneVisibility();
   const { activeNumber: resolvedMilestone, milestones, setActiveNumber } = useActiveMilestone();
   const { data: budgetStatus } = useProjectBudgetStatus(projectSlug);
@@ -141,6 +145,13 @@ export function Board({ projectSlug }: BoardProps) {
           {items.length} issue{items.length === 1 ? '' : 's'}
         </span>
         <span className="grow" />
+        <button
+          type="button"
+          onClick={() => setJiraImportOpen(true)}
+          className="inline-flex h-6 items-center gap-1.5 rounded border border-line px-2 text-[12px] text-fg-2 hover:bg-bg-hover hover:text-fg"
+        >
+          <Download size={12} /> Import Jira
+        </button>
         {hiddenLanes.length > 0 && (
           <details className="relative">
             <summary className="cursor-pointer list-none flex items-center gap-1.5 hover:text-fg">
@@ -180,6 +191,20 @@ export function Board({ projectSlug }: BoardProps) {
           />
         ))}
       </div>
+      <JiraImportDialog
+        open={jiraImportOpen}
+        projectSlug={projectSlug}
+        onClose={() => setJiraImportOpen(false)}
+        onImported={(item) => {
+          void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
+          if (resolvedMilestone != null) {
+            void queryClient.invalidateQueries({
+              queryKey: ['milestone-issues', projectSlug, resolvedMilestone],
+            });
+          }
+          navigate(`/projects/${projectSlug}/items/${item.externalId}`);
+        }}
+      />
     </div>
   );
 }

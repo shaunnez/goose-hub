@@ -42,6 +42,13 @@ describe('Atlassian DTO schemas', () => {
           summary: 'Full Jira description',
           bytes: 1024,
         },
+        rawArtifactRef: {
+          stored: true,
+          artifactKey: 'atlassian:jira:evidence:TAS-123:def',
+          kind: 'atlassian:jira:evidence:TAS-123',
+          summary: 'Raw Jira issue response',
+          bytes: 2048,
+        },
         labels: ['factory'],
         components: ['hub'],
         linkedKeys: ['TAS-456'],
