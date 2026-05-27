@@ -5,6 +5,7 @@ export type TimelineContext = {
   slug: string;
   issueId: string;
   latestRunId: string | null;
+  events?: readonly AgentEventDto[];
   runCosts?: Map<string, CostRowDto>;
   /** Monotonic tick that increments each time the user clicks expand/collapse all. */
   expandSignal?: { tick: number; open: boolean };
