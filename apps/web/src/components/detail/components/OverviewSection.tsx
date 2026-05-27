@@ -1,4 +1,4 @@
-import { fetchEvents, fetchIssueDiff } from '@/lib/api';
+import { fetchEvents, fetchIssueDiff, fetchTriageResult } from '@/lib/api';
 import { laneForState } from '@/lib/lanes.config';
 import { renderMarkdownToHtml } from '@/lib/markdown';
 import type { AgentEventDto, IssueDiffDto, WorkItemDto } from '@/lib/types';
@@ -9,9 +9,11 @@ import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { parseDiff } from '../lib/code-diff';
 import { useIssueCostsBreakdown } from '../lib/costs';
+import { buildOverviewWorkflowCards } from '../lib/overview-workflow-summary';
 import { CommentsSection } from './CommentsSection';
 import { DependenciesSection } from './DependenciesSection';
 import { StatCard } from './StatCard';
+import { WorkflowSummaryCard } from './WorkflowSummaryCard';
 
 interface OverviewSectionProps {
   item?: WorkItemDto;
@@ -51,10 +53,27 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
     staleTime: 10_000,
     enabled: id !== '',
   });
+  const { data: triage } = useQuery({
+    queryKey: ['triage', slug, id],
+    queryFn: () => fetchTriageResult(slug, id),
+    staleTime: 10_000,
+    enabled: id !== '',
+  });
   const qaPayload = events.find((e) => e.kind === 'qa.completed')?.payload as
     | { testRun?: { passed: number; failed: number; skipped: number } }
     | undefined;
   const testRun = qaPayload?.testRun ?? null;
+  const workflowCards = useMemo(
+    () =>
+      buildOverviewWorkflowCards({
+        item,
+        events,
+        costs,
+        diff: diffData,
+        triage: triage ?? null,
+      }),
+    [costs, diffData, events, item, triage],
+  );
 
   return (
     <div data-testid="overview-section" className="px-8 py-6 flex flex-col gap-5">
@@ -98,6 +117,23 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
         <StatCard label="Last agent" value={lastAgentLabel} />
         <StatCard label="Spent" value={spentValue} sub={spentSub} />
       </div>
+
+      <section className="flex flex-col gap-3">
+        <div>
+          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">
+            Workflow Snapshot
+          </div>
+          <p className="text-[12px] text-fg-3">Stage status, key outputs, and cost at a glance.</p>
+        </div>
+        <div
+          data-testid="workflow-snapshot-grid"
+          className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
+        >
+          {workflowCards.map((card) => (
+            <WorkflowSummaryCard key={card.key} card={card} />
+          ))}
+        </div>
+      </section>
 
       {/* Main content grid */}
       <div className="grid gap-4">
