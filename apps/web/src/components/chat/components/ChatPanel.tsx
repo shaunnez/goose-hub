@@ -31,9 +31,11 @@ import { ConversationList } from './ConversationList';
 
 const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 
-interface ChatPanelProps {
+export type ChatPanelCloseReason = 'launcher-toggle' | 'header-close' | 'navigate';
+
+export interface ChatPanelProps {
   open: boolean;
-  onClose: () => void;
+  onClose: (reason: ChatPanelCloseReason) => void;
 }
 
 type View = 'thread' | 'list';
@@ -135,6 +137,21 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       // localStorage unavailable — accept the loss; selection is best-effort.
     }
   }, []);
+
+  const resetManualDismissState = useCallback(() => {
+    loadTokenRef.current += 1;
+    activeConversationIdRef.current = null;
+    inFlightRunByConversationRef.current.clear();
+    writeActiveId(null);
+    setConversation(null);
+    setMessages([]);
+    setInvocations([]);
+    setSendingConversationIds(new Set());
+    setBusy(false);
+    setPendingDecision(null);
+    setError(null);
+    setView('list');
+  }, [writeActiveId]);
 
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;
@@ -377,7 +394,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
           const path = (res.invocation.result as { path?: string }).path;
           if (typeof path === 'string' && path.startsWith('/')) {
             navigate(path);
-            onClose();
+            onClose('navigate');
           }
         }
       } catch (err) {
@@ -410,7 +427,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const handleNavigate = useCallback(
     (path: string) => {
       navigate(path);
-      onClose();
+      onClose('navigate');
     },
     [navigate, onClose],
   );
@@ -463,7 +480,10 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         </select>
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => {
+            resetManualDismissState();
+            onClose('header-close');
+          }}
           aria-label="Close chat"
           className="p-1 text-fg-2 hover:text-fg rounded"
         >
