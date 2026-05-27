@@ -139,8 +139,8 @@ describe('QA timeline events', () => {
     expect(document.body.textContent).not.toContain('"repairMode"');
   });
 
-  it('renders prompt-contract regression repair context without raw JSON or ANSI codes', () => {
-    const event = makeEvent('agent.fix-feedback-complete', {
+  it('renders skipped prompt-contract regression repair context without raw JSON or ANSI codes', () => {
+    const event = makeEvent('agent.fix-feedback-skipped', {
       pipelineRunId: 'a4ec956d-49c7-468d-a454-66d92b792d73',
       attemptId: 'd4bb85ec-fc83-4977-923e-30a68ff6b2fd',
       repairMode: 'legacy-implement',
@@ -158,7 +158,7 @@ describe('QA timeline events', () => {
 
     render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
 
-    expect(screen.getByText('Legacy Repair Cycle 1')).toBeTruthy();
+    expect(screen.getByText('Legacy Repair Cycle 1 Skipped')).toBeTruthy();
     expect(screen.getByText('QA source failure')).toBeTruthy();
     expect(screen.getAllByText('Prompt Contract Regression')).toHaveLength(1);
     expect(screen.getByText('PR #1145')).toBeTruthy();

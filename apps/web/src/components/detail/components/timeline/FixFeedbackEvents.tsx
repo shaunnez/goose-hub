@@ -6,6 +6,7 @@ import {
   GitBranch,
   GitPullRequest,
 } from 'lucide-react';
+import type { ComponentType } from 'react';
 
 type FixFeedbackPayload = {
   filesWritten?: number;
@@ -58,22 +59,53 @@ function TimelineDot() {
   return <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />;
 }
 
-export function AgentFixFeedbackCompleteEvent({ event }: { event: AgentEventDto }) {
+type FixFeedbackVariant = {
+  fallbackTitle: string;
+  legacyTitle: (cycle: number) => string;
+  borderClass: string;
+  Icon: ComponentType<{ size?: number; className?: string }>;
+  iconClass: string;
+};
+
+const completeVariant: FixFeedbackVariant = {
+  fallbackTitle: 'Fix feedback complete',
+  legacyTitle: (cycle) => `Legacy Repair Cycle ${cycle}`,
+  borderClass: 'border-success bg-bg-elev/60',
+  Icon: ClipboardCheck,
+  iconClass: 'text-green-400',
+};
+
+const skippedVariant: FixFeedbackVariant = {
+  fallbackTitle: 'Fix feedback skipped',
+  legacyTitle: (cycle) => `Legacy Repair Cycle ${cycle} Skipped`,
+  borderClass: 'border-yellow-500/30 bg-yellow-500/5',
+  Icon: AlertTriangle,
+  iconClass: 'text-yellow-400',
+};
+
+function FixFeedbackEventCard({
+  event,
+  variant,
+}: {
+  event: AgentEventDto;
+  variant: FixFeedbackVariant;
+}) {
   const p = event.payload as FixFeedbackPayload | null;
   const command = p?.testsRun?.command;
   const paths = p?.testsRun?.paths ?? [];
   const sourceFeedbackLines = feedbackLines(p?.sourceFeedback);
   const title =
     p?.repairMode === 'legacy-implement' && p.repairCycle != null
-      ? `Legacy Repair Cycle ${p.repairCycle}`
-      : 'Fix feedback complete';
+      ? variant.legacyTitle(p.repairCycle)
+      : variant.fallbackTitle;
+  const Icon = variant.Icon;
   return (
     <li
       data-event-kind={event.kind}
-      className="rounded-md border border-success bg-bg-elev/60 px-4 py-3"
+      className={`rounded-md border ${variant.borderClass} px-4 py-3`}
     >
       <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
-        <ClipboardCheck size={13} className="shrink-0 text-green-400" />
+        <Icon size={13} className={`shrink-0 ${variant.iconClass}`} />
         <span className="font-mono uppercase tracking-wider">{title}</span>
         <TimelineDot />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
@@ -161,4 +193,12 @@ export function AgentFixFeedbackCompleteEvent({ event }: { event: AgentEventDto 
       )}
     </li>
   );
+}
+
+export function AgentFixFeedbackCompleteEvent({ event }: { event: AgentEventDto }) {
+  return <FixFeedbackEventCard event={event} variant={completeVariant} />;
+}
+
+export function AgentFixFeedbackSkippedEvent({ event }: { event: AgentEventDto }) {
+  return <FixFeedbackEventCard event={event} variant={skippedVariant} />;
 }
