@@ -2,6 +2,21 @@ import type { AgentEventDto } from '@/lib/types';
 import { isCodexTransportWarningLog } from './log-events';
 import type { RenderItem } from './types';
 
+function isAnsweredGrillTransitionEvent(event: AgentEventDto): boolean {
+  if (event.kind !== 'state.transitioned') return false;
+  const payload = event.payload as {
+    discoverSessionId?: unknown;
+    from?: unknown;
+    to?: unknown;
+  } | null;
+  return (
+    typeof payload?.discoverSessionId === 'string' &&
+    payload.discoverSessionId.trim() !== '' &&
+    payload.from === 'factory:gate-pending' &&
+    payload.to === 'factory:grilling'
+  );
+}
+
 export function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {
   const items: RenderItem[] = [];
   const flushLogGroup = (group: AgentEventDto[]) => {
@@ -115,7 +130,11 @@ export function extractRunMeta(items: RenderItem[]): {
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'prd.approved' || ev.kind === 'prd.rejected') {
       if (endedAt == null) endedAt = ev.createdAt;
-    } else if (ev.kind === 'grill.question-posted' || ev.kind === 'grill.completed') {
+    } else if (
+      ev.kind === 'grill.question-posted' ||
+      ev.kind === 'grill.completed' ||
+      isAnsweredGrillTransitionEvent(ev)
+    ) {
       // grill-me runs don't emit agent.run-completed - these are the terminal events
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'decompose.completed') {

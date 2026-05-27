@@ -42,6 +42,10 @@ export function getDiscoverPhaseId(
 
 function isGrillPhaseEvent(event: AgentEventDto): boolean {
   if (event.kind.startsWith('grill.')) return true;
+  return isAnsweredGrillTransitionEvent(event);
+}
+
+function isAnsweredGrillTransitionEvent(event: AgentEventDto): boolean {
   if (event.kind !== 'state.transitioned' || getDiscoverSessionId(event) == null) return false;
   const payload = event.payload as { from?: unknown; to?: unknown } | null;
   return payload?.from === 'factory:gate-pending' && payload.to === 'factory:grilling';
@@ -60,6 +64,7 @@ function resolveDiscoverPhaseStatus(
   if (phase === 'grill') {
     if (events.some((event) => event.kind === 'grill.completed')) return 'completed';
     if (events.some((event) => event.kind === 'grill.question-posted')) return 'completed';
+    if (events.some(isAnsweredGrillTransitionEvent)) return 'completed';
   } else if (
     events.some((event) =>
       ['prd.drafted', 'prd.approved', 'prd.rejected', 'prd.revised', 'prd.declined'].includes(
