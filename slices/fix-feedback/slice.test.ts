@@ -192,6 +192,34 @@ function makeQaCompletedEvent(passed = false) {
   };
 }
 
+function makeToolCallEvent(
+  runId: string,
+  toolName: string,
+  status: 'ok' | 'failed',
+  path: string,
+  id = 3,
+) {
+  return {
+    id,
+    kind: 'agent.tool-call' as EventKind,
+    payload: {
+      tool_name: toolName,
+      status,
+      raw_path: path,
+      canonical_path: { path },
+      tool_input: {
+        path,
+        rawPaths: [path],
+        paths: [path],
+      },
+    },
+    projectId: 'proj',
+    workItemId: 'github:owner/repo#42',
+    createdAt: new Date().toISOString(),
+    runId,
+  };
+}
+
 describe('runFixFeedbackWorkflow', () => {
   let stateSource: StateSource;
 
@@ -409,6 +437,49 @@ describe('runFixFeedbackWorkflow', () => {
 
     expect(eventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'agent.fix-feedback-complete' }),
+    );
+  });
+
+  it('escalates when written repair tests lack a post-edit run_tests success', async () => {
+    const replay = vi.mocked(eventStore.replay);
+    const initialEvents = [makePrOpenedEvent(), makeQaCompletedEvent()];
+    replay.mockReturnValueOnce(initialEvents);
+    const customRuntime: AgentRuntime = {
+      run: vi.fn().mockImplementation(async (spec) => {
+        replay.mockReturnValue([
+          ...initialEvents,
+          makeToolCallEvent(spec.runId, 'edit_file', 'ok', 'src/utils.test.ts', 3),
+          makeToolCallEvent(spec.runId, 'run_tests', 'failed', 'src/utils.test.ts', 4),
+        ]);
+        return {
+          output: makeImplementOutput({
+            testsWritten: [{ path: 'src/utils.test.ts', cases: 1 }],
+            testsRun: { command: 'pnpm test', paths: ['src/utils.test.ts'] },
+          }),
+          decisionSummaries: [],
+          events: [],
+        };
+      }),
+    };
+
+    await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo', {
+      runtime: customRuntime,
+    });
+
+    expect(mockOrchestratorCommitAll).not.toHaveBeenCalled();
+    expect(stateSource.transitionState).toHaveBeenLastCalledWith(
+      '42',
+      'factory:in-progress',
+      'factory:needs-human',
+    );
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({
+          failureKind: 'verification-failed',
+          error: expect.stringContaining('exact-file run_tests success'),
+        }),
+      }),
     );
   });
 

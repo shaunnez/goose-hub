@@ -931,7 +931,7 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       output: {
         verdict: 'approved',
         confidence: 0.9,
-        criteriaChecks: [{ criterion: 'Add foo', status: 'met' }],
+        criteriaChecks: [{ criterion: 'Loosely summarized criterion', status: 'met' }],
         findings: [],
         decisionSummaries: [],
       },
@@ -952,6 +952,41 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       '42',
       expect.stringContaining('missing canonical acceptance criteria coverage'),
     );
+  });
+
+  it('canonicalizes review criterion IDs from exact acceptance-contract text', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+    const approvedWithoutIds = (): AgentResult => ({
+      output: {
+        verdict: 'approved',
+        confidence: 0.95,
+        criteriaChecks: [{ criterion: 'Add foo', status: 'met' }],
+        findings: [],
+        decisionSummaries: [],
+      },
+      decisionSummaries: [],
+      events: [],
+    });
+    for (let i = 0; i < 6; i++) mockRun.mockResolvedValueOnce(approvedWithoutIds());
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:approved',
+    );
+    const slotEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'review.slot-completed');
+    expect(slotEvents[0]?.[0].payload).toMatchObject({
+      criteriaChecks: [expect.objectContaining({ criterionId: 'AC-1' })],
+    });
   });
 
   // Test for P2 fix: review.completed emitted on convergence path

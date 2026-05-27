@@ -63,6 +63,8 @@ export interface VerifyResult {
   displayTruncated: boolean;
   fullOutputPath?: string;
   command: ReadonlyArray<string>;
+  blocked?: true;
+  blockedReason?: string;
   rawPaths?: string[];
   paths?: RepoRelativePath[];
   /**
@@ -161,7 +163,7 @@ export async function runTestsTool(
 
   if (pathMetadata?.paths.some((path) => isE2eOwnedPath(path.path)) === true) {
     const blocked = buildE2eOwnedBlockedResult(argv, pathMetadata);
-    emitToolCall(ctx, {
+    emitBlockedToolCall(ctx, {
       tool: 'run_tests',
       input: {
         path: input.path ?? null,
@@ -169,10 +171,9 @@ export async function runTestsTool(
         rawPaths: pathMetadata.rawPaths,
         paths: pathMetadata.paths.map((path) => path.path),
       },
-      status: 'failed',
-      exitCode: blocked.exitCode,
-      durationMs: blocked.durationMs,
-      truncated: false,
+      blocked: true,
+      reason: 'e2e_owned_path',
+      message: blocked.stderr,
     });
     return blocked;
   }
@@ -182,7 +183,7 @@ export async function runTestsTool(
   const priorFailures = consecutiveTestFailures(ctx.runId, retryPathKey);
   if (priorFailures >= cap) {
     const blocked = buildRetryCapBlockedResult(argv, cap, priorFailures, retryPathKey);
-    emitToolCall(ctx, {
+    emitBlockedToolCall(ctx, {
       tool: 'run_tests',
       input: {
         path: input.path ?? null,
@@ -190,10 +191,9 @@ export async function runTestsTool(
         rawPaths: pathMetadata?.rawPaths ?? [],
         paths: pathMetadata?.paths.map((path) => path.path) ?? [],
       },
-      status: 'failed',
-      exitCode: blocked.exitCode,
-      durationMs: blocked.durationMs,
-      truncated: false,
+      blocked: true,
+      reason: 'excessive_test_retries',
+      message: blocked.stderr,
     });
     eventStore.appendEvent({
       projectId: ctx.projectId,
@@ -302,6 +302,8 @@ function buildE2eOwnedBlockedResult(
     command: argv,
     rawPaths: paths.rawPaths,
     paths: paths.paths,
+    blocked: true,
+    blockedReason: 'e2e_owned_path',
   };
 }
 
@@ -321,6 +323,8 @@ function buildRetryCapBlockedResult(
     truncated: false,
     displayTruncated: false,
     command: argv,
+    blocked: true,
+    blockedReason: 'excessive_test_retries',
   };
 }
 
@@ -337,6 +341,8 @@ function buildRetrySignatureBlockedResult(
     truncated: false,
     displayTruncated: false,
     command: argv,
+    blocked: true,
+    blockedReason: 'repeated_test_failure_signature',
   };
 }
 

@@ -206,8 +206,21 @@ describe('runTestsTool retry cap', () => {
 
     const blocked = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
     expect(blocked.status).toBe('failed');
+    expect(blocked.blocked).toBe(true);
+    expect(blocked.blockedReason).toBe('excessive_test_retries');
     expect(mockRunCommand).not.toHaveBeenCalled();
     expect(blocked.stderr).toMatch(/retry cap|consecutive failures/i);
+
+    const blockedCalls = (await import('../../../event-stream/store.js')).eventStore
+      .replay({ runId: ctx.runId, kind: 'agent.tool-call' })
+      .filter(
+        (event) =>
+          (event.payload as { tool_name?: unknown; blocked?: unknown; reason?: unknown })
+            .tool_name === 'run_tests' &&
+          (event.payload as { blocked?: unknown }).blocked === true &&
+          (event.payload as { reason?: unknown }).reason === 'excessive_test_retries',
+      );
+    expect(blockedCalls).toHaveLength(1);
 
     const violations = (await import('../../../event-stream/store.js')).eventStore
       .replay({ runId: ctx.runId, kind: 'tool.violation' })

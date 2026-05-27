@@ -107,6 +107,22 @@ export function hasCanonicalCriteriaCoverage(
   return criteria.every((criterion) => checkedIds.has(criterion.id));
 }
 
+export function withCanonicalCriterionIds(
+  output: ReviewOutput,
+  acceptanceContract?: AcceptanceContract | null,
+): ReviewOutput {
+  const criteria = acceptanceContract?.criteria ?? [];
+  if (criteria.length === 0) return output;
+  const byStatement = new Map(criteria.map((criterion) => [criterion.statement, criterion.id]));
+  return {
+    ...output,
+    criteriaChecks: output.criteriaChecks.map((check) => ({
+      ...check,
+      criterionId: check.criterionId ?? byStatement.get(check.criterion),
+    })),
+  };
+}
+
 /** Default reviewer slots: constrained + unconstrained. Model/provider come from Skill runtime. */
 export const DEFAULT_REVIEWER_SLOTS: ReviewerSlot[] = [
   { prompt: 'default' },

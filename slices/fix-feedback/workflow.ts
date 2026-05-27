@@ -30,7 +30,7 @@ import {
   orchestratorPushBranch,
 } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import { collectScopeManifest } from '@goose-hub/core/workspaces/scope-manifest.js';
-import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
+import { type ImplementOutput, ImplementSchema } from '@goose-hub/skills/implement/schema.js';
 
 /** Maximum prior dev decision-summaries surfaced to the repair agent. */
 const PRIOR_DECISION_LIMIT = 20;
@@ -40,6 +40,153 @@ const PRIOR_CHANGED_FILES_LIMIT = 30;
 interface PriorDevDecision {
   kind: string;
   summary: string;
+}
+
+type FixFeedbackEvent = ReturnType<typeof eventStore.replay>[number];
+
+function toolCallName(event: FixFeedbackEvent): string | null {
+  if (event.kind !== 'agent.tool-call') return null;
+  const payload = event.payload as { tool_name?: unknown; toolName?: unknown };
+  const name = payload.tool_name ?? payload.toolName;
+  return typeof name === 'string' ? name : null;
+}
+
+function toolCallInput(event: FixFeedbackEvent): Record<string, unknown> {
+  const payload = event.payload as {
+    tool_input?: unknown;
+    toolInput?: unknown;
+  };
+  const input = payload.tool_input ?? payload.toolInput;
+  return input != null && typeof input === 'object' && !Array.isArray(input)
+    ? (input as Record<string, unknown>)
+    : {};
+}
+
+function toolCallStatus(event: FixFeedbackEvent): string | null {
+  if (event.kind !== 'agent.tool-call') return null;
+  const payload = event.payload as { status?: unknown };
+  return typeof payload.status === 'string' ? payload.status : null;
+}
+
+function toolCallPaths(event: FixFeedbackEvent): string[] {
+  const payload = event.payload as {
+    raw_path?: unknown;
+    canonical_path?: unknown;
+  };
+  const input = toolCallInput(event);
+  const paths = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value === 'string' && value.length > 0) paths.add(value);
+  };
+  const addArray = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+    for (const entry of value) add(entry);
+  };
+  add(payload.raw_path);
+  const canonical = payload.canonical_path;
+  if (canonical != null && typeof canonical === 'object' && !Array.isArray(canonical)) {
+    add((canonical as { path?: unknown }).path);
+  }
+  add(input.path);
+  addArray(input.paths);
+  addArray(input.rawPaths);
+  return [...paths];
+}
+
+function normalizePathForCompare(path: string): string {
+  return path.replace(/^\.\//, '').replace(/\/+$/, '');
+}
+
+function pathsMatch(left: string, right: string): boolean {
+  const a = normalizePathForCompare(left);
+  const b = normalizePathForCompare(right);
+  return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+}
+
+function pathCoversPath(candidate: string, target: string): boolean {
+  const a = normalizePathForCompare(candidate);
+  const b = normalizePathForCompare(target);
+  return a === b || b.startsWith(`${a}/`);
+}
+
+function isEditToolCall(event: FixFeedbackEvent): boolean {
+  const name = toolCallName(event)?.toLowerCase();
+  return name != null && (name.includes('edit') || name.includes('write'));
+}
+
+function runIdsForRepair(events: FixFeedbackEvent[], runId: string): Set<string> {
+  const ids = new Set([runId]);
+  for (const event of events) {
+    if (event.kind !== 'agent.retry-escalated') continue;
+    const payload = event.payload as { runId?: unknown; retryRunId?: unknown };
+    if (payload.runId === runId && typeof payload.retryRunId === 'string') {
+      ids.add(payload.retryRunId);
+    }
+  }
+  return ids;
+}
+
+function eventBelongsToRun(event: FixFeedbackEvent, runIds: Set<string>): boolean {
+  if (typeof event.runId === 'string' && runIds.has(event.runId)) return true;
+  const payload = event.payload as { runId?: unknown; retryRunId?: unknown };
+  return (
+    (typeof payload.runId === 'string' && runIds.has(payload.runId)) ||
+    (typeof payload.retryRunId === 'string' && runIds.has(payload.retryRunId))
+  );
+}
+
+function latestCoveringRunTestsStatusForPathAfterLastEdit(
+  events: FixFeedbackEvent[],
+  path: string,
+): string | null {
+  let lastEditIndex = -1;
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    if (toolCallStatus(event) !== 'ok') continue;
+    if (!isEditToolCall(event)) continue;
+    const editedPaths = toolCallPaths(event);
+    if (editedPaths.length === 0 || editedPaths.some((candidate) => pathsMatch(candidate, path))) {
+      lastEditIndex = i;
+    }
+  }
+
+  for (let i = events.length - 1; i > lastEditIndex; i--) {
+    const event = events[i];
+    if (toolCallName(event) !== 'run_tests') continue;
+    const paths = toolCallPaths(event);
+    if (paths.length === 0 || paths.some((candidate) => pathCoversPath(candidate, path))) {
+      return toolCallStatus(event);
+    }
+  }
+  return null;
+}
+
+function fixFeedbackAcceptanceFailure(input: {
+  output: ImplementOutput;
+  events: FixFeedbackEvent[];
+  runId: string;
+}): string | null {
+  const runIds = runIdsForRepair(input.events, input.runId);
+  const runEvents = input.events.filter((event) => eventBelongsToRun(event, runIds));
+  if (!runEvents.some((event) => event.kind === 'agent.tool-call')) return null;
+
+  const writtenTestPaths = [...new Set(input.output.testsWritten.map((test) => test.path))];
+  const failedWrittenTests = writtenTestPaths.filter(
+    (path) => latestCoveringRunTestsStatusForPathAfterLastEdit(runEvents, path) !== 'ok',
+  );
+  if (failedWrittenTests.length > 0) {
+    return `written test files need exact-file run_tests success after their last edit: ${failedWrittenTests.join(', ')}`;
+  }
+
+  const reportedRunPaths = [...new Set(input.output.testsRun.paths)];
+  const failedReportedRuns = reportedRunPaths.filter(
+    (path) => latestCoveringRunTestsStatusForPathAfterLastEdit(runEvents, path) !== 'ok',
+  );
+  if (failedReportedRuns.length > 0) {
+    return `required run_tests did not pass for: ${failedReportedRuns.join(', ')}`;
+  }
+
+  return null;
 }
 
 function collectPriorDevDecisions(
@@ -1000,6 +1147,49 @@ export async function runFixFeedbackWorkflow(
         appendSystemPrompt: implementPrompt,
       },
     });
+
+    const acceptanceFailure = fixFeedbackAcceptanceFailure({
+      output: implementOutput,
+      events: eventStore.replay({ workItemId: workItem.id }),
+      runId,
+    });
+    if (acceptanceFailure != null) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.run-failed',
+        payload: {
+          runId,
+          error: `fix-feedback: ${acceptanceFailure}`,
+          failureKind: 'verification-failed',
+          ...repairPayload,
+        },
+        runId,
+      });
+      await stateSource.comment(
+        workItem.externalId,
+        buildAgentComment(
+          'Dev',
+          'Failed',
+          `Fix-feedback verification failed: ${acceptanceFailure}`,
+        ),
+      );
+      await stateSource.transitionState(
+        workItem.externalId,
+        'factory:in-progress',
+        'factory:needs-human',
+      );
+      emitStateTransitionEvent({
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:in-progress',
+        to: 'factory:needs-human',
+        by: 'fix-feedback',
+        runId,
+        extraPayload: repairPayload,
+      });
+      return;
+    }
 
     const observedChangedFiles = deriveObservedChangedFiles(worktreePath);
     const commitResult = commitAllFn(

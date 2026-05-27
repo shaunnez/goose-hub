@@ -35,6 +35,7 @@ import {
   extractChangedFilePaths,
   findingKeyStr,
   hasCanonicalCriteriaCoverage,
+  withCanonicalCriterionIds,
 } from './review-spec.js';
 
 export type { DispatchReviewWaveOpts, FindingKey, ReviewWaveResult };
@@ -145,13 +146,16 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
     r instanceof Error ? null : safeParseOutputForSchema(ReviewOutputSchema, r.output),
   );
 
-  const successfulReviewerOutputs = parsed.flatMap((p, i) => {
-    if (p == null || !p.success) return [];
-    if (!hasCanonicalCriteriaCoverage(p.data, acceptanceContract)) return [];
+  const normalizedReviewerOutputs = parsed.map((p) =>
+    p?.success ? withCanonicalCriterionIds(p.data, acceptanceContract) : null,
+  );
+
+  const successfulReviewerOutputs = normalizedReviewerOutputs.flatMap((output, i) => {
+    if (output == null || !hasCanonicalCriteriaCoverage(output, acceptanceContract)) return [];
     const slot = slots[i];
     return [
       {
-        parsed: p.data,
+        parsed: output,
         runId: runIds[i],
         round,
         slotIndex: i,
@@ -190,7 +194,8 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
 
   const coverageFailures = parsed.flatMap((p, i) => {
     if (p == null || !p.success) return [];
-    return hasCanonicalCriteriaCoverage(p.data, acceptanceContract)
+    const output = normalizedReviewerOutputs[i];
+    return output != null && hasCanonicalCriteriaCoverage(output, acceptanceContract)
       ? []
       : [`slot ${i} missing canonical acceptance criteria coverage`];
   });
