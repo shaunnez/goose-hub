@@ -18,6 +18,7 @@ export type StageBreakdown = {
 export interface IssueCostsBreakdown {
   byRun: Map<string, CostRowDto>;
   byStage: Map<CostRowDto['stage'], StageBreakdown>;
+  bySkill: Map<string, StageBreakdown>;
   total: number;
   totalTokens: number;
   hasEstimated: boolean;
@@ -29,12 +30,45 @@ export interface IssueCostsBreakdown {
 const EMPTY: Omit<IssueCostsBreakdown, 'isLoading'> = {
   byRun: new Map(),
   byStage: new Map(),
+  bySkill: new Map(),
   total: 0,
   totalTokens: 0,
   hasEstimated: false,
   totalLabel: 'exact',
   runCount: 0,
 };
+
+function accumulateBreakdown(
+  map: Map<string, StageBreakdown>,
+  key: string,
+  row: CostRowDto,
+  tokens: number,
+): void {
+  const existing = map.get(key);
+  if (existing) {
+    existing.usd += row.costUsd;
+    existing.tokens += tokens;
+    existing.inputTokens += row.inputTokens;
+    existing.cachedInputTokens += row.cachedInputTokens;
+    existing.reasoningOutputTokens += row.reasoningOutputTokens;
+    existing.cacheHitRatio = existing.cachedInputTokens / Math.max(existing.inputTokens, 1);
+    existing.runCount += 1;
+    if (row.costLabel === 'estimated') existing.label = 'estimated';
+    return;
+  }
+
+  map.set(key, {
+    stage: row.stage,
+    usd: row.costUsd,
+    tokens,
+    inputTokens: row.inputTokens,
+    cachedInputTokens: row.cachedInputTokens,
+    reasoningOutputTokens: row.reasoningOutputTokens,
+    cacheHitRatio: row.cacheHitRatio,
+    label: row.costLabel,
+    runCount: 1,
+  });
+}
 
 /**
  * One cached fetch per work item (`['issue-costs', slug, id]`) sliced by run
@@ -55,41 +89,21 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
 
     const byRun = new Map<string, CostRowDto>();
     const byStage = new Map<CostRowDto['stage'], StageBreakdown>();
+    const bySkill = new Map<string, StageBreakdown>();
     let totalTokens = 0;
 
     for (const row of data.rows) {
       byRun.set(row.runId, row);
       const tokens = row.inputTokens + row.outputTokens;
       totalTokens += tokens;
-
-      const existing = byStage.get(row.stage);
-      if (existing) {
-        existing.usd += row.costUsd;
-        existing.tokens += tokens;
-        existing.inputTokens += row.inputTokens;
-        existing.cachedInputTokens += row.cachedInputTokens;
-        existing.reasoningOutputTokens += row.reasoningOutputTokens;
-        existing.cacheHitRatio = existing.cachedInputTokens / Math.max(existing.inputTokens, 1);
-        existing.runCount += 1;
-        if (row.costLabel === 'estimated') existing.label = 'estimated';
-      } else {
-        byStage.set(row.stage, {
-          stage: row.stage,
-          usd: row.costUsd,
-          tokens,
-          inputTokens: row.inputTokens,
-          cachedInputTokens: row.cachedInputTokens,
-          reasoningOutputTokens: row.reasoningOutputTokens,
-          cacheHitRatio: row.cacheHitRatio,
-          label: row.costLabel,
-          runCount: 1,
-        });
-      }
+      accumulateBreakdown(byStage, row.stage, row, tokens);
+      accumulateBreakdown(bySkill, row.skill, row, tokens);
     }
 
     return {
       byRun,
       byStage,
+      bySkill,
       total: data.totalUsd,
       totalTokens,
       hasEstimated: data.hasEstimated,

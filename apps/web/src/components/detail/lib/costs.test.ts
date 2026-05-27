@@ -49,6 +49,7 @@ describe('useIssueCostsBreakdown', () => {
     expect(result.current.runCount).toBe(0);
     expect(result.current.byRun.size).toBe(0);
     expect(result.current.byStage.size).toBe(0);
+    expect(result.current.bySkill.size).toBe(0);
   });
 
   it('keys cost rows by runId and aggregates by stage', async () => {
@@ -123,5 +124,78 @@ describe('useIssueCostsBreakdown', () => {
 
     expect(result.current.totalLabel).toBe('estimated');
     expect(result.current.byStage.get('review')?.label).toBe('estimated');
+  });
+
+  it('aggregates costs by skill without changing stage totals', async () => {
+    const data: WorkItemCostsDto = {
+      workItemId: 'wi-1',
+      totalUsd: 0.22,
+      hasEstimated: true,
+      rows: [
+        row({
+          runId: 'discover-grill-1',
+          stage: 'discover',
+          skill: 'grill-me',
+          costUsd: 0.05,
+          inputTokens: 100,
+          cachedInputTokens: 20,
+          outputTokens: 40,
+          reasoningOutputTokens: 10,
+          cacheHitRatio: 0.2,
+          costLabel: 'exact',
+        }),
+        row({
+          runId: 'discover-grill-2',
+          stage: 'discover',
+          skill: 'grill-me',
+          costUsd: 0.04,
+          inputTokens: 80,
+          cachedInputTokens: 40,
+          outputTokens: 20,
+          reasoningOutputTokens: 5,
+          cacheHitRatio: 0.5,
+          costLabel: 'estimated',
+        }),
+        row({
+          runId: 'discover-prd-1',
+          stage: 'discover',
+          skill: 'write-prd',
+          costUsd: 0.13,
+          inputTokens: 300,
+          cachedInputTokens: 60,
+          outputTokens: 120,
+          reasoningOutputTokens: 30,
+          cacheHitRatio: 0.2,
+          costLabel: 'exact',
+        }),
+      ],
+    };
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(data);
+
+    const { result } = renderHook(() => useIssueCostsBreakdown('proj', '42'), { wrapper });
+    await waitFor(() => {
+      expect(result.current.runCount).toBe(3);
+    });
+
+    const grill = result.current.bySkill.get('grill-me');
+    expect(grill?.runCount).toBe(2);
+    expect(grill?.usd).toBeCloseTo(0.09, 5);
+    expect(grill?.tokens).toBe(240);
+    expect(grill?.cachedInputTokens).toBe(60);
+    expect(grill?.reasoningOutputTokens).toBe(15);
+    expect(grill?.cacheHitRatio).toBeCloseTo(60 / 180, 5);
+    expect(grill?.label).toBe('estimated');
+
+    const prd = result.current.bySkill.get('write-prd');
+    expect(prd?.runCount).toBe(1);
+    expect(prd?.usd).toBeCloseTo(0.13, 5);
+    expect(prd?.tokens).toBe(420);
+    expect(prd?.label).toBe('exact');
+
+    const discover = result.current.byStage.get('discover');
+    expect(discover?.usd).toBeCloseTo(0.22, 5);
+    expect(discover?.tokens).toBe(660);
+    expect(discover?.runCount).toBe(3);
+    expect(discover?.label).toBe('estimated');
   });
 });
