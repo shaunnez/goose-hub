@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { AtlassianDetailSchema, AtlassianEvidenceSchema, AtlassianHeadlineSchema } from './dtos.js';
+import {
+  AtlassianDetailSchema,
+  AtlassianEvidenceSchema,
+  AtlassianHeadlineSchema,
+  BitbucketPullRequestDiffSchema,
+} from './dtos.js';
 
 describe('Atlassian DTO schemas', () => {
   it('accepts headline, detail, and evidence tiers with artifact refs for provider bodies', () => {
@@ -76,6 +81,17 @@ describe('Atlassian DTO schemas', () => {
         ],
       }),
     ).toMatchObject({ provider: 'bitbucket', tier: 'evidence' });
+
+    expect(
+      BitbucketPullRequestDiffSchema.parse({
+        provider: 'bitbucket',
+        resourceKind: 'pull_request',
+        repoRef: 'company/api',
+        externalId: '45',
+        diff: 'diff --git a/a.ts b/a.ts',
+        url: 'https://bitbucket.org/company/api/pull-requests/45',
+      }),
+    ).toMatchObject({ provider: 'bitbucket', resourceKind: 'pull_request' });
   });
 
   it('rejects inline raw provider payloads at the service boundary', () => {
