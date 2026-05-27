@@ -29,6 +29,7 @@ const TEST_TIMEOUT_MS = 5 * 60 * 1000;
 const LINT_TIMEOUT_MS = 90 * 1000;
 const TYPECHECK_TIMEOUT_MS = 3 * 60 * 1000;
 const PACKAGE_SCRIPT_TIMEOUT_MS = 5 * 60 * 1000;
+const E2E_PATH_PREFIX = 'apps/web/e2e';
 
 export class StackCommandMissingError extends Error {
   readonly kind = 'StackCommandMissingError' as const;
@@ -158,6 +159,24 @@ export async function runTestsTool(
     pathMetadata = { rawPaths: [input.path], paths: [canonical] };
   }
 
+  if (pathMetadata?.paths.some((path) => isE2eOwnedPath(path.path)) === true) {
+    const blocked = buildE2eOwnedBlockedResult(argv, pathMetadata);
+    emitToolCall(ctx, {
+      tool: 'run_tests',
+      input: {
+        path: input.path ?? null,
+        command: argv.join(' '),
+        rawPaths: pathMetadata.rawPaths,
+        paths: pathMetadata.paths.map((path) => path.path),
+      },
+      status: 'failed',
+      exitCode: blocked.exitCode,
+      durationMs: blocked.durationMs,
+      truncated: false,
+    });
+    return blocked;
+  }
+
   const retryPathKey = pathMetadata?.paths[0]?.path ?? null;
   const cap = testRetryCap();
   const priorFailures = consecutiveTestFailures(ctx.runId, retryPathKey);
@@ -260,6 +279,30 @@ export async function runTestsTool(
   }
   const verifyResult = toVerifyResult(argv, result, pathMetadata);
   return failureSummary != null ? { ...verifyResult, failureSummary } : verifyResult;
+}
+
+function isE2eOwnedPath(path: string): boolean {
+  const normalized = path.replace(/^\.\//, '').replace(/\/+$/, '');
+  return normalized === E2E_PATH_PREFIX || normalized.startsWith(`${E2E_PATH_PREFIX}/`);
+}
+
+function buildE2eOwnedBlockedResult(
+  argv: ReadonlyArray<string>,
+  paths: { rawPaths: string[]; paths: RepoRelativePath[] },
+): VerifyResult {
+  const canonicalPaths = paths.paths.map((path) => path.path);
+  return {
+    status: 'failed',
+    exitCode: null,
+    stdout: '',
+    stderr: `[harness] run_tests does not run Playwright e2e paths (${canonicalPaths.join(', ')}). E2e specs are QA/evidence-owned; add or run unit/component tests here, or let QA run the project's e2eCommand.`,
+    durationMs: 0,
+    truncated: false,
+    displayTruncated: false,
+    command: argv,
+    rawPaths: paths.rawPaths,
+    paths: paths.paths,
+  };
 }
 
 function buildRetryCapBlockedResult(

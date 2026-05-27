@@ -412,6 +412,121 @@ describe('runFixFeedbackWorkflow', () => {
     );
   });
 
+  it('routes regression-unrelated QA failures to needs-human instead of issue repair', async () => {
+    const workItem = makeWorkItem();
+    const compareBaseline = vi.fn().mockResolvedValue({
+      status: 'same-failures-on-base',
+      feedback: 'Baseline comparison: same failures on origin/main',
+    });
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makePrOpenedEvent(),
+      {
+        ...makeQaCompletedEvent(false),
+        payload: {
+          verdict: 'fail',
+          overallScore: 40,
+          threshold: 70,
+          failureCategory: 'regression-unrelated',
+          tierResults: {
+            structural: { passed: true, findings: [] },
+            functional: { passed: true, findings: [] },
+            regression: {
+              passed: false,
+              findings: [
+                {
+                  tier: 'regression',
+                  severity: 'error',
+                  description: 'Global e2e seed fails on base',
+                  suggestion: 'Fix pipeline seed data',
+                },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo', {
+      baselineRegressionComparisonImpl: compareBaseline,
+    });
+
+    expect(compareBaseline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        worktreePath: '/work/wt',
+        baseBranch: 'main',
+      }),
+    );
+    expect(mockClaudeCliRun).not.toHaveBeenCalled();
+    expect(stateSource.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-fix',
+      'factory:needs-human',
+    );
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.fix-feedback-skipped',
+        payload: expect.objectContaining({
+          reason: 'baseline-red-global',
+          sourceFeedback: expect.stringContaining('regression suite failed'),
+        }),
+      }),
+    );
+  });
+
+  it('repairs regression-unrelated QA failures when baseline comparison is head-only', async () => {
+    const workItem = makeWorkItem();
+    const compareBaseline = vi.fn().mockResolvedValue({
+      status: 'head-only-failure',
+      feedback: 'Baseline comparison: regression passed on origin/main',
+    });
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makePrOpenedEvent(),
+      {
+        ...makeQaCompletedEvent(false),
+        payload: {
+          verdict: 'fail',
+          overallScore: 40,
+          threshold: 70,
+          failureCategory: 'regression-unrelated',
+          tierResults: {
+            structural: { passed: true, findings: [] },
+            functional: { passed: true, findings: [] },
+            regression: {
+              passed: false,
+              findings: [
+                {
+                  tier: 'regression',
+                  severity: 'error',
+                  description: 'Regression [escalate]: failing head-only suite',
+                  suggestion: 'Repair the regression',
+                },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+    mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo', {
+      baselineRegressionComparisonImpl: compareBaseline,
+    });
+
+    expect(mockClaudeCliRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          advisorFeedback: expect.stringContaining('head-only'),
+        }),
+      }),
+    );
+    expect(stateSource.transitionState).toHaveBeenNthCalledWith(
+      1,
+      '42',
+      'factory:needs-fix',
+      'factory:in-progress',
+    );
+  });
+
   it('commits repair edits and pushes the existing PR branch before completion', async () => {
     mockDeriveObservedChangedFiles.mockReturnValue({
       count: 2,

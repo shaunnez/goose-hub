@@ -182,6 +182,29 @@ describe('QA timeline events', () => {
     expect(screen.getByText('Product')).toBeTruthy();
   });
 
+  it('labels regression tier as a suite and surfaces the actual command', () => {
+    const event = makeEvent('qa.completed', {
+      verdict: 'fail',
+      overallScore: 40,
+      threshold: 70,
+      tierResults: {
+        structural: { passed: true, findings: [] },
+        functional: { passed: true, findings: [] },
+        regression: {
+          passed: false,
+          command: 'pnpm --filter @goose-hub/web test:e2e:pipeline',
+          findings: [],
+        },
+      },
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Regression suite')).toBeTruthy();
+    expect(screen.getByText('pnpm --filter @goose-hub/web test:e2e:pipeline')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('Regression (playwright)');
+  });
+
   it('renders verification-blocked failure category badges', () => {
     const event = makeEvent('qa.verification-blocked', {
       failedTier: 2,

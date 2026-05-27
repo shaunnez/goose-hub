@@ -77,9 +77,9 @@ Return a single JSON object conforming exactly to the output schema. Free-text-o
   "say": "<the user-facing reply>",
   "proposals": [
     {
-      "toolName": "<one of CHAT_TOOL_REGISTRY names>",
-      "input": "{\"...\":\"...\"}",
-      "rationale": "<one sentence shown in the tool card; conditional only for mutating tools>"
+      "toolName": "list_projects",
+      "input": "{}",
+      "rationale": "List registered projects before answering the project selection question."
     }
   ],
   "done": false,

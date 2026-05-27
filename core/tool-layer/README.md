@@ -37,13 +37,14 @@ Named bundles passed via `AgentSpec.toolBundles`. At spawn, `bindToolsForAgentSp
 | `validate` | `mcp__factory-tools__*` context, read/search, evidence tools | Playwright/evidence validation skills |
 | `core` | no tools | Prompt-only skills |
 | `emergency-debug` | `Bash` | Explicit opt-in escape hatch |
-| `playwright-mcp` | `mcp__playwright-test__*` (browser/planner/generator) | `spec-author` skill (auto-merges `apps/web/.mcp.json`) |
 
 Every default agent-facing bundle is composed of `mcp__factory-tools__*` names only. Native `Read`, `Write`, `Edit`, `Glob`, `Grep`, and broad `Bash` are not in default bundles; native `Bash` is available only through `emergency-debug`.
 
+Playwright automation runs through workflow-owned commands and evidence tools (`write_playwright_spec`, `run_playwright_spec`, `collect_evidence`), not a separate `playwright-mcp` bundle. Unknown bundle names and unknown `toolExtras` are skipped and recorded as `ToolBinding.warnings`; they are visible in `agent.run-started` payloads and telemetry logs without aborting the run.
+
 `mcp__factory-tools__record_decision` is part of the context tools and stays available to holdout roles so QA/reviewer runs can emit their own live decision summaries without seeing implementation reasoning. There is no separate single-tool decision bundle; runtime code should use the MCP context tool.
 
-`ToolBinding` is the orchestrator-owned runtime contract for a run's tool surface. It contains the flat Claude allowlist, Codex `enabled_tools` grouped by MCP server, optional MCP server bundles, native tool names, sandbox/approval policy, and stable fingerprints for cache/cost analysis. Runtime code consumes this artifact instead of re-deriving bundle policy.
+`ToolBinding` is the orchestrator-owned runtime contract for a run's tool surface. It contains the flat Claude allowlist, Codex `enabled_tools` grouped by MCP server, native tool names, sandbox/approval policy, non-fatal drift warnings, and stable fingerprints for cache/cost analysis. Runtime code consumes this artifact instead of re-deriving bundle policy.
 
 ## Canonical Path Contract
 

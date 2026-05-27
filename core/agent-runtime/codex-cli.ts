@@ -341,7 +341,26 @@ export class CodexCliRuntime implements AgentRuntime {
           mcpServerSetHash: toolBinding.fingerprints.mcpServerSetHash,
           nativeToolCount: toolBinding.nativeTools.length,
           mcpServerNames: toolBinding.mcpServerNames,
+          toolBindingWarningCount: toolBinding.warnings.length,
+          toolBindingWarnings: toolBinding.warnings,
           ...spec.extraEventPayload,
+        },
+        runId,
+        personaId,
+      });
+    }
+    if (toolBinding.warnings.length > 0) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.log',
+        payload: {
+          runId,
+          skill: spec.skill,
+          stream: 'telemetry',
+          metric: 'tool_binding_warnings',
+          warningCount: toolBinding.warnings.length,
+          warnings: toolBinding.warnings,
         },
         runId,
         personaId,

@@ -459,11 +459,11 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
         telemetry,
       };
     }
-    // Reconcile proposals: drop unknown tools and malformed JSON inputs before
-    // handing off to the dispatcher.
+    // Reconcile proposals: drop malformed JSON inputs before handing off to
+    // the dispatcher. Tool-name validity is owned by HubChatOutputSchema.
     const validProposals = parsed.data.proposals
       .map(decodeProposalInput)
-      .filter((p): p is HubChatProposal => p != null && manifestHas(p.toolName));
+      .filter((p): p is HubChatProposal => p != null);
     telemetry.durationMs.postModelParsing = elapsedSince(parsingStarted);
     telemetry.durationMs.total = elapsedSince(totalStarted);
     Object.assign(telemetry.tokens, readActualTokens(runId));
@@ -507,10 +507,6 @@ function decodeProposalInput(proposal: HubChatWireProposal): HubChatProposal | n
   } catch {
     return null;
   }
-}
-
-function manifestHas(name: string): boolean {
-  return listToolManifests().some((t) => t.name === name);
 }
 
 type ThinkingCheckpoint = 'skill-invoked' | 'structured-output-received';

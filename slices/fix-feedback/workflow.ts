@@ -1,4 +1,7 @@
-import { posix as pathPosix } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join as pathJoin, posix as pathPosix } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { getChangedFilesSince } from '@goose-hub/core/agent-runtime/git-intel.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
@@ -115,6 +118,7 @@ export interface FixFeedbackDeps {
   runtime?: AgentRuntime;
   orchestratorCommitAllImpl?: typeof orchestratorCommitAll;
   orchestratorPushBranchImpl?: typeof orchestratorPushBranch;
+  baselineRegressionComparisonImpl?: typeof compareRegressionAgainstBaseline;
 }
 
 /**
@@ -153,7 +157,22 @@ function findPrLifecycle(events: ReturnType<typeof eventStore.replay>): PrLifecy
 
 type TierResult = {
   passed: boolean;
+  command?: string | null;
+  output?: string | null;
   findings: Array<{ tier: string; severity: string; description: string; suggestion?: string }>;
+};
+
+type BaselineComparisonStatus = 'same-failures-on-base' | 'head-only-failure' | 'unavailable';
+
+type BaselineComparisonResult = {
+  status: BaselineComparisonStatus;
+  feedback: string;
+};
+
+type BaselineComparisonInput = {
+  payload: QaPayload;
+  worktreePath: string;
+  baseBranch?: string;
 };
 
 type QaPayload = {
@@ -216,6 +235,9 @@ type SourceFailure = {
   feedback: string;
   actionable: boolean;
   verificationInfrastructure?: boolean;
+  baselineRedGlobal?: boolean;
+  requiresBaselineComparison?: boolean;
+  payload?: QaPayload;
   skipReason?: string;
 };
 
@@ -319,6 +341,135 @@ function formatVerificationBlockedFeedback(payload: QaPayload): string {
   return lines.join('\n');
 }
 
+function formatRegressionUnrelatedFeedback(payload: QaPayload): string {
+  const lines = [
+    'QA regression suite failed outside the issue-specific implementation surface.',
+    `Failure category: ${payload.failureCategory ?? 'regression-unrelated'}`,
+    'Compare against base/main before deciding whether this belongs to the issue repair loop.',
+  ];
+  const regressionFindings = payload.tierResults?.regression?.findings ?? [];
+  for (const finding of regressionFindings.slice(0, 5)) {
+    lines.push(`- ${finding.description}`);
+  }
+  return lines.join('\n');
+}
+
+function regressionCommandForPayload(payload: QaPayload): string | null {
+  const command = payload.tierResults?.regression?.command;
+  return typeof command === 'string' && command.trim().length > 0 ? command.trim() : null;
+}
+
+function regressionFailureDescriptions(payload: QaPayload): string[] {
+  return (payload.tierResults?.regression?.findings ?? [])
+    .map((finding) => finding.description)
+    .filter((description) => description.trim().length > 0);
+}
+
+function normalizeFailureSignature(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/^regression\s*\[[^\]]+\]:\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+}
+
+function extractFailedTestLines(output: string): string[] {
+  const failed: string[] = [];
+  for (const line of output.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0 || trimmed.length > 240) continue;
+    if (trimmed.includes('FAIL') || trimmed.includes('✗') || trimmed.includes('× ')) {
+      failed.push(trimmed);
+    }
+  }
+  return failed.slice(0, 20);
+}
+
+function signaturesOverlap(left: string, right: string): boolean {
+  if (left.length === 0 || right.length === 0) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+async function compareRegressionAgainstBaseline({
+  payload,
+  worktreePath,
+  baseBranch = 'main',
+}: BaselineComparisonInput): Promise<BaselineComparisonResult> {
+  const command = regressionCommandForPayload(payload);
+  if (command == null) {
+    return {
+      status: 'unavailable',
+      feedback:
+        'Baseline comparison unavailable: regression tier payload did not include a command.',
+    };
+  }
+
+  const baselineDir = mkdtempSync(pathJoin(tmpdir(), 'goose-hub-baseline-'));
+  const baseRef = baseBranch.startsWith('origin/') ? baseBranch : `origin/${baseBranch}`;
+  try {
+    const add = spawnSync(
+      'git',
+      ['-C', worktreePath, 'worktree', 'add', '--detach', baselineDir, baseRef],
+      {
+        encoding: 'utf8',
+        timeout: 120_000,
+      },
+    );
+    if (add.status !== 0) {
+      return {
+        status: 'unavailable',
+        feedback: `Baseline comparison unavailable: could not create ${baseRef} worktree (${add.stderr || add.stdout || 'git worktree add failed'}).`,
+      };
+    }
+
+    const run = spawnSync('sh', ['-c', command], {
+      cwd: baselineDir,
+      encoding: 'utf8',
+      env: { ...process.env, CI: '1', FORCE_COLOR: '0' },
+      timeout: 10 * 60_000,
+    });
+    if (run.error != null) {
+      return {
+        status: 'unavailable',
+        feedback: `Baseline comparison unavailable: ${run.error.message}.`,
+      };
+    }
+    if ((run.status ?? 1) === 0) {
+      return {
+        status: 'head-only-failure',
+        feedback: `Baseline comparison: ${command} passed on ${baseRef}; regression appears head-only.`,
+      };
+    }
+
+    const baseOutput = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
+    const baseFailures = extractFailedTestLines(baseOutput).map(normalizeFailureSignature);
+    const headFailures = regressionFailureDescriptions(payload).map(normalizeFailureSignature);
+    const sameFailures =
+      baseFailures.length > 0 && headFailures.length > 0
+        ? headFailures.some((head) => baseFailures.some((base) => signaturesOverlap(head, base)))
+        : baseFailures.length > 0;
+
+    if (sameFailures) {
+      return {
+        status: 'same-failures-on-base',
+        feedback: `Baseline comparison: ${command} also failed on ${baseRef}; route as baseline-red/global instead of issue repair.`,
+      };
+    }
+
+    return {
+      status: 'head-only-failure',
+      feedback: `Baseline comparison: ${command} failed on ${baseRef}, but not with the same failure signature; repair the head regression.`,
+    };
+  } finally {
+    spawnSync('git', ['-C', worktreePath, 'worktree', 'remove', '--force', baselineDir], {
+      encoding: 'utf8',
+      timeout: 120_000,
+    });
+    rmSync(baselineDir, { recursive: true, force: true });
+  }
+}
+
 async function findLatestSourceFailure(
   events: ReturnType<typeof eventStore.replay>,
   stateSource: StateSource,
@@ -378,6 +529,16 @@ async function findLatestSourceFailure(
         skipReason: 'verification-infrastructure',
       };
     }
+    if (payload.failureCategory === 'regression-unrelated') {
+      return {
+        kind: 'qa',
+        runId: sourceRunId(qaEvent),
+        feedback: formatRegressionUnrelatedFeedback(payload),
+        actionable: false,
+        requiresBaselineComparison: true,
+        payload,
+      };
+    }
     const { verdict = 'fail', overallScore = 0, threshold = 70 } = payload;
     const verifiedFollowUpRefs = await verifiedFollowUpRefsForPayload(payload, stateSource);
     const actionableItems = collectActionableQaItems(
@@ -432,7 +593,7 @@ export async function runFixFeedbackWorkflow(
   const attemptId = crypto.randomUUID();
   const events = eventStore.replay({ workItemId: workItem.id });
   const prLifecycle = findPrLifecycle(events);
-  const sourceFailure = await findLatestSourceFailure(events, stateSource);
+  let sourceFailure = await findLatestSourceFailure(events, stateSource);
   const repairCycle = nextRepairCycle(events);
   const repairPayload = compactPayload({
     pipelineRunId: prLifecycle?.pipelineRunId,
@@ -451,6 +612,8 @@ export async function runFixFeedbackWorkflow(
   const projectConfig = await getProjectBySlug(projectId);
   const commitAllFn = deps.orchestratorCommitAllImpl ?? orchestratorCommitAll;
   const pushBranchFn = deps.orchestratorPushBranchImpl ?? orchestratorPushBranch;
+  const compareRegressionFn =
+    deps.baselineRegressionComparisonImpl ?? compareRegressionAgainstBaseline;
   const { runtime, resolvedBudget } = resolveProjectAgentExecution({
     skill: 'fix-feedback',
     role: 'developer',
@@ -458,6 +621,41 @@ export async function runFixFeedbackWorkflow(
     projectConfig,
     injectedRuntime: deps.runtime,
   });
+
+  if (sourceFailure?.requiresBaselineComparison === true && sourceFailure.payload != null) {
+    const worktreePath = prLifecycle?.worktreePath;
+    if (worktreePath == null) {
+      sourceFailure = {
+        ...sourceFailure,
+        baselineRedGlobal: true,
+        skipReason: 'baseline-compare-unavailable',
+        feedback: `${sourceFailure.feedback}\n\nBaseline comparison unavailable: no integration worktree was recorded.`,
+      };
+    } else {
+      const comparison = await compareRegressionFn({
+        payload: sourceFailure.payload,
+        worktreePath,
+        baseBranch: prLifecycle?.baseBranch,
+      });
+      if (comparison.status === 'head-only-failure') {
+        sourceFailure = {
+          ...sourceFailure,
+          actionable: true,
+          feedback: `${sourceFailure.feedback}\n\n${comparison.feedback}`,
+        };
+      } else {
+        sourceFailure = {
+          ...sourceFailure,
+          baselineRedGlobal: true,
+          skipReason:
+            comparison.status === 'same-failures-on-base'
+              ? 'baseline-red-global'
+              : 'baseline-compare-unavailable',
+          feedback: `${sourceFailure.feedback}\n\n${comparison.feedback}`,
+        };
+      }
+    }
+  }
 
   if (sourceFailure?.verificationInfrastructure === true) {
     await stateSource.comment(
@@ -490,6 +688,44 @@ export async function runFixFeedbackWorkflow(
       payload: {
         ...repairPayload,
         reason: sourceFailure.skipReason ?? 'verification-infrastructure',
+        sourceFeedback: sourceFailure.feedback,
+      },
+      runId,
+    });
+    return;
+  }
+
+  if (sourceFailure?.baselineRedGlobal === true) {
+    await stateSource.comment(
+      workItem.externalId,
+      buildAgentComment(
+        'Dev',
+        'Baseline Red',
+        'Skipping fix-feedback because QA found regression-suite failures outside this issue-specific change.',
+        [sourceFailure.feedback],
+      ),
+    );
+    await stateSource.transitionState(
+      workItem.externalId,
+      'factory:needs-fix',
+      'factory:needs-human',
+    );
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:needs-fix',
+      to: 'factory:needs-human',
+      by: 'fix-feedback',
+      runId,
+      extraPayload: repairPayload,
+    });
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.fix-feedback-skipped',
+      payload: {
+        ...repairPayload,
+        reason: sourceFailure.skipReason ?? 'baseline-red-global',
         sourceFeedback: sourceFailure.feedback,
       },
       runId,

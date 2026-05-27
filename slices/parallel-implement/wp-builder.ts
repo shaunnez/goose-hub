@@ -181,6 +181,10 @@ function pathsMatch(left: string, right: string): boolean {
   return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
 }
 
+function pathsExactlyMatch(left: string, right: string): boolean {
+  return normalizePathForCompare(left) === normalizePathForCompare(right);
+}
+
 function isTerminalDecisionKind(kind: unknown): kind is TerminalDecisionKind {
   return kind === 'TOOL_FAILURE' || kind === 'BLOCKER';
 }
@@ -230,6 +234,32 @@ function latestRunTestsStatusForPath(events: AgentEvent[], path: string): string
   return null;
 }
 
+function latestExactRunTestsStatusForPathAfterLastEdit(
+  events: AgentEvent[],
+  path: string,
+): string | null {
+  let lastEditIndex = -1;
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    if (toolCallStatus(event) !== 'ok') continue;
+    if (!isEditToolCall(event)) continue;
+    const editedPaths = toolCallPaths(event);
+    if (editedPaths.length === 0 || editedPaths.some((candidate) => pathsMatch(candidate, path))) {
+      lastEditIndex = i;
+    }
+  }
+
+  for (let i = events.length - 1; i > lastEditIndex; i--) {
+    const event = events[i];
+    if (toolCallName(event) !== 'run_tests') continue;
+    const paths = toolCallPaths(event);
+    if (paths.length === 0) continue;
+    if (!paths.some((candidate) => pathsExactlyMatch(candidate, path))) continue;
+    return toolCallStatus(event);
+  }
+  return null;
+}
+
 function hasSuccessfulVerificationToolCall(events: AgentEvent[]): boolean {
   return events.some((event) => {
     if (event.kind !== 'agent.tool-call') return false;
@@ -254,14 +284,21 @@ function implementWpAcceptanceFailure(input: {
       reason: 'implement-wp returned low confidence while verification was required',
     };
   }
-  const requiredTestPaths = [
-    ...new Set([
-      ...input.output.testsWritten.map((test) => test.path),
-      ...input.output.testsRun.paths,
-    ]),
-  ];
-  if (requiredTestPaths.length > 0) {
-    const failedPaths = requiredTestPaths.filter(
+  const writtenTestPaths = [...new Set(input.output.testsWritten.map((test) => test.path))];
+  if (writtenTestPaths.length > 0) {
+    const failedWrittenTestPaths = writtenTestPaths.filter(
+      (path) => latestExactRunTestsStatusForPathAfterLastEdit(input.events, path) !== 'ok',
+    );
+    if (failedWrittenTestPaths.length > 0) {
+      return {
+        kind: 'verification-failed',
+        reason: `written test files need exact-file run_tests success after their last edit: ${failedWrittenTestPaths.join(', ')}`,
+      };
+    }
+  }
+  const reportedRunPaths = [...new Set(input.output.testsRun.paths)];
+  if (reportedRunPaths.length > 0) {
+    const failedPaths = reportedRunPaths.filter(
       (path) => latestRunTestsStatusForPath(input.events, path) !== 'ok',
     );
     if (failedPaths.length > 0) {

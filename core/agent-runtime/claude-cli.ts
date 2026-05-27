@@ -111,8 +111,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
     const toolBinding = bindToolsForAgentSpec(spec);
     // Per-run MCP config under <worktree>/.factory/mcp-config.json (ADR 0045).
     // Always written; the factory-tools server entry carries the run's
-    // identity via env. Bundle-specific servers (playwright-mcp) are
-    // merged in from their workspace-relative configs when declared.
+    // identity via env.
     const { configPath: factoryMcpConfigPath } = buildFactoryMcpConfig({
       workspaceDir,
       runId,
@@ -149,7 +148,26 @@ export class ClaudeCliRuntime implements AgentRuntime {
           mcpServerSetHash: toolBinding.fingerprints.mcpServerSetHash,
           nativeToolCount: toolBinding.nativeTools.length,
           mcpServerNames: toolBinding.mcpServerNames,
+          toolBindingWarningCount: toolBinding.warnings.length,
+          toolBindingWarnings: toolBinding.warnings,
           ...spec.extraEventPayload,
+        },
+        runId,
+        personaId: spec.personaId,
+      });
+    }
+    if (toolBinding.warnings.length > 0) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.log',
+        payload: {
+          runId,
+          skill: spec.skill,
+          stream: 'telemetry',
+          metric: 'tool_binding_warnings',
+          warningCount: toolBinding.warnings.length,
+          warnings: toolBinding.warnings,
         },
         runId,
         personaId: spec.personaId,

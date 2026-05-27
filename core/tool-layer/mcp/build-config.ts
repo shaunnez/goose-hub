@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // SERVER_SCRIPT_RELATIVE is the path relative to the orchestrator root.
@@ -22,7 +22,7 @@ export interface BuildFactoryMcpConfigInput {
   /** Skill name for timeline attribution of tool-originated events. */
   skill?: string | null;
   personaId?: string | null;
-  /** Bundle names declared on the skill spec; used to merge bundle-specific MCP servers. */
+  /** Bundle names declared on the skill spec. Kept for caller parity; factory-tools is always used. */
   toolBundles: ReadonlyArray<string>;
   /** Optional orchestrator HTTP port to expose via FACTORY_SERVER_PORT. */
   serverPort?: number | string;
@@ -47,18 +47,11 @@ export interface McpConfigJson {
   mcpServers: Record<string, McpServerEntry>;
 }
 
-const BUNDLE_TO_MCP_RELATIVE: Record<string, string> = {
-  'playwright-mcp': 'apps/web/.mcp.json',
-};
-
 /**
  * Builds and writes the per-run MCP config that Claude/Codex CLIs pass via
  * `--mcp-config`. Always includes the `factory-tools` server entry, with
  * the run-scoped identity propagated via env vars (the agent never sees
  * these — it gets the MCP tools from the spawned server).
- *
- * Bundle-specific servers (today: `playwright-mcp`) are merged in from
- * their workspace-relative config files when those bundles are declared.
  *
  * The config file lives at `<workspaceDir>/.factory/mcp-config.json` so
  * each worktree owns its own config — that removes the race between
@@ -99,7 +92,6 @@ export function buildFactoryMcpConfig(
         args: [...launcher.argsPrefix, serverScript],
         env,
       },
-      ...resolveBundleServers(input.toolBundles, workspaceDir),
     },
   };
 
@@ -134,31 +126,6 @@ function resolveTsxBinary(orchestratorRoot: string): string {
   const local = join(orchestratorRoot, TSX_BIN_RELATIVE);
   if (existsSync(local)) return local;
   return 'tsx';
-}
-
-function resolveBundleServers(
-  toolBundles: ReadonlyArray<string>,
-  workspaceDir: string,
-): Record<string, McpServerEntry> {
-  const merged: Record<string, McpServerEntry> = {};
-  for (const bundle of toolBundles) {
-    const relPath = BUNDLE_TO_MCP_RELATIVE[bundle];
-    if (relPath == null) continue;
-    const candidate = isAbsolute(relPath) ? relPath : join(workspaceDir, relPath);
-    if (!existsSync(candidate)) continue;
-    try {
-      const parsed = JSON.parse(readFileSync(candidate, 'utf8')) as Partial<McpConfigJson>;
-      const servers = parsed.mcpServers ?? {};
-      for (const [name, entry] of Object.entries(servers)) {
-        merged[name] = entry as McpServerEntry;
-      }
-    } catch {
-      // Malformed bundle MCP config — skip silently rather than aborting
-      // the run; factory-tools will still be available, which is what the
-      // agent actually needs.
-    }
-  }
-  return merged;
 }
 
 /**

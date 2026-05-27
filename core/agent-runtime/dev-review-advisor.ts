@@ -300,6 +300,7 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
     personaId,
     outputJsonSchema,
     appendSystemPrompt: prompt,
+    workspaceDir: input.worktreePath,
   });
   emitSymbolIndexHintsUsedEvent({
     projectId: input.projectId,

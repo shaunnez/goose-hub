@@ -17,6 +17,7 @@ const {
     mcpServerBundles: [],
     mcpServerNames: [],
     sandboxMode: 'read-only',
+    warnings: [],
     fingerprints: {
       toolBindingHash: 'binding-hash',
       toolAllowlistHash: 'allowlist-hash',
@@ -125,6 +126,7 @@ beforeEach(() => {
     mcpServerBundles: [],
     mcpServerNames: [],
     sandboxMode: 'read-only',
+    warnings: [],
     fingerprints: {
       toolBindingHash: 'binding-hash',
       toolAllowlistHash: 'allowlist-hash',
@@ -265,6 +267,50 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
           mcpServerSetHash: 'server-hash',
           nativeToolCount: 0,
           mcpServerNames: [],
+          toolBindingWarningCount: 0,
+          toolBindingWarnings: [],
+        }),
+      }),
+    );
+  });
+
+  it('emits tool binding warnings on run-started and telemetry log events', async () => {
+    const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
+    mockSpawn.mockReturnValue(makeChild(0, envelope));
+    vi.mocked(bindToolsForAgentSpec).mockReturnValueOnce({
+      allowlist: [],
+      enabledToolsByServer: {},
+      nativeTools: [],
+      mcpServerBundles: [],
+      mcpServerNames: [],
+      sandboxMode: 'read-only',
+      warnings: [{ kind: 'unknown-bundle', name: 'legacy' }],
+      fingerprints: {
+        toolBindingHash: 'binding-hash',
+        toolAllowlistHash: 'allowlist-hash',
+        mcpServerSetHash: 'server-hash',
+      },
+    });
+
+    const runtime = new ClaudeCliRuntime();
+    await runtime.run(makeSpec());
+
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-started',
+        payload: expect.objectContaining({
+          toolBindingWarningCount: 1,
+          toolBindingWarnings: [{ kind: 'unknown-bundle', name: 'legacy' }],
+        }),
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.log',
+        payload: expect.objectContaining({
+          metric: 'tool_binding_warnings',
+          warningCount: 1,
+          warnings: [{ kind: 'unknown-bundle', name: 'legacy' }],
         }),
       }),
     );
