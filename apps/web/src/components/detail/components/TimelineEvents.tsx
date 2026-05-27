@@ -73,6 +73,7 @@ import {
   ParallelExhaustedEvent,
   ParallelIterationStartedEvent,
   ParallelWpCommittedEvent,
+  ParallelWpContextAssembledEvent,
   ParallelWpFailedEvent,
   ParallelWpPersistedEvent,
   ParallelWpStartedEvent,
@@ -422,6 +423,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <ParallelIterationStartedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-started':
       return <ParallelWpStartedEvent key={event.id} event={event} />;
+    case 'parallel-implement.wp-context-assembled':
+      return <ParallelWpContextAssembledEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-committed':
       return <ParallelWpCommittedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-persisted':

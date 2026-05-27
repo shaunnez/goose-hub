@@ -108,6 +108,44 @@ describe('ParallelImplementEvents', () => {
     expect(document.body.textContent).not.toContain('"scratchPath"');
   });
 
+  it('renders wp-context-assembled as context counts instead of raw JSON', () => {
+    const event = makeEvent('parallel-implement.wp-context-assembled', {
+      schemaVersion: 1,
+      pipelineRunId: '805e37ae-2c79-40ef-b017-07b82dafbd09',
+      devRunId: '13ab9ca2-54fe-4ea9-a6fb-e0dc227cd8f7',
+      wpId: 'WP1',
+      wpRunId: '13ab9ca2-54fe-4ea9-a6fb-e0dc227cd8f7:wp:WP1:iter:1',
+      iteration: 1,
+      counts: {
+        ownedFiles: 2,
+        newOwnedFiles: 2,
+        codeSnippets: 0,
+        codeContextEntries: 0,
+        specContracts: 1,
+        relevantAcceptanceCriteria: 1,
+        verificationCommands: 2,
+        referenceFiles: 0,
+      },
+      rawProbeKey: 'raw-value',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    const rendered = document.body.textContent ?? '';
+    expect(screen.getByText('WP1 context assembled')).toBeTruthy();
+    expect(rendered).toContain('Iteration 1');
+    expect(rendered).toContain('2 owned files');
+    expect(rendered).toContain('2 new files');
+    expect(rendered).toContain('1 spec contract');
+    expect(rendered).toContain('1 acceptance criterion');
+    expect(rendered).toContain('2 verification commands');
+    expect(rendered).toContain('pipeline 805e37ae');
+    expect(rendered).not.toContain('"schemaVersion"');
+    expect(rendered).not.toContain('"pipelineRunId"');
+    expect(rendered).not.toContain('rawProbeKey');
+    expect(rendered).not.toContain('raw-value');
+  });
+
   it('renders wp-committed with a short commit sha', () => {
     render(
       <ul>
