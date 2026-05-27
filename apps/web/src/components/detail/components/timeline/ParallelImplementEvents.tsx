@@ -13,6 +13,7 @@ type ParallelPayload = {
   wpId?: string;
   iteration?: number;
   wpRunId?: string;
+  devRunId?: string;
   scratchPath?: string;
   commitSha?: string;
   pushedSha?: string;
@@ -29,6 +30,16 @@ type ParallelPayload = {
   failedWpIds?: string[];
   workItemId?: string;
   runId?: string;
+  counts?: {
+    ownedFiles?: number;
+    newOwnedFiles?: number;
+    codeSnippets?: number;
+    codeContextEntries?: number;
+    specContracts?: number;
+    relevantAcceptanceCriteria?: number;
+    verificationCommands?: number;
+    referenceFiles?: number;
+  };
 };
 
 type SpecPrdContextAttachedPayload = {
@@ -60,6 +71,15 @@ function formatFilesPersisted(value: string[] | number | undefined): string | nu
   const count = Array.isArray(value) ? value.length : value;
   if (typeof count !== 'number') return null;
   return `${count} file${count === 1 ? '' : 's'} persisted`;
+}
+
+function formatCount(
+  value: number | undefined,
+  singular: string,
+  plural = `${singular}s`,
+): string | null {
+  if (typeof value !== 'number' || value <= 0) return null;
+  return `${value} ${value === 1 ? singular : plural}`;
 }
 
 function PipelineChip({ pipelineRunId }: { pipelineRunId?: string }) {
@@ -222,6 +242,47 @@ export function ParallelWpStartedEvent({ event }: { event: AgentEventDto }) {
               {p.scratchPath.replace(/^.*\/workspaces\//, '')}
             </span>
           </DetailRow>
+        )}
+      </div>
+    </ParallelEventShell>
+  );
+}
+
+export function ParallelWpContextAssembledEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as ParallelPayload | null;
+  const counts = p?.counts;
+  const facts = [
+    formatCount(counts?.ownedFiles, 'owned file'),
+    formatCount(counts?.newOwnedFiles, 'new file'),
+    formatCount(counts?.codeSnippets, 'code snippet'),
+    formatCount(counts?.codeContextEntries, 'code context entry', 'code context entries'),
+    formatCount(counts?.specContracts, 'spec contract'),
+    formatCount(counts?.relevantAcceptanceCriteria, 'acceptance criterion', 'acceptance criteria'),
+    formatCount(counts?.verificationCommands, 'verification command'),
+    formatCount(counts?.referenceFiles, 'reference file'),
+  ].filter((fact): fact is string => fact != null);
+
+  return (
+    <ParallelEventShell
+      event={event}
+      icon={<Layers size={13} className="shrink-0 text-[color:var(--accent)]" />}
+      title={`${p?.wpId ?? 'Work package'} context assembled`}
+      tone="info"
+    >
+      <div className="space-y-1">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
+          {p?.iteration != null && <span>Iteration {p.iteration}</span>}
+          {formatShortId(p?.wpRunId) != null && (
+            <span className="font-mono text-fg-4">run {formatShortId(p?.wpRunId)}</span>
+          )}
+          <PipelineChip pipelineRunId={p?.pipelineRunId} />
+        </div>
+        {facts.length > 0 && (
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-2">
+            {facts.map((fact) => (
+              <span key={fact}>{fact}</span>
+            ))}
+          </div>
         )}
       </div>
     </ParallelEventShell>
