@@ -12,6 +12,7 @@ import {
   type ScheduleUIValue,
 } from '@goose-hub/core/state-source/github-labels.js';
 import type { Result } from '#shared/middleware.js';
+import { getProject } from '#shared/projects.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
 import {
@@ -224,6 +225,14 @@ function workItemServerDto(item: { id: string; externalRefs?: unknown }): object
   };
 }
 
+export interface CreateIssueRequestDto {
+  title?: unknown;
+  body?: unknown;
+  type?: unknown;
+  priority?: unknown;
+  milestoneNumber?: unknown;
+}
+
 // Public surface for the issues domain. The implementation is split across
 // sibling files to keep each concern focused; this barrel re-exports the
 // pieces the router and tests depend on.
@@ -258,6 +267,56 @@ export async function listIssues(
     prdParent: byChild.get(item.externalId),
   }));
   return { ok: true, data: { items: enriched } };
+}
+
+export async function createIssue(
+  slug: string,
+  body: CreateIssueRequestDto,
+): Promise<Result<{ item: unknown }>> {
+  const title = typeof body.title === 'string' ? body.title.trim() : '';
+  if (title.length === 0) return { ok: false, error: 'title is required', status: 400 };
+
+  const project = await getProject(slug);
+  if (project == null) return { ok: false, error: 'project not found', status: 404 };
+  if (project.source.kind !== 'local-db') {
+    return {
+      ok: false,
+      error: 'local Work Item creation requires a local-db project',
+      status: 400,
+    };
+  }
+
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+
+  const type =
+    body.type === 'feature' ||
+    body.type === 'bug' ||
+    body.type === 'chore' ||
+    body.type === 'research'
+      ? body.type
+      : undefined;
+  const priority =
+    body.priority === 'critical' ||
+    body.priority === 'high' ||
+    body.priority === 'medium' ||
+    body.priority === 'low'
+      ? body.priority
+      : undefined;
+  const milestoneId =
+    typeof body.milestoneNumber === 'number' && Number.isInteger(body.milestoneNumber)
+      ? String(body.milestoneNumber)
+      : undefined;
+
+  const item = await source.createIssue({
+    title,
+    body: typeof body.body === 'string' ? body.body : '',
+    ...(type != null ? { type } : {}),
+    ...(priority != null ? { priority } : {}),
+    ...(milestoneId != null ? { milestoneId } : {}),
+  });
+
+  return { ok: true, data: { item: workItemServerDto(item) } };
 }
 
 export async function getIssue(slug: string, id: string): Promise<Result<{ item: unknown }>> {

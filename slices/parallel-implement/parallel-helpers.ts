@@ -80,6 +80,7 @@ export function buildParallelPrBody(opts: {
   workItem: WorkItem;
   spec: EngineeringSpec;
   wpResults: WpDispatchResult[];
+  closesIssueNumber?: number | null;
 }): string {
   const wpChangelog = opts.wpResults
     .map((r) => {
@@ -89,6 +90,15 @@ export function buildParallelPrBody(opts: {
     })
     .join('\n');
 
+  const closeTarget =
+    opts.closesIssueNumber === undefined
+      ? opts.workItem.id.startsWith('local:')
+        ? null
+        : opts.workItem.externalId
+      : opts.closesIssueNumber;
+  const closingLine =
+    closeTarget == null ? `Local Work Item: ${opts.workItem.id}` : `Closes #${closeTarget}`;
+
   return `## Summary
 
 ${opts.workItem.title}
@@ -97,6 +107,6 @@ ${opts.workItem.title}
 
 ${wpChangelog}
 
-Closes #${opts.workItem.externalId}
+${closingLine}
 `;
 }

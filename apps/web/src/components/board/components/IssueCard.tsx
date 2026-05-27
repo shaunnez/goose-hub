@@ -6,7 +6,7 @@ import type { WorkItemCostsDto, WorkItemDto } from '@/lib/types';
 import { getPersonaInitials, usePersonaMap } from '@/lib/usePersonaMap';
 import { ageLabel, formatCost } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
-import { Ban, GitFork } from 'lucide-react';
+import { Ban, Database, GitFork } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 /** Shorten a repo-qualified dep ref to issue-number-only when it's in the same repo. */
@@ -31,6 +31,8 @@ export function IssueCard({
   const personaMap = usePersonaMap();
   const initials = getPersonaInitials(personaMap, item.lastPersonaId);
   const isBlocked = item.schedule === 'blocked-by';
+  const isLocalOnly =
+    item.canonicalWorkItemId.startsWith('local:') && item.externalRefs.length === 0;
 
   // Per-card fetch; TanStack Query dedupes by key so the issue detail page
   // shares the same cache. Boards with many cards trigger N requests on mount —
@@ -107,6 +109,16 @@ export function IssueCard({
         <Pill tone="default" className="h-5 text-[10.5px] px-2 capitalize">
           {item.priority}
         </Pill>
+        {isLocalOnly && (
+          <Pill
+            tone="default"
+            className="h-5 text-[10.5px] px-2 gap-1"
+            data-testid="local-only-indicator"
+          >
+            <Database size={9} aria-hidden />
+            Local-only
+          </Pill>
+        )}
         {item.milestoneTitle != null && (
           <Pill
             tone="default"

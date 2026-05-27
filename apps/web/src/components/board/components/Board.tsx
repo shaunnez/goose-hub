@@ -8,13 +8,14 @@ import { useActiveMilestone } from '@/state/active-milestone';
 import { useActiveProject } from '@/state/active-project';
 import { useLaneVisibility } from '@/state/lane-visibility';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Download, Eye, RefreshCw } from 'lucide-react';
+import { ChevronDown, Download, Eye, Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { canUseAssignedToMeJiraImport, canUseManualJiraImport } from '../lib/jira-import';
 import { BoardColumn } from './BoardColumn';
 import { JiraAssignedImportAction } from './JiraAssignedImportAction';
 import { JiraImportDialog } from './JiraImportDialog';
+import { NewLocalIssueDialog } from './NewLocalIssueDialog';
 
 interface BoardProps {
   projectSlug: string;
@@ -24,6 +25,7 @@ export function Board({ projectSlug }: BoardProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [jiraImportOpen, setJiraImportOpen] = useState(false);
+  const [newLocalOpen, setNewLocalOpen] = useState(false);
   const { projects } = useActiveProject();
   const { hidden, toggle, reset } = useLaneVisibility();
   const { activeNumber: resolvedMilestone, milestones, setActiveNumber } = useActiveMilestone();
@@ -31,6 +33,7 @@ export function Board({ projectSlug }: BoardProps) {
   const currentProject = projects.find((project) => project.slug === projectSlug);
   const showJiraImport = canUseManualJiraImport(currentProject);
   const showAssignedJiraImport = canUseAssignedToMeJiraImport(currentProject);
+  const showLocalCreate = currentProject?.source.kind === 'local-db';
 
   const {
     data: items = [],
@@ -152,6 +155,15 @@ export function Board({ projectSlug }: BoardProps) {
           {items.length} issue{items.length === 1 ? '' : 's'}
         </span>
         <span className="grow" />
+        {showLocalCreate && (
+          <button
+            type="button"
+            onClick={() => setNewLocalOpen(true)}
+            className="inline-flex h-6 items-center gap-1.5 rounded border border-line px-2 text-[12px] text-fg-2 hover:bg-bg-hover hover:text-fg"
+          >
+            <Plus size={12} /> New local
+          </button>
+        )}
         {showJiraImport && (
           <button
             type="button"
@@ -220,6 +232,21 @@ export function Board({ projectSlug }: BoardProps) {
         milestoneNumber={resolvedMilestone}
         onClose={() => setJiraImportOpen(false)}
         onImported={(item) => {
+          void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
+          if (resolvedMilestone != null) {
+            void queryClient.invalidateQueries({
+              queryKey: ['milestone-issues', projectSlug, resolvedMilestone],
+            });
+          }
+          navigate(`/projects/${projectSlug}/items/${item.externalId}`);
+        }}
+      />
+      <NewLocalIssueDialog
+        open={showLocalCreate && newLocalOpen}
+        projectSlug={projectSlug}
+        milestoneNumber={resolvedMilestone}
+        onClose={() => setNewLocalOpen(false)}
+        onCreated={(item) => {
           void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
           if (resolvedMilestone != null) {
             void queryClient.invalidateQueries({

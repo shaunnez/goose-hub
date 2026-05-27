@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockListIssues,
+  mockCreateIssue,
   mockGetIssue,
   mockGetIssueLegalTargets,
   mockGetIssueEvents,
@@ -30,6 +31,7 @@ const {
   mockGetIssueSpec,
 } = vi.hoisted(() => ({
   mockListIssues: vi.fn(),
+  mockCreateIssue: vi.fn(),
   mockGetIssue: vi.fn(),
   mockGetIssueLegalTargets: vi.fn(),
   mockGetIssueEvents: vi.fn(),
@@ -57,6 +59,7 @@ const {
 
 vi.mock('./service.js', () => ({
   listIssues: mockListIssues,
+  createIssue: mockCreateIssue,
   getIssue: mockGetIssue,
   getIssueLegalTargets: mockGetIssueLegalTargets,
   getIssueEvents: mockGetIssueEvents,
@@ -132,6 +135,46 @@ describe('GET /projects/:slug/issues', () => {
     expect(res.status).toBe(404);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('project not found');
+  });
+});
+
+describe('POST /projects/:slug/issues', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('creates a local Work Item', async () => {
+    const item = { id: 'local:proj#1', externalId: '1', externalRefs: [] };
+    mockCreateIssue.mockResolvedValue({ ok: true, data: { item } });
+
+    const app = makeApp();
+    const res = await postJson(app, '/projects/my-project/issues', {
+      title: 'Local-only task',
+      body: 'Details',
+      type: 'chore',
+      priority: 'high',
+      milestoneNumber: 3,
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ item });
+    expect(mockCreateIssue).toHaveBeenCalledWith('my-project', {
+      title: 'Local-only task',
+      body: 'Details',
+      type: 'chore',
+      priority: 'high',
+      milestoneNumber: 3,
+    });
+  });
+
+  it('returns service validation failures', async () => {
+    mockCreateIssue.mockResolvedValue({ ok: false, error: 'title is required', status: 400 });
+
+    const app = makeApp();
+    const res = await postJson(app, '/projects/my-project/issues', { title: '' });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'title is required' });
   });
 });
 

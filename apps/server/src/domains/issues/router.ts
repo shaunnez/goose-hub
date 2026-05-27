@@ -6,6 +6,7 @@ import {
   approveIssue,
   approvePRD,
   commentOnIssue,
+  createIssue,
   declinePRD,
   getIssue,
   getIssueAcceptanceContract,
@@ -36,6 +37,21 @@ router.get('/:slug/issues', async (c) => {
     ? await listIssues(c.req.param('slug'), { all })
     : await listIssues(c.req.param('slug'));
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
+});
+
+router.post('/:slug/issues', async (c) => {
+  const body = await parseBody<{
+    title?: unknown;
+    body?: unknown;
+    type?: unknown;
+    priority?: unknown;
+    milestoneNumber?: unknown;
+  }>(c);
+  if (!body.ok) return body.error;
+  const result = await createIssue(c.req.param('slug'), body.data);
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404);
 });
 
 router.get('/:slug/issues/:id', async (c) => {

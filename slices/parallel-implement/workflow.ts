@@ -23,11 +23,12 @@ import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/r
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
-import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
+import { openLocalDbPR, openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { readProjectSettings } from '@goose-hub/core/db/repositories/project-settings.js';
 import type { RunDisposition } from '@goose-hub/core/event-stream/run-disposition.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { upsertGithubExternalRef } from '@goose-hub/core/integrations/github/external-refs.js';
 import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -88,6 +89,8 @@ export interface ParallelImplementDeps {
   /** Separate runtime for the dev-review-response pass (defaults to project skill settings). */
   devReviewResponseRuntime?: AgentRuntime;
   openPRImpl?: typeof openPR;
+  openLocalDbPRImpl?: typeof openLocalDbPR;
+  upsertGithubExternalRefImpl?: typeof upsertGithubExternalRef;
   createWpWorktreeImpl?: typeof createWpScratchWorktree;
   createIssueWorktreeImpl?: typeof createWorktree;
   /** Override dependency prewarm for tests or alternate package managers. */
@@ -314,6 +317,14 @@ class BlockedGateError extends Error {
     super(message);
     this.name = 'BlockedGateError';
   }
+}
+
+function latestLinkedGithubIssue(workItem: WorkItem) {
+  return (
+    (workItem.externalRefs ?? [])
+      .filter((ref) => ref.provider === 'github' && ref.kind === 'issue' && ref.repoRef != null)
+      .at(-1) ?? null
+  );
 }
 
 function errorMessage(err: unknown): string {
@@ -555,6 +566,8 @@ export async function runParallelImplementWorkflow(
     return baseAppend({ ...input, payload });
   };
   const openPRFn = deps.openPRImpl ?? openPR;
+  const openLocalDbPRFn = deps.openLocalDbPRImpl ?? openLocalDbPR;
+  const upsertGithubExternalRefFn = deps.upsertGithubExternalRefImpl ?? upsertGithubExternalRef;
   const createWpFn = deps.createWpWorktreeImpl ?? createWpScratchWorktree;
   const createIssueFn = deps.createIssueWorktreeImpl ?? createWorktree;
   const usesInjectedWorkflowWorktree =
@@ -1425,9 +1438,23 @@ export async function runParallelImplementWorkflow(
       throw new Error('GITHUB_TOKEN env var is required to open PR');
     }
 
+    const linkedIssueRef = workItem.id.startsWith('local:')
+      ? latestLinkedGithubIssue(workItem)
+      : null;
+    const repoRef = linkedIssueRef?.repoRef ?? stateSource.repoRef;
     const branchName = integrationBranch;
     const title = `M19.XX: ${workItem.title.slice(0, 50)}`;
-    const body = buildParallelPrBody({ workItem, spec: specForRun, wpResults: allWpResults });
+    const closesIssueNumber =
+      linkedIssueRef != null ? Number(linkedIssueRef.externalId) : Number(workItem.externalId);
+    const shouldCloseGithubIssue =
+      Number.isFinite(closesIssueNumber) &&
+      (linkedIssueRef != null || !workItem.id.startsWith('local:'));
+    const body = buildParallelPrBody({
+      workItem,
+      spec: specForRun,
+      wpResults: allWpResults,
+      closesIssueNumber: shouldCloseGithubIssue ? closesIssueNumber : null,
+    });
     const expectedRemoteHead = devReviewResponseCommitSha ?? integrationHeadSha;
     if (expectedRemoteHead == null) {
       throw new PersistenceFailureError(
@@ -1446,17 +1473,47 @@ export async function runParallelImplementWorkflow(
       allowUnverifiedTestPersistence,
     });
 
-    const prResult = await openPRFn({
-      worktreePath: issueWorktreePath ?? '',
-      repo: stateSource.repoRef,
-      issueNumber: Number(workItem.externalId),
-      title,
-      body,
-      branchName,
-      baseBranch: workflowBase.branch,
-      token,
-      skipPush: true,
-    });
+    const prResult = shouldCloseGithubIssue
+      ? await openPRFn({
+          worktreePath: issueWorktreePath ?? '',
+          repo: repoRef,
+          issueNumber: closesIssueNumber,
+          title,
+          body,
+          branchName,
+          baseBranch: workflowBase.branch,
+          token,
+          skipPush: true,
+        })
+      : await openLocalDbPRFn({
+          worktreePath: issueWorktreePath ?? '',
+          repo: repoRef,
+          title,
+          body,
+          branchName,
+          baseBranch: workflowBase.branch,
+          token,
+          skipPush: true,
+        });
+
+    if (workItem.id.startsWith('local:')) {
+      upsertGithubExternalRefFn({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'pull_request',
+        repoRef,
+        externalId: String(prResult.prNumber),
+        url: prResult.prUrl,
+      });
+      upsertGithubExternalRefFn({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'branch',
+        repoRef,
+        externalId: prResult.branch,
+        metadata: { baseBranch: prResult.base },
+      });
+    }
 
     append({
       projectId,
