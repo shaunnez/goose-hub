@@ -4,6 +4,27 @@ export interface GitHubSourceConfig {
   stateMachine: 'labels';
 }
 
+export interface LocalDbJiraIntegrationConfig {
+  enabled: boolean;
+  baseUrl: string;
+  projectKeys: string[];
+  importMode: 'manual' | 'assigned-to-me';
+  postBack?: {
+    comments: boolean;
+    transitions: false;
+  };
+}
+
+export interface LocalDbBitbucketIntegrationConfig {
+  enabled: boolean;
+  workspace: string;
+  repos: string[];
+  postBack?: {
+    pullRequests: boolean;
+    comments: boolean;
+  };
+}
+
 export interface LocalDbSourceConfig {
   kind: 'local-db';
   stateMachine: 'db';
@@ -13,6 +34,8 @@ export interface LocalDbSourceConfig {
       mirrorLabels?: boolean;
       importIssues?: boolean;
     };
+    jira?: LocalDbJiraIntegrationConfig;
+    bitbucket?: LocalDbBitbucketIntegrationConfig;
   };
 }
 
