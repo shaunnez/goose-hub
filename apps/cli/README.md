@@ -18,6 +18,16 @@ Prints the live state of a target project's GitHub issues:
 
 Lists all non-terminal issues in a milestone, then prompts to bulk-archive them. Used at milestone exit to clean up stale issues before closing.
 
+### `goose issue restart <project-slug> <issue-id> [--state=...] [--schedule=...] [--yes]`
+
+Creates a fresh issue from an existing issue and archives the original.
+
+- Clones title, body, type, priority, milestone, and safe auxiliary labels.
+- Defaults the new issue state to `factory:triaging`.
+- Defaults the new issue schedule to the original issue schedule unless `--schedule` is provided.
+- Links the old and new issues with comments.
+- Without `--yes`, prints the restart plan and makes no changes.
+
 ### `goose run-agent --skill=<name> --input='<json>' [--dry-run]`
 
 Runs a named skill against the Claude CLI runtime.
@@ -39,6 +49,7 @@ Known projects are loaded from a hardcoded registry in `src/index.ts`. Adding a 
 ```bash
 pnpm goose status goose-hub-self
 pnpm goose sweep goose-hub-self 5
+pnpm goose issue restart goose-hub-self 123 --state=factory:triaging --schedule=current --yes
 pnpm goose run-agent --skill=triage --input='{"projectId":"goose-hub-self","workItemId":"123"}'
 ```
 

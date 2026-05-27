@@ -45,6 +45,48 @@ The `bootstrap-remote-localdb` branch already establishes the right foundation:
 
 This plan extends that pattern to Jira and Bitbucket without turning either provider into Factory authority.
 
+## Current Code Audit
+
+Audit date: 2026-05-27 on `bootstrap-remote-localdb`.
+
+What is already in place:
+
+- `core/types.ts` has `SourceConfig` support for `source.kind = "local-db"`, but `LocalDbSourceConfig.integrations` currently only types `github`.
+- `core/db/schema.ts` has provider-neutral `work_item_external_refs` columns: `provider`, `kind`, nullable `repo_ref`, `external_id`, `url`, and `metadata_json`.
+- `core/state-source/local-db-repository.ts` already exposes provider-neutral helpers for external refs: `upsertExternalRef`, `getExternalRef`, `getWorkItemByExternalRef`, `listExternalRefsByKind`, and `listExternalRefs`.
+- `core/state-source/local-db-repository.test.ts` already proves Jira issue refs can be stored without `repo_ref`, and Bitbucket pull request refs can be stored with `repo_ref`.
+- `core/integrations/github/import-issues.ts` is the closest existing pattern for idempotently importing external work into local Work Items plus external refs.
+- `core/agent-artifacts/repository.ts` already has threshold-based local payload offload through `maybeStoreLargePayload`, `storeArtifact`, `deterministicArtifactKey`, and `getArtifact`.
+
+Gaps to close before Jira and Bitbucket are first-class:
+
+- `LocalDbSourceConfig.integrations` needs typed `jira` and `bitbucket` blocks. Do not store credentials in project config.
+- No `core/integrations/jira/*`, `core/integrations/bitbucket/*`, or shared Atlassian service/DTO layer exists.
+- No server route exists for manual Jira import, assigned-to-me import, external-ref listing, artifact slicing, or post-back.
+- `apps/server/src/domains/issues/service.ts` returns Work Items without external refs, so the UI cannot distinguish imported Jira work from local-only work.
+- `apps/web/src/components/detail/components/DetailPage.tsx` still synthesizes live event ids as `github:${item.repoRef}#${item.externalId}`. Local-db detail pages should use the canonical `item.id`.
+- `LocalDbStateSource.getPrDiff` only reads GitHub PR refs. Bitbucket PR diff/linking needs its own adapter path and must not be treated as GitHub-compatible.
+- Artifact retrieval currently returns the whole payload for a work-item artifact. Atlassian comments/history/page bodies need slice retrieval so large evidence does not re-enter context by default.
+- `activateLocalDbProject` imports only GitHub issues. Jira import should be a separate explicit action, not a bootstrap side effect.
+- Current project config in `target-projects/goose-hub-self/project.config.ts` is still GitHub-backed; Jira/Bitbucket rollout needs at least one local-db target project config or fixture for tests.
+
+## Atlassian Integration Contract
+
+Adapt the SkyTab SDK/CLI guidance to Goose Hub's TypeScript stack:
+
+- Use Zod schemas and TypeScript DTOs instead of Pydantic models.
+- Put provider access behind typed service modules. The agent, workflow, server action, or UI never sees raw Jira or Bitbucket payloads.
+- Prefer direct REST adapters first unless a proven CLI is the safer implementation path. If a CLI adapter is added, it must return JSON, use `spawn` without `shell: true`, cap output, set a timeout, and parse immediately into Zod-validated DTOs.
+- The service owns query-level resolution. Exact Jira keys and URLs are L0 and must short-circuit before search. Assigned-to-me import builds safe scoped JQL internally. Raw JQL is absent from normal user/agent tools.
+- Return progressive response tiers:
+  - `headline`: key/id, title, status, url, total count, `hasMore`
+  - `card`: headline plus project, issue type, assignee, priority, created, updated
+  - `detail`: card plus capped description/body preview, labels/components, linked keys
+  - `evidence`: comments, changelog/history, attachments, and large bodies stored as artifacts and retrieved by slice
+  - `raw`: developer-only, stored as an artifact, never returned inline by default
+- Use `core/agent-artifacts/repository.ts` as the scratchpad/store. Large Jira/Bitbucket payloads should produce summaries plus artifact refs, not full context dumps.
+- Provider errors should be typed enough for callers to distinguish validation, auth, permission, not-found, query, rate-limit, connection, and post-back failures.
+
 ## Non-Goals
 
 - Do not create a shared Goose Hub hub/server.
@@ -254,22 +296,29 @@ Provider config and types:
 - `core/types.ts`
 - `core/state-source/local-db.ts`
 - `core/state-source/local-db-repository.ts`
+- `core/agent-artifacts/repository.ts`
 - tests near `core/state-source/local-db*.test.ts`
 
 Provider integrations:
 
+- new `core/integrations/atlassian/*` for shared Zod DTOs, query-level resolution, payload offload, and typed errors
 - new `core/integrations/jira/*`
 - new `core/integrations/bitbucket/*`
-- possible MCP-backed adapter boundary if Jira/Bitbucket access comes through MCP rather than direct REST
+- REST adapters first; optional CLI adapters only if they emit JSON and follow Factory subprocess rules
+- no open-ended Atlassian MCP tool surface for normal agent or UI paths
 
 Server actions:
 
 - `apps/server/src/domains/issues/service.ts`
-- possible new integration routes under `apps/server/src/domains/integrations/`
+- new integration routes under `apps/server/src/domains/integrations/`
+- `apps/server/src/server.ts` route registration
 - existing route-id resolution via `apps/server/src/shared/work-item-resolution.ts`
+- issue artifact routes for bounded slice retrieval
 
 Web UI:
 
+- `apps/web/src/lib/types.ts`
+- `apps/web/src/components/detail/components/DetailPage.tsx`
 - issue list and detail linked-ref display
 - import action for "Import Jira issue"
 - import action for "Import assigned to me"
@@ -281,93 +330,151 @@ Workflow and PR linking:
 - external ref creation when a Bitbucket PR is opened or discovered
 - PRD/investigation artifact post-back actions
 
-## Implementation Order
+## Final Implementation Order
 
-### PR A: Provider-Agnostic External Ref Hardening
+### PR A: Local-DB External Ref Read Model and Canonical IDs
 
-Objective: make sure the local-db external ref layer is provider-neutral enough for Jira and Bitbucket.
+Objective: finish the provider-neutral local-db surface before adding Atlassian behavior.
 
 Tasks:
 
-1. Audit `work_item_external_refs` helper APIs for GitHub assumptions.
-2. Add tests for non-GitHub providers.
-3. Add typed provider/kind helpers if needed.
-4. Keep existing GitHub import/mirroring behavior passing.
+1. Keep the existing provider-neutral repository APIs and tests in `core/state-source/local-db-repository.ts`.
+2. Add typed external-ref DTO helpers around `LocalDbExternalRefRow` so callers do not parse `metadata_json` ad hoc.
+3. Add external refs to the Work Item server DTO in `apps/server/src/domains/issues/service.ts`.
+4. Add `canonicalWorkItemId` or use `item.id` in the web Work Item DTO.
+5. Fix `apps/web/src/components/detail/components/DetailPage.tsx` so local-db detail pages subscribe to `item.id`, not `github:${item.repoRef}#${item.externalId}`.
+6. Add UI display for linked refs and explicit local-only status on the issue detail page.
+7. Add artifact slice retrieval support for work-item artifacts so stored provider evidence can be fetched by key plus slice range.
 
 Acceptance:
 
-- `jira` issue refs and `bitbucket` PR refs can be created, updated, listed, and resolved to local Work Items.
-- Existing GitHub ref behavior is unchanged.
+- Existing GitHub local-db import/mirroring behavior is unchanged.
+- `jira` issue refs and `bitbucket` pull request refs can be listed through the issue API.
+- Local-db detail pages query and subscribe with canonical local Work Item ids.
+- The issue detail page distinguishes local-only Work Items from imported or linked external Work Items.
+- Stored artifact retrieval can return a bounded slice without returning the full payload.
 
-### PR B: Manual Jira Import
+### PR B: Atlassian Config, DTOs, and Safe Service Boundary
 
-Objective: allow a developer to paste a Jira key/URL and import it into local DB.
+Objective: establish the TypeScript Atlassian integration contract without importing anything yet.
 
 Tasks:
 
-1. Add Jira issue key/URL parsing.
-2. Add Jira issue fetch adapter.
-3. Add import service that maps Jira issue data to a local Work Item and external ref.
-4. Add a server action and UI affordance for manual import.
-5. Add idempotency and error-path tests.
+1. Extend `LocalDbSourceConfig.integrations` in `core/types.ts` with typed `jira` and `bitbucket` blocks matching this plan.
+2. Add Zod DTOs for Atlassian headline/card/detail/evidence refs under `core/integrations/atlassian/`.
+3. Add Jira key and URL parsing with exact-key-first behavior.
+4. Add query-level resolution helpers for L0/L1/L2/L3, but expose only the levels needed by manual and assigned-to-me import.
+5. Add typed provider error classes or result variants: validation, auth, permission, not_found, query, rate_limit, connection, post_back.
+6. Add an adapter interface for provider calls. Implement Jira REST behind the interface first; keep a CLI adapter as an optional later substitution.
+7. Add payload offload helpers that wrap `maybeStoreLargePayload` with deterministic artifact keys derived from provider, query/resource id, tier, and user-facing args.
 
 Acceptance:
 
-- `TAS-123` imports into a local Work Item.
-- Re-import updates the local title/body/metadata without duplicating the Work Item.
-- Jira workflow status remains unchanged.
+- Config typing permits Jira and Bitbucket integrations without allowing credentials in project config.
+- Exact Jira keys and URLs resolve to L0 without constructing search JQL.
+- Free-text helper tests prove max-result caps and date/project bounds are applied before provider calls.
+- Large provider payloads produce summaries plus artifact refs.
+- No raw JQL/CQL or raw provider object crosses the service boundary.
 
-### PR C: Assigned-To-Me Jira Import
+### PR C: Manual Jira Import
 
-Objective: make Jira assignment the default team-safe local queue filter.
+Objective: allow a developer to paste a Jira key or URL and import it into local DB.
 
 Tasks:
 
-1. Resolve the current Jira user.
-2. Query assigned issues scoped by configured projects.
-3. Reuse manual import mapping per issue.
-4. Add sync result counts and visible stale/failure handling.
-5. Add UI action for "Import assigned to me".
+1. Add `core/integrations/jira/import-issue.ts` using the service from PR B.
+2. Map Jira detail DTOs into `work_items`: title, body/description preview or sanitized body, type, priority, assignee metadata, status metadata, and default local Factory state.
+3. Store the Jira issue ref in `work_item_external_refs` with `provider = "jira"`, `kind = "issue"`, `repo_ref = null`, and `external_id = <issue key>`.
+4. Store large comments, history, changelog, attachments, and raw detail as `agent_artifacts` when requested or above threshold.
+5. Add `POST /projects/:slug/integrations/jira/import` or a similarly scoped route under `apps/server/src/domains/integrations/`.
+6. Add an "Import Jira issue" UI action that accepts a key or URL, reports typed errors, and links to the created local Work Item.
+7. Add idempotency and failure-path tests.
 
 Acceptance:
 
-- Developers can import only their own Jira-assigned queue.
-- Imported items remain local and workflow-ready.
-- Local rows are not deleted when Jira assignment changes.
+- `TAS-123` and a configured Jira browse URL import into a local Work Item.
+- Re-import updates the local title/body/metadata and external ref without duplicating the Work Item.
+- Jira workflow status is copied into external-ref metadata but never mutates local Factory state.
+- Provider failure returns a visible typed error and does not create a partial Work Item.
 
-### PR D: Local-Only Work Item Creation Polish
+### PR D: Assigned-To-Me Jira Import
 
-Objective: make local-only items first-class for scratch and non-Jira work.
+Objective: make Jira assignment the team-safe way to populate each developer's local queue.
 
 Tasks:
 
-1. Ensure create issue paths do not require an external ref.
-2. Ensure PR open/link paths do not require Jira/GitHub issue numbers.
-3. Make issue detail display external refs when present and local-only status when absent.
-4. Add tests for local-only PR body semantics.
+1. Add a service method to resolve the current Jira user.
+2. Build safe JQL internally from configured `baseUrl`, `projectKeys`, current user, max results, and updated date bounds.
+3. Reuse the manual import mapper per returned issue.
+4. Report counts: imported, updated, skipped, stale, failed.
+5. Mark no-longer-assigned local imports as stale/hidden metadata only; do not delete local Work Items.
+6. Add `POST /projects/:slug/integrations/jira/import-assigned-to-me`.
+7. Add an "Import my Jira issues" UI action with result counts and per-issue failures.
+
+Acceptance:
+
+- Developers importing assigned-to-me receive only Jira issues assigned to their current Jira user and configured projects.
+- Local rows are never auto-run or deleted by sync.
+- Existing local artifacts/runs/comments remain attached when Jira assignment changes.
+- Sync result counts are shown and tested.
+
+### PR E: Local-Only Work Item and PR Semantics
+
+Objective: make non-Jira work and local-only PR flows explicit.
+
+Tasks:
+
+1. Ensure local Work Item creation does not require any external ref.
+2. Ensure implementation and PR-opening paths do not require Jira, GitHub, or numeric external issue ids.
+3. Keep `core/connectors/github/slice.test.ts` coverage for local-db PRs without closing GitHub issue lines, and extend it for imported Jira and local-only Work Items if needed.
+4. Ensure PR bodies reference linked external refs only as context, not as close keywords unless the provider integration explicitly supports that behavior later.
+5. Add UI copy/state that clearly identifies local-only work.
 
 Acceptance:
 
 - A local-only issue can be created, run through workflows, and open/link a PR.
-- No fake Jira key or GitHub issue number is emitted.
+- PR bodies do not emit fake Jira keys, fake GitHub issue numbers, or auto-close keywords for local-only Work Items.
+- Imported Jira Work Items keep local identity in Goose Hub routes and events.
 
-### PR E: Post-Back Comments
+### PR F: Bitbucket PR Linking and Diff Adapter
+
+Objective: support Bitbucket PR refs as projection links without making Bitbucket a Work Item authority.
+
+Tasks:
+
+1. Add Bitbucket config typing and REST adapter under `core/integrations/bitbucket/`.
+2. Add helpers to upsert Bitbucket PR refs with `provider = "bitbucket"`, `kind = "pull_request"`, `repo_ref = "workspace/repo"`, and `external_id = <pr id>`.
+3. Update implementation/PR linking paths so Bitbucket PRs can be attached to local Work Items when discovered or opened.
+4. Add a Bitbucket diff-fetching path instead of extending `LocalDbStateSource.getPrDiff` with GitHub assumptions.
+5. Keep Bitbucket PR state in external-ref metadata only.
+
+Acceptance:
+
+- A local Work Item can link to a Bitbucket PR.
+- Bitbucket PR metadata can be updated idempotently.
+- Diff retrieval is provider-specific and does not require `GITHUB_TOKEN`.
+- Bitbucket PR state never drives local Factory state automatically.
+
+### PR G: Explicit Post-Back Comments
 
 Objective: let developers publish selected Goose Hub outputs back to Jira or Bitbucket.
 
 Tasks:
 
-1. Add explicit post-back actions for PRD, investigation, PR link, and needs-human summaries.
-2. Add provider adapters for Jira comments and Bitbucket PR comments.
-3. Store successful comment refs in `work_item_external_refs`.
-4. Emit warning events on failure.
+1. Add explicit post-back actions for PRD summary, investigation summary, PR link, and needs-human summary.
+2. Add Jira issue comment and Bitbucket PR comment adapters.
+3. Sanitize and cap generated post-back text before provider calls.
+4. Store successful comment refs in `work_item_external_refs` with `kind = "comment"` and provider-specific metadata.
+5. Emit visible warning events on post-back failure and keep the local workflow successful.
+6. Add UI affordances that require an explicit user action to post back.
 
 Acceptance:
 
-- PRD/investigation summaries can be posted to the linked Jira issue.
+- PRD and investigation summaries can be posted to a linked Jira issue.
 - PR links can be posted to Jira.
-- Bitbucket PR comment post-back works for linked PRs.
-- Failures are visible and non-fatal.
+- Bitbucket PR comments can be posted to linked PRs.
+- Failures are visible, typed, and non-fatal.
+- Post-back references external refs and never replaces local Work Item identity.
 
 ## Cross-Slice Invariants
 
