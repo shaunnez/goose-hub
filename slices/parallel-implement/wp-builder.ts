@@ -13,6 +13,7 @@ import type { InvestigationContext } from '@goose-hub/core/agent-runtime/investi
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { getRecordDecisionTool } from '@goose-hub/core/db/repositories/project-settings.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { writeWpBuilderSandbox } from '@goose-hub/core/tool-layer/sandbox.js';
@@ -364,6 +365,14 @@ function hasSuccessfulVerificationToolCall(events: AgentEvent[]): boolean {
   });
 }
 
+function mergeRuntimeAndDurableEvents(
+  runtimeEvents: AgentEvent[],
+  durableEvents: AgentEvent[],
+): AgentEvent[] {
+  const seenIds = new Set(runtimeEvents.map((event) => event.id));
+  return [...runtimeEvents, ...durableEvents.filter((event) => !seenIds.has(event.id))];
+}
+
 function implementWpAcceptanceFailure(input: {
   output: ImplementWpOutput;
   events: AgentEvent[];
@@ -419,7 +428,9 @@ function implementWpAcceptanceFailure(input: {
     const failedPaths = reportedRunPaths.filter((path) =>
       isPlaywrightSpecPath(path)
         ? latestPlaywrightVerificationStatusForPathAfterLastEdit(input.events, path) !== 'ok'
-        : latestRunTestsStatusForPath(input.events, path) !== 'ok',
+        : writtenTestPaths.includes(path)
+          ? writtenTestVerificationStatusAfterLastEdit(input.events, path) !== 'ok'
+          : latestRunTestsStatusForPath(input.events, path) !== 'ok',
     );
     if (failedPaths.length > 0) {
       return {
@@ -911,8 +922,13 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     return { status: 'failed', wpId: wp.id, errorReason: errorReason ?? 'unknown', runId: wpRunId };
   }
 
+  const runEvents = mergeRuntimeAndDurableEvents(
+    result.events,
+    eventStore.replay({ runId: wpRunId }),
+  );
+
   const loopDiagnosis = editTestLoopDiagnosis({
-    events: result.events,
+    events: runEvents,
     maxCycles: opts.implementWpControl?.editTestLoopMaxCycles ?? 3,
   });
   if (loopDiagnosis != null) {
@@ -1013,7 +1029,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
 
   const acceptanceFailure = implementWpAcceptanceFailure({
     output,
-    events: result.events,
+    events: runEvents,
     verificationRequired:
       output.testsWritten.length > 0 ||
       output.testsRun.paths.length > 0 ||
