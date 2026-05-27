@@ -87,7 +87,36 @@ describe('POST /inbox', () => {
       body: 'null',
     });
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('invalid request body');
     expect(mockCreateInboxItem).not.toHaveBeenCalled();
+  });
+
+  it('returns the existing title validation error for missing title', async () => {
+    const app = makeApp();
+    const res = await app.request('/inbox', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: 'no title here' }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('title is required');
+    expect(mockCreateInboxItem).not.toHaveBeenCalled();
+  });
+
+  it('passes unknown type values through so the service can normalize them', async () => {
+    mockCreateInboxItem.mockResolvedValue({ ok: true, data: { item: { id: 1 } } });
+
+    const app = makeApp();
+    const res = await app.request('/inbox', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Needs triage', body: 'details', type: 'unexpected-type' }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(mockCreateInboxItem).toHaveBeenCalledWith('Needs triage', 'details', 'unexpected-type');
   });
 });
 

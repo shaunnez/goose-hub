@@ -6,7 +6,7 @@ import { createInboxItem, deleteInboxItem, getInboxItems, promoteInboxItem } fro
 const CreateInboxBodySchema = z.object({
   title: z.string().trim().min(1, 'title is required'),
   body: z.string().optional().default(''),
-  type: z.enum(['feature', 'bug', 'chore', 'research']).optional().default('feature'),
+  type: z.string().optional().default('feature'),
 });
 
 const router = new Hono();
@@ -17,7 +17,11 @@ router.post('/', async (c) => {
 
   const result = CreateInboxBodySchema.safeParse(body.data);
   if (!result.success) {
-    return c.json({ error: 'validation failed', issues: result.error.issues }, 400);
+    const titleIssue = result.error.issues.find((issue) => issue.path[0] === 'title');
+    if (titleIssue != null) {
+      return c.json({ error: 'title is required' }, 400);
+    }
+    return c.json({ error: 'invalid request body' }, 400);
   }
 
   const createResult = await createInboxItem(result.data.title, result.data.body, result.data.type);
