@@ -83,40 +83,11 @@ export const TOOL_BUNDLE_DEFINITIONS = {
   'qa-tools': [...FT_CONTEXT, ...FT_READ, ...FT_GIT_READ, ...FT_QA],
   validate: [...FT_CONTEXT, ...FT_READ, ...FT_EVIDENCE],
   'emergency-debug': ['Bash'],
-  'playwright-mcp': [
-    'mcp__playwright-test__browser_click',
-    'mcp__playwright-test__browser_close',
-    'mcp__playwright-test__browser_console_messages',
-    'mcp__playwright-test__browser_drag',
-    'mcp__playwright-test__browser_evaluate',
-    'mcp__playwright-test__browser_file_upload',
-    'mcp__playwright-test__browser_handle_dialog',
-    'mcp__playwright-test__browser_hover',
-    'mcp__playwright-test__browser_navigate',
-    'mcp__playwright-test__browser_navigate_back',
-    'mcp__playwright-test__browser_network_requests',
-    'mcp__playwright-test__browser_press_key',
-    'mcp__playwright-test__browser_run_code',
-    'mcp__playwright-test__browser_select_option',
-    'mcp__playwright-test__browser_snapshot',
-    'mcp__playwright-test__browser_take_screenshot',
-    'mcp__playwright-test__browser_type',
-    'mcp__playwright-test__browser_wait_for',
-    'mcp__playwright-test__browser_verify_element_visible',
-    'mcp__playwright-test__browser_verify_list_visible',
-    'mcp__playwright-test__browser_verify_text_visible',
-    'mcp__playwright-test__browser_verify_value',
-    'mcp__playwright-test__planner_setup_page',
-    'mcp__playwright-test__planner_save_plan',
-    'mcp__playwright-test__generator_read_log',
-    'mcp__playwright-test__generator_setup_page',
-    'mcp__playwright-test__generator_write_test',
-  ],
 } satisfies Record<string, string[]>;
 
 export type BundleName = keyof typeof TOOL_BUNDLE_DEFINITIONS;
 
-const OPTIONAL_MCP_SERVER_BUNDLES = new Set<BundleName>(['playwright-mcp']);
+const OPTIONAL_MCP_SERVER_BUNDLES = new Set<BundleName>();
 const HOLDOUT_FORBIDDEN_CAPABILITIES = new Set<ToolCapability>(['write', 'native-shell']);
 
 const TOOL_DEFINITIONS = new Map<string, ToolDefinition>();
@@ -128,9 +99,6 @@ for (const externalName of FT_VERIFY) defineTool(externalName, ['verify']);
 for (const externalName of FT_GIT_READ) defineTool(externalName, ['git-read']);
 for (const externalName of FT_QA) defineTool(externalName, ['qa']);
 for (const externalName of FT_EVIDENCE) defineTool(externalName, ['evidence']);
-for (const externalName of TOOL_BUNDLE_DEFINITIONS['playwright-mcp']) {
-  defineTool(externalName, ['evidence']);
-}
 defineNativeTool('Bash', ['native-shell']);
 
 function defineTool(externalName: string, capabilities: ReadonlyArray<ToolCapability>): void {
@@ -171,8 +139,16 @@ export function bundleTools(bundleName: string): string[] {
   return [...(TOOL_BUNDLE_DEFINITIONS[bundleName as BundleName] ?? [])];
 }
 
+export function isKnownBundleName(bundleName: string): boolean {
+  return Object.hasOwn(TOOL_BUNDLE_DEFINITIONS, bundleName);
+}
+
 export function isOptionalMcpServerBundle(bundleName: string): boolean {
   return OPTIONAL_MCP_SERVER_BUNDLES.has(bundleName as BundleName);
+}
+
+export function isKnownToolName(externalName: string): boolean {
+  return TOOL_DEFINITIONS.has(externalName);
 }
 
 export function isToolAllowedForRole(externalName: string, role?: Role): boolean {

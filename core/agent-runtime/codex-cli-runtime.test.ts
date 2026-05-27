@@ -93,6 +93,7 @@ function makeToolBinding(overrides: Partial<ToolBinding> = {}): ToolBinding {
     mcpServerBundles: [],
     mcpServerNames: [],
     sandboxMode: 'read-only' as const,
+    warnings: [],
     fingerprints: {
       toolBindingHash: 'binding-hash',
       toolAllowlistHash: 'allowlist-hash',
@@ -107,7 +108,6 @@ function defaultToolBindingForSpec(spec: { skill?: string; toolBundles?: Readonl
   const needsBrowser = spec.skill === 'playwright-repro' && bundles.includes('validate');
   const needsWrite = bundles.includes('dev-tools');
   return makeToolBinding({
-    mcpServerBundles: bundles.includes('playwright-mcp') ? ['playwright-mcp'] : [],
     sandboxMode: needsBrowser ? 'danger-full-access' : needsWrite ? 'workspace-write' : 'read-only',
     ...(needsBrowser ? { approvalPolicy: 'never' } : {}),
   });
@@ -445,6 +445,36 @@ describe('CodexCliRuntime timeout handling', () => {
           mcpServerSetHash: 'server-hash',
           nativeToolCount: 0,
           mcpServerNames: [],
+          toolBindingWarningCount: 0,
+          toolBindingWarnings: [],
+        }),
+      }),
+    );
+  });
+
+  it('emits tool binding warnings on run-started and telemetry log events', async () => {
+    vi.mocked(bindToolsForAgentSpec).mockReturnValueOnce(
+      makeToolBinding({ warnings: [{ kind: 'unknown-tool-extra', name: 'legacy-tool' }] }),
+    );
+
+    await runSuccessfulCodexSpec();
+
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-started',
+        payload: expect.objectContaining({
+          toolBindingWarningCount: 1,
+          toolBindingWarnings: [{ kind: 'unknown-tool-extra', name: 'legacy-tool' }],
+        }),
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.log',
+        payload: expect.objectContaining({
+          metric: 'tool_binding_warnings',
+          warningCount: 1,
+          warnings: [{ kind: 'unknown-tool-extra', name: 'legacy-tool' }],
         }),
       }),
     );

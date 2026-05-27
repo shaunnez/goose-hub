@@ -1,6 +1,8 @@
 import type { Role } from '../types.js';
 import {
   bundleTools,
+  isKnownBundleName,
+  isKnownToolName,
   isOptionalMcpServerBundle,
   isToolAllowedForRole,
   lookupTool,
@@ -23,6 +25,10 @@ export interface ToolBindingFingerprints {
   mcpServerSetHash: string;
 }
 
+export type ToolBindingWarning =
+  | { kind: 'unknown-bundle'; name: string }
+  | { kind: 'unknown-tool-extra'; name: string };
+
 export interface ToolBinding {
   allowlist: string[];
   enabledToolsByServer: Record<string, string[]>;
@@ -32,6 +38,7 @@ export interface ToolBinding {
   sandboxMode: ToolBindingSandboxMode;
   approvalPolicy?: ToolBindingApprovalPolicy;
   fingerprints: ToolBindingFingerprints;
+  warnings: ToolBindingWarning[];
 }
 
 const BROWSER_PROCESS_ACCESS_SKILLS = new Set(['playwright-repro', 'evidence-post']);
@@ -39,8 +46,13 @@ const BROWSER_PROCESS_ACCESS_SKILLS = new Set(['playwright-repro', 'evidence-pos
 export function bindToolsForAgentSpec(input: ToolBindingInput): ToolBinding {
   const selectedTools = new Set<string>();
   const mcpServerBundles = new Set<string>();
+  const warnings: ToolBindingWarning[] = [];
 
   for (const bundle of input.toolBundles) {
+    if (!isKnownBundleName(bundle)) {
+      warnings.push({ kind: 'unknown-bundle', name: bundle });
+      continue;
+    }
     if (isOptionalMcpServerBundle(bundle)) mcpServerBundles.add(bundle);
     for (const tool of bundleTools(bundle)) {
       addToolIfAllowed(selectedTools, tool, input.role);
@@ -48,6 +60,10 @@ export function bindToolsForAgentSpec(input: ToolBindingInput): ToolBinding {
   }
 
   for (const tool of input.toolExtras) {
+    if (!isKnownToolName(tool)) {
+      warnings.push({ kind: 'unknown-tool-extra', name: tool });
+      continue;
+    }
     addToolIfAllowed(selectedTools, tool, input.role);
   }
 
@@ -94,6 +110,7 @@ export function bindToolsForAgentSpec(input: ToolBindingInput): ToolBinding {
     mcpServerNames,
     sandboxMode,
     ...(needsBrowserProcessAccess ? { approvalPolicy: 'never' as const } : {}),
+    warnings,
     fingerprints: {
       toolAllowlistHash: stableHash(allowlist),
       mcpServerSetHash: stableHash({

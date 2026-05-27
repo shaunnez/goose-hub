@@ -162,10 +162,19 @@ vi.mock('@goose-hub/core/conversations/repository.js', () => ({
   setToolInvocationRunId: (...args: unknown[]) => mockSetToolInvocationRunId(...args),
 }));
 
+import { CHAT_TOOL_REGISTRY } from '@goose-hub/core/chat-tools/registry.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { CHAT_TOOL_IMPLEMENTATIONS, ToolExecutionError } from './tools.js';
 
 const ctx = { conversationId: 'conv_test', projectId: null, workItemId: null };
+
+describe('chat-tools — registry parity', () => {
+  it('implements every registered chat tool and no unregistered tools', () => {
+    expect(Object.keys(CHAT_TOOL_IMPLEMENTATIONS).sort()).toEqual(
+      CHAT_TOOL_REGISTRY.map((entry) => entry.name).sort(),
+    );
+  });
+});
 
 function workItem(
   overrides: Partial<{ id: string; externalId: string; title: string; state: string }>,

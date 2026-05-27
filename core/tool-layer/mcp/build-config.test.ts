@@ -80,17 +80,7 @@ describe('buildFactoryMcpConfig', () => {
     expect(env?.FACTORY_PERSONA_ID).toBe('demo/developer/0');
   });
 
-  it('merges playwright-mcp entries from apps/web/.mcp.json when the bundle is declared', () => {
-    mkdirSync(join(workspace, 'apps/web'), { recursive: true });
-    writeFileSync(
-      join(workspace, 'apps/web/.mcp.json'),
-      JSON.stringify({
-        mcpServers: {
-          'playwright-test': { command: 'node', args: ['playwright-mcp.js'] },
-        },
-      }),
-    );
-
+  it('does not merge legacy bundle-specific MCP server entries', () => {
     const result = buildFactoryMcpConfig({
       workspaceDir: workspace,
       runId: 'run-1',
@@ -100,35 +90,6 @@ describe('buildFactoryMcpConfig', () => {
       orchestratorRoot,
     });
 
-    expect(Object.keys(result.config.mcpServers).sort()).toEqual(
-      ['factory-tools', 'playwright-test'].sort(),
-    );
-  });
-
-  it('silently skips bundle MCP files that do not exist', () => {
-    const result = buildFactoryMcpConfig({
-      workspaceDir: workspace,
-      runId: 'run-1',
-      projectId: 'demo',
-      workItemId: null,
-      toolBundles: ['playwright-mcp'],
-      orchestratorRoot,
-    });
-    expect(Object.keys(result.config.mcpServers)).toEqual(['factory-tools']);
-  });
-
-  it('silently skips malformed bundle MCP files', () => {
-    mkdirSync(join(workspace, 'apps/web'), { recursive: true });
-    writeFileSync(join(workspace, 'apps/web/.mcp.json'), 'not valid json');
-
-    const result = buildFactoryMcpConfig({
-      workspaceDir: workspace,
-      runId: 'run-1',
-      projectId: 'demo',
-      workItemId: null,
-      toolBundles: ['playwright-mcp'],
-      orchestratorRoot,
-    });
     expect(Object.keys(result.config.mcpServers)).toEqual(['factory-tools']);
   });
 

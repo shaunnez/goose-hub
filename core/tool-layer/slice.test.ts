@@ -166,19 +166,8 @@ describe('TOOL_BUNDLES', () => {
     expect(TOOL_BUNDLES['emergency-debug']).toEqual(['Bash']);
   });
 
-  it('playwright-mcp bundle contains browser_* and planner_* and generator_* tools', () => {
-    expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__browser_navigate');
-    expect(TOOL_BUNDLES['playwright-mcp']).toContain(
-      'mcp__playwright-test__browser_take_screenshot',
-    );
-    expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__planner_save_plan');
-    expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__generator_write_test');
-  });
-
-  it('playwright-mcp bundle entries are all mcp__playwright-test__ prefixed', () => {
-    for (const tool of TOOL_BUNDLES['playwright-mcp']) {
-      expect(tool.startsWith('mcp__playwright-test__')).toBe(true);
-    }
+  it('does not expose the legacy playwright-mcp bundle', () => {
+    expect(TOOL_BUNDLES).not.toHaveProperty('playwright-mcp');
   });
 });
 
@@ -215,6 +204,11 @@ describe('computeAllowlist', () => {
 
   it('ignores unknown bundle names', () => {
     const list = computeAllowlist({ toolBundles: ['unknown-bundle'], toolExtras: [] });
+    expect(list).toEqual([]);
+  });
+
+  it('ignores unknown extra tool names', () => {
+    const list = computeAllowlist({ toolBundles: [], toolExtras: ['mcp__unknown__surface'] });
     expect(list).toEqual([]);
   });
 });
@@ -275,7 +269,7 @@ describe('bindToolsForAgentSpec', () => {
     expect(binding.approvalPolicy).toBeUndefined();
   });
 
-  it('adds optional MCP server bundles separately from the flat allowlist', () => {
+  it('records warnings for unknown bundle names without failing binding', () => {
     const binding = bindToolsForAgentSpec({
       toolBundles: ['read', 'playwright-mcp'],
       toolExtras: [],
@@ -283,9 +277,25 @@ describe('bindToolsForAgentSpec', () => {
       skill: 'spec-author',
     });
 
-    expect(binding.mcpServerBundles).toEqual(['playwright-mcp']);
-    expect(binding.enabledToolsByServer['playwright-test']).toContain('browser_navigate');
-    expect(binding.allowlist).toContain('mcp__playwright-test__browser_navigate');
+    expect(binding.mcpServerBundles).toEqual([]);
+    expect(binding.enabledToolsByServer['playwright-test']).toBeUndefined();
+    expect(binding.allowlist).not.toContain('mcp__playwright-test__browser_navigate');
+    expect(binding.warnings).toEqual([{ kind: 'unknown-bundle', name: 'playwright-mcp' }]);
+  });
+
+  it('records warnings and skips unknown toolExtras', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: [],
+      toolExtras: ['mcp__factory-tools__read_file', 'mcp__unknown__surface'],
+      role: 'developer',
+      skill: 'spec-author',
+    });
+
+    expect(binding.allowlist).toEqual(['mcp__factory-tools__read_file']);
+    expect(binding.enabledToolsByServer).toEqual({ 'factory-tools': ['read_file'] });
+    expect(binding.warnings).toEqual([
+      { kind: 'unknown-tool-extra', name: 'mcp__unknown__surface' },
+    ]);
   });
 
   it('keeps MCP record_decision available to QA holdouts', () => {

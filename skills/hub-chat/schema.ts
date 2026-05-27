@@ -1,3 +1,4 @@
+import { ChatToolNameSchema } from '@goose-hub/core/chat-tools/registry.js';
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
@@ -21,7 +22,7 @@ export { DecisionSummarySchema };
  * the dispatcher runs it.
  */
 export const HubChatProposalSchema = z.object({
-  toolName: z.string().describe('Must match a name in core/chat-tools/registry.ts'),
+  toolName: ChatToolNameSchema.describe('Must match a name in core/chat-tools/registry.ts'),
   input: z
     .string()
     .min(2)

@@ -127,18 +127,6 @@ const config: ProjectConfig = {
       medium: 'allow-down-tier',
       low: 'allow-down-tier',
     },
-    toolAllowlists: {
-      triager: { bundles: ['core'] },
-      griller: { bundles: ['core'] },
-      'prd-writer': { bundles: ['read', 'core'] },
-      decomposer: { bundles: ['read', 'core'] },
-      investigator: { bundles: ['read', 'core'] },
-      developer: { bundles: ['dev-tools'] },
-      qa: { bundles: ['qa-tools'] },
-      reviewer: { bundles: ['read', 'qa-tools'] },
-      retrospector: { bundles: ['core'] },
-      researcher: { bundles: ['read'] },
-    },
     advisorMode: {
       enabled: false,
       triggerOn: { priorities: [] },

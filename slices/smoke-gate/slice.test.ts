@@ -63,7 +63,6 @@ function makeConfig(
       runtime: 'claude-cli',
       rolesModels: {} as ProjectConfig['agentConfig']['rolesModels'],
       fallbackPolicy: {} as ProjectConfig['agentConfig']['fallbackPolicy'],
-      toolAllowlists: {} as ProjectConfig['agentConfig']['toolAllowlists'],
       advisorMode: {
         enabled: false,
         triggerOn: { priorities: [] },
