@@ -31,7 +31,7 @@ export interface ReviewWaveResult {
   }>;
   parseFailure: boolean;
   parseFailureError?: string;
-  /** True if any reviewer returned verdict: 'needs-human' — must escalate immediately. */
+  /** True if any reviewer returned verdict: 'needs-human' and no actionable repair verdict wins. */
   anyNeedsHuman: boolean;
   /** True if any reviewer returned verdict: 'needs-fix' — routes to the repair workflow. */
   anyNeedsFix: boolean;

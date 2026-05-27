@@ -362,8 +362,9 @@ export async function runConvergentReviewWorkflow(
         runId: crypto.randomUUID(),
       });
 
-      // P1 fix: a reviewer returning needs-human must escalate immediately (rule 23, holdout).
-      if (waveResult.anyNeedsHuman) {
+      // P1 fix: a reviewer returning needs-human must escalate immediately (rule 23, holdout)
+      // only when the wave does not also provide actionable repair findings.
+      if (waveResult.anyNeedsHuman && !waveResult.anyNeedsFix) {
         const humanReviewer = waveResult.reviewerOutputs.find(
           (r) => r.parsed.verdict === 'needs-human',
         );
@@ -428,12 +429,15 @@ export async function runConvergentReviewWorkflow(
       const allReviewersNeedFix =
         waveResult.reviewerOutputs.length > 0 &&
         waveResult.reviewerOutputs.every((reviewer) => reviewer.parsed.verdict === 'needs-fix');
+      const actionableNonCriticalNeedsFix =
+        waveResult.anyNeedsFix && waveResult.newCriticalFindings.length === 0;
 
       // Configured reviewer slots can deliberately mix constrained and
-      // adversarial prompts. If that split yields approved + needs-fix, or all
-      // reviewers request fixes, the finding is actionable repair input rather
-      // than a human-arbitration problem.
-      if (waveResult.verdictsDiverge || allReviewersNeedFix) {
+      // adversarial prompts. If any reviewer provides a needs-fix verdict, the
+      // finding is actionable repair input rather than a human-arbitration
+      // problem, even when another reviewer requested human confirmation. New
+      // critical findings still use the multi-round convergence/cap path.
+      if (actionableNonCriticalNeedsFix || waveResult.verdictsDiverge || allReviewersNeedFix) {
         const runId = crypto.randomUUID();
         const allFindings = waveResult.reviewerOutputs.flatMap((r) => r.parsed.findings);
         const criteriaChecks = waveResult.reviewerOutputs.flatMap((r) => r.parsed.criteriaChecks);

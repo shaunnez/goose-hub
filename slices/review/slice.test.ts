@@ -869,6 +869,58 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
     expect(completedEvents[0]?.[0].payload).toMatchObject({ verdict: 'needs-human' });
   });
 
+  it('routes to needs-fix when a needs-human reviewer is paired with actionable needs-fix', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    mockRun.mockResolvedValueOnce(makeNeedsHumanResult());
+    mockRun.mockResolvedValueOnce({
+      output: {
+        verdict: 'needs-fix',
+        confidence: 0.7,
+        criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'unmet' }],
+        findings: [
+          {
+            severity: 'major',
+            description: 'not implemented',
+            disposition: 'needs-fix',
+            dispositionRef: '#999',
+          },
+        ],
+        decisionSummaries: [],
+      },
+      decisionSummaries: [],
+      events: [],
+    } satisfies AgentResult);
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:needs-fix',
+    );
+    expect(mockRun).toHaveBeenCalledTimes(2);
+
+    const completedEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'review.completed');
+    expect(completedEvents).toHaveLength(1);
+    expect(completedEvents[0]?.[0].payload).toMatchObject({
+      verdict: 'needs-fix',
+      findings: [
+        expect.objectContaining({
+          description: 'not implemented',
+          disposition: 'needs-fix',
+        }),
+      ],
+    });
+  });
+
   it('escalates when reviewer outputs omit canonical criterion IDs', async () => {
     const item = makeWorkItem();
     const source = makeMockSource({
