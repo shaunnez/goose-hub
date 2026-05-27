@@ -721,6 +721,26 @@ describe('verification summary harness', () => {
     });
     expect(JSON.stringify(result.verificationSummary)).not.toContain('root cause analysis');
   });
+
+  it('explains absent evidence when no evidence workflow event was recorded', async () => {
+    const { buildVerificationSummary } = await import('./verification-summary.js');
+
+    const result = await buildVerificationSummary({
+      prHints: {},
+      prDiff: '',
+      qaE2eMode: 'off',
+      commands: { testCommand: 'pnpm test --reporter=json' },
+      priorEvents: [],
+      runTests: vi.fn(),
+      runCommand: vi.fn(),
+    });
+
+    expect(result.verificationSummary.evidence).toEqual({
+      status: 'absent',
+      reason:
+        'no evidence event was recorded; no evidence spec was declared or the evidence workflow did not run',
+    });
+  });
 });
 
 describe('runQaWorkflow', () => {

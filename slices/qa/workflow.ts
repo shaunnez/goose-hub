@@ -676,6 +676,7 @@ export async function runQaWorkflow(
         testStatus: verificationSummary.commands.test.status,
         e2eStatus: verificationSummary.e2e.status,
         evidenceStatus: verificationSummary.evidence.status,
+        evidenceReason: verificationSummary.evidence.reason,
         executableCheckCount: criteriaResults.length,
         executableCheckPassedCount: criteriaResults.filter((result) => result.passed).length,
       },

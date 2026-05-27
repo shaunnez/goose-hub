@@ -1310,6 +1310,111 @@ describe('dispatchForLabel', () => {
     expect(mockRunTriageBatch).not.toHaveBeenCalled();
   });
 
+  it('dispatches the review fix-feedback QA review loop from current issue state', async () => {
+    let state = 'factory:needs-review';
+    const baseItem = {
+      id: 'github:shaunnez/goose-hub#1151',
+      externalId: '1151',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'grill bug',
+      body: 'body',
+      priority: 'medium',
+      type: 'bug',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockImplementation(async () => ({ ...baseItem, state })),
+      transitionState: vi
+        .fn()
+        .mockImplementation(async (_id: string, _from: string, to: string) => {
+          state = to;
+        }),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      budgets: { maxParallelAgents: 1 },
+    });
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockRunConvergentReviewWorkflow
+      .mockImplementationOnce(async (item, reviewSource) => {
+        await (reviewSource as { transitionState: typeof source.transitionState }).transitionState(
+          (item as typeof baseItem).externalId,
+          'factory:needs-review',
+          'factory:needs-fix',
+        );
+      })
+      .mockImplementationOnce(async (item, reviewSource) => {
+        await (reviewSource as { transitionState: typeof source.transitionState }).transitionState(
+          (item as typeof baseItem).externalId,
+          'factory:needs-review',
+          'factory:approved',
+        );
+      });
+    mockRunFixFeedbackWorkflow.mockImplementationOnce(async (item, fixSource) => {
+      await (fixSource as { transitionState: typeof source.transitionState }).transitionState(
+        (item as typeof baseItem).externalId,
+        'factory:needs-fix',
+        'factory:in-progress',
+      );
+      await (fixSource as { transitionState: typeof source.transitionState }).transitionState(
+        (item as typeof baseItem).externalId,
+        'factory:in-progress',
+        'factory:needs-qa',
+      );
+    });
+    mockRunQaWorkflow.mockImplementationOnce(async (item, qaSource) => {
+      await (qaSource as { transitionState: typeof source.transitionState }).transitionState(
+        (item as typeof baseItem).externalId,
+        'factory:needs-qa',
+        'factory:needs-review',
+      );
+    });
+
+    const { dispatchForIssue } = await import('./dispatch.js');
+    await dispatchForIssue('goose-hub-self', 1151);
+    await dispatchForIssue('goose-hub-self', 1151);
+    await dispatchForIssue('goose-hub-self', 1151);
+    await dispatchForIssue('goose-hub-self', 1151);
+
+    expect(mockRunConvergentReviewWorkflow).toHaveBeenCalledTimes(2);
+    expect(mockRunFixFeedbackWorkflow).toHaveBeenCalledOnce();
+    expect(mockRunQaWorkflow).toHaveBeenCalledOnce();
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      1,
+      '1151',
+      'factory:needs-review',
+      'factory:needs-fix',
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      2,
+      '1151',
+      'factory:needs-fix',
+      'factory:in-progress',
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      3,
+      '1151',
+      'factory:in-progress',
+      'factory:needs-qa',
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      4,
+      '1151',
+      'factory:needs-qa',
+      'factory:needs-review',
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      5,
+      '1151',
+      'factory:needs-review',
+      'factory:approved',
+    );
+    expect(state).toBe('factory:approved');
+  });
+
   it('routes factory:spec-ready through parallel-implement when M19 pipeline is enabled', async () => {
     const item = {
       id: 'github:shaunnez/goose-hub#694',

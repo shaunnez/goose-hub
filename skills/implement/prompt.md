@@ -115,6 +115,7 @@ If a test harness/import/runtime failure appears, compare against an adjacent pa
 
 - Implement the smallest slice that satisfies the tests and every criterion in `<acceptanceContract>` when present.
 - Re-run targeted tests only after a real write has occurred, then iterate until green or blocked.
+- Re-run each written unit/component test file one final time by file path after the last edit to that test file. A passing parent-directory/package test after the last edit can satisfy the final proof if it covers the written test. For written Playwright specs, the final proof is a passing `run_playwright_spec` call for the spec or a passing e2e package script after the last edit. In `testsRun.paths`, return the canonical path for every written test or Playwright spec you actually verified.
 - Do not add or run Playwright e2e specs for ordinary product fixes. Browser/e2e validation is owned by QA/evidence workflows unless the work item is explicitly e2e/test-infra.
 - For frontend product changes, add unit/component coverage near the changed surface. Return `evidenceSpecPath: null` unless an existing evidence path is provided and still applies.
 - If `priorEvidenceSpecPath` is provided and your changes still touch `apps/web/`, preserve it as `evidenceSpecPath` only when it remains applicable; do not inspect, rewrite, or execute that e2e spec from the implement run. If it is stale or not applicable, return `evidenceSpecPath: null` with a `SKIP_GATE` decision summary.

@@ -79,7 +79,8 @@ describe('QA timeline events', () => {
       typecheckStatus: 'passed',
       testStatus: 'failed',
       e2eStatus: 'skipped',
-      evidenceStatus: 'skipped',
+      evidenceStatus: 'absent',
+      evidenceReason: 'no evidence event was recorded',
     });
 
     render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
@@ -92,7 +93,9 @@ describe('QA timeline events', () => {
     expect(screen.getByText('Typecheck')).toBeTruthy();
     expect(screen.getByText('Tests')).toBeTruthy();
     expect(screen.getByText('failed')).toBeTruthy();
-    expect(screen.getAllByText('skipped')).toHaveLength(2);
+    expect(screen.getAllByText('skipped')).toHaveLength(1);
+    expect(screen.getByText('absent')).toBeTruthy();
+    expect(screen.getByText('no evidence event was recorded')).toBeTruthy();
     expect(document.body.textContent).not.toContain('"changedFileCount"');
   });
 
