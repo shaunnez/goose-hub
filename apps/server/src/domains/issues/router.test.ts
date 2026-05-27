@@ -312,6 +312,40 @@ describe('GET /projects/:slug/issues/:id/artifacts/:artifactKey', () => {
     expect(mockGetIssueArtifact).toHaveBeenCalledWith('my-project', '42', 'pr-diff:abc');
   });
 
+  it('passes bounded slice params to artifact retrieval', async () => {
+    const artifact = {
+      artifactKey: 'provider-evidence:abc',
+      projectId: 'my-project',
+      workItemId: 'local:my-project#42',
+      runId: 'run-abc',
+      kind: 'provider-evidence',
+      summary: 'Provider evidence',
+      bytes: 100,
+      createdAt: '2026-05-14T00:00:00Z',
+      expiresAt: null,
+      offset: 10,
+      limit: 20,
+      returnedBytes: 20,
+      hasMore: true,
+      payloadSlice: '01234567890123456789',
+      encoding: 'json',
+    };
+    mockGetIssueArtifact.mockResolvedValue({ ok: true, data: { artifact } });
+
+    const app = makeApp();
+    const res = await app.request(
+      '/projects/my-project/issues/42/artifacts/provider-evidence:abc?offset=10&limit=20',
+      { method: 'GET' },
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ artifact });
+    expect(mockGetIssueArtifact).toHaveBeenCalledWith('my-project', '42', 'provider-evidence:abc', {
+      offset: 10,
+      limit: 20,
+    });
+  });
+
   it('returns 404 for unknown or unauthorized artifacts', async () => {
     mockGetIssueArtifact.mockResolvedValue({
       ok: false,

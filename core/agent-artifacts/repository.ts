@@ -3,9 +3,10 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/db.js';
 import { agentArtifacts } from '../db/schema.js';
 import { redactSecrets } from '../tool-layer/secret-redaction.js';
-import type { ArtifactRef, StoredArtifact } from './types.js';
+import type { ArtifactRef, StoredArtifact, StoredArtifactSlice } from './types.js';
 
 export const DEFAULT_ARTIFACT_THRESHOLD_BYTES = 25 * 1024;
+export const MAX_ARTIFACT_SLICE_BYTES = 64 * 1024;
 
 export type StoreArtifactInput = {
   projectId: string;
@@ -57,6 +58,11 @@ function isExpired(expiresAt: string | null): boolean {
 
 function serializePayload(payload: unknown): string {
   return JSON.stringify(payload ?? null);
+}
+
+function nonNegativeInteger(value: number | undefined, fallback: number): number {
+  if (value == null || !Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.floor(value));
 }
 
 function rowToArtifact(row: typeof agentArtifacts.$inferSelect): StoredArtifact | null {
@@ -132,6 +138,47 @@ export function getArtifact(artifactKey: string): StoredArtifact | null {
     .where(eq(agentArtifacts.artifactKey, artifactKey))
     .get();
   return row == null ? null : rowToArtifact(row);
+}
+
+export function getArtifactSlice(
+  artifactKey: string,
+  slice: { offset?: number; limit?: number },
+): StoredArtifactSlice | null {
+  const row = db
+    .select()
+    .from(agentArtifacts)
+    .where(eq(agentArtifacts.artifactKey, artifactKey))
+    .get();
+  if (row == null || isExpired(row.expiresAt)) return null;
+
+  const offset = nonNegativeInteger(slice.offset, 0);
+  const limit = Math.min(
+    MAX_ARTIFACT_SLICE_BYTES,
+    nonNegativeInteger(slice.limit, MAX_ARTIFACT_SLICE_BYTES),
+  );
+  const payloadBytes = Buffer.from(row.payloadJson, 'utf8');
+  const byteSlice = payloadBytes.subarray(offset, offset + limit);
+  const payloadSlice = byteSlice.toString('utf8');
+  const returnedBytes = byteSlice.length;
+
+  return {
+    id: row.id,
+    artifactKey: row.artifactKey,
+    projectId: row.projectId,
+    workItemId: row.workItemId,
+    runId: row.runId,
+    kind: row.kind,
+    summary: row.summary,
+    bytes: row.bytes,
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt,
+    offset,
+    limit,
+    returnedBytes,
+    hasMore: offset + returnedBytes < payloadBytes.length,
+    payloadSlice,
+    encoding: 'json',
+  };
 }
 
 export function listArtifactsForRun(runId: string): StoredArtifact[] {

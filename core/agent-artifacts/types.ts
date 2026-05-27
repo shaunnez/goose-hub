@@ -20,6 +20,15 @@ export type StoredArtifact = {
   expiresAt: string | null;
 };
 
+export type StoredArtifactSlice = Omit<StoredArtifact, 'payload'> & {
+  offset: number;
+  limit: number;
+  returnedBytes: number;
+  hasMore: boolean;
+  payloadSlice: string;
+  encoding: 'json';
+};
+
 export type InlinePayload<T = unknown> = {
   stored: false;
   payload: T;

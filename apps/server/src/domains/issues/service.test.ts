@@ -27,6 +27,7 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 }));
 vi.mock('@goose-hub/core/agent-artifacts/repository.js', () => ({
   getArtifact: vi.fn(),
+  getArtifactSlice: vi.fn(),
 }));
 vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
   getEngineeringSpec: vi.fn(),
@@ -77,7 +78,7 @@ vi.mock('../../shared/resolve-milestone.js', () => ({
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
+import { getArtifact, getArtifactSlice } from '@goose-hub/core/agent-artifacts/repository.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { open } from '@goose-hub/core/interventions/reducer.js';
@@ -190,6 +191,7 @@ beforeEach(() => {
   );
   vi.mocked(getSourceForSlug).mockResolvedValue(mockSource as never);
   vi.mocked(getArtifact).mockReturnValue(null);
+  vi.mocked(getArtifactSlice).mockReturnValue(null);
   vi.mocked(getEngineeringSpec).mockReturnValue(null);
 });
 
@@ -746,6 +748,68 @@ describe('listIssues', () => {
     expect(result).toMatchObject({ ok: true, data: { items: [{ id: 'github:owner/repo#42' }] } });
   });
 
+  it('returns canonical work item ids and provider-neutral external refs', async () => {
+    mockSource.listOpenWork.mockResolvedValueOnce([
+      {
+        id: 'local:proj#1',
+        externalId: '1',
+        repoRef: 'owner/repo',
+        title: 'Imported Jira work',
+        externalRefs: [
+          {
+            id: 1,
+            provider: 'jira',
+            kind: 'issue',
+            repoRef: null,
+            externalId: 'TAS-123',
+            url: 'https://company.atlassian.net/browse/TAS-123',
+            metadata: { status: 'To Do' },
+            createdAt: '2026-05-27T00:00:00Z',
+          },
+          {
+            id: 2,
+            provider: 'bitbucket',
+            kind: 'pull_request',
+            repoRef: 'workspace/repo',
+            externalId: '45',
+            url: 'https://bitbucket.org/workspace/repo/pull-requests/45',
+            metadata: { state: 'OPEN' },
+            createdAt: '2026-05-27T00:00:00Z',
+          },
+        ],
+      },
+    ]);
+
+    const result = await listIssues('proj', { all: true });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        items: [
+          {
+            id: 'local:proj#1',
+            canonicalWorkItemId: 'local:proj#1',
+            externalRefs: [
+              {
+                provider: 'jira',
+                kind: 'issue',
+                externalId: 'TAS-123',
+                metadata: { status: 'To Do' },
+              },
+              {
+                provider: 'bitbucket',
+                kind: 'pull_request',
+                repoRef: 'workspace/repo',
+                externalId: '45',
+                metadata: { state: 'OPEN' },
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
   it('two projects with different active milestones produce independent filtered sets', async () => {
     const sourceA = {
       ...mockSource,
@@ -779,6 +843,45 @@ describe('getIssue', () => {
     vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
     const result = await getIssue('unknown', '1');
     expect(result).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('returns canonical work item id and external refs for item detail', async () => {
+    mockSource.getItem.mockResolvedValueOnce({
+      ...defaultMockItem('1'),
+      id: 'local:proj#1',
+      externalRefs: [
+        {
+          id: 1,
+          provider: 'jira',
+          kind: 'issue',
+          repoRef: null,
+          externalId: 'TAS-123',
+          url: 'https://company.atlassian.net/browse/TAS-123',
+          metadata: { status: 'To Do' },
+          createdAt: '2026-05-27T00:00:00Z',
+        },
+      ],
+    });
+
+    const result = await getIssue('proj', '1');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        item: {
+          id: 'local:proj#1',
+          canonicalWorkItemId: 'local:proj#1',
+          externalRefs: [
+            {
+              provider: 'jira',
+              kind: 'issue',
+              externalId: 'TAS-123',
+              metadata: { status: 'To Do' },
+            },
+          ],
+        },
+      },
+    });
   });
 });
 
@@ -1431,6 +1534,51 @@ describe('getIssueArtifact', () => {
         payload: 'diff',
       });
     }
+  });
+
+  it('returns bounded artifact slices without returning the full payload', async () => {
+    vi.mocked(getArtifactSlice).mockReturnValueOnce({
+      id: 1,
+      artifactKey: 'provider-evidence:abc',
+      projectId: 'proj',
+      workItemId: 'github:owner/repo#1',
+      runId: 'run-1',
+      kind: 'provider-evidence',
+      summary: 'Provider evidence',
+      bytes: 100,
+      createdAt: '2026-05-14T00:00:00Z',
+      expiresAt: null,
+      offset: 10,
+      limit: 20,
+      returnedBytes: 20,
+      hasMore: true,
+      payloadSlice: '01234567890123456789',
+      encoding: 'json',
+    });
+
+    const result = await getIssueArtifact('proj', '1', 'provider-evidence:abc', {
+      offset: 10,
+      limit: 20,
+    });
+
+    expect(getArtifact).not.toHaveBeenCalled();
+    expect(getArtifactSlice).toHaveBeenCalledWith('provider-evidence:abc', {
+      offset: 10,
+      limit: 20,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        artifact: {
+          artifactKey: 'provider-evidence:abc',
+          payloadSlice: '01234567890123456789',
+          offset: 10,
+          limit: 20,
+          hasMore: true,
+        },
+      },
+    });
+    if (result.ok) expect(result.data.artifact).not.toHaveProperty('payload');
   });
 
   it('rejects artifacts from another project', async () => {

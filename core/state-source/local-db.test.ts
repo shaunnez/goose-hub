@@ -103,6 +103,63 @@ describe('LocalDbStateSource', () => {
     });
   });
 
+  it('includes provider-neutral external refs on listed and fetched Work Items', async () => {
+    const { source, repository } = trackedSource();
+    const created = await source.createIssue({
+      title: 'Imported Jira work',
+      body: '',
+    });
+
+    repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: created.id,
+      provider: 'jira',
+      kind: 'issue',
+      externalId: 'TAS-123',
+      url: 'https://company.atlassian.net/browse/TAS-123',
+      metadata: { status: 'To Do' },
+    });
+    repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: created.id,
+      provider: 'bitbucket',
+      kind: 'pull_request',
+      repoRef: 'workspace/repo',
+      externalId: '45',
+      url: 'https://bitbucket.org/workspace/repo/pull-requests/45',
+      metadata: { state: 'OPEN' },
+    });
+
+    await expect(source.getItem(created.id)).resolves.toMatchObject({
+      id: 'local:proj#1',
+      externalRefs: [
+        {
+          provider: 'jira',
+          kind: 'issue',
+          repoRef: null,
+          externalId: 'TAS-123',
+          metadata: { status: 'To Do' },
+        },
+        {
+          provider: 'bitbucket',
+          kind: 'pull_request',
+          repoRef: 'workspace/repo',
+          externalId: '45',
+          metadata: { state: 'OPEN' },
+        },
+      ],
+    });
+    await expect(source.listOpenWork()).resolves.toMatchObject([
+      {
+        id: 'local:proj#1',
+        externalRefs: [
+          expect.objectContaining({ provider: 'jira', externalId: 'TAS-123' }),
+          expect.objectContaining({ provider: 'bitbucket', externalId: '45' }),
+        ],
+      },
+    ]);
+  });
+
   it('rejects illegal transitions and records forced transition history', async () => {
     const { source, repository } = trackedSource();
     const created = await source.createIssue({ title: 'A', body: '' });

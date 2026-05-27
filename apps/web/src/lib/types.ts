@@ -7,8 +7,20 @@ export interface ProjectSummary {
   defaultBranch?: string;
 }
 
+export interface WorkItemExternalRefDto {
+  id: number;
+  provider: string;
+  kind: string;
+  repoRef: string | null;
+  externalId: string;
+  url: string | null;
+  metadata: unknown | null;
+  createdAt: string;
+}
+
 export interface WorkItemDto {
   id: string;
+  canonicalWorkItemId: string;
   externalId: string;
   repoRef: string;
   title: string;
@@ -27,6 +39,7 @@ export interface WorkItemDto {
   blocks: string[];
   prdChildren?: string[];
   prdParent?: string;
+  externalRefs: WorkItemExternalRefDto[];
   createdAt: string;
   lastPersonaId?: string | null;
 }
