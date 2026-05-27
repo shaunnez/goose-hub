@@ -40,6 +40,23 @@ vi.mock('@goose-hub/core/db/schema.js', async (importOriginal) => {
 vi.mock('./shared/source.js', () => ({
   getSourceForSlug: vi.fn().mockResolvedValue({
     repoRef: 'owner/repo',
+    getItem: vi.fn().mockResolvedValue({
+      id: 'github:owner/repo#1',
+      externalId: '1',
+      repoRef: 'owner/repo',
+      title: 'Open item',
+      body: '',
+      type: 'feature',
+      priority: 'medium',
+      mode: 'supervised',
+      state: 'factory:triaging',
+      authorIsOwner: true,
+      schedule: 'current',
+      exec: 'parallel',
+      dependsOn: [],
+      blocks: [],
+      createdAt: new Date('2024-01-02'),
+    }),
     comment: vi.fn().mockResolvedValue(undefined),
     listComments: vi.fn().mockResolvedValue([]),
     setMilestone: vi.fn().mockResolvedValue(undefined),

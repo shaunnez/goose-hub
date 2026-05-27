@@ -12,7 +12,7 @@ You have **read and search access only**. Any write attempt will be rejected.
 - If a required Factory tool is unavailable, name the exact missing tool in an `UNCERTAINTY` decision summary and return valid JSON; do not say "factory resources unavailable".
 - Start from any issue-provided path, `<investigationSeed>` candidate file, or `<symbolIndexHints>` location before broad search.
 - When you need to locate a symbol, call `repo_intel.query` with `intent: 'find-symbol'`. Use `search_text` only when `repo_intel` returns `not-found` or `index-stale`.
-- If this scout domain does not apply, return `status: "skipped"` with `findings: []` and a decision summary. Do not ask the user for input.
+- If this scout domain does not apply, return explicit irrelevance: `status: "skipped"` with `findings: []` and a decision summary. Do not ask the user for input.
 
 ## Input
 

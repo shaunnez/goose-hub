@@ -10,6 +10,7 @@ import { logger } from '@goose-hub/core/logger.js';
 import { filterEligibleByDependencies } from '@goose-hub/core/projects/dependency-scheduler.js';
 import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import type { ProjectConfig } from '@goose-hub/core/types.js';
 import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js';
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
 import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.js';
@@ -28,6 +29,24 @@ type InvCompletePayload = {
     wave2Needed?: boolean;
   };
 };
+
+function primaryRepoRef(project: ProjectConfig): string {
+  const source = project.source as {
+    kind?: string;
+    type?: string;
+    repo?: string;
+    integrations?: { github?: { repos?: string[] } };
+  };
+  if ((source.kind === 'github' || source.type === 'github') && typeof source.repo === 'string') {
+    return source.repo;
+  }
+  return (
+    project.repositories?.[0]?.repoRef ??
+    project.repos?.[0] ??
+    source.integrations?.github?.repos?.[0] ??
+    `local:${project.id}`
+  );
+}
 
 function hasEquivalentInvestigationCompleteTransition(
   events: Array<{ kind: string; payload: unknown }>,
@@ -334,10 +353,7 @@ export async function dispatchSpecAuthor(slug: string, issueNumber: number): Pro
     if (depProjectConfig != null) {
       const fetchTarget = await createProjectAwareTargetSource();
       const { eligible } = await filterEligibleByDependencies([item], {
-        currentRepo:
-          depProjectConfig.source.kind === 'github'
-            ? depProjectConfig.source.repo
-            : depProjectConfig.repos[0],
+        currentRepo: primaryRepoRef(depProjectConfig),
         fetchTarget,
         source,
       });
@@ -424,10 +440,7 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
     if (depProjectConfig != null) {
       const fetchTarget = await createProjectAwareTargetSource();
       const { eligible } = await filterEligibleByDependencies([item], {
-        currentRepo:
-          depProjectConfig.source.kind === 'github'
-            ? depProjectConfig.source.repo
-            : depProjectConfig.repos[0],
+        currentRepo: primaryRepoRef(depProjectConfig),
         fetchTarget,
         source,
       });
