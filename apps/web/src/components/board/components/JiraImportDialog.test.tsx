@@ -14,13 +14,19 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderDialog(open = true) {
+function renderDialog(open = true, milestoneNumber: number | null = null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onClose = vi.fn();
   const onImported = vi.fn();
   render(
     <QueryClientProvider client={client}>
-      <JiraImportDialog open={open} projectSlug="proj" onClose={onClose} onImported={onImported} />
+      <JiraImportDialog
+        open={open}
+        projectSlug="proj"
+        milestoneNumber={milestoneNumber}
+        onClose={onClose}
+        onImported={onImported}
+      />
     </QueryClientProvider>,
   );
   return { onClose, onImported };
@@ -55,7 +61,30 @@ describe('JiraImportDialog', () => {
         expect.objectContaining({ externalId: '1', jiraKey: 'TAS-123' }),
       ),
     );
-    expect(importJiraIssue).toHaveBeenCalledWith('proj', 'TAS-123');
+    expect(importJiraIssue).toHaveBeenCalledWith('proj', 'TAS-123', { milestoneNumber: null });
+  });
+
+  it('passes the active milestone through the import request', async () => {
+    const { importJiraIssue } = await import('@/lib/api');
+    vi.mocked(importJiraIssue).mockResolvedValue({
+      item: {
+        id: 'local:proj#1',
+        externalId: '1',
+        jiraKey: 'TAS-123',
+        jiraUrl: 'https://company.atlassian.net/browse/TAS-123',
+        title: 'Manual Jira import',
+        imported: true,
+      },
+    });
+    const user = userEvent.setup();
+    renderDialog(true, 7);
+
+    await user.type(screen.getByTestId('jira-import-input'), 'TAS-123');
+    await user.click(screen.getByTestId('jira-import-submit'));
+
+    await waitFor(() =>
+      expect(importJiraIssue).toHaveBeenCalledWith('proj', 'TAS-123', { milestoneNumber: 7 }),
+    );
   });
 
   it('surfaces provider failures without closing', async () => {

@@ -5,6 +5,7 @@ import { type FormEvent, useState } from 'react';
 interface JiraImportDialogProps {
   open: boolean;
   projectSlug: string;
+  milestoneNumber?: number | null;
   onClose: () => void;
   onImported: (item: JiraImportItemDto) => void;
 }
@@ -12,6 +13,7 @@ interface JiraImportDialogProps {
 export function JiraImportDialog({
   open,
   projectSlug,
+  milestoneNumber,
   onClose,
   onImported,
 }: JiraImportDialogProps) {
@@ -31,7 +33,7 @@ export function JiraImportDialog({
     setSubmitting(true);
     setError(null);
     try {
-      const result = await importJiraIssue(projectSlug, value);
+      const result = await importJiraIssue(projectSlug, value, { milestoneNumber });
       setInput('');
       onImported(result.item);
       onClose();

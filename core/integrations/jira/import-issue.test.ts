@@ -163,6 +163,34 @@ describe('importJiraIssueToLocalDb', () => {
       lastSyncedAt: '2026-05-27T02:00:00.000Z',
     });
     expect(repository.listWorkItems('proj')).toHaveLength(1);
+    expect(repository.listRepoLinks('proj', 'local:proj#1')).toMatchObject([
+      {
+        repoRef: 'owner/repo',
+        role: 'primary',
+        source: 'jira-import',
+      },
+    ]);
+  });
+
+  it('preserves the requested milestone when creating a Jira Work Item', async () => {
+    const { sqlite, repository } = makeRepository();
+    handles.push(sqlite);
+
+    await importJiraIssueToLocalDb({
+      projectConfig,
+      input: 'TAS-123',
+      adapter: adapterWith(jiraDetail()),
+      repository,
+      milestone: {
+        id: '7',
+        title: 'M7: Atlassian imports',
+      },
+    });
+
+    expect(repository.requireWorkItem('proj', 'local:proj#1')).toMatchObject({
+      milestoneId: '7',
+      milestoneTitle: 'M7: Atlassian imports',
+    });
   });
 
   it('does not create a partial Work Item when the provider fails', async () => {

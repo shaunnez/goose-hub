@@ -10,6 +10,10 @@ export interface ImportJiraIssueToLocalDbInput {
   projectConfig: ProjectConfig;
   input: string;
   adapter: JiraProviderAdapter;
+  milestone?: {
+    id: string;
+    title?: string | null;
+  };
   repository?: LocalDbWorkItemRepository;
   now?: () => Date;
 }
@@ -65,8 +69,24 @@ export async function importJiraIssueToLocalDb(
   const mapped = mapJiraIssueToWorkItem(detail.data);
   const row =
     existing == null
-      ? repository.createWorkItem({ projectId: cfg.id, ...mapped })
+      ? repository.createWorkItem({
+          projectId: cfg.id,
+          ...mapped,
+          milestoneId: input.milestone?.id ?? null,
+          milestoneTitle: input.milestone?.title ?? null,
+        })
       : repository.updateWorkItem(cfg.id, existing.id, mapped);
+
+  const defaultRepoRef = cfg.repos[0];
+  if (defaultRepoRef != null && !defaultRepoRef.startsWith('local:')) {
+    repository.createRepoLink({
+      projectId: cfg.id,
+      itemId: row.id,
+      repoRef: defaultRepoRef,
+      role: 'primary',
+      source: 'jira-import',
+    });
+  }
 
   repository.upsertExternalRef({
     projectId: cfg.id,

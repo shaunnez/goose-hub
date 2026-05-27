@@ -4,6 +4,7 @@ import type {
 } from '@goose-hub/core/integrations/atlassian/errors.js';
 import { importJiraIssueToLocalDb } from '@goose-hub/core/integrations/jira/import-issue.js';
 import { createJiraRestAdapterFromEnv } from '@goose-hub/core/integrations/jira/rest.js';
+import { LocalDbWorkItemRepository } from '@goose-hub/core/state-source/local-db-repository.js';
 import type { Result } from '#shared/middleware.js';
 import { getProject } from '#shared/projects.js';
 
@@ -22,6 +23,7 @@ export interface JiraImportResponseDto {
 
 export interface JiraImportRequestDto {
   input?: unknown;
+  milestoneNumber?: unknown;
 }
 
 export async function importJiraIssue(
@@ -41,9 +43,15 @@ export async function importJiraIssue(
     return { ok: false, error: 'Jira integration is not enabled for this project', status: 400 };
   }
 
+  const repository = new LocalDbWorkItemRepository();
+  const milestone = resolveMilestone(projectConfig.id, body.milestoneNumber, repository);
+  if (!milestone.ok) return milestone;
+
   const result = await importJiraIssueToLocalDb({
     projectConfig,
     input: rawInput,
+    milestone: milestone.data,
+    repository,
     adapter: createJiraRestAdapterFromEnv({
       baseUrl: jira.baseUrl,
       artifactContext: {
@@ -66,6 +74,26 @@ export async function importJiraIssue(
         title: result.data.title,
         imported: result.data.imported,
       },
+    },
+  };
+}
+
+function resolveMilestone(
+  projectId: string,
+  rawMilestoneNumber: unknown,
+  repository: LocalDbWorkItemRepository,
+): Result<{ id: string; title: string } | undefined> {
+  if (rawMilestoneNumber == null) return { ok: true, data: undefined };
+  if (typeof rawMilestoneNumber !== 'number' || !Number.isInteger(rawMilestoneNumber)) {
+    return { ok: false, error: 'milestoneNumber must be an integer', status: 400 };
+  }
+  const row = repository.getMilestone(projectId, rawMilestoneNumber);
+  if (row == null) return { ok: false, error: 'milestone not found', status: 404 };
+  return {
+    ok: true,
+    data: {
+      id: String(row.number),
+      title: row.title,
     },
   };
 }

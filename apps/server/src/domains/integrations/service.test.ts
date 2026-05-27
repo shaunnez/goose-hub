@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockGetProject, mockImportJiraIssueToLocalDb } = vi.hoisted(() => ({
+const { mockGetMilestone, mockGetProject, mockImportJiraIssueToLocalDb } = vi.hoisted(() => ({
   mockGetProject: vi.fn(),
   mockImportJiraIssueToLocalDb: vi.fn(),
+  mockGetMilestone: vi.fn(),
 }));
 
 vi.mock('#shared/projects.js', () => ({
@@ -17,10 +18,20 @@ vi.mock('@goose-hub/core/integrations/jira/rest.js', () => ({
   createJiraRestAdapterFromEnv: vi.fn(() => ({ getIssue: vi.fn() })),
 }));
 
+vi.mock('@goose-hub/core/state-source/local-db-repository.js', () => ({
+  LocalDbWorkItemRepository: vi.fn(() => ({
+    getMilestone: mockGetMilestone,
+  })),
+}));
+
 import { importJiraIssue } from './service.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockGetMilestone.mockReturnValue({
+    number: 7,
+    title: 'M7: Atlassian imports',
+  });
   mockGetProject.mockResolvedValue({
     id: 'proj',
     slug: 'proj',
@@ -53,7 +64,7 @@ beforeEach(() => {
 
 describe('importJiraIssue', () => {
   it('imports a configured local-db Jira issue and returns a navigation target', async () => {
-    const result = await importJiraIssue('proj', { input: 'TAS-123' });
+    const result = await importJiraIssue('proj', { input: 'TAS-123', milestoneNumber: 7 });
 
     expect(result).toMatchObject({
       ok: true,
@@ -70,6 +81,10 @@ describe('importJiraIssue', () => {
       expect.objectContaining({
         projectConfig: expect.objectContaining({ id: 'proj' }),
         input: 'TAS-123',
+        milestone: {
+          id: '7',
+          title: 'M7: Atlassian imports',
+        },
       }),
     );
   });
