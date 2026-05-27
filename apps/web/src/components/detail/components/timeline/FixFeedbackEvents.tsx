@@ -1,5 +1,11 @@
 import type { AgentEventDto } from '@/lib/types';
-import { CheckCircle, ClipboardCheck } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle,
+  ClipboardCheck,
+  GitBranch,
+  GitPullRequest,
+} from 'lucide-react';
 
 type FixFeedbackPayload = {
   filesWritten?: number;
@@ -7,12 +13,46 @@ type FixFeedbackPayload = {
   confidence?: string;
   repairMode?: string;
   repairCycle?: number;
+  sourceFailureKind?: string;
+  sourceFailureRunId?: string;
+  devRunId?: string;
+  reason?: string;
+  sourceFeedback?: string;
+  prNumber?: number;
+  branch?: string;
+  branchSource?: string;
   affectedWpIds?: string[];
   testsRun?: {
     command?: string;
     paths?: string[];
   };
 };
+
+function stripAnsi(value: string): string {
+  return value.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, 'g'), '');
+}
+
+function formatSlug(value: string): string {
+  return value
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map((part) => (part.toLowerCase() === 'qa' ? 'QA' : part))
+    .join(' ');
+}
+
+function shortRunId(value: string): string {
+  return value.slice(0, 8);
+}
+
+function feedbackLines(value: string | undefined): string[] {
+  if (value == null) return [];
+  return stripAnsi(value)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+}
 
 function TimelineDot() {
   return <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />;
@@ -22,6 +62,7 @@ export function AgentFixFeedbackCompleteEvent({ event }: { event: AgentEventDto 
   const p = event.payload as FixFeedbackPayload | null;
   const command = p?.testsRun?.command;
   const paths = p?.testsRun?.paths ?? [];
+  const sourceFeedbackLines = feedbackLines(p?.sourceFeedback);
   const title =
     p?.repairMode === 'legacy-implement' && p.repairCycle != null
       ? `Legacy Repair Cycle ${p.repairCycle}`
@@ -39,6 +80,10 @@ export function AgentFixFeedbackCompleteEvent({ event }: { event: AgentEventDto 
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
         {p?.repairMode === 'legacy-implement' && <span>legacy implement repair</span>}
+        {p?.sourceFailureKind != null && (
+          <span>{formatSlug(p.sourceFailureKind)} source failure</span>
+        )}
+        {p?.reason != null && <span>{formatSlug(p.reason)}</span>}
         {p?.filesWritten != null && (
           <span>
             {p.filesWritten} file{p.filesWritten === 1 ? '' : 's'} written
@@ -54,6 +99,51 @@ export function AgentFixFeedbackCompleteEvent({ event }: { event: AgentEventDto 
           <span>{p.affectedWpIds.join(', ')}</span>
         )}
       </div>
+      {(p?.prNumber != null || p?.branch != null || p?.branchSource != null) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-3">
+          {p?.prNumber != null && (
+            <span className="inline-flex min-w-0 items-center gap-1">
+              <GitPullRequest size={12} className="shrink-0 text-fg-4" />
+              {`PR #${p.prNumber}`}
+            </span>
+          )}
+          {p?.branch != null && (
+            <span className="inline-flex min-w-0 items-center gap-1">
+              <GitBranch size={12} className="shrink-0 text-fg-4" />
+              <span className="font-mono break-all">{p.branch}</span>
+            </span>
+          )}
+          {p?.branchSource != null && <span>{`branch source ${p.branchSource}`}</span>}
+        </div>
+      )}
+      {(p?.sourceFailureRunId != null || p?.devRunId != null) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-3">
+          {p.sourceFailureRunId != null && (
+            <span className="font-mono">{`source run ${shortRunId(p.sourceFailureRunId)}`}</span>
+          )}
+          {p.devRunId != null && (
+            <span className="font-mono">{`dev run ${shortRunId(p.devRunId)}`}</span>
+          )}
+        </div>
+      )}
+      {sourceFeedbackLines.length > 0 && (
+        <div className="mt-2 rounded border border-yellow-500/20 bg-yellow-500/5 px-3 py-2">
+          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-mono uppercase text-yellow-400">
+            <AlertTriangle size={11} className="shrink-0" />
+            Source feedback
+          </div>
+          <div className="flex flex-col gap-1">
+            {sourceFeedbackLines.map((line) => (
+              <div
+                key={line}
+                className="font-mono text-[10.5px] text-fg-3 whitespace-pre-wrap break-words"
+              >
+                {line}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {command != null && (
         <div className="mt-2 flex items-start gap-2 text-[11.5px] text-fg-3">
           <CheckCircle size={12} className="mt-0.5 shrink-0 text-green-400" />
