@@ -721,7 +721,8 @@ describe('runTriageBatch onward routing after accept', () => {
 
   it('routes from an existing type label when model triage disagrees', async () => {
     const source = makeMockSource([makeWorkItem({ type: 'bug' })]);
-    vi.mocked(source.listLabels!).mockResolvedValue(['factory:triaging', 'type:bug']);
+    const listLabels = vi.mocked(source.listLabels as NonNullable<typeof source.listLabels>);
+    listLabels.mockResolvedValue(['factory:triaging', 'type:bug']);
     mockRuntime.run
       .mockResolvedValueOnce({
         output: { ...makeTriageOutput(), type: 'feature', priority: 'p2' },

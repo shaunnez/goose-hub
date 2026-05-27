@@ -105,7 +105,7 @@ export function ReviewGroupWrapper({
           setOpen((e.target as HTMLDetailsElement).open);
         }}
       >
-        <summary className="flex items-center gap-2 cursor-pointer list-none px-4 py-2 font-mono text-[11px] select-none">
+        <summary className="flex items-center gap-2 cursor-pointer list-none px-4 py-2 font-mono text-[11px] select-none flex-wrap">
           <span className="shrink-0">
             {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </span>
