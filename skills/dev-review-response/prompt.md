@@ -8,7 +8,7 @@ For each finding in `devReviewFindings`:
 
 1. **Read the finding carefully** — severity, file, line, and suggestion.
 2. **Decide: address or dismiss.**
-   - **Address**: make the code change. Run the relevant test/lint commands to verify. If the fix requires a git commit, do so now in the integration worktree.
+   - **Address**: make the code change. Run the relevant targeted test/lint commands for the reviewed files or directly affected tests. If the fix requires a git commit, do so now in the integration worktree.
    - **Dismiss**: write a short, concrete reason why the finding does not require action (e.g. "P3 style nit — diverges from team conventions; suppress on next Biome run", or "false-positive — the pattern is intentional because X").
 3. **Prioritise by severity**: P0/P1 must be addressed or have a compelling dismissal. P2/P3 may be dismissed with less justification.
 
@@ -48,7 +48,8 @@ Your terminal JSON must include:
 ## Constraints
 
 - **One pass only** — you will not get a second Codex review after this turn.
-- **No regressions** — run the test command before finishing. If tests break, fix them.
+- **Targeted verification** — this is a single repair turn before QA. Run the smallest tests that cover the finding and any touched test file, plus lint/typecheck when available. Do not run the whole project test suite unless the review finding specifically requires broad integration proof; QA owns full-suite regression verification after this turn.
+- **No regressions** — if targeted tests, lint, or typecheck break, fix them before finishing.
 - **No new features** — only address the reported findings. Do not expand scope.
 - **Inline prompts fail review** — this prompt is loaded via `readPromptWithContext`, do not duplicate it in code.
 

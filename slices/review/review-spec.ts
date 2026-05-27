@@ -33,9 +33,9 @@ export interface ReviewWaveResult {
   parseFailureError?: string;
   /** True if any reviewer returned verdict: 'needs-human' — must escalate immediately. */
   anyNeedsHuman: boolean;
-  /** True if any reviewer returned verdict: 'needs-fix' — prevents convergence counting. */
+  /** True if any reviewer returned verdict: 'needs-fix' — routes to the repair workflow. */
   anyNeedsFix: boolean;
-  /** True when some reviewers approved and others returned needs-fix — escalate immediately. */
+  /** True when some reviewers approved and others returned needs-fix. */
   verdictsDiverge: boolean;
 }
 

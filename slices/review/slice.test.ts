@@ -1068,13 +1068,13 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
     ).toEqual(['slot A needs human', 'slot B approves']);
   });
 
-  // M19.20: configurable reviewer slots — divergent verdicts escalate immediately
+  // M19.20: configurable reviewer slots
   describe('configurable reviewer slots (M19.20)', () => {
     beforeEach(() => {
       mockReadProjectReviewSettings.mockReturnValue(null);
     });
 
-    it('escalates to factory:needs-human immediately when 1-claude + 1-codex reviewers return divergent verdicts (approved vs needs-fix)', async () => {
+    it('routes to factory:needs-fix when configured reviewers return actionable divergent verdicts (approved vs needs-fix)', async () => {
       const item = makeWorkItem();
       const source = makeMockSource({
         getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
@@ -1100,15 +1100,24 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       } satisfies AgentResult);
 
       const { runConvergentReviewWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
       await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
 
       expect(source.transitionState).toHaveBeenCalledWith(
         '42',
         'factory:needs-review',
-        'factory:needs-human',
+        'factory:needs-fix',
       );
-      // Must escalate after round 1 only (2 slot calls — no further rounds)
+      // Must send back after round 1 only (2 slot calls — no further rounds).
       expect(mockRun).toHaveBeenCalledTimes(2);
+      const completedEvents = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.filter(([event]) => event.kind === 'review.completed');
+      expect(completedEvents).toHaveLength(1);
+      expect(completedEvents[0]?.[0].payload).toMatchObject({
+        verdict: 'needs-fix',
+        findings: [{ severity: 'minor', description: 'style nit' }],
+      });
     });
 
     it('uses the review skill runtime provider for reviewer slots', async () => {

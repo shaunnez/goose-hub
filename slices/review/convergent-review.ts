@@ -17,6 +17,7 @@ import {
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
+import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '@goose-hub/core/retry/retry-counter.js';
 import { classifyTopic } from '@goose-hub/core/review/topic-classifier.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ReviewOutputSchema } from '@goose-hub/skills/review/schema.js';
@@ -68,7 +69,8 @@ function getQaVerdict(
  * unconstrained on claude if not configured. Each spawn routes through
  * assembleSpawnContext for holdout boundary enforcement (rule 1, ADR 0014).
  * No advisor (rule 20). Any slot parse failure → returns parseFailure: true.
- * Divergent verdicts (approved + needs-fix) → verdictsDiverge: true.
+ * Divergent verdicts (approved + needs-fix) still preserve verdictsDiverge
+ * metadata, but actionable needs-fix verdicts route to the repair workflow.
  */
 export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<ReviewWaveResult> {
   const {
@@ -272,7 +274,8 @@ export async function runConvergentReviewWorkflow(
     const prDiff = await stateSource.getPrDiff(workItem.externalId);
     const changedFilePaths = extractChangedFilePaths(prDiff);
     const { minRounds } = classifyTopic(changedFilePaths);
-    const qaResult = getQaVerdict(eventStore.replay({ workItemId: workItem.id }));
+    const priorEvents = eventStore.replay({ workItemId: workItem.id });
+    const qaResult = getQaVerdict(priorEvents);
     const acceptanceContract = resolveAcceptanceContract({
       projectId: projectSlug,
       workItemId: workItem.id,
@@ -422,27 +425,52 @@ export async function runConvergentReviewWorkflow(
         return;
       }
 
-      // Divergent verdicts (approved + needs-fix) — immediate escalation (M19.20).
-      if (waveResult.verdictsDiverge) {
+      const allReviewersNeedFix =
+        waveResult.reviewerOutputs.length > 0 &&
+        waveResult.reviewerOutputs.every((reviewer) => reviewer.parsed.verdict === 'needs-fix');
+
+      // Configured reviewer slots can deliberately mix constrained and
+      // adversarial prompts. If that split yields approved + needs-fix, or all
+      // reviewers request fixes, the finding is actionable repair input rather
+      // than a human-arbitration problem.
+      if (waveResult.verdictsDiverge || allReviewersNeedFix) {
         const runId = crypto.randomUUID();
-        eventStore.appendEvent({
-          projectId: projectSlug,
-          workItemId: workItem.id,
-          kind: 'review.escalated',
-          payload: { ...reviewWorkflowPayload, reason: 'divergent-verdicts', round },
-          runId,
-        });
+        const allFindings = waveResult.reviewerOutputs.flatMap((r) => r.parsed.findings);
+        const criteriaChecks = waveResult.reviewerOutputs.flatMap((r) => r.parsed.criteriaChecks);
+        const needsEscalation = shouldEscalateReview(priorEvents);
+        const nextState = needsEscalation ? 'factory:needs-human' : 'factory:needs-fix';
+        const reason = waveResult.verdictsDiverge
+          ? 'divergent-verdicts-actionable-needs-fix'
+          : 'reviewer-needs-fix';
+        const confidence =
+          waveResult.reviewerOutputs.length > 0
+            ? Math.min(...waveResult.reviewerOutputs.map((r) => r.parsed.confidence))
+            : 0;
+
+        if (needsEscalation) {
+          eventStore.appendEvent({
+            projectId: projectSlug,
+            workItemId: workItem.id,
+            kind: 'review.escalated',
+            payload: { ...reviewWorkflowPayload, reason, round, targetState: nextState },
+            runId,
+          });
+        }
         eventStore.appendEvent({
           projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'review.completed',
           payload: {
             ...reviewWorkflowPayload,
-            verdict: 'needs-human',
-            confidence: 0,
-            criteriaChecks: [],
-            findings: waveResult.reviewerOutputs.flatMap((r) => r.parsed.findings),
-            escalationReason: `Round ${round} reviewers returned divergent verdicts — human arbitration required`,
+            verdict: needsEscalation ? 'needs-human' : 'needs-fix',
+            confidence,
+            criteriaChecks,
+            findings: allFindings,
+            ...(needsEscalation
+              ? {
+                  escalationReason: `Review requested fixes after ${DEFAULT_MAX_RETRIES} prior repair cycle(s); human arbitration required`,
+                }
+              : {}),
             ...pipelineRunIdPayload,
           },
           runId,
@@ -451,21 +479,21 @@ export async function runConvergentReviewWorkflow(
           workItem.externalId,
           buildAgentComment(
             'Review',
-            'Needs Human',
-            `Round ${round} reviewers diverged (approved vs needs-fix) — human arbitration required`,
-            [],
+            needsEscalation ? 'Needs Human' : 'Needs Fix',
+            needsEscalation
+              ? `Round ${round} requested fixes after the retry cap — human arbitration required`
+              : `Round ${round} reviewer feedback requested fixes — sending back to repair`,
+            allFindings
+              .slice(0, 5)
+              .map((finding) => `[${finding.severity}] ${finding.description}`),
           ),
         );
-        await stateSource.transitionState(
-          workItem.externalId,
-          'factory:needs-review',
-          'factory:needs-human',
-        );
+        await stateSource.transitionState(workItem.externalId, 'factory:needs-review', nextState);
         emitStateTransitionEvent({
           projectId: projectSlug,
           workItemId: workItem.id,
           from: 'factory:needs-review',
-          to: 'factory:needs-human',
+          to: nextState,
           by: 'convergent-review',
           runId,
           extraPayload: reviewWorkflowPayload,
@@ -473,7 +501,6 @@ export async function runConvergentReviewWorkflow(
         return;
       }
 
-      // P1 fix: needs-fix verdict (even without blockers) prevents convergence counting.
       if (waveResult.newCriticalFindings.length === 0 && !waveResult.anyNeedsFix) {
         consecutiveZeroCriticalRounds++;
       } else {
