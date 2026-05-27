@@ -869,6 +869,13 @@ function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs
   const verdict = (completed?.payload as { verdict?: string } | null)?.verdict;
   if (verdict === 'needs-human') return 'needs-human';
   if (verdict === 'approved' || verdict === 'needs-fix') return 'completed';
+  if (
+    events.some(
+      (event) => event.kind === 'grill.question-posted' || event.kind === 'grill.completed',
+    )
+  ) {
+    return 'completed';
+  }
   return 'live';
 }
 
