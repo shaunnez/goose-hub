@@ -58,6 +58,14 @@ describe('ReviewGroupWrapper', () => {
         kind: 'event',
         event: makeEvent('state.transitioned', {
           reviewWorkflowRunId,
+          from: 'factory:gate-pending',
+          to: 'factory:grilling',
+        }),
+      },
+      {
+        kind: 'event',
+        event: makeEvent('state.transitioned', {
+          reviewWorkflowRunId,
           to: 'factory:prd-drafting',
         }),
       },
