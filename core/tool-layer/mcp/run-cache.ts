@@ -360,7 +360,9 @@ export function clearTestFailureCounter(runId: string, canonicalPath: string | n
   const key = normalizeTestPathKey(canonicalPath);
   const runMap = testRetryCounters.get(runId);
   if (runMap == null) return;
-  runMap.delete(key);
+  for (const existingKey of [...runMap.keys()]) {
+    if (testRetryKeysOverlap(existingKey, key)) runMap.delete(existingKey);
+  }
   if (runMap.size === 0) testRetryCounters.delete(runId);
 }
 
@@ -374,7 +376,13 @@ export function clearTestFailureSignatureCounters(runId: string): void {
  */
 export function consecutiveTestFailures(runId: string, canonicalPath: string | null): number {
   const key = normalizeTestPathKey(canonicalPath);
-  return testRetryCounters.get(runId)?.get(key) ?? 0;
+  const runMap = testRetryCounters.get(runId);
+  if (runMap == null) return 0;
+  let max = 0;
+  for (const [existingKey, count] of runMap) {
+    if (testRetryKeysOverlap(existingKey, key)) max = Math.max(max, count);
+  }
+  return max;
 }
 
 export function recordDuplicateToolCall(
@@ -447,6 +455,11 @@ function pathsOverlap(left: string, right: string): boolean {
   const b = normalizePathForOverlap(right);
   if (a === '.' || b === '.') return true;
   return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+}
+
+function testRetryKeysOverlap(left: string, right: string): boolean {
+  if (left === TEST_RETRY_ALL_KEY || right === TEST_RETRY_ALL_KEY) return true;
+  return pathsOverlap(left, right);
 }
 
 function cloneResult<T>(result: T): T {

@@ -267,6 +267,47 @@ describe('runTestsTool retry cap', () => {
     expect(other.status).toBe('failed');
   });
 
+  it('blocks parent target rotation after a child test path hits the cap', async () => {
+    mockFailed();
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    mockRunCommand.mockClear();
+    const parent = await runTestsTool(ctx, { path: 'src' });
+
+    expect(parent.status).toBe('failed');
+    expect(mockRunCommand).not.toHaveBeenCalled();
+    expect(parent.stderr).toMatch(/retry cap|consecutive failures/i);
+  });
+
+  it('clears child counters after a covering parent test target passes', async () => {
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'failed',
+      exitCode: 1,
+      stdout: 'FAIL',
+      stderr: '',
+      durationMs: 12,
+      truncated: false,
+    });
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'ok',
+      exitCode: 0,
+      stdout: 'PASS',
+      stderr: '',
+      durationMs: 12,
+      truncated: false,
+    });
+
+    await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    await runTestsTool(ctx, { path: 'src' });
+
+    mockRunCommand.mockClear();
+    mockFailed();
+    const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    expect(mockRunCommand).toHaveBeenCalledOnce();
+    expect(next.status).toBe('failed');
+  });
+
   it('blocks repeated failure signatures across different test paths', async () => {
     writeFileSync(join(workspace, 'apps/web/src/bar.test.ts'), 'test("y", () => {});\n');
     const vitestJson = (file: string) =>
