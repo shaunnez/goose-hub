@@ -3,12 +3,13 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as schema from '../db/schema.js';
 import { LocalDbWorkItemRepository } from './local-db-repository.js';
 import { LocalDbStateSource } from './local-db.js';
+import type { LocalDbPrDiffAdapters } from './local-db.js';
 
-function makeSource() {
+function makeSource(prDiffAdapters?: LocalDbPrDiffAdapters) {
   const sqlite = new Database(':memory:');
   const db = drizzle(sqlite, { schema });
   const migrationsFolder = path.join(
@@ -25,7 +26,7 @@ function makeSource() {
   return {
     sqlite,
     repository,
-    source: new LocalDbStateSource('proj', 'owner/repo', repository),
+    source: new LocalDbStateSource('proj', 'owner/repo', repository, undefined, prDiffAdapters),
   };
 }
 
@@ -33,11 +34,12 @@ describe('LocalDbStateSource', () => {
   const handles: Database.Database[] = [];
 
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const handle of handles.splice(0)) handle.close();
   });
 
-  function trackedSource(): ReturnType<typeof makeSource> {
-    const result = makeSource();
+  function trackedSource(prDiffAdapters?: LocalDbPrDiffAdapters): ReturnType<typeof makeSource> {
+    const result = makeSource(prDiffAdapters);
     handles.push(result.sqlite);
     return result;
   }
@@ -195,7 +197,69 @@ describe('LocalDbStateSource', () => {
     expect(await source.listLabels(created.id)).not.toContain('custom:manual');
   });
 
-  it('uses no-op compatibility methods until local pubsub and PR diff linking are implemented', async () => {
+  it('routes GitHub PR diff refs through the GitHub diff adapter', async () => {
+    const githubDiff = vi.fn(async () => 'diff --git a/src/github.ts b/src/github.ts');
+    const bitbucketDiff = vi.fn(async () => 'unexpected');
+    const { source, repository } = trackedSource({
+      github: { getPullRequestDiff: githubDiff },
+      bitbucket: { getPullRequestDiff: bitbucketDiff },
+    });
+    const created = await source.createIssue({ title: 'GitHub-linked work', body: '' });
+    repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: created.id,
+      provider: 'github',
+      kind: 'pull_request',
+      repoRef: 'owner/repo',
+      externalId: '9',
+      url: 'https://github.com/owner/repo/pull/9',
+    });
+
+    await expect(source.getPrDiff(created.id)).resolves.toBe(
+      'diff --git a/src/github.ts b/src/github.ts',
+    );
+    expect(githubDiff).toHaveBeenCalledWith({ repoRef: 'owner/repo', pullRequestId: '9' });
+    expect(bitbucketDiff).not.toHaveBeenCalled();
+  });
+
+  it('routes Bitbucket PR diff refs through the Bitbucket adapter without driving local state', async () => {
+    const githubDiff = vi.fn(async () => 'unexpected');
+    const bitbucketDiff = vi.fn(async () => 'diff --git a/src/bitbucket.ts b/src/bitbucket.ts');
+    const { source, repository } = trackedSource({
+      github: { getPullRequestDiff: githubDiff },
+      bitbucket: { getPullRequestDiff: bitbucketDiff },
+    });
+    const created = await source.createIssue({ title: 'Bitbucket-linked work', body: '' });
+    repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: created.id,
+      provider: 'bitbucket',
+      kind: 'pull_request',
+      repoRef: 'workspace/repo',
+      externalId: '45',
+      url: 'https://bitbucket.org/workspace/repo/pull-requests/45',
+      metadata: { state: 'MERGED' },
+    });
+
+    await expect(source.getPrDiff(created.id)).resolves.toBe(
+      'diff --git a/src/bitbucket.ts b/src/bitbucket.ts',
+    );
+    expect(bitbucketDiff).toHaveBeenCalledWith({ repoRef: 'workspace/repo', pullRequestId: '45' });
+    expect(githubDiff).not.toHaveBeenCalled();
+    await expect(source.getItem(created.id)).resolves.toMatchObject({
+      state: 'factory:triaging',
+      externalRefs: [
+        expect.objectContaining({
+          provider: 'bitbucket',
+          kind: 'pull_request',
+          metadata: { state: 'MERGED' },
+        }),
+      ],
+    });
+    expect(repository.listStateEvents('proj', created.id)).toHaveLength(1);
+  });
+
+  it('keeps attach, watch, and missing PR diff methods as compatibility no-ops', async () => {
     const { source } = trackedSource();
     const created = await source.createIssue({ title: 'A', body: '' });
     const subscription = await source.watchForUpdates(() => {});

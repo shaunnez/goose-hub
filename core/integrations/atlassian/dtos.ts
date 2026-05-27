@@ -103,6 +103,17 @@ export const BitbucketPullRequestDetailSchema = AtlassianDetailSchema.extend({
   resourceKind: z.literal('pull_request'),
 }).strict();
 
+export const BitbucketPullRequestDiffSchema = z
+  .object({
+    provider: z.literal('bitbucket'),
+    resourceKind: z.literal('pull_request'),
+    repoRef: z.string().min(1),
+    externalId: z.string().min(1),
+    diff: z.string(),
+    url: z.string().url().optional(),
+  })
+  .strict();
+
 export type AtlassianProvider = z.infer<typeof AtlassianProviderSchema>;
 export type AtlassianTier = z.infer<typeof AtlassianTierSchema>;
 export type AtlassianArtifactRef = z.infer<typeof AtlassianArtifactRefSchema>;
@@ -116,3 +127,4 @@ export type JiraIssueDetailDto = z.infer<typeof JiraIssueDetailSchema>;
 export type BitbucketPullRequestHeadlineDto = z.infer<typeof BitbucketPullRequestHeadlineSchema>;
 export type BitbucketPullRequestCardDto = z.infer<typeof BitbucketPullRequestCardSchema>;
 export type BitbucketPullRequestDetailDto = z.infer<typeof BitbucketPullRequestDetailSchema>;
+export type BitbucketPullRequestDiffDto = z.infer<typeof BitbucketPullRequestDiffSchema>;

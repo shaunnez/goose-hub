@@ -1,5 +1,6 @@
 import type {
   BitbucketPullRequestDetailDto,
+  BitbucketPullRequestDiffDto,
   JiraIssueCardDto,
   JiraIssueDetailDto,
 } from './dtos.js';
@@ -61,4 +62,9 @@ export interface BitbucketProviderAdapter {
   searchPullRequests(
     input: BitbucketPullRequestSearchRequest,
   ): Promise<ProviderResult<AtlassianSearchPage<BitbucketPullRequestDetailDto>>>;
+  getPullRequestDiff(input: {
+    workspace: string;
+    repo: string;
+    pullRequestId: string;
+  }): Promise<ProviderResult<BitbucketPullRequestDiffDto>>;
 }

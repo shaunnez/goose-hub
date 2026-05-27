@@ -1,3 +1,4 @@
+import { createBitbucketRestAdapterFromEnv } from '../integrations/bitbucket/rest.js';
 import { mirrorGithubLabels } from '../integrations/github/label-mirror.js';
 import type { StateName } from '../state-machine/states.js';
 import { STATES } from '../state-machine/states.js';
@@ -24,6 +25,19 @@ const PRIORITIES = new Set<Priority>(['critical', 'high', 'medium', 'low']);
 const SCHEDULES = new Set<Schedule>(['current', 'next', 'later', 'blocked-by']);
 const TYPES = new Set<WorkItemType>(['feature', 'bug', 'chore', 'research']);
 const STATE_LABELS = new Set<string>(STATES);
+
+export interface LocalDbGithubPrDiffAdapter {
+  getPullRequestDiff(input: { repoRef: string; pullRequestId: string }): Promise<string>;
+}
+
+export interface LocalDbBitbucketPrDiffAdapter {
+  getPullRequestDiff(input: { repoRef: string; pullRequestId: string }): Promise<string>;
+}
+
+export interface LocalDbPrDiffAdapters {
+  github?: LocalDbGithubPrDiffAdapter;
+  bitbucket?: LocalDbBitbucketPrDiffAdapter;
+}
 
 function parseStateLabel(label: string): StateName | null {
   return STATE_LABELS.has(label) ? (label as StateName) : null;
@@ -75,6 +89,7 @@ export class LocalDbStateSource implements StateSource {
     readonly repoRef: string,
     private readonly repository = new LocalDbWorkItemRepository(),
     private readonly integrations?: LocalDbSourceConfig['integrations'],
+    private readonly prDiffAdapters: LocalDbPrDiffAdapters = defaultPrDiffAdapters(),
   ) {}
 
   private toWorkItem(row: LocalDbWorkItemRow): WorkItem {
@@ -289,23 +304,26 @@ export class LocalDbStateSource implements StateSource {
     const item = this.repository.requireWorkItem(this.projectId, itemId);
     const prRefs = this.repository
       .listExternalRefs(this.projectId, item.id)
-      .filter((ref) => ref.provider === 'github' && ref.kind === 'pull_request');
+      .filter((ref) => ref.kind === 'pull_request');
     const ref = prRefs[prRefs.length - 1];
     if (ref == null || ref.repoRef == null) return '';
-    const token = process.env.GITHUB_TOKEN ?? '';
-    if (token.length === 0) return '';
-    const response = await fetch(
-      `https://api.github.com/repos/${ref.repoRef}/pulls/${ref.externalId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github.v3.diff',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-      },
-    );
-    if (!response.ok) return '';
-    return response.text();
+    if (ref.provider === 'github') {
+      return (
+        (await this.prDiffAdapters.github?.getPullRequestDiff({
+          repoRef: ref.repoRef,
+          pullRequestId: ref.externalId,
+        })) ?? ''
+      );
+    }
+    if (ref.provider === 'bitbucket') {
+      return (
+        (await this.prDiffAdapters.bitbucket?.getPullRequestDiff({
+          repoRef: ref.repoRef,
+          pullRequestId: ref.externalId,
+        })) ?? ''
+      );
+    }
+    return '';
   }
 
   async watchForUpdates(_callback: (event: SourceEvent) => void): Promise<Subscription> {
@@ -321,4 +339,41 @@ export class LocalDbStateSource implements StateSource {
       repository: this.repository,
     });
   }
+}
+
+function defaultPrDiffAdapters(): LocalDbPrDiffAdapters {
+  return {
+    github: {
+      async getPullRequestDiff(input) {
+        const token = process.env.GITHUB_TOKEN ?? '';
+        if (token.length === 0) return '';
+        const response = await fetch(
+          `https://api.github.com/repos/${input.repoRef}/pulls/${input.pullRequestId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github.v3.diff',
+              'X-GitHub-Api-Version': '2022-11-28',
+            },
+          },
+        );
+        if (!response.ok) return '';
+        return response.text();
+      },
+    },
+    bitbucket: {
+      async getPullRequestDiff(input) {
+        const [workspace, ...repoParts] = input.repoRef.split('/');
+        const repo = repoParts.join('/');
+        if (workspace == null || workspace.length === 0 || repo.length === 0) return '';
+        const adapter = createBitbucketRestAdapterFromEnv();
+        const result = await adapter.getPullRequestDiff({
+          workspace,
+          repo,
+          pullRequestId: input.pullRequestId,
+        });
+        return result.ok ? result.data.diff : '';
+      },
+    },
+  };
 }
