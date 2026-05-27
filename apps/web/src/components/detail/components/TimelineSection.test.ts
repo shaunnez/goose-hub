@@ -562,6 +562,50 @@ describe('groupEvents — run-group metadata', () => {
     }
   });
 
+  it('prefers an answered grill transition over an earlier grill question-posted endedAt', () => {
+    const startedAt = '2026-05-27T10:00:00.000Z';
+    const questionPostedAt = '2026-05-27T10:03:00.000Z';
+    const repliedAt = '2026-05-27T10:05:00.000Z';
+    const events: AgentEventDto[] = [
+      {
+        ...makeRunEvent(1, 'discover-run', 'agent.run-started', 'grill-me'),
+        payload: { skill: 'grill-me', discoverSessionId: 'discover-session-1' },
+        createdAt: startedAt,
+      },
+      {
+        ...makeRunEvent(2, 'discover-run', 'grill.question-posted'),
+        payload: {
+          displaySkill: 'grill-me',
+          discoverSessionId: 'discover-session-1',
+          question: 'What should happen next?',
+        },
+        createdAt: questionPostedAt,
+      },
+      {
+        ...makeRunEvent(3, 'discover-run', 'state.transitioned'),
+        payload: {
+          discoverSessionId: 'discover-session-1',
+          from: 'factory:gate-pending',
+          to: 'factory:grilling',
+        },
+        createdAt: repliedAt,
+      },
+    ];
+
+    const result = groupEvents(events);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('phase-group');
+    if (result[0].kind === 'phase-group') {
+      expect(result[0].items).toHaveLength(1);
+      expect(result[0].items[0].kind).toBe('run-group');
+      if (result[0].items[0].kind === 'run-group') {
+        expect(result[0].items[0].startedAt).toBe(startedAt);
+        expect(result[0].items[0].endedAt).toBe(repliedAt);
+      }
+    }
+  });
+
   it('infers fix-feedback display skill from the completion marker for legacy runs', () => {
     const events: AgentEventDto[] = [
       makeRunEvent(3, 'run-fix', 'agent.fix-feedback-complete'),

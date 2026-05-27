@@ -135,8 +135,8 @@ export function extractRunMeta(items: RenderItem[]): {
       ev.kind === 'grill.completed' ||
       isAnsweredGrillTransitionEvent(ev)
     ) {
-      // grill-me runs don't emit agent.run-completed - these are the terminal events
-      if (endedAt == null) endedAt = ev.createdAt;
+      // grill-me runs don't emit agent.run-completed; prefer the latest terminal marker.
+      if (endedAt == null || ms > new Date(endedAt).getTime()) endedAt = ev.createdAt;
     } else if (ev.kind === 'decompose.completed') {
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'parallel-implement.iteration-started') {
