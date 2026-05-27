@@ -13,8 +13,8 @@ import { timeAgo } from '@/lib/utils';
 import { useActiveProject } from '@/state/active-project';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 // import { Filter, RefreshCw } from 'lucide-react';
-import { Search } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import {
   CONFIDENCE_NUM,
@@ -41,6 +41,55 @@ interface InvestigationSectionProps {
   itemState?: string;
 }
 
+export type InvestigationAccordionKey =
+  | 'findings'
+  | 'acceptance-contract'
+  | 'engineering-spec'
+  | 'open-questions'
+  | 'investigation-trail';
+
+export const investigationAccordionDefaults: Record<InvestigationAccordionKey, boolean> = {
+  findings: true,
+  'acceptance-contract': false,
+  'engineering-spec': false,
+  'open-questions': false,
+  'investigation-trail': false,
+};
+
+function InvestigationAccordion({
+  title,
+  summary,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  summary?: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-[color:var(--accent)]/20 bg-bg-elev overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-bg-elev-2 text-left cursor-pointer"
+      >
+        <div className="min-w-0">
+          <div className="text-[10.5px] uppercase tracking-wider text-fg-2">{title}</div>
+          {summary != null && <div className="text-[11px] text-fg-4 truncate">{summary}</div>}
+        </div>
+        <span className="shrink-0 text-fg-4">
+          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </span>
+      </button>
+      {open && <div className="px-4 py-4 border-t border-line">{children}</div>}
+    </div>
+  );
+}
+
 export function InvestigationSection({
   projectSlug,
   id,
@@ -58,6 +107,9 @@ export function InvestigationSection({
   const [notes, setNotes] = useState('');
   const [proceeding, setProceeding] = useState(false);
   const [proceedError, setProceedError] = useState<string | null>(null);
+  const [accordionOpen, setAccordionOpen] = useState<Record<InvestigationAccordionKey, boolean>>(
+    () => ({ ...investigationAccordionDefaults }),
+  );
 
   const { data: events = [], isLoading } = useQuery<AgentEventDto[]>({
     queryKey: ['events', projectSlug, id],
@@ -160,6 +212,12 @@ export function InvestigationSection({
       : investigate.confidence === 'medium'
         ? 'plausible'
         : 'weak';
+  const hasAcceptanceContract =
+    acceptanceContract != null && acceptanceContract.criteria.length > 0;
+
+  function toggleAccordion(key: InvestigationAccordionKey) {
+    setAccordionOpen((current) => ({ ...current, [key]: !current[key] }));
+  }
 
   return (
     <div data-testid="investigation-section" className="px-8 py-6 flex flex-col gap-5">
@@ -230,23 +288,30 @@ export function InvestigationSection({
         <StatCard label="Conf" value={investigate.confidence} sub={confSub} />
       </div>
 
-      {/* Root-cause finding card */}
+      {/* Findings */}
       {investigate.findings.trim().length > 0 && (
-        <FindingCard
-          severity={investigate.confidence}
-          title="Root cause hypothesis"
-          body={
-            <div
-              data-testid="findings-content"
-              className="prose prose-sm prose-invert max-w-none text-[13px] text-fg-2 [&_p]:mb-2 [&_ul]:mb-2 [&_li]:ml-4 [&_li]:list-disc [&_code]:font-mono [&_code]:text-[12px]"
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml
-              dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(investigate.findings) }}
-            />
-          }
-          conf={conf}
-          personaInitials={initials}
-          personaName={personaLabel}
-        />
+        <InvestigationAccordion
+          title="Findings"
+          summary="Root cause hypothesis"
+          open={accordionOpen.findings}
+          onToggle={() => toggleAccordion('findings')}
+        >
+          <FindingCard
+            severity={investigate.confidence}
+            title="Root cause hypothesis"
+            body={
+              <div
+                data-testid="findings-content"
+                className="prose prose-sm prose-invert max-w-none text-[13px] text-fg-2 [&_p]:mb-2 [&_ul]:mb-2 [&_li]:ml-4 [&_li]:list-disc [&_code]:font-mono [&_code]:text-[12px]"
+                // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml
+                dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(investigate.findings) }}
+              />
+            }
+            conf={conf}
+            personaInitials={initials}
+            personaName={personaLabel}
+          />
+        </InvestigationAccordion>
       )}
 
       {/* Key files as long finding cards */}
@@ -271,17 +336,28 @@ export function InvestigationSection({
         </div>
       )}
 
-      <AcceptanceContractDetails contract={acceptanceContract} />
+      {hasAcceptanceContract && (
+        <InvestigationAccordion
+          title="Acceptance Criteria"
+          summary={`${acceptanceContract.criteria.length} AC`}
+          open={accordionOpen['acceptance-contract']}
+          onToggle={() => toggleAccordion('acceptance-contract')}
+        >
+          <AcceptanceContractDetails contract={acceptanceContract} />
+        </InvestigationAccordion>
+      )}
 
       {/* Engineering spec */}
       {spec != null && <SpecDetails spec={spec} itemState={itemState} />}
 
       {/* Open questions */}
       {investigate.openQuestions.length > 0 && (
-        <div className="rounded-lg border border-line bg-bg-elev px-4 py-4">
-          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-2">
-            Open questions
-          </div>
+        <InvestigationAccordion
+          title="Open Questions"
+          summary={`${investigate.openQuestions.length} unresolved`}
+          open={accordionOpen['open-questions']}
+          onToggle={() => toggleAccordion('open-questions')}
+        >
           <ul data-testid="open-questions-list" className="space-y-1 list-disc list-inside">
             {investigate.openQuestions.map((q) => (
               <li key={q} className="text-[12.5px] text-fg-2">
@@ -289,19 +365,18 @@ export function InvestigationSection({
               </li>
             ))}
           </ul>
-        </div>
+        </InvestigationAccordion>
       )}
 
       {/* Investigation trail */}
       {investigate.decisionSummaries.length > 0 && (
-        <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
-          <div className="px-4 py-3 border-b border-line bg-bg-elev-2 flex items-baseline gap-2">
-            <div className="text-[10.5px] uppercase tracking-wider text-fg-2">
-              Investigation trail
-            </div>
-            <div className="text-[12px] text-fg-3">What was looked at, in order</div>
-          </div>
-          <ol data-testid="investigation-trail" className="px-4 py-3 flex flex-col gap-2">
+        <InvestigationAccordion
+          title="Investigation Trail"
+          summary="What was looked at, in order"
+          open={accordionOpen['investigation-trail']}
+          onToggle={() => toggleAccordion('investigation-trail')}
+        >
+          <ol data-testid="investigation-trail" className="flex flex-col gap-2">
             {investigate.decisionSummaries.map((s, i) => (
               <li
                 // biome-ignore lint/suspicious/noArrayIndexKey: trail is append-only and indices are stable for a given event payload
@@ -333,7 +408,7 @@ export function InvestigationSection({
               </li>
             ))}
           </ol>
-        </div>
+        </InvestigationAccordion>
       )}
 
       {/* Human review notes posted via the investigation gate */}

@@ -1,9 +1,8 @@
 /** @vitest-environment jsdom */
-import type { AgentEventDto, EngineeringSpecDto } from '@/lib/types';
+import type { AcceptanceContractDto, AgentEventDto, EngineeringSpecDto } from '@/lib/types';
 import { ActiveProjectProvider } from '@/state/active-project';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
-import { cleanup } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InvestigationSection } from './InvestigationSection';
 
@@ -76,6 +75,25 @@ const ENGINEERING_SPEC: EngineeringSpecDto = {
   riskRegister: [],
 };
 
+const ACCEPTANCE_CONTRACT: AcceptanceContractDto = {
+  source: 'engineering-spec',
+  criteria: [
+    {
+      id: 'AC-1',
+      statement: 'Users can log in.',
+      executableChecks: [
+        {
+          id: 'AC-1-check-1',
+          command:
+            'pnpm vitest run apps/web/src/components/detail/components/InvestigationSection.test.tsx',
+          expectedExitCodes: [0],
+          kind: 'unit',
+        },
+      ],
+    },
+  ],
+};
+
 function investigationEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   return {
     ...INVESTIGATION_EVENT,
@@ -101,10 +119,17 @@ function toolCallEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   };
 }
 
-function renderSection(events: AgentEventDto[] = [], spec?: EngineeringSpecDto | null) {
+function renderSection(
+  events: AgentEventDto[] = [],
+  spec?: EngineeringSpecDto | null,
+  acceptanceContract?: AcceptanceContractDto | null,
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['events', 'test-proj', '42'], events);
   if (spec !== undefined) qc.setQueryData(['spec', 'test-proj', '42'], spec);
+  if (acceptanceContract !== undefined) {
+    qc.setQueryData(['acceptance-contract', 'test-proj', '42'], acceptanceContract);
+  }
   render(
     <QueryClientProvider client={qc}>
       <ActiveProjectProvider initialSlug="test-proj">
@@ -133,6 +158,38 @@ describe('InvestigationSection', () => {
     expect(screen.getByText('1 work package · 1 AC')).toBeTruthy();
   });
 
+  it('renders investigation subsections as independent accordions with expected default states', () => {
+    renderSection([INVESTIGATION_EVENT], ENGINEERING_SPEC, ACCEPTANCE_CONTRACT);
+
+    expect(screen.getByTestId('findings-content')).toBeTruthy();
+    expect(screen.queryByText('Users can log in.')).toBeNull();
+    expect(screen.queryByText('Build the authentication flow with token refresh.')).toBeNull();
+    expect(screen.queryByText('Does this affect the mobile app?')).toBeNull();
+    expect(screen.queryByText('Reviewed auth logs')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /acceptance criteria/i }));
+    expect(screen.getByText('Users can log in.')).toBeTruthy();
+    expect(screen.queryByText('Build the authentication flow with token refresh.')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /engineering spec/i }));
+    expect(screen.getByText('Build the authentication flow with token refresh.')).toBeTruthy();
+    expect(screen.queryByText('Does this affect the mobile app?')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /open questions/i }));
+    expect(screen.getByText('Does this affect the mobile app?')).toBeTruthy();
+    expect(screen.queryByText('Reviewed auth logs')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /investigation trail/i }));
+    expect(screen.getByText('Reviewed auth logs')).toBeTruthy();
+    expect(screen.getByTestId('findings-content')).toBeTruthy();
+  });
+
+  it('does not render an empty acceptance criteria accordion', () => {
+    renderSection([INVESTIGATION_EVENT], ENGINEERING_SPEC, { source: 'issue-body', criteria: [] });
+
+    expect(screen.queryByRole('button', { name: /acceptance criteria/i })).toBeNull();
+  });
+
   it('displays the correct confidence badge for high confidence', () => {
     renderSection([INVESTIGATION_EVENT]);
     const badge = screen.getByTestId('confidence-badge');
@@ -148,8 +205,9 @@ describe('InvestigationSection', () => {
     expect(screen.getByText('src/auth/session.ts')).toBeTruthy();
   });
 
-  it('renders open questions list', () => {
+  it('renders open questions list after expanding the accordion', () => {
     renderSection([INVESTIGATION_EVENT]);
+    fireEvent.click(screen.getByRole('button', { name: /open questions/i }));
     const questionsList = screen.getByTestId('open-questions-list');
     expect(questionsList).toBeTruthy();
     expect(screen.getByText('Does this affect the mobile app?')).toBeTruthy();
