@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { preparePrDiffContext } from '@goose-hub/core/agent-runtime/dev-review-advisor.js';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
@@ -673,6 +674,25 @@ export async function runQaWorkflow(
     const deterministicTierResults = deterministic
       ? toAgentTierResults(deterministic.tierResults)
       : undefined;
+    const preparedDiff = preparePrDiffContext({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      runId,
+      prDiff,
+    });
+    if (preparedDiff.disclosure != null) {
+      eventStore.appendEvent({
+        projectId: projectSlug,
+        workItemId: workItem.id,
+        kind: 'agent.disclosure',
+        payload: {
+          ...preparedDiff.disclosure,
+          skill: 'qa',
+          ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
+        },
+        runId,
+      });
+    }
     const prDiffWithContext = buildPrDiffWithContext(prDiff);
 
     const qaResult = await runtime.run({
@@ -687,7 +707,7 @@ export async function runQaWorkflow(
           body: workItem.body,
           number: Number(workItem.externalId),
         },
-        prDiff,
+        prDiff: preparedDiff.prDiffContext,
         prDiffWithContext,
         projectCommands: {
           testCommand,

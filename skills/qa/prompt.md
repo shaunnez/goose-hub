@@ -32,7 +32,7 @@ If you find yourself reasoning about "why the developer did X", stop. Your job i
 The context contains a `<task>` block with:
 
 - `<workItem>` — JSON payload for the original GitHub issue, with `title`, `body`, and `number`
-- `<prDiff>` — complete git diff of the PR being reviewed
+- `<prDiff>` — PR diff context. Small diffs may be complete inline; large diffs may be a digest plus artifact reference. When the full diff is omitted, use the digest to orient and read changed files directly before making line-specific claims.
 - `<prDiffWithContext>` — diff-derived changed-file and hunk metadata. Use it to orient before reading `prDiff`; it contains no developer reasoning.
 - `<verificationSummary>` — compact workflow-owned verification packet:
   - `changedFiles` — changed paths, count, diff character count, and diff stat

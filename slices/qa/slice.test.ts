@@ -1087,6 +1087,62 @@ describe('runQaWorkflow', () => {
       expect(specUsed.contextAllowlist).not.toContain('devDecisionSummaries');
     });
 
+    it('stores large QA diffs as artifacts before spawning the holdout agent', async () => {
+      const workspaceDir = mkdtempSync(join(tmpdir(), 'qa-large-diff-'));
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: workspaceDir });
+        execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: workspaceDir });
+        execFileSync('git', ['config', 'user.name', 'Test User'], { cwd: workspaceDir });
+        writeFileSync(join(workspaceDir, 'large.txt'), 'base\n');
+        execFileSync('git', ['add', 'large.txt'], { cwd: workspaceDir });
+        execFileSync('git', ['commit', '-m', 'base'], { cwd: workspaceDir });
+        execFileSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], {
+          cwd: workspaceDir,
+        });
+        writeFileSync(join(workspaceDir, 'large.txt'), `${'changed line\n'.repeat(3_000)}`);
+        execFileSync('git', ['add', 'large.txt'], { cwd: workspaceDir });
+        execFileSync('git', ['commit', '-m', 'large change'], { cwd: workspaceDir });
+
+        const item = makeWorkItem();
+        const source = makeMockSource();
+        mockReplay.mockReturnValue([
+          {
+            id: 1,
+            kind: 'pr.opened',
+            payload: { worktreePath: workspaceDir, baseBranch: 'main' },
+            createdAt: '',
+          },
+        ]);
+        mockRun.mockResolvedValueOnce(makePassResult());
+
+        const { runQaWorkflow } = await import('./workflow.js');
+        const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+          runCommand: vi.fn(async (_cwd, command) => ({ command, status: 'passed' as const })),
+        });
+
+        const specUsed = mockRun.mock.calls[0][0] as {
+          context: { prDiff: string };
+        };
+        expect(specUsed.context.prDiff).toContain('Full PR diff omitted from prompt context');
+        expect(specUsed.context.prDiff).toContain('ArtifactRef:');
+        expect(specUsed.context.prDiff).not.toContain('changed line\n'.repeat(100));
+
+        expect(vi.mocked(eventStore.appendEvent)).toHaveBeenCalledWith(
+          expect.objectContaining({
+            kind: 'agent.disclosure',
+            payload: expect.objectContaining({
+              kind: 'diff_summarized',
+              skill: 'qa',
+            }),
+          }),
+        );
+      } finally {
+        rmSync(workspaceDir, { recursive: true, force: true });
+      }
+    });
+
     it('passes verificationSummary into QA context and allowlist', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();

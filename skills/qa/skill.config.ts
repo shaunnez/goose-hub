@@ -16,7 +16,7 @@ import { QaOutputSchema, TestRunSchema, VerificationSummarySchema } from './sche
  *
  *   <task>
  *     <workItem>{"title":"...","body":"...","number":123}</workItem>
- *     <prDiff>...</prDiff>
+ *     <prDiff>Diff context; large diffs may be a digest plus artifact reference.</prDiff>
  *     <prDiffWithContext>{"changedFiles":["..."],"hunks":[...]}</prDiffWithContext>
  *     <projectCommands>{"testCommand":"...","lintCommand":"...","e2eCommand":"..."}</projectCommands>
  *     <verificationSummary>{"changedFiles":...,"commands":...,"testRun":...}</verificationSummary>
@@ -30,7 +30,7 @@ export const QaContextSchema = z.object({
     body: z.string(),
     number: z.number(),
   }),
-  /** The git diff of the PR being reviewed — what was actually changed */
+  /** Diff context for the PR. Small diffs are inline; large diffs may be summarized with an artifact reference. */
   prDiff: z.string(),
   /** Diff-derived changed-file and hunk metadata. Contains no developer or investigation reasoning. */
   prDiffWithContext: z
