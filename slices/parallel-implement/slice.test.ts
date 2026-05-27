@@ -1689,6 +1689,107 @@ describe('implement-wp ownership gate', () => {
     expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(false);
   });
 
+  it('accepts a later parent-directory pass after an earlier exact-file retry failure', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add regression coverage',
+      filesWritten: [{ path: 'apps/web/src/foo.ts', reason: 'Implement behavior' }],
+      testsWritten: [{ path: 'apps/web/src/foo.test.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test apps/web/src/foo.test.ts',
+        paths: ['apps/web/src/foo.test.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const runId = 'run-wp-parent-after-exact-retry:wp:WP1:iter:1';
+    const editAfterFailures: AgentEvent = {
+      id: 1030,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'apply_patch',
+        status: 'ok',
+        tool_input: { fileCount: 1 },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const exactRetryFailure: AgentEvent = {
+      id: 1031,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_tests',
+        status: 'failed',
+        tool_input: {
+          path: 'apps/web/src/foo.test.ts',
+          paths: ['apps/web/src/foo.test.ts'],
+        },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const directoryPassAfterExactFailure: AgentEvent = {
+      id: 1032,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_tests',
+        status: 'ok',
+        tool_input: {
+          path: 'apps/web/src',
+          paths: ['apps/web/src'],
+        },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']),
+      iteration: 1,
+      runId: 'run-wp-parent-after-exact-retry',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockResolvedValue({
+          output,
+          events: [editAfterFailures, exactRetryFailure, directoryPassAfterExactFailure],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'built',
+      wp: expect.objectContaining({ id: 'WP1' }),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(false);
+  });
+
   it('accepts run_playwright_spec success for written Playwright specs', async () => {
     const scratchWorktree = makeTempRepo(['apps/web/e2e/chat.spec.ts']);
     const { fn: appendEvent, events } = makeAppendEvent();

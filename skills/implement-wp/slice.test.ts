@@ -210,4 +210,10 @@ describe('implement-wp prompt live decisions', () => {
     expect(prompt).toContain('interfaceContracts[].signature');
     expect(prompt).toContain('requiredExports');
   });
+
+  it('forbids re-running the same useful RED failure before an edit', () => {
+    expect(prompt).toContain('After a useful RED failure');
+    expect(prompt).toContain('edited a source or test file');
+    expect(prompt).toContain('Do not re-run');
+  });
 });

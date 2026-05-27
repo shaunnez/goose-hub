@@ -23,6 +23,8 @@ passes them as literal arguments. Use separate `bash` calls.
 **No command retry.** CWD is always the scratch worktree root. If a command returns output
 you've already seen, running it again produces identical output. Stop immediately, emit a
 diagnosis decision summary (`kind: BLOCKER`), set `confidence: low`, and return.
+After a useful RED failure, do not run the same failing test command again until you have
+edited a source or test file that can change that result.
 
 **Stay in your filesOwned.** Only write files listed in `<wp>.filesOwned`. Writing outside
 your list triggers the `wp-file-guard` PreToolUse hook denial and is a critical violation.
@@ -98,6 +100,9 @@ If a test harness/import/runtime failure appears, compare against an adjacent pa
 - Do not add or run Playwright e2e specs for ordinary product WPs. Use unit/component tests near the changed surface. E2e/browser validation belongs to QA/evidence workflows unless this WP is explicitly e2e/test-infra.
 - Run unit/component tests via `run_tests` (Claude name: `mcp__factory-tools__run_tests`; pass only the new test file paths). If this WP is explicitly e2e/test-infra and owns a Playwright spec under `apps/web/e2e/`, run it with `run_playwright_spec` instead; `run_tests` intentionally refuses Playwright e2e paths.
 - Confirm the new tests fail and pre-existing tests still pass.
+- Once the failure proves the missing behavior, move directly to implementation. Do not re-run
+  the same failing test command just to reconfirm RED; the harness will treat that as an
+  unproductive loop.
 - Emit: `[decision] RED: Wrote N failing tests for <surface>`
 
 ### 4 — Green — implementation

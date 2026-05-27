@@ -253,32 +253,6 @@ function latestRunTestsStatusForPath(events: AgentEvent[], path: string): string
   return null;
 }
 
-function latestExactRunTestsStatusForPathAfterLastEdit(
-  events: AgentEvent[],
-  path: string,
-): string | null {
-  let lastEditIndex = -1;
-  for (let i = 0; i < events.length; i++) {
-    const event = events[i];
-    if (toolCallStatus(event) !== 'ok') continue;
-    if (!isEditToolCall(event)) continue;
-    const editedPaths = toolCallPaths(event);
-    if (editedPaths.length === 0 || editedPaths.some((candidate) => pathsMatch(candidate, path))) {
-      lastEditIndex = i;
-    }
-  }
-
-  for (let i = events.length - 1; i > lastEditIndex; i--) {
-    const event = events[i];
-    if (toolCallName(event) !== 'run_tests') continue;
-    const paths = toolCallPaths(event);
-    if (paths.length === 0) continue;
-    if (!paths.some((candidate) => pathsExactlyMatch(candidate, path))) continue;
-    return toolCallStatus(event);
-  }
-  return null;
-}
-
 function latestCoveringRunTestsStatusForPathAfterLastEdit(
   events: AgentEvent[],
   path: string,
@@ -297,10 +271,9 @@ function latestCoveringRunTestsStatusForPathAfterLastEdit(
   for (let i = events.length - 1; i > lastEditIndex; i--) {
     const event = events[i];
     if (toolCallName(event) !== 'run_tests') continue;
-    if (toolCallStatus(event) !== 'ok') continue;
     const paths = toolCallPaths(event);
     if (paths.length === 0 || paths.some((candidate) => pathCoversPath(candidate, path))) {
-      return 'ok';
+      return toolCallStatus(event);
     }
   }
   return null;
@@ -342,10 +315,7 @@ function writtenTestVerificationStatusAfterLastEdit(
   if (isPlaywrightSpecPath(path)) {
     return latestPlaywrightVerificationStatusForPathAfterLastEdit(events, path);
   }
-  return (
-    latestExactRunTestsStatusForPathAfterLastEdit(events, path) ??
-    latestCoveringRunTestsStatusForPathAfterLastEdit(events, path)
-  );
+  return latestCoveringRunTestsStatusForPathAfterLastEdit(events, path);
 }
 
 function isRetryCapFinalVerificationFailure(failure: ImplementWpAcceptanceFailure | null): boolean {
