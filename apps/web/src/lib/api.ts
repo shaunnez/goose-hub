@@ -6,6 +6,7 @@ export * from './api/settings.js';
 export * from './api/roster.js';
 export * from './api/inbox.js';
 export * from './api/interventions.js';
+export * from './api/integrations.js';
 export * from './api/playbooks.js';
 export * from './api/bootstrap.js';
 export * from './api/chat.js';

@@ -52,6 +52,7 @@ export const AtlassianDetailSchema = AtlassianCardSchema.extend({
   tier: z.literal('detail'),
   bodyPreview: z.string().optional(),
   bodyArtifactRef: AtlassianArtifactRefSchema.optional(),
+  rawArtifactRef: AtlassianArtifactRefSchema.optional(),
   labels: z.array(z.string()).default([]),
   components: z.array(z.string()).default([]),
   linkedKeys: z.array(z.string()).default([]),
