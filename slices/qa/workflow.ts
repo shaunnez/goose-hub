@@ -33,6 +33,7 @@ import {
   type QaOutput,
   QaOutputSchema,
   type TestRun,
+  type VerificationSummary,
 } from '@goose-hub/skills/qa/schema.js';
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
 import {
@@ -76,10 +77,107 @@ export interface QaWorkflowDeps {
 const DEFAULT_TEST_COMMAND = 'pnpm test --reporter=json';
 const EXECUTABLE_CHECK_OUTPUT_LIMIT = 4_000;
 const QA_CONTEXT_CRITERIA_OUTPUT_LIMIT = 1_000;
+const QA_CONTEXT_VALUE_LIMIT_BYTES = 60_000;
+const QA_CONTEXT_STRING_PREVIEW_CHARS = 4_000;
 
 function localIssueRef(ref: string | undefined): string | null {
   const match = ref?.trim().match(/^#?(\d+)$/);
   return match?.[1] != null ? match[1] : null;
+}
+
+function estimateJsonBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
+}
+
+function compactLargeQaContextValue(key: string, value: unknown): unknown {
+  const byteSize = estimateJsonBytes(value);
+  if (byteSize <= QA_CONTEXT_VALUE_LIMIT_BYTES) return value;
+
+  if (typeof value === 'string') {
+    return {
+      omitted: true,
+      reason: 'qa-context-value-too-large',
+      key,
+      byteSize,
+      preview: value.slice(0, QA_CONTEXT_STRING_PREVIEW_CHARS),
+    };
+  }
+
+  if (key === 'workItem' && value != null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return {
+      ...record,
+      body:
+        typeof record.body === 'string'
+          ? record.body.slice(0, QA_CONTEXT_STRING_PREVIEW_CHARS)
+          : record.body,
+      bodyTruncated: typeof record.body === 'string',
+      originalByteSize: byteSize,
+    };
+  }
+
+  if (key === 'acceptanceContract' && value != null && typeof value === 'object') {
+    const record = value as { criteria?: unknown };
+    return {
+      omitted: true,
+      reason: 'qa-context-value-too-large',
+      key,
+      byteSize,
+      criteriaCount: Array.isArray(record.criteria) ? record.criteria.length : undefined,
+    };
+  }
+
+  return {
+    omitted: true,
+    reason: 'qa-context-value-too-large',
+    key,
+    byteSize,
+  };
+}
+
+function compactQaContextForPrompt(context: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(context).map(([key, value]) => [key, compactLargeQaContextValue(key, value)]),
+  );
+}
+
+function hasUiChangedPath(paths: readonly string[]): boolean {
+  return paths.some((path) => path.startsWith('apps/web/'));
+}
+
+function explicitEvidenceSkipReason(summary: VerificationSummary): string {
+  return hasUiChangedPath(summary.changedFiles.paths)
+    ? 'no evidence workflow event was recorded for UI changes; browser evidence did not run or no evidence spec was declared'
+    : 'non-UI change; browser evidence not required';
+}
+
+function ensureExplicitEvidenceSummary(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  summary: VerificationSummary;
+}): VerificationSummary {
+  if (input.summary.evidence.status !== 'absent') return input.summary;
+  const reason = explicitEvidenceSkipReason(input.summary);
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'evidence.post-skipped',
+    payload: {
+      runId: input.runId,
+      reason,
+      source: 'qa',
+      changedPaths: input.summary.changedFiles.paths,
+    },
+    runId: input.runId,
+  });
+  return {
+    ...input.summary,
+    evidence: {
+      status: 'skipped',
+      reason,
+    },
+  };
 }
 
 async function verifiedFollowUpRefsForQaOutput(
@@ -637,7 +735,11 @@ export async function runQaWorkflow(
             SERVER_PORT: String(apiPort),
           }
         : undefined;
-    const { verificationSummary, testRun, e2eDecision } = await buildVerificationSummary({
+    const {
+      verificationSummary: rawVerificationSummary,
+      testRun,
+      e2eDecision,
+    } = await buildVerificationSummary({
       workspaceDir,
       prHints,
       prDiff,
@@ -655,6 +757,12 @@ export async function runQaWorkflow(
       commandTimeoutMs: resolvedBudget.budgets.timeoutMs,
       runTests,
       ...(runCommand != null ? { runCommand } : {}),
+    });
+    const verificationSummary = ensureExplicitEvidenceSummary({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      runId,
+      summary: rawVerificationSummary,
     });
     const criteriaResults = await runExecutableChecks({
       workspaceDir,
@@ -708,35 +816,37 @@ export async function runQaWorkflow(
     }
     const prDiffWithContext = buildPrDiffWithContext(prDiff);
 
+    const qaContext = compactQaContextForPrompt({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      workItem: {
+        title: workItem.title,
+        body: workItem.body,
+        number: Number(workItem.externalId),
+      },
+      prDiff: preparedDiff.prDiffContext,
+      prDiffWithContext,
+      projectCommands: {
+        testCommand,
+        lintCommand,
+        ...(e2eDecision.command != null ? { e2eCommand: e2eDecision.command } : {}),
+      },
+      verificationSummary,
+      e2eDecision,
+      ...(criteriaResultsForContext.length > 0
+        ? { criteriaResults: criteriaResultsForContext }
+        : {}),
+      ...(acceptanceContract != null ? { acceptanceContract } : {}),
+      ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
+      ...(devTestsRun != null ? { devTestsRun } : {}),
+      ...(deterministicTierResults != null ? { deterministicTierResults } : {}),
+    });
+
     const qaResult = await runtime.run({
       runId,
       role: 'qa',
       skill: 'qa',
-      context: {
-        projectId: projectSlug,
-        workItemId: workItem.id,
-        workItem: {
-          title: workItem.title,
-          body: workItem.body,
-          number: Number(workItem.externalId),
-        },
-        prDiff: preparedDiff.prDiffContext,
-        prDiffWithContext,
-        projectCommands: {
-          testCommand,
-          lintCommand,
-          ...(e2eDecision.command != null ? { e2eCommand: e2eDecision.command } : {}),
-        },
-        verificationSummary,
-        e2eDecision,
-        ...(criteriaResultsForContext.length > 0
-          ? { criteriaResults: criteriaResultsForContext }
-          : {}),
-        ...(acceptanceContract != null ? { acceptanceContract } : {}),
-        ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
-        ...(devTestsRun != null ? { devTestsRun } : {}),
-        ...(deterministicTierResults != null ? { deterministicTierResults } : {}),
-      },
+      context: qaContext,
       contextAllowlist: [
         'workItem',
         'prDiff',

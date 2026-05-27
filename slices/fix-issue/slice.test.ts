@@ -2285,7 +2285,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
     expect(evidenceCall.contextAllowlist).toContain('workItem.beforeCommentUrl');
   });
 
-  it('with evidenceSpecPath null: emits evidence.no-spec-declared and skips evidence-post run', async () => {
+  it('with backend evidenceSpecPath null: emits evidence.post-skipped and skips evidence-post run', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
 
@@ -2319,10 +2319,12 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
     // Only implement run — no evidence-post
     expect(vi.mocked(runtime.run)).toHaveBeenCalledTimes(1);
 
-    const noSpec = vi
+    const skipped = vi
       .mocked(eventStore.appendEvent)
-      .mock.calls.find(([e]) => e.kind === 'evidence.no-spec-declared');
-    expect(noSpec).toBeDefined();
+      .mock.calls.find(([e]) => e.kind === 'evidence.post-skipped');
+    expect(skipped?.[0].payload).toMatchObject({
+      reason: 'non-UI change; browser evidence not required',
+    });
   });
 
   it('evidence-post runtime failure: emits evidence.post-failed and still transitions to needs-qa (best-effort)', async () => {

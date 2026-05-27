@@ -29,6 +29,7 @@ export interface RunEvidencePostInput {
   prHeadSha: string;
   repoRef: string;
   evidenceSpecPath: string | null;
+  changedPaths?: string[];
   /**
    * Permalink to the BEFORE-state comment posted by playwright-repro during
    * investigation. Present only for type:bug; undefined for feature/chore.
@@ -68,11 +69,31 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
   }
 
   if (input.evidenceSpecPath == null) {
+    const changedPaths = input.changedPaths ?? [];
+    const hasUiChange = changedPaths.some((path) => path.startsWith('apps/web/'));
+    if (!hasUiChange) {
+      eventStore.appendEvent({
+        projectId: input.projectId,
+        workItemId: input.workItem.id,
+        kind: 'evidence.post-skipped',
+        payload: {
+          runId: input.runId,
+          reason: 'non-UI change; browser evidence not required',
+          changedPaths,
+        },
+        runId: input.runId,
+      });
+      return;
+    }
     eventStore.appendEvent({
       projectId: input.projectId,
       workItemId: input.workItem.id,
       kind: 'evidence.no-spec-declared',
-      payload: { runId: input.runId },
+      payload: {
+        runId: input.runId,
+        reason: 'UI change did not declare an evidence spec',
+        changedPaths,
+      },
       runId: input.runId,
     });
     return;

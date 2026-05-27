@@ -949,6 +949,7 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
     prHeadSha,
     repoRef,
     evidenceSpecPath: implementOutput.evidenceSpecPath,
+    changedPaths: observedChangedFiles.paths,
     beforeCommentUrl,
     worktreePath,
     evidenceRuntime: input.evidenceRuntime,

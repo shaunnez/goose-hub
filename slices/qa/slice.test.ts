@@ -1205,6 +1205,78 @@ describe('runQaWorkflow', () => {
       expect(spec.contextAllowlist).toContain('verificationSummary');
     });
 
+    it('emits explicit evidence skip status when no evidence workflow event exists', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc' },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+      });
+
+      expect(vi.mocked(eventStore.appendEvent)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'evidence.post-skipped',
+          payload: expect.objectContaining({
+            source: 'qa',
+            reason: 'non-UI change; browser evidence not required',
+          }),
+        }),
+      );
+      const summaryEvent = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.verification-summary-built');
+      expect(summaryEvent?.[0].payload).toMatchObject({
+        evidenceStatus: 'skipped',
+        evidenceReason: 'non-UI change; browser evidence not required',
+      });
+    });
+
+    it('compacts oversized QA context values before spawning Codex', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const largeAcceptanceContract = {
+        source: 'normalized' as const,
+        criteria: [
+          {
+            id: 'AC1',
+            statement: 'x'.repeat(80_000),
+            executableChecks: [],
+          },
+        ],
+      };
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        acceptanceContract: largeAcceptanceContract,
+        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+      });
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: { acceptanceContract?: unknown };
+      };
+      expect(spec.context.acceptanceContract).toEqual(
+        expect.objectContaining({
+          omitted: true,
+          reason: 'qa-context-value-too-large',
+          key: 'acceptanceContract',
+          criteriaCount: 1,
+        }),
+      );
+      expect(JSON.stringify(spec.context).length).toBeLessThan(80_000);
+    });
+
     it('runs workflow-owned e2e with the same controlled ports passed to QA', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
