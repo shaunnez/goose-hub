@@ -11,6 +11,7 @@ import { parseDiff } from '../lib/code-diff';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { CommentsSection } from './CommentsSection';
 import { DependenciesSection } from './DependenciesSection';
+import { ExternalRefsSection } from './ExternalRefsSection';
 import { StatCard } from './StatCard';
 
 interface OverviewSectionProps {
@@ -101,6 +102,8 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
 
       {/* Main content grid */}
       <div className="grid gap-4">
+        <ExternalRefsSection refs={item?.externalRefs ?? []} />
+
         {/* Brief card */}
         <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
           <div className="px-4 py-3 border-b border-line bg-bg-elev-2">

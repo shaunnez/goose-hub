@@ -100,6 +100,7 @@ export class LocalDbStateSource implements StateSource {
       dependsOn: mapDependencyRefs(row.body, 'depends-on', repoRef),
       blocks: mapDependencyRefs(row.body, 'blocks', repoRef),
       createdAt: new Date(row.createdAt),
+      externalRefs: this.repository.listExternalRefReadModels(this.projectId, row.id),
     };
   }
 

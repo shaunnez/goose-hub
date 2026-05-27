@@ -1,5 +1,5 @@
 import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
-import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
+import { getArtifact, getArtifactSlice } from '@goose-hub/core/agent-artifacts/repository.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { isIssueTimelineEvent } from '@goose-hub/core/event-stream/issue-timeline.js';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -216,6 +216,14 @@ function buildPrdRelationships(projectId: string): {
   return { byParent, byChild };
 }
 
+function workItemServerDto(item: { id: string; externalRefs?: unknown }): object {
+  return {
+    ...(item as object),
+    canonicalWorkItemId: item.id,
+    externalRefs: Array.isArray(item.externalRefs) ? item.externalRefs : [],
+  };
+}
+
 // Public surface for the issues domain. The implementation is split across
 // sibling files to keep each concern focused; this barrel re-exports the
 // pieces the router and tests depend on.
@@ -239,8 +247,8 @@ export async function listIssues(
   const titleByExternalId = new Map(items.map((i) => [i.externalId, i.title]));
   const { byParent, byChild } = buildPrdRelationships(slug);
   const enriched = items.map((item) => ({
-    ...(item as object),
-    lastPersonaId: lastPersonaMap.get((item as { id: string }).id) ?? null,
+    ...workItemServerDto(item),
+    lastPersonaId: lastPersonaMap.get(item.id) ?? null,
     dependsOnTitles: Object.fromEntries(
       (item.dependsOn ?? [])
         .filter((ref) => titleByExternalId.has(ref))
@@ -261,7 +269,7 @@ export async function getIssue(slug: string, id: string): Promise<Result<{ item:
   const { byParent, byChild } = buildPrdRelationships(slug);
   const externalId = (item as { externalId: string }).externalId;
   const enriched = {
-    ...(item as object),
+    ...workItemServerDto(item as { id: string; externalRefs?: unknown }),
     lastPersonaId: lastPersonaMap.get(workItemId) ?? null,
     prdChildren: byParent.get(externalId),
     prdParent: byChild.get(externalId),
@@ -409,6 +417,7 @@ export async function getIssueArtifact(
   slug: string,
   id: string,
   artifactKey: string,
+  slice?: { offset?: number; limit?: number },
 ): Promise<
   Result<{
     artifact: {
@@ -421,13 +430,52 @@ export async function getIssueArtifact(
       bytes: number;
       createdAt: string;
       expiresAt: string | null;
-      payload: unknown;
+      payload?: unknown;
+      offset?: number;
+      limit?: number;
+      returnedBytes?: number;
+      hasMore?: boolean;
+      payloadSlice?: string;
+      encoding?: 'json';
     };
   }>
 > {
   const resolved = await resolveCanonicalWorkItemForRoute(slug, id);
   if (!resolved.ok) return resolved;
   const expectedWorkItemId = resolved.data.canonicalWorkItemId;
+
+  if (slice?.offset != null || slice?.limit != null) {
+    const artifact = getArtifactSlice(artifactKey, slice);
+    if (artifact == null) return { ok: false, error: 'artifact not found', status: 404 };
+    if (artifact.projectId !== slug) return { ok: false, error: 'artifact not found', status: 404 };
+    if (artifact.workItemId !== expectedWorkItemId) {
+      return { ok: false, error: 'artifact not found', status: 404 };
+    }
+
+    return {
+      ok: true,
+      data: {
+        artifact: {
+          artifactKey: artifact.artifactKey,
+          projectId: artifact.projectId,
+          workItemId: artifact.workItemId,
+          runId: artifact.runId,
+          kind: artifact.kind,
+          summary: artifact.summary,
+          bytes: artifact.bytes,
+          createdAt: artifact.createdAt,
+          expiresAt: artifact.expiresAt,
+          offset: artifact.offset,
+          limit: artifact.limit,
+          returnedBytes: artifact.returnedBytes,
+          hasMore: artifact.hasMore,
+          payloadSlice: artifact.payloadSlice,
+          encoding: artifact.encoding,
+        },
+      },
+    };
+  }
+
   const artifact = getArtifact(artifactKey);
   if (artifact == null) return { ok: false, error: 'artifact not found', status: 404 };
   if (artifact.projectId !== slug) return { ok: false, error: 'artifact not found', status: 404 };
