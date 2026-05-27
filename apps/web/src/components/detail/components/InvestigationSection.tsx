@@ -25,6 +25,7 @@ import {
   extractInvestigationPayload,
   latestInvestigationEvent,
 } from '../lib/investigation';
+import { hasPlaywrightRepro } from '../lib/playwright-capture';
 import { AcceptanceContractDetails } from './AcceptanceContractDetails';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { CostBadge } from './CostBadge';
@@ -165,6 +166,7 @@ export function InvestigationSection({
   const hasKeyFiles = investigate.keyFiles.length > 0;
   const findingsAccordionContent = hasFindingsSummary || hasKeyFiles;
   const accordionResetKey = `${projectSlug}:${id}:${latest.runId ?? latest.id}`;
+  const hasBugReproCapture = itemType === 'bug' && hasPlaywrightRepro(events);
 
   function renderKeyFileCards() {
     return investigate.keyFiles.map((f) => {
@@ -396,7 +398,7 @@ export function InvestigationSection({
       )}
 
       {/* Playwright captures (bug items only) */}
-      {itemType === 'bug' && (
+      {hasBugReproCapture && (
         <InvestigationAccordionSection title="Bug Repro Capture" resetKey={accordionResetKey}>
           <PlaywrightCaptureSection projectSlug={projectSlug} id={id} itemType={itemType} />
         </InvestigationAccordionSection>
@@ -410,7 +412,7 @@ export function InvestigationSection({
             itemState === 'factory:gate-pending' ? 'Human review required' : 'Ready to proceed'
           }
           defaultOpen={itemState === 'factory:gate-pending'}
-          resetKey={accordionResetKey}
+          resetKey={`${accordionResetKey}:${itemState ?? 'unknown-state'}`}
           testId="investigation-proceed-gate"
           contentTestId="investigation-proceed-gate-content"
         >

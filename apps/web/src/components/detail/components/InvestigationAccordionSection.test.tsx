@@ -120,4 +120,37 @@ describe('InvestigationAccordionSection', () => {
     );
     expect(screen.queryByTestId('section-content')).toBeNull();
   });
+
+  it('reapplies defaultOpen when it changes for the same accordion identity', async () => {
+    const { rerender } = render(
+      <InvestigationAccordionSection
+        title="Proceed Gate"
+        defaultOpen={false}
+        resetKey="issue-1"
+        contentTestId="section-content"
+      >
+        <div>Gate content.</div>
+      </InvestigationAccordionSection>,
+    );
+
+    expect(
+      screen.getByRole('button', { name: /proceed gate/i }).getAttribute('aria-expanded'),
+    ).toBe('false');
+
+    rerender(
+      <InvestigationAccordionSection
+        title="Proceed Gate"
+        defaultOpen
+        resetKey="issue-1"
+        contentTestId="section-content"
+      >
+        <div>Gate content.</div>
+      </InvestigationAccordionSection>,
+    );
+
+    expect(
+      screen.getByRole('button', { name: /proceed gate/i }).getAttribute('aria-expanded'),
+    ).toBe('true');
+    expect(screen.getByTestId('section-content')).toBeTruthy();
+  });
 });

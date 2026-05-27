@@ -94,6 +94,14 @@ const HUMAN_NOTES = [
   },
 ];
 
+const PLAYWRIGHT_REPRO = {
+  screenshots: [],
+  gifPath: null,
+  consoleErrors: [],
+  reproSteps: ['Open the page'],
+  reproduced: true,
+};
+
 function investigationEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   return {
     ...INVESTIGATION_EVENT,
@@ -141,21 +149,26 @@ function renderSection({
     qc.setQueryData(['acceptance-contract', 'test-proj', '42'], acceptanceContract);
   }
   if (comments !== undefined) qc.setQueryData(['comments', 'test-proj', '42'], comments);
-  render(
-    <QueryClientProvider client={qc}>
-      <ActiveProjectProvider initialSlug="test-proj">
-        <InvestigationSection
-          projectSlug="test-proj"
-          id="42"
-          itemType={itemType}
-          itemState={itemState}
-        />
-      </ActiveProjectProvider>
-    </QueryClientProvider>,
-  );
+  function WrappedSection(props: { itemType?: string; itemState?: string }) {
+    return (
+      <QueryClientProvider client={qc}>
+        <ActiveProjectProvider initialSlug="test-proj">
+          <InvestigationSection
+            projectSlug="test-proj"
+            id="42"
+            itemType={props.itemType}
+            itemState={props.itemState}
+          />
+        </ActiveProjectProvider>
+      </QueryClientProvider>
+    );
+  }
+
+  const view = render(<WrappedSection itemType={itemType} itemState={itemState} />);
+  return { ...view, qc, WrappedSection };
 }
 
-function getAccordionButton(title: string) {
+function getAccordionButton(title: string): HTMLElement {
   const match = screen
     .getAllByRole('button')
     .find((button) => within(button).queryByText(new RegExp(`^${title}$`, 'i')) != null);
@@ -322,7 +335,17 @@ describe('InvestigationSection', () => {
 
   it('shows findings expanded by default and keeps other sections collapsed initially', () => {
     renderSection({
-      events: [INVESTIGATION_EVENT],
+      events: [
+        investigationEvent({
+          payload: {
+            investigate: {
+              ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> })
+                .investigate,
+            },
+            playwrightRepro: PLAYWRIGHT_REPRO,
+          } as AgentEventDto['payload'],
+        }),
+      ],
       spec: ENGINEERING_SPEC,
       acceptanceContract: ACCEPTANCE_CONTRACT,
       comments: HUMAN_NOTES,
@@ -356,7 +379,17 @@ describe('InvestigationSection', () => {
 
   it('reveals collapsed investigation accordions when their headers are clicked', () => {
     renderSection({
-      events: [INVESTIGATION_EVENT],
+      events: [
+        investigationEvent({
+          payload: {
+            investigate: {
+              ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> })
+                .investigate,
+            },
+            playwrightRepro: PLAYWRIGHT_REPRO,
+          } as AgentEventDto['payload'],
+        }),
+      ],
       spec: ENGINEERING_SPEC,
       acceptanceContract: ACCEPTANCE_CONTRACT,
       comments: HUMAN_NOTES,
@@ -428,5 +461,29 @@ describe('InvestigationSection', () => {
     expect(getAccordionButton('Proceed Gate').getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByTestId('investigation-proceed-gate-content')).toBeTruthy();
     expect(screen.getByText(/Investigation confidence is low\./)).toBeTruthy();
+  });
+
+  it('updates the proceed gate default state when itemState changes without a new run', () => {
+    const view = renderSection({
+      events: [INVESTIGATION_EVENT],
+      itemState: 'factory:investigation-complete',
+    });
+
+    expect(getAccordionButton('Proceed Gate').getAttribute('aria-expanded')).toBe('false');
+
+    view.rerender(<view.WrappedSection itemState="factory:gate-pending" />);
+
+    expect(getAccordionButton('Proceed Gate').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('investigation-proceed-gate-content')).toBeTruthy();
+  });
+
+  it('does not render the bug repro accordion when no capture payload exists', () => {
+    renderSection({
+      events: [INVESTIGATION_EVENT],
+      itemType: 'bug',
+    });
+
+    expect(screen.queryByRole('button', { name: /bug repro capture/i })).toBeNull();
+    expect(screen.queryByTestId('playwright-capture-content')).toBeNull();
   });
 });

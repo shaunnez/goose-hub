@@ -25,12 +25,19 @@ export function InvestigationAccordionSection({
   const [open, setOpen] = useState(defaultOpen);
   const identity = resetKey ?? title;
   const previousIdentity = useRef(identity);
+  const previousDefaultOpen = useRef(defaultOpen);
 
   useEffect(() => {
-    if (previousIdentity.current !== identity) {
-      previousIdentity.current = identity;
-      setOpen(defaultOpen);
+    const identityChanged = previousIdentity.current !== identity;
+    const defaultOpenChanged = previousDefaultOpen.current !== defaultOpen;
+
+    if (!identityChanged && !defaultOpenChanged) {
+      return;
     }
+
+    previousIdentity.current = identity;
+    previousDefaultOpen.current = defaultOpen;
+    setOpen(defaultOpen);
   }, [defaultOpen, identity]);
 
   return (
