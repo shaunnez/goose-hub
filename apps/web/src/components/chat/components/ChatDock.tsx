@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ChatLauncher } from './ChatLauncher';
-import { ChatPanel } from './ChatPanel';
+import { ChatPanel, type ChatPanelCloseReason } from './ChatPanel';
 
 const STORAGE_KEY = 'hub-chat-open';
+const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 
 /**
  * Top-level entry point: hosts the slide-out chat panel + the floating
@@ -24,10 +25,28 @@ export function ChatDock() {
     } catch {}
   }, [open]);
 
+  function handleChatClose(reason: ChatPanelCloseReason) {
+    if (reason === 'launcher-toggle' || reason === 'header-close') {
+      try {
+        localStorage.removeItem(ACTIVE_CONVERSATION_STORAGE_KEY);
+      } catch {}
+    }
+    setOpen(false);
+  }
+
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} />
-      <ChatLauncher open={open} onToggle={() => setOpen((o) => !o)} />
+      <ChatPanel open={open} onClose={handleChatClose} />
+      <ChatLauncher
+        open={open}
+        onToggle={() => {
+          if (open) {
+            handleChatClose('launcher-toggle');
+            return;
+          }
+          setOpen(true);
+        }}
+      />
     </>
   );
 }
