@@ -75,6 +75,7 @@ export interface QaWorkflowDeps {
 
 const DEFAULT_TEST_COMMAND = 'pnpm test --reporter=json';
 const EXECUTABLE_CHECK_OUTPUT_LIMIT = 4_000;
+const QA_CONTEXT_CRITERIA_OUTPUT_LIMIT = 1_000;
 
 function localIssueRef(ref: string | undefined): string | null {
   const match = ref?.trim().match(/^#?(\d+)$/);
@@ -362,6 +363,16 @@ async function runExecutableChecks(input: {
     );
   }
   return results;
+}
+
+function compactCriteriaResultsForQaContext(results: CriteriaResult[]): CriteriaResult[] {
+  return results.map((result) => ({
+    ...result,
+    actual:
+      result.actual.length > QA_CONTEXT_CRITERIA_OUTPUT_LIMIT
+        ? result.actual.slice(-QA_CONTEXT_CRITERIA_OUTPUT_LIMIT)
+        : result.actual,
+  }));
 }
 
 /**
@@ -674,6 +685,7 @@ export async function runQaWorkflow(
     const deterministicTierResults = deterministic
       ? toAgentTierResults(deterministic.tierResults)
       : undefined;
+    const criteriaResultsForContext = compactCriteriaResultsForQaContext(criteriaResults);
     const preparedDiff = preparePrDiffContext({
       projectId: projectSlug,
       workItemId: workItem.id,
@@ -716,9 +728,10 @@ export async function runQaWorkflow(
         },
         verificationSummary,
         e2eDecision,
-        ...(criteriaResults.length > 0 ? { criteriaResults } : {}),
+        ...(criteriaResultsForContext.length > 0
+          ? { criteriaResults: criteriaResultsForContext }
+          : {}),
         ...(acceptanceContract != null ? { acceptanceContract } : {}),
-        testRun,
         ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
         ...(devTestsRun != null ? { devTestsRun } : {}),
         ...(deterministicTierResults != null ? { deterministicTierResults } : {}),
@@ -730,7 +743,6 @@ export async function runQaWorkflow(
         'projectCommands',
         'verificationSummary',
         'e2eDecision',
-        'testRun',
         'criteriaResults',
         ...(acceptanceContract != null ? ['acceptanceContract'] : []),
         ...(evidenceCommentUrl != null ? ['evidenceCommentUrl'] : []),

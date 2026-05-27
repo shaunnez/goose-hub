@@ -137,7 +137,7 @@ export const QaContextSchema = z.object({
       paths: z.array(z.string()),
     })
     .optional(),
-  /** Structured test results captured by the workflow before the QA agent starts. */
+  /** Legacy raw test results. New QA workflow context uses compact verificationSummary.testRun instead. */
   testRun: TestRunSchema.nullable().optional(),
   /**
    * Compact workflow-owned verification packet. Contains deterministic command
@@ -188,7 +188,6 @@ const config: SkillConfig = {
     'criteriaResults',
     'acceptanceContract',
     'devTestsRun',
-    'testRun',
     'verificationSummary',
   ],
 };

@@ -1870,6 +1870,183 @@ describe('implement-wp ownership gate', () => {
     expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(false);
   });
 
+  it('treats latest failing run_playwright_spec as blocking written Playwright specs', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/e2e/chat.spec.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add e2e regression coverage',
+      filesWritten: [{ path: 'apps/web/e2e/chat.spec.ts', reason: 'Add regression coverage' }],
+      testsWritten: [{ path: 'apps/web/e2e/chat.spec.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test:e2e:pipeline apps/web/e2e/chat.spec.ts',
+        paths: ['apps/web/e2e/chat.spec.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const runId = 'run-wp-playwright-latest-failed:wp:WP1:iter:1';
+    const writeSpec: AgentEvent = {
+      id: 1021,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'write_playwright_spec',
+        status: 'ok',
+        tool_input: { path: 'apps/web/e2e/chat.spec.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const playwrightPass: AgentEvent = {
+      id: 1022,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_playwright_spec',
+        status: 'ok',
+        tool_input: { spec: 'apps/web/e2e/chat.spec.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const playwrightFail: AgentEvent = {
+      id: 1023,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_playwright_spec',
+        status: 'failed',
+        tool_input: { spec: 'apps/web/e2e/chat.spec.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/e2e/chat.spec.ts']),
+      iteration: 1,
+      runId: 'run-wp-playwright-latest-failed',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockResolvedValue({
+          output,
+          events: [writeSpec, playwrightPass, playwrightFail],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      wpId: 'WP1',
+      errorReason: expect.stringContaining('run_playwright_spec'),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(true);
+  });
+
+  it('does not accept unrelated e2e package-script success for written Playwright specs', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/e2e/chat.spec.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add e2e regression coverage',
+      filesWritten: [{ path: 'apps/web/e2e/chat.spec.ts', reason: 'Add regression coverage' }],
+      testsWritten: [{ path: 'apps/web/e2e/chat.spec.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test:e2e:pipeline',
+        paths: ['apps/web/e2e/chat.spec.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const runId = 'run-wp-playwright-unrelated-e2e:wp:WP1:iter:1';
+    const writeSpec: AgentEvent = {
+      id: 1024,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'write_playwright_spec',
+        status: 'ok',
+        tool_input: { path: 'apps/web/e2e/chat.spec.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const unrelatedE2ePass: AgentEvent = {
+      id: 1025,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_package_script',
+        status: 'ok',
+        tool_input: { script: 'test:e2e:pipeline' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/e2e/chat.spec.ts']),
+      iteration: 1,
+      runId: 'run-wp-playwright-unrelated-e2e',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockResolvedValue({
+          output,
+          events: [writeSpec, unrelatedE2ePass],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      wpId: 'WP1',
+      errorReason: expect.stringContaining('run_playwright_spec'),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(true);
+  });
+
   it('asks for Playwright verification instead of run_tests for written e2e specs', async () => {
     const scratchWorktree = makeTempRepo(['apps/web/e2e/chat.spec.ts']);
     const { fn: appendEvent, events } = makeAppendEvent();

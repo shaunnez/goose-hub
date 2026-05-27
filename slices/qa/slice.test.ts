@@ -1540,6 +1540,11 @@ describe('runQaWorkflow', () => {
         expect(result?.passed).toBe(true);
         expect(result?.actual).toHaveLength(4000);
         expect(result?.actual).not.toContain('needle');
+
+        const spec = mockRun.mock.calls[0][0] as {
+          context: { criteriaResults?: Array<{ actual: string }> };
+        };
+        expect(spec.context.criteriaResults?.[0]?.actual).toHaveLength(1000);
       } finally {
         rmSync(worktree, { recursive: true, force: true });
       }
@@ -1670,7 +1675,7 @@ describe('runQaWorkflow', () => {
       expect(spec.context.verificationSummary.testRun).toBeUndefined();
     });
 
-    it('passes testRun into the agent context and allowlists it', async () => {
+    it('keeps raw testRun out of the agent context while preserving compact verificationSummary', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
       mockReplay.mockReturnValue([
@@ -1689,11 +1694,16 @@ describe('runQaWorkflow', () => {
       });
 
       const spec = mockRun.mock.calls[0][0] as {
-        context: { testRun: unknown };
+        context: { testRun?: unknown; verificationSummary?: { testRun?: unknown } };
         contextAllowlist: string[];
       };
-      expect(spec.context.testRun).toEqual(sampleTestRun);
-      expect(spec.contextAllowlist).toContain('testRun');
+      expect(spec.context.testRun).toBeUndefined();
+      expect(spec.contextAllowlist).not.toContain('testRun');
+      expect(spec.context.verificationSummary?.testRun).toMatchObject({
+        total: sampleTestRun.total,
+        passed: sampleTestRun.passed,
+        failed: sampleTestRun.failed,
+      });
     });
 
     it('includes testRun in the qa.completed payload when present', async () => {
@@ -1760,8 +1770,8 @@ describe('runQaWorkflow', () => {
       await runQaWorkflow(item, source, 'test-project', 'owner/repo', { runTests });
 
       expect(runTests).not.toHaveBeenCalled();
-      const spec = mockRun.mock.calls[0][0] as { context: { testRun: unknown } };
-      expect(spec.context.testRun).toBeNull();
+      const spec = mockRun.mock.calls[0][0] as { context: { testRun?: unknown } };
+      expect(spec.context.testRun).toBeUndefined();
     });
   });
 

@@ -52,6 +52,27 @@ describe('implement output schema', () => {
     ).toBe(true);
   });
 
+  it('accepts SKIP_GATE evidence rationale without brittle summary wording', () => {
+    expect(
+      ImplementSchema.safeParse({
+        ...baseValid,
+        filesWritten: [
+          { path: 'apps/web/src/components/detail/lib/timeline/index.ts', reason: 'review fix' },
+        ],
+        evidenceSpecPath: null,
+        decisionSummaries: [
+          { kind: 'PLAN', summary: 'Limit the review status change to the reducer' },
+          {
+            kind: 'SKIP_GATE',
+            summary: 'No evidence spec was added for this apps/web slice',
+            evidence:
+              'The change is limited to the timeline reducer and unit tests, and there was no applicable evidence spec path to preserve.',
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
   it('rejects web changes without evidenceSpecPath when no evidence blocker is recorded', () => {
     expect(
       ImplementSchema.safeParse({

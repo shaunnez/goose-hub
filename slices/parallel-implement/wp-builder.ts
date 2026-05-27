@@ -204,6 +204,14 @@ function isE2ePackageScript(event: AgentEvent): boolean {
   return typeof script === 'string' && /\be2e\b/i.test(script);
 }
 
+function isE2ePackageScriptCoveringPath(event: AgentEvent, path: string): boolean {
+  if (!isE2ePackageScript(event)) return false;
+  const script = toolCallInput(event).script;
+  if (typeof script === 'string' && script.includes(path)) return true;
+  const paths = toolCallPaths(event);
+  return paths.some((candidate) => pathsExactlyMatch(candidate, path));
+}
+
 function isTerminalDecisionKind(kind: unknown): kind is TerminalDecisionKind {
   return kind === 'TOOL_FAILURE' || kind === 'BLOCKER';
 }
@@ -296,14 +304,15 @@ function latestPlaywrightVerificationStatusForPathAfterLastEdit(
 
   for (let i = events.length - 1; i > lastEditIndex; i--) {
     const event = events[i];
-    if (toolCallStatus(event) !== 'ok') continue;
     const name = toolCallName(event);
     if (name === 'run_playwright_spec') {
       const paths = toolCallPaths(event);
-      if (paths.some((candidate) => pathsExactlyMatch(candidate, path))) return 'ok';
+      if (paths.some((candidate) => pathsExactlyMatch(candidate, path))) {
+        return toolCallStatus(event);
+      }
       continue;
     }
-    if (isE2ePackageScript(event)) return 'ok';
+    if (isE2ePackageScriptCoveringPath(event, path)) return toolCallStatus(event);
   }
   return null;
 }

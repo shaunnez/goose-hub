@@ -3,6 +3,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { CodeContextEntry } from '@goose-hub/core/agent-runtime/code-context.js';
+import { hasEvidenceBlockerDecision } from '@goose-hub/core/agent-runtime/evidence-blocker.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import {
   type InvestigationContext,
@@ -325,14 +326,7 @@ function evaluateImplementOutputRepairGate(input: {
 }
 
 function hasEvidenceBlockerSummary(output: ImplementOutputShape): boolean {
-  return output.decisionSummaries.some(
-    (summary) =>
-      (summary.kind === 'TOOL_FAILURE' ||
-        summary.kind === 'UNCERTAINTY' ||
-        summary.kind === 'SKIP_GATE') &&
-      /\b(e2e|evidence|playwright)\b/i.test(summary.summary) &&
-      /\b(block\w*|fail\w*|unclear|disabled|setting|skip\w*)\b/i.test(summary.summary),
-  );
+  return hasEvidenceBlockerDecision(output.decisionSummaries);
 }
 
 function evaluateEvidenceRequirementGate(input: {
