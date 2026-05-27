@@ -1,16 +1,29 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { parseBody } from '#shared/middleware.js';
 import { createInboxItem, deleteInboxItem, getInboxItems, promoteInboxItem } from './service.js';
+
+const CreateInboxBodySchema = z.object({
+  title: z.string().trim().min(1, 'title is required'),
+  body: z.string().optional().default(''),
+  type: z.enum(['feature', 'bug', 'chore', 'research']).optional().default('feature'),
+});
 
 const router = new Hono();
 
 router.post('/', async (c) => {
   const body = await parseBody<{ title?: string; body?: string; type?: string }>(c);
   if (!body.ok) return body.error;
-  const result = await createInboxItem(body.data.title, body.data.body, body.data.type);
-  return result.ok
-    ? c.json(result.data, 201)
-    : c.json({ error: result.error }, result.status as 400);
+
+  const result = CreateInboxBodySchema.safeParse(body.data);
+  if (!result.success) {
+    return c.json({ error: 'validation failed', issues: result.error.issues }, 400);
+  }
+
+  const createResult = await createInboxItem(result.data.title, result.data.body, result.data.type);
+  return createResult.ok
+    ? c.json(createResult.data, 201)
+    : c.json({ error: createResult.error }, createResult.status as 400);
 });
 
 router.get('/', async (c) => {

@@ -53,18 +53,19 @@ describe('POST /inbox', () => {
     expect(mockCreateInboxItem).toHaveBeenCalledWith('New feature', 'details', 'feature');
   });
 
-  it('returns 400 when service rejects (e.g. missing title)', async () => {
-    mockCreateInboxItem.mockResolvedValue({ ok: false, error: 'title is required', status: 400 });
+  it('returns 400 when service rejects a valid payload', async () => {
+    mockCreateInboxItem.mockResolvedValue({ ok: false, error: 'duplicate title', status: 400 });
 
     const app = makeApp();
     const res = await app.request('/inbox', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: 'no title here' }),
+      body: JSON.stringify({ title: 'Existing title', body: 'details', type: 'feature' }),
     });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('title is required');
+    expect(body.error).toBe('duplicate title');
+    expect(mockCreateInboxItem).toHaveBeenCalledWith('Existing title', 'details', 'feature');
   });
 
   it('returns 400 for invalid JSON body', async () => {
@@ -73,6 +74,17 @@ describe('POST /inbox', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+    expect(mockCreateInboxItem).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for JSON null body without calling the service', async () => {
+    const app = makeApp();
+    const res = await app.request('/inbox', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'null',
     });
     expect(res.status).toBe(400);
     expect(mockCreateInboxItem).not.toHaveBeenCalled();
