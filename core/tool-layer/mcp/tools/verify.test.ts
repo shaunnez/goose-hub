@@ -230,7 +230,7 @@ describe('runTestsTool retry cap', () => {
     expect(next.status).toBe('failed');
   });
 
-  it('resets the cap after a source edit, allowing one final exact test rerun', async () => {
+  it('resets the cap after any source edit before rerunning the same test', async () => {
     const { invalidateRunCacheForPaths } = await import('../run-cache.js');
     mockFailed();
     for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
@@ -243,7 +243,7 @@ describe('runTestsTool retry cap', () => {
     expect(next.status).toBe('failed');
   });
 
-  it('does not reset a capped test path after an unrelated edit', async () => {
+  it('resets the cap after an unrelated edit because shared fixtures or setup may affect the test', async () => {
     const { invalidateRunCacheForPaths } = await import('../run-cache.js');
     mockFailed();
     for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
@@ -252,9 +252,8 @@ describe('runTestsTool retry cap', () => {
 
     mockRunCommand.mockClear();
     const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
-    expect(mockRunCommand).not.toHaveBeenCalled();
+    expect(mockRunCommand).toHaveBeenCalledOnce();
     expect(next.status).toBe('failed');
-    expect(next.stderr).toMatch(/retry cap/i);
   });
 
   it('counters are isolated per path', async () => {

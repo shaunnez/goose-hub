@@ -128,22 +128,37 @@ describe('readFileTool redundant-read detection', () => {
     expect(redundantEvents).toHaveLength(0);
   });
 
-  it('throws RedundancyAbortError and emits agent.run-aborted when >40% of reads are redundant and total >= 10', async () => {
-    // 4 unique files + 6 reads on the same file = 10 total, 5 redundant (50% > 40%)
+  it('does not abort a small focused run with moderate redundant reads', async () => {
+    // This pattern appears in focused TDD loops: a few files get revisited while
+    // the agent is still below the hard-abort floor.
     for (const name of ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'target.txt']) {
       writeFileSync(join(workspace, name), `content of ${name}`);
     }
-    // Reset counters so this test starts clean
     clearRunCache(ctx.runId);
     await readFileTool(ctx, { path: 'a.txt' });
     await readFileTool(ctx, { path: 'b.txt' });
     await readFileTool(ctx, { path: 'c.txt' });
     await readFileTool(ctx, { path: 'd.txt' });
-    // 5 reads of target.txt: first is fine, each subsequent is redundant
     for (let i = 0; i < 5; i++) {
-      await readFileTool(ctx, { path: 'target.txt' }).catch(() => {});
+      await readFileTool(ctx, { path: 'target.txt' });
     }
-    // 10th read should throw
+    await expect(readFileTool(ctx, { path: 'target.txt' })).resolves.toBeDefined();
+
+    const abortedEvents = eventStore.replay({ runId: ctx.runId, kind: 'agent.run-aborted' });
+    expect(abortedEvents).toHaveLength(0);
+  });
+
+  it('throws RedundancyAbortError and emits agent.run-aborted when >60% of reads are redundant and total >= 20', async () => {
+    for (const name of ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt', 'target.txt']) {
+      writeFileSync(join(workspace, name), `content of ${name}`);
+    }
+    clearRunCache(ctx.runId);
+    for (const name of ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt']) {
+      await readFileTool(ctx, { path: name });
+    }
+    for (let i = 0; i < 14; i++) {
+      await readFileTool(ctx, { path: 'target.txt' });
+    }
     await expect(readFileTool(ctx, { path: 'target.txt' })).rejects.toMatchObject({
       name: 'RedundancyAbortError',
     });
