@@ -149,7 +149,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   const { data: budgetStatus } = useProjectBudgetStatus(slug);
 
   const currentSection = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0];
-  const workItemId = item != null ? `github:${item.repoRef}#${item.externalId}` : '';
+  const workItemId = item?.canonicalWorkItemId ?? item?.id ?? '';
 
   const safetyRefetchTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 

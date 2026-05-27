@@ -206,6 +206,51 @@ describe('LocalDbWorkItemRepository', () => {
     ]);
   });
 
+  it('returns typed external ref read models with parsed metadata', () => {
+    const { repository } = trackedRepository();
+    const item = repository.createWorkItem({ projectId: 'proj', title: 'Imported Jira issue' });
+
+    repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: item.id,
+      provider: 'jira',
+      kind: 'issue',
+      externalId: 'TAS-123',
+      url: 'https://company.atlassian.net/browse/TAS-123',
+      metadata: { status: 'In Progress', issueType: 'Bug' },
+    });
+    repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: item.id,
+      provider: 'bitbucket',
+      kind: 'pull_request',
+      repoRef: 'workspace/repo',
+      externalId: '45',
+      url: 'https://bitbucket.org/workspace/repo/pull-requests/45',
+      metadata: { branch: 'feature/local-state', state: 'OPEN' },
+    });
+
+    expect(repository.listExternalRefReadModels('proj', item.id)).toEqual([
+      expect.objectContaining({
+        provider: 'jira',
+        kind: 'issue',
+        repoRef: null,
+        externalId: 'TAS-123',
+        metadata: { status: 'In Progress', issueType: 'Bug' },
+      }),
+      expect.objectContaining({
+        provider: 'bitbucket',
+        kind: 'pull_request',
+        repoRef: 'workspace/repo',
+        externalId: '45',
+        metadata: { branch: 'feature/local-state', state: 'OPEN' },
+      }),
+    ]);
+    expect(
+      repository.listExternalRefReadModelsByKind({ projectId: 'proj', provider: 'jira' }),
+    ).toEqual([expect.objectContaining({ provider: 'jira', externalId: 'TAS-123' })]);
+  });
+
   it('creates, updates, lists, and resolves Bitbucket pull request refs by repo identity', () => {
     const { repository } = trackedRepository();
     const item = repository.createWorkItem({ projectId: 'proj', title: 'Linked Bitbucket PR' });
