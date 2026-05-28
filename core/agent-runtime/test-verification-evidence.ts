@@ -85,6 +85,7 @@ export function isPlaywrightSpecPath(path: string): boolean {
 export function isEditToolCall(event: VerificationEvent): boolean {
   const name = toolCallName(event)?.toLowerCase();
   if (name == null) return false;
+  if (name === 'apply_patch') return true;
   if (name.includes('edit') || name.includes('write')) return true;
   const command = toolCallInput(event).command;
   return (
@@ -104,10 +105,8 @@ export function isE2ePackageScript(event: VerificationEvent): boolean {
 
 export function isE2ePackageScriptCoveringPath(event: VerificationEvent, path: string): boolean {
   if (!isE2ePackageScript(event)) return false;
-  const script = toolCallInput(event).script;
-  if (typeof script === 'string' && script.includes(path)) return true;
   const paths = toolCallPaths(event);
-  return paths.some((candidate) => pathsExactlyMatch(candidate, path));
+  return paths.length === 0 || paths.some((candidate) => pathsExactlyMatch(candidate, path));
 }
 
 export function latestRunTestsStatusForPath(

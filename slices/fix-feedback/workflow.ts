@@ -230,6 +230,12 @@ type BaselineComparisonInput = {
   baseBranch?: string;
 };
 
+type BaselineVerificationCommand = {
+  command: string;
+  args: string[];
+  display: string;
+};
+
 type QaPayload = {
   verdict?: string;
   overallScore?: number;
@@ -441,6 +447,46 @@ function regressionCommandForPayload(payload: QaPayload): string | null {
   return typeof command === 'string' && command.trim().length > 0 ? command.trim() : null;
 }
 
+export function parseBaselineVerificationCommand(
+  command: string,
+): BaselineVerificationCommand | null {
+  const trimmed = command.trim();
+  if (trimmed.length === 0) return null;
+  if (/[;&|<>()`$\\'"\n\r]/.test(trimmed)) return null;
+
+  const tokens = trimmed.split(/\s+/).filter((token) => token.length > 0);
+  if (tokens[0] !== 'pnpm') return null;
+  if (tokens.some((token) => token.length === 0 || token.startsWith('='))) return null;
+
+  const args = tokens.slice(1);
+  const action = findPnpmAction(args);
+  if (action == null || !isPnpmVerificationAction(action.token, args[action.index + 1])) {
+    return null;
+  }
+
+  return { command: 'pnpm', args, display: tokens.join(' ') };
+}
+
+function findPnpmAction(args: string[]): { token: string; index: number } | null {
+  for (let i = 0; i < args.length; i++) {
+    const token = args[i];
+    if (token === '--filter' || token === '-F' || token === '--dir' || token === '-C') {
+      i++;
+      continue;
+    }
+    if (token.startsWith('--filter=') || token.startsWith('--dir=')) continue;
+    if (token.startsWith('-')) continue;
+    return { token, index: i };
+  }
+  return null;
+}
+
+function isPnpmVerificationAction(action: string, next: string | undefined): boolean {
+  if (action === 'vitest') return true;
+  const script = action === 'run' ? next : action;
+  return typeof script === 'string' && /^(?:test|lint|typecheck)(?::|$)/.test(script);
+}
+
 function regressionFailureDescriptions(payload: QaPayload): string[] {
   return (payload.tierResults?.regression?.findings ?? [])
     .map((finding) => finding.description)
@@ -486,6 +532,14 @@ async function compareRegressionAgainstBaseline({
         'Baseline comparison unavailable: regression tier payload did not include a command.',
     };
   }
+  const baselineCommand = parseBaselineVerificationCommand(command);
+  if (baselineCommand == null) {
+    return {
+      status: 'unavailable',
+      feedback:
+        'Baseline comparison unavailable: regression command is not an argv-safe pnpm verification command.',
+    };
+  }
 
   const baselineDir = mkdtempSync(pathJoin(tmpdir(), 'goose-hub-baseline-'));
   const baseRef = baseBranch.startsWith('origin/') ? baseBranch : `origin/${baseBranch}`;
@@ -505,10 +559,11 @@ async function compareRegressionAgainstBaseline({
       };
     }
 
-    const run = spawnSync('sh', ['-c', command], {
+    const run = spawnSync(baselineCommand.command, baselineCommand.args, {
       cwd: baselineDir,
       encoding: 'utf8',
       env: { ...process.env, CI: '1', FORCE_COLOR: '0' },
+      shell: false,
       timeout: 10 * 60_000,
     });
     if (run.error != null) {
@@ -520,7 +575,7 @@ async function compareRegressionAgainstBaseline({
     if ((run.status ?? 1) === 0) {
       return {
         status: 'head-only-failure',
-        feedback: `Baseline comparison: ${command} passed on ${baseRef}; regression appears head-only.`,
+        feedback: `Baseline comparison: ${baselineCommand.display} passed on ${baseRef}; regression appears head-only.`,
       };
     }
 
@@ -535,13 +590,13 @@ async function compareRegressionAgainstBaseline({
     if (sameFailures) {
       return {
         status: 'same-failures-on-base',
-        feedback: `Baseline comparison: ${command} also failed on ${baseRef}; route as baseline-red/global instead of issue repair.`,
+        feedback: `Baseline comparison: ${baselineCommand.display} also failed on ${baseRef}; route as baseline-red/global instead of issue repair.`,
       };
     }
 
     return {
       status: 'head-only-failure',
-      feedback: `Baseline comparison: ${command} failed on ${baseRef}, but not with the same failure signature; repair the head regression.`,
+      feedback: `Baseline comparison: ${baselineCommand.display} failed on ${baseRef}, but not with the same failure signature; repair the head regression.`,
     };
   } finally {
     spawnSync('git', ['-C', worktreePath, 'worktree', 'remove', '--force', baselineDir], {

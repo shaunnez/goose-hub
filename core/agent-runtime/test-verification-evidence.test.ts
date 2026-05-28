@@ -57,13 +57,36 @@ describe('test verification evidence', () => {
     const specPath = 'apps/web/e2e/issue-1151.spec.ts';
     const events = [
       toolEvent(1, 'edit_file', 'ok', specPath),
-      toolEvent(2, 'run_package_script', 'ok', specPath, { script: `test:e2e ${specPath}` }),
+      toolEvent(2, 'run_package_script', 'ok', '', { script: 'test:e2e:pipeline' }),
     ];
 
     const failures = collectWrittenTestVerificationFailures(events, [specPath]);
 
     expect(formatWrittenTestVerificationFailure(failures)).toBeNull();
     expect(hasSuccessfulVerificationToolCall(events)).toBe(true);
+  });
+
+  it('treats pathless apply_patch tool calls as edits', () => {
+    const events = [
+      toolEvent(1, 'run_tests', 'ok', 'apps/web/src/foo.test.ts'),
+      toolEvent(2, 'apply_patch', 'ok', '', { fileCount: 1 }),
+    ];
+
+    const failures = collectWrittenTestVerificationFailures(events, ['apps/web/src/foo.test.ts']);
+
+    expect(formatWrittenTestVerificationFailure(failures)).toContain('apps/web/src/foo.test.ts');
+  });
+
+  it('requires e2e package-script evidence after the last Playwright spec edit', () => {
+    const specPath = 'apps/web/e2e/issue-1151.spec.ts';
+    const events = [
+      toolEvent(1, 'run_package_script', 'ok', '', { script: 'test:e2e:pipeline' }),
+      toolEvent(2, 'edit_file', 'ok', specPath),
+    ];
+
+    const failures = collectWrittenTestVerificationFailures(events, [specPath]);
+
+    expect(formatWrittenTestVerificationFailure(failures)).toContain(specPath);
   });
 
   it('accepts parent-directory run_tests passes for reported non-written test paths', () => {

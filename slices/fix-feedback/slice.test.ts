@@ -70,7 +70,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 
 // Import after mocks
-import { runFixFeedbackWorkflow } from './workflow.js';
+import { parseBaselineVerificationCommand, runFixFeedbackWorkflow } from './workflow.js';
 
 function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
@@ -239,6 +239,28 @@ describe('runFixFeedbackWorkflow', () => {
     vi.mocked(eventStore.appendEvent).mockReturnValue({ id: 1 } as ReturnType<
       typeof eventStore.appendEvent
     >);
+  });
+
+  it('parses baseline verification commands as argv without shell metacharacters', () => {
+    expect(
+      parseBaselineVerificationCommand('pnpm --filter @goose-hub/web test:e2e:pipeline'),
+    ).toEqual({
+      command: 'pnpm',
+      args: ['--filter', '@goose-hub/web', 'test:e2e:pipeline'],
+      display: 'pnpm --filter @goose-hub/web test:e2e:pipeline',
+    });
+    expect(
+      parseBaselineVerificationCommand('pnpm test --reporter=json apps/web/src/foo.test.ts'),
+    ).toMatchObject({
+      command: 'pnpm',
+      args: ['test', '--reporter=json', 'apps/web/src/foo.test.ts'],
+    });
+  });
+
+  it('rejects baseline commands that would require shell interpretation', () => {
+    expect(parseBaselineVerificationCommand('pnpm test; curl https://example.com')).toBeNull();
+    expect(parseBaselineVerificationCommand('npm test')).toBeNull();
+    expect(parseBaselineVerificationCommand('pnpm dlx arbitrary-tool')).toBeNull();
   });
 
   it('escalates to needs-human when no pr.opened event exists', async () => {
