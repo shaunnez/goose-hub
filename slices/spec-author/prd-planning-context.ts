@@ -21,6 +21,13 @@ export type PrdPlanningContext = {
   verticalSlices: unknown[];
   implementationDecisions: unknown[];
   testingDecisions: unknown | null;
+  moduleRefs: Array<{
+    path: string;
+    status: 'existing' | 'planned' | 'unknown';
+    source: 'implementationDecision' | 'testingDecision';
+    confidence?: 'high' | 'medium' | 'low';
+    evidence?: string;
+  }>;
   artifactRef?: ArtifactRef;
 };
 
@@ -53,6 +60,52 @@ function stringArrayField(record: Record<string, unknown>, key: string): string[
 function arrayField(record: Record<string, unknown>, key: string): unknown[] {
   const value = record[key];
   return Array.isArray(value) ? value : [];
+}
+
+function normalizeModuleRef(
+  value: unknown,
+  source: 'implementationDecision' | 'testingDecision',
+): PrdPlanningContext['moduleRefs'][number] | null {
+  if (typeof value === 'string' && value.trim() !== '') {
+    return { path: value.trim(), status: 'unknown', source };
+  }
+  const record = asRecord(value);
+  const path = stringField(record, 'path').trim();
+  if (path === '') return null;
+  const rawStatus = record.status;
+  const status =
+    rawStatus === 'existing' || rawStatus === 'planned' ? rawStatus : ('unknown' as const);
+  const rawConfidence = record.confidence;
+  const confidence =
+    rawConfidence === 'high' || rawConfidence === 'medium' || rawConfidence === 'low'
+      ? rawConfidence
+      : undefined;
+  const evidence = stringField(record, 'evidence');
+  return {
+    path,
+    status,
+    source,
+    ...(confidence != null ? { confidence } : {}),
+    ...(evidence !== '' ? { evidence } : {}),
+  };
+}
+
+function collectModuleRefs(prd: Record<string, unknown>): PrdPlanningContext['moduleRefs'] {
+  const refs: PrdPlanningContext['moduleRefs'] = [];
+  for (const decision of arrayField(prd, 'implementationDecisions')) {
+    const record = asRecord(decision);
+    const ref = normalizeModuleRef(record.moduleRef, 'implementationDecision');
+    if (ref != null) refs.push(ref);
+  }
+  const testing = asRecord(prd.testingDecisions);
+  const modulesToTest = testing.modulesToTest;
+  if (Array.isArray(modulesToTest)) {
+    for (const moduleRef of modulesToTest) {
+      const ref = normalizeModuleRef(moduleRef, 'testingDecision');
+      if (ref != null) refs.push(ref);
+    }
+  }
+  return refs;
 }
 
 export function buildPrdPlanningContext(
@@ -93,6 +146,7 @@ export function buildPrdPlanningContext(
     verticalSlices: arrayField(prd, 'verticalSlices'),
     implementationDecisions: arrayField(prd, 'implementationDecisions'),
     testingDecisions: prd.testingDecisions ?? null,
+    moduleRefs: collectModuleRefs(prd),
     ...(stored.stored ? { artifactRef: stored } : {}),
   };
 }

@@ -16,6 +16,7 @@ export const FACTORY_LABELS: Label[] = [
   { name: 'factory:triaging', color: 'fbca04', description: 'Awaiting triage decision' },
   { name: 'factory:accepted', color: '0e8a16', description: 'Accepted by triage' },
   { name: 'factory:rejected', color: 'e6e6e6', description: 'Rejected by triage' },
+  { name: 'factory:grounding', color: '14b8a6', description: 'Feature code-grounding preflight' },
   {
     name: 'factory:framing',
     color: '8b5cf6',

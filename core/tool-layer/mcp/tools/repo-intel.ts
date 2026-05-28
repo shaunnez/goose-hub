@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { z } from 'zod';
 import { getArtifact } from '../../../agent-artifacts/repository.js';
 import { gitRecentChanges, gitRecentlyTouched } from '../../../agent-runtime/git-intel.js';
@@ -290,7 +292,12 @@ async function dispatchRepoIntel(
     }
     case 'find-route': {
       if (input.pathPattern == null) return invalid(input.intent, 'Provide pathPattern.');
-      const results = routeLookup(input.pathPattern, { worktreePath: ctx.workspaceRoot });
+      const routeResults = routeLookup(input.pathPattern, { worktreePath: ctx.workspaceRoot });
+      const serverResults = findServerRouteCandidates(ctx, input.pathPattern);
+      const results =
+        routeResults == null && serverResults.length === 0
+          ? null
+          : uniqueRoutes([...(routeResults ?? []), ...serverResults]);
       return indexFound(input.intent, 'route-index', results, 'No route found.');
     }
     case 'find-component': {
@@ -559,6 +566,144 @@ function duplicateNudgeFields(duplicate: ReturnType<typeof recordDuplicateToolCa
   duplicateNudge?: string;
 } {
   return duplicate?.duplicateNudge != null ? { duplicateNudge: duplicate.duplicateNudge } : {};
+}
+
+function findServerRouteCandidates(ctx: FactoryContext, pathPattern: string): RouteRowLike[] {
+  const serverRelPath = 'apps/server/src/server.ts';
+  const serverAbsPath = path.join(ctx.workspaceRoot, serverRelPath);
+  if (!fs.existsSync(serverAbsPath)) return [];
+
+  let text: string;
+  try {
+    text = fs.readFileSync(serverAbsPath, 'utf8');
+  } catch {
+    return [];
+  }
+
+  const imports = parseNamedImports(text, serverRelPath);
+  const requestedPaths = normalizedServerRoutePaths(pathPattern);
+  const matches: RouteRowLike[] = [];
+  const lines = text.split(/\r?\n/);
+  lines.forEach((line, index) => {
+    const match = line.match(
+      /\b[A-Za-z_$][\w$]*\.route\(\s*['"]([^'"]+)['"]\s*,\s*([A-Za-z_$][\w$]*)/,
+    );
+    if (match == null) return;
+    const mountPath = normalizeRoutePath(match[1]);
+    const routerName = match[2];
+    if (!requestedPaths.some((requested) => routeMountMatches(requested, mountPath))) return;
+    const routerFile = imports.get(routerName);
+    if (routerFile == null) return;
+    if (!fs.existsSync(path.join(ctx.workspaceRoot, routerFile))) return;
+    const routerLine = findRouterPathLine({
+      workspaceRoot: ctx.workspaceRoot,
+      routerFile,
+      mountPath,
+      requestedPaths,
+    });
+    matches.push({
+      pathPattern: mountPath,
+      filePath: routerFile,
+      line: routerLine ?? index + 1,
+      component: routerName,
+    });
+  });
+  return matches;
+}
+
+interface RouteRowLike {
+  pathPattern: string;
+  filePath: string;
+  line: number;
+  component?: string;
+}
+
+function parseNamedImports(text: string, importerRelPath: string): Map<string, string> {
+  const imports = new Map<string, string>();
+  const importerDir = path.posix.dirname(importerRelPath);
+  for (const match of text.matchAll(/import\s*\{\s*([^}]+)\s*\}\s*from\s*['"]([^'"]+)['"]/g)) {
+    const specifier = match[2];
+    if (!specifier.startsWith('.')) continue;
+    const resolved = resolveTsImport(importerDir, specifier);
+    if (resolved == null) continue;
+    for (const part of match[1].split(',')) {
+      const localName = part
+        .trim()
+        .split(/\s+as\s+/)
+        .at(-1)
+        ?.trim();
+      if (localName != null && localName.length > 0) imports.set(localName, resolved);
+    }
+  }
+  return imports;
+}
+
+function resolveTsImport(importerDir: string, specifier: string): string | null {
+  const normalized = path.posix.normalize(path.posix.join(importerDir, specifier));
+  if (normalized.endsWith('.js')) return `${normalized.slice(0, -3)}.ts`;
+  if (normalized.endsWith('.ts')) return normalized;
+  return `${normalized}.ts`;
+}
+
+function normalizedServerRoutePaths(pathPattern: string): string[] {
+  const normalized = normalizeRoutePath(pathPattern);
+  const paths = [normalized];
+  if (normalized.startsWith('/api/')) paths.push(normalizeRoutePath(normalized.slice(4)));
+  return unique(paths);
+}
+
+function normalizeRoutePath(value: string): string {
+  const withoutQuery = value.split(/[?#]/, 1)[0]?.trim() ?? '/';
+  if (withoutQuery.length === 0) return '/';
+  return withoutQuery.startsWith('/') ? withoutQuery : `/${withoutQuery}`;
+}
+
+function routeMountMatches(requestedPath: string, mountPath: string): boolean {
+  return requestedPath === mountPath || requestedPath.startsWith(`${mountPath}/`);
+}
+
+function findRouterPathLine(input: {
+  workspaceRoot: string;
+  routerFile: string;
+  mountPath: string;
+  requestedPaths: string[];
+}): number | null {
+  const absPath = path.join(input.workspaceRoot, input.routerFile);
+  if (!fs.existsSync(absPath)) return null;
+  let text: string;
+  try {
+    text = fs.readFileSync(absPath, 'utf8');
+  } catch {
+    return null;
+  }
+  const lines = text.split(/\r?\n/);
+  for (const [index, line] of lines.entries()) {
+    const match = line.match(
+      /\b[A-Za-z_$][\w$]*\.(?:get|post|put|patch|delete|all)\(\s*['"]([^'"]+)['"]/,
+    );
+    if (match == null) continue;
+    const childPath = normalizeRoutePath(match[1]);
+    const fullPath =
+      childPath === '/'
+        ? input.mountPath
+        : normalizeRoutePath(`${input.mountPath}/${childPath.replace(/^\/+/, '')}`);
+    if (input.requestedPaths.some((requested) => routeMountMatches(requested, fullPath))) {
+      return index + 1;
+    }
+  }
+  return null;
+}
+
+function uniqueRoutes(routes: RouteRowLike[]): RouteRowLike[] {
+  const seen = new Set<string>();
+  const out: RouteRowLike[] = [];
+  for (const route of routes) {
+    const key = `${route.pathPattern}\0${route.filePath}\0${route.line}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(route);
+  }
+  return out;
 }
 
 function workItemNumber(workItemId: string): number {

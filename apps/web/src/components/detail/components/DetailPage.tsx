@@ -295,7 +295,12 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
           </button>
         </div>
 
-        <TaskHeader item={item} projectSlug={slug} hasOpenDep={hasOpenDep} />
+        <TaskHeader
+          item={item}
+          projectSlug={slug}
+          hasOpenDep={hasOpenDep}
+          events={eventsQuery.data ?? []}
+        />
         <ProjectBudgetBanner status={budgetStatus} />
 
         <GatePendingBanner

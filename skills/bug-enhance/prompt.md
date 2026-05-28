@@ -48,9 +48,10 @@ Pick the grounding strategy that fits `category`. Use intents from `repo_intel.q
 
 ### server-api
 
-1. Extract any symbol-shaped tokens from the body (camelCase, PascalCase, snake_case, identifiers, route patterns). For the most specific one, call `repo_intel.query({intent:"find-symbol", name:"<sym>"})`.
-2. If a request path is mentioned (e.g. `POST /api/inbox`), call `repo_intel.query({intent:"find-route", pathPattern:"<path>"})`.
-3. If neither hits, fall back to `repo_intel.query({intent:"recent-touched", sinceDays:14, limit:5})` and filter to `apps/server/src/` and `core/`.
+1. If a request path is mentioned (e.g. `POST /api/inbox`), call `repo_intel.query({intent:"find-route", pathPattern:"<path>"})` first. Add the returned route handler file as a high-confidence candidate.
+2. If the request path starts with `/api/` and the first lookup misses, retry the lookup without the proxy prefix (for example `/api/inbox` -> `/inbox`) before falling back to symbols.
+3. Extract any symbol-shaped tokens from the body (camelCase, PascalCase, snake_case, identifiers, route patterns). For the most specific one, call `repo_intel.query({intent:"find-symbol", name:"<sym>"})`.
+4. If neither hits, fall back to `repo_intel.query({intent:"recent-touched", sinceDays:14, limit:5})` and filter to `apps/server/src/` and `core/`.
 
 ### cli
 

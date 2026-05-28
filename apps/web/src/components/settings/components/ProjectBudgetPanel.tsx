@@ -634,6 +634,16 @@ export function ProjectBudgetPanel({ slug }: Props) {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['project-settings', slug] }),
   });
 
+  const switchAllProvider = useMutation({
+    mutationFn: (provider: ModelProvider) =>
+      Promise.all(
+        (data?.registeredSkills ?? []).map((skill) =>
+          patchSkillBudgetSetting(slug, skill, { provider }),
+        ),
+      ),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['project-settings', slug] }),
+  });
+
   if (isLoading) return <div className="text-[12px] text-fg-3 py-4">Loading…</div>;
   if (error || !data)
     return <div className="text-[12px] text-danger py-4">Failed to load budget settings.</div>;
@@ -759,9 +769,29 @@ export function ProjectBudgetPanel({ slug }: Props) {
 
       {/* Per-skill overrides */}
       <section>
-        <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2 mb-3">
-          Skill runtime settings
-        </h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2">
+            Skill runtime settings
+          </h3>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => switchAllProvider.mutate('claude')}
+              disabled={switchAllProvider.isPending}
+              className="text-[11px] border border-line/60 rounded-full px-2.5 py-0.5 text-fg-2 hover:text-fg hover:border-line transition-colors disabled:opacity-40"
+            >
+              Switch all to Claude
+            </button>
+            <button
+              type="button"
+              onClick={() => switchAllProvider.mutate('codex')}
+              disabled={switchAllProvider.isPending}
+              className="text-[11px] border border-line/60 rounded-full px-2.5 py-0.5 text-fg-2 hover:text-fg hover:border-line transition-colors disabled:opacity-40"
+            >
+              Switch all to Codex
+            </button>
+          </div>
+        </div>
         <p className="text-[11px] text-fg-3 mb-4">
           Leave fields blank to inherit from config or skill defaults. Changes take effect on the
           next agent dispatch. Primary, fallback, and advisor are derived read-only values.

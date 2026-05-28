@@ -357,6 +357,30 @@ describe('runGrillRound', () => {
     }
   });
 
+  it('passes feature grounding digest into grill-me context', async () => {
+    mockInvokeSkill.mockResolvedValueOnce(
+      makeAgentResult(minimalGrillOutput({ readyForPRD: true, refinedIntent: 'Final intent.' })),
+    );
+
+    await runGrillRound({
+      ...baseInput(),
+      codeGrounding: {
+        groundingRunId: 'grounding-run',
+        existingSurfaces: ['core/workflows/grill-and-prd.ts'],
+      },
+      scoutDigest: { reports: [{ scoutName: 'scout-code-path' }] },
+    });
+
+    expect(mockInvokeSkill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          codeGrounding: expect.objectContaining({ groundingRunId: 'grounding-run' }),
+          scoutDigest: { reports: [{ scoutName: 'scout-code-path' }] },
+        }),
+      }),
+    );
+  });
+
   it('returns invalid when output has readyForPRD:false with no questions', async () => {
     mockInvokeSkill.mockResolvedValueOnce(
       makeAgentResult(minimalGrillOutput({ readyForPRD: false, questions: [] })),
@@ -451,6 +475,28 @@ describe('runPrdDraft', () => {
     if (result.status === 'ok') {
       expect(result.prdOutput.title).toBe('Test PRD');
     }
+  });
+
+  it('passes feature grounding digest into write-prd context', async () => {
+    mockInvokeSkill.mockResolvedValueOnce(makeAgentResult(minimalPrdOutput()));
+
+    await runPrdDraft({
+      ...baseInput(),
+      codeGrounding: {
+        groundingRunId: 'grounding-run',
+        plannedFiles: ['apps/web/src/features/new-flow/view.tsx'],
+      },
+      scoutDigest: { reports: [{ scoutName: 'scout-pattern' }] },
+    });
+
+    expect(mockInvokeSkill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          codeGrounding: expect.objectContaining({ groundingRunId: 'grounding-run' }),
+          scoutDigest: { reports: [{ scoutName: 'scout-pattern' }] },
+        }),
+      }),
+    );
   });
 
   it('returns invalid when output parse fails', async () => {

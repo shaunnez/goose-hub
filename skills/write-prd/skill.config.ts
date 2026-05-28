@@ -5,6 +5,25 @@ import { PRDOutputSchema } from './schema.js';
 
 export { ProjectContextSchema };
 
+export const CodeGroundingContextSchema = z.object({
+  groundingRunId: z.string(),
+  existingSurfaces: z.array(z.string()).optional(),
+  confirmedExports: z
+    .array(
+      z.object({
+        path: z.string(),
+        symbol: z.string(),
+        evidence: z.string().optional(),
+      }),
+    )
+    .optional(),
+  plannedFiles: z.array(z.string()).optional(),
+  testSurfaces: z.array(z.string()).optional(),
+  reusablePatterns: z.array(z.string()).optional(),
+  openQuestions: z.array(z.string()).optional(),
+  scoutDigest: z.unknown().optional(),
+});
+
 export const WritePRDContextSchema = z.object({
   workItem: z.object({
     title: z.string(),
@@ -17,6 +36,8 @@ export const WritePRDContextSchema = z.object({
   priorReplies: z.array(GrillPriorReplyEntrySchema).optional(),
   priorPrd: PRDOutputSchema.optional(),
   humanConcerns: z.array(z.string()).optional(),
+  codeGrounding: CodeGroundingContextSchema.optional(),
+  scoutDigest: z.unknown().optional(),
 });
 
 const config: SkillConfig = {
@@ -36,6 +57,8 @@ const config: SkillConfig = {
     'priorReplies',
     'priorPrd',
     'humanConcerns',
+    'codeGrounding',
+    'scoutDigest',
   ],
 };
 

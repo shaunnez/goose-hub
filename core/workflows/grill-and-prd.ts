@@ -39,6 +39,36 @@ export interface ProjectContextBundle {
   claudeMd: string;
 }
 
+function latestFeatureGroundingContext(
+  projectId: string,
+  workItemId: string,
+): {
+  codeGrounding?: unknown;
+  scoutDigest?: unknown;
+} {
+  const [latest] = eventStore.replay({
+    projectId,
+    workItemId,
+    kind: 'feature.grounding-complete',
+    order: 'desc',
+    limit: 1,
+  });
+  if (latest == null) return {};
+  const payload = latest.payload as Record<string, unknown>;
+  return {
+    codeGrounding: {
+      groundingRunId: payload.groundingRunId,
+      existingSurfaces: payload.existingSurfaces,
+      confirmedExports: payload.confirmedExports,
+      plannedFiles: payload.plannedFiles,
+      testSurfaces: payload.testSurfaces,
+      reusablePatterns: payload.reusablePatterns,
+      openQuestions: payload.openQuestions,
+    },
+    scoutDigest: payload.scoutDigest,
+  };
+}
+
 function serializeStack(stack: StackConfig | undefined): string {
   if (stack == null) return '';
   const parts: string[] = [];
@@ -308,17 +338,38 @@ export async function runGrillAndPrdWorkflow(
   // Merge stackSummary from config into the bundle
   const stackSummary = serializeStack((projectConfig as ProjectConfig | null)?.stack);
   const fullProjectContext = { ...projectContext, stackSummary };
+  const groundingContext = latestFeatureGroundingContext(projectId, workItem.id);
+
+  // Restore framed body for grill and write-prd: the state source re-fetches the
+  // original GitHub issue body, which is unframed. Use the framedBody stored in
+  // the feature.framed event so grill-me sees the enriched description.
+  const [framedEvent] = eventStore.replay({
+    projectId,
+    workItemId: workItem.id,
+    kind: 'feature.framed',
+    order: 'desc',
+    limit: 1,
+  });
+  const framedBody = (framedEvent?.payload as { framedBody?: string } | undefined)?.framedBody;
+  const effectiveWorkItem =
+    framedBody != null && !isReviseMode ? { ...workItem, body: framedBody } : workItem;
 
   // ─── Skip-grill mode: jump directly to write-prd ─────────────────────────
   if (skipGrill) {
     const allEvents = eventStore.replay({ projectId, workItemId: workItem.id });
     const grillCompleted = [...allEvents].reverse().find((e) => e.kind === 'grill.completed');
+    const featureFramed = [...allEvents].reverse().find((e) => e.kind === 'feature.framed');
+    const featureGrounding = [...allEvents]
+      .reverse()
+      .find((e) => e.kind === 'feature.grounding-complete');
     const refinedIntent =
       input.refinedIntent ??
       (grillCompleted?.payload as { refinedIntent?: string } | null)?.refinedIntent ??
+      (featureGrounding?.payload as { refinedIntent?: string } | null)?.refinedIntent ??
+      (featureFramed?.payload as { refinedIntent?: string } | null)?.refinedIntent ??
       workItem.title;
     return runWritePrdStep({
-      workItem,
+      workItem: effectiveWorkItem,
       stateSource,
       projectId,
       workflowRunId,
@@ -327,6 +378,7 @@ export async function runGrillAndPrdWorkflow(
       projectConfig,
       totalSpendForSkill,
       fullProjectContext,
+      ...groundingContext,
       refinedIntent,
       priorReplies: augmentPriorRepliesWithCrystallizations(priorReplies, projectId, workItem.id),
     });
@@ -344,6 +396,7 @@ export async function runGrillAndPrdWorkflow(
       projectConfig,
       totalSpendForSkill,
       fullProjectContext,
+      ...groundingContext,
       refinedIntent: priorPrd?.title ?? workItem.title,
       priorPrd,
       humanConcerns,
@@ -411,10 +464,10 @@ export async function runGrillAndPrdWorkflow(
 
         const outcome = await runGrillRound({
           workItem: {
-            id: workItem.id,
-            title: workItem.title,
-            body: workItem.body,
-            externalId: workItem.externalId,
+            id: effectiveWorkItem.id,
+            title: effectiveWorkItem.title,
+            body: effectiveWorkItem.body,
+            externalId: effectiveWorkItem.externalId,
           },
           projectId,
           workItemId: workItem.id,
@@ -424,6 +477,7 @@ export async function runGrillAndPrdWorkflow(
           worktreePath,
           priorReplies: augmentedPriorReplies,
           projectContext: fullProjectContext,
+          ...groundingContext,
           projectConfig,
           deps: { runtime },
         });
@@ -598,6 +652,7 @@ export async function runGrillAndPrdWorkflow(
     projectConfig,
     totalSpendForSkill,
     fullProjectContext,
+    ...groundingContext,
     refinedIntent: refinedIntentForPrd ?? workItem.title,
     priorReplies: augmentPriorRepliesWithCrystallizations(
       augmentedPriorReplies,
@@ -617,6 +672,8 @@ interface WritePrdStepInput {
   projectConfig: Pick<ProjectConfig, 'budgets' | 'stack' | 'targetRepo'> | null | undefined;
   totalSpendForSkill: (projectId: string, skill: string) => number;
   fullProjectContext: ProjectContextBundle;
+  codeGrounding?: unknown;
+  scoutDigest?: unknown;
   refinedIntent: string;
   priorPrd?: PRDOutput;
   humanConcerns?: string[];
@@ -634,6 +691,8 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     projectConfig,
     totalSpendForSkill,
     fullProjectContext,
+    codeGrounding,
+    scoutDigest,
     refinedIntent,
     priorPrd,
     humanConcerns,
@@ -693,6 +752,8 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     discoverSessionId,
     refinedIntent,
     fullProjectContext,
+    codeGrounding,
+    scoutDigest,
     projectConfig,
     priorReplies,
     priorPrd,

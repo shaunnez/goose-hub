@@ -152,7 +152,8 @@ describe('toJsonSchema', () => {
     expect(implementationDecision.properties).toHaveProperty('rationale');
     expect(implementationDecision.properties).toHaveProperty('moduleRef');
     expect(implementationDecision.properties?.rationale).toEqual({ type: ['string', 'null'] });
-    expect(implementationDecision.properties?.moduleRef).toEqual({ type: ['string', 'null'] });
+    expect(schemaAllowsNull(implementationDecision.properties?.moduleRef)).toBe(true);
+    expect(schemaAllowsModuleRefObject(implementationDecision.properties?.moduleRef)).toBe(true);
     expect(implementationDecision.required).toEqual(['decision', 'rationale', 'moduleRef']);
 
     const testingDecisions = properties.testingDecisions as {
@@ -340,4 +341,24 @@ function schemaAllowsNull(value: unknown): boolean {
       ? value.oneOf
       : [];
   return variants.some(schemaAllowsNull);
+}
+
+function schemaAllowsModuleRefObject(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const variants = Array.isArray(value.anyOf)
+    ? value.anyOf
+    : Array.isArray(value.oneOf)
+      ? value.oneOf
+      : null;
+  if (variants != null) return variants.some(schemaAllowsModuleRefObject);
+  const properties = isRecord(value.properties) ? value.properties : {};
+  const status = properties.status;
+  return (
+    value.type === 'object' &&
+    isRecord(properties.path) &&
+    isRecord(status) &&
+    Array.isArray(status.enum) &&
+    status.enum.includes('existing') &&
+    status.enum.includes('planned')
+  );
 }

@@ -193,9 +193,58 @@ function projectEngineeringSpec(record: NonNullable<ReturnType<typeof getEnginee
 }
 
 const TYPE_EXCLUDED_LEGAL_TARGETS: Readonly<Record<string, readonly StateName[]>> = {
-  bug: ['factory:framing', 'factory:grilling', 'factory:research-pending'],
+  bug: ['factory:framing', 'factory:grounding', 'factory:grilling', 'factory:research-pending'],
   feature: ['factory:investigating', 'factory:research-pending'],
 };
+
+const PIPELINE_FALLBACK_TERMINAL_KINDS = new Set([
+  'qa.completed',
+  'qa.verification-blocked',
+  'dev-review.completed',
+  'dev-review.failed',
+  'parallel-implement.exhausted',
+  'parallel-implement.wp-terminal-blocked',
+  'pr.opened',
+  'agent.run-failed',
+]);
+
+function eventDateMs(event: AgentEvent): number {
+  const ms = new Date(event.createdAt).getTime();
+  return Number.isFinite(ms) ? ms : Number.NaN;
+}
+
+function latestEventTimestamp(events: AgentEvent[], predicate: (event: AgentEvent) => boolean) {
+  return events
+    .filter(predicate)
+    .map((event) => ({ createdAt: event.createdAt, ms: eventDateMs(event) }))
+    .filter((event) => Number.isFinite(event.ms))
+    .sort((a, b) => a.ms - b.ms)
+    .at(-1)?.createdAt;
+}
+
+function resolvePipelineTimes(projectId: string, workItemId: string) {
+  const events = eventStore.replay({ projectId, workItemId });
+  const pipelineStartedAt = events
+    .filter((event) => event.kind === 'agent.run-started' && isIssueTimelineEvent(event))
+    .map((event) => ({ createdAt: event.createdAt, ms: eventDateMs(event) }))
+    .filter((event) => Number.isFinite(event.ms))
+    .sort((a, b) => a.ms - b.ms)
+    .at(0)?.createdAt;
+
+  const reviewCompletedAt = latestEventTimestamp(events, (event) => {
+    if (event.kind !== 'review.completed') return false;
+    const verdict = (event.payload as { verdict?: string } | null)?.verdict;
+    return verdict !== 'needs-fix';
+  });
+  const fallbackCompletedAt = latestEventTimestamp(events, (event) =>
+    PIPELINE_FALLBACK_TERMINAL_KINDS.has(event.kind),
+  );
+
+  return {
+    pipelineStartedAt: pipelineStartedAt ?? null,
+    pipelineCompletedAt: reviewCompletedAt ?? fallbackCompletedAt ?? null,
+  };
+}
 
 function buildPrdRelationships(projectId: string): {
   byParent: Map<string, string[]>;
@@ -330,6 +379,7 @@ export async function getIssue(slug: string, id: string): Promise<Result<{ item:
   const enriched = {
     ...workItemServerDto(item as { id: string; externalRefs?: unknown }),
     lastPersonaId: lastPersonaMap.get(workItemId) ?? null,
+    ...resolvePipelineTimes(slug, workItemId),
     prdChildren: byParent.get(externalId),
     prdParent: byChild.get(externalId),
   };

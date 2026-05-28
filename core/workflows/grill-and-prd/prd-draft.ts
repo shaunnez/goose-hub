@@ -33,6 +33,8 @@ export interface RunPrdDraftInput {
   discoverSessionId: string;
   refinedIntent: string;
   fullProjectContext: ProjectContextBundle;
+  codeGrounding?: unknown;
+  scoutDigest?: unknown;
   projectConfig?: Pick<ProjectConfig, 'budgets' | 'stack' | 'targetRepo'> | null;
   priorReplies?: Array<{ role: 'user' | 'agent'; content: string; crystallized?: string }>;
   priorPrd?: PRDOutput;
@@ -50,6 +52,8 @@ export async function runPrdDraft(input: RunPrdDraftInput): Promise<PrdDraftOutc
     discoverSessionId,
     refinedIntent,
     fullProjectContext,
+    codeGrounding,
+    scoutDigest,
     priorReplies,
     priorPrd,
     humanConcerns,
@@ -75,6 +79,8 @@ export async function runPrdDraft(input: RunPrdDraftInput): Promise<PrdDraftOutc
         refinedIntent,
         priority: workItem.priority,
         projectContext: fullProjectContext,
+        ...(codeGrounding != null ? { codeGrounding } : {}),
+        ...(scoutDigest != null ? { scoutDigest } : {}),
         ...(priorReplies != null ? { priorReplies } : {}),
         ...(priorPrd != null ? { priorPrd } : {}),
         ...(humanConcerns != null ? { humanConcerns } : {}),

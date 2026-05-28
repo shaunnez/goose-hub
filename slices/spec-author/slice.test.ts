@@ -47,6 +47,7 @@ vi.mock('@goose-hub/core/projects/loader.js', () => ({
 
 vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
   listScoutReportsForInvestigation: vi.fn().mockReturnValue([]),
+  listScoutReportsForRun: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
@@ -777,6 +778,113 @@ describe('runSpecAuthorWorkflow', () => {
       );
     });
 
+    it('includes nearby manifest candidates in missing filesOwned repair feedback', async () => {
+      const { collectScopeManifest } = await import('@goose-hub/core/workspaces/scope-manifest.js');
+      vi.mocked(collectScopeManifest).mockReturnValueOnce([
+        { path: 'apps/web/src/components/detail', kind: 'dir' },
+        { path: 'apps/web/src/components/detail/lib/costs.ts', kind: 'file' },
+        { path: 'apps/web/src/components/detail/components/OverviewSection.tsx', kind: 'file' },
+      ]);
+      mockValidateEngineeringSpec
+        .mockReturnValueOnce({
+          ok: false,
+          errors: [
+            {
+              rule: 'self-check-grounded-in-code',
+              message:
+                "WP 'WP1' filesOwned path 'apps/web/src/components/detail/hooks/useIssueCostsBreakdown.ts' does not exist in worktree and is not annotated status:'new'. Either fix the path or declare it as a new file.",
+              ref: 'WP1',
+            },
+          ],
+        })
+        .mockReturnValueOnce({ ok: true });
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const retryInput = mockInvokeSkill.mock.calls[1]?.[0] as {
+        overrides?: { appendContext?: { repairFeedback?: string } };
+      };
+      expect(retryInput.overrides?.appendContext?.repairFeedback).toContain(
+        "Nearby existing manifest candidates for 'apps/web/src/components/detail/hooks/useIssueCostsBreakdown.ts'",
+      );
+      expect(retryInput.overrides?.appendContext?.repairFeedback).toContain(
+        'apps/web/src/components/detail/lib/costs.ts',
+      );
+    });
+
+    it('includes available exports and line-citation guidance in missing symbol repair feedback', async () => {
+      const fs = await import('node:fs');
+      vi.mocked(fs.readFileSync).mockReturnValueOnce(
+        'export function dispatchWave() {}\nexport const runScout = true;\n',
+      );
+      mockValidateEngineeringSpec
+        .mockReturnValueOnce({
+          ok: false,
+          errors: [
+            {
+              rule: 'constraint-source-symbol-missing',
+              message:
+                "constraint 'Wave dispatch' cites symbol 'dispatchWav' in 'core/agent-runtime/swarm.ts' which is not present",
+              ref: 'Wave dispatch',
+            },
+          ],
+        })
+        .mockReturnValueOnce({ ok: true });
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const retryInput = mockInvokeSkill.mock.calls[1]?.[0] as {
+        overrides?: { appendContext?: { repairFeedback?: string } };
+      };
+      expect(retryInput.overrides?.appendContext?.repairFeedback).toContain(
+        "Available exports in 'core/agent-runtime/swarm.ts': dispatchWave, runScout",
+      );
+      expect(retryInput.overrides?.appendContext?.repairFeedback).toContain(
+        'Do not introduce new unverified symbols',
+      );
+      expect(retryInput.overrides?.appendContext?.repairFeedback).toContain(
+        'switch to a path:line citation',
+      );
+    });
+
+    it('does not persist when the repair still cites nonexistent symbols', async () => {
+      mockValidateEngineeringSpec
+        .mockReturnValueOnce({
+          ok: false,
+          errors: [
+            {
+              rule: 'constraint-source-symbol-missing',
+              message:
+                "constraint 'Wave dispatch' cites symbol 'dispatchWav' in 'core/agent-runtime/swarm.ts' which is not present",
+            },
+          ],
+        })
+        .mockReturnValueOnce({
+          ok: false,
+          errors: [
+            {
+              rule: 'constraint-source-symbol-missing',
+              message:
+                "constraint 'Wave dispatch' cites symbol 'newUnverifiedSymbol' in 'core/agent-runtime/swarm.ts' which is not present",
+            },
+          ],
+        });
+
+      const source = makeMockSource();
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+
+      expect(mockInvokeSkill).toHaveBeenCalledTimes(2);
+      expect(mockPersistEngineeringSpec).not.toHaveBeenCalled();
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '55',
+        'factory:dev-ready',
+        'factory:needs-human',
+      );
+    });
+
     it('retries once with repair feedback when output schema validation fails', async () => {
       const outputError = Object.assign(
         new Error("invokeSkill: output validation failed for 'spec-author'"),
@@ -1180,6 +1288,81 @@ describe('runSpecAuthorWorkflow', () => {
       );
     });
 
+    it('preserves planned PRD module refs so spec-author can mark them status:new', async () => {
+      vi.mocked(eventStore.replay).mockImplementation((query?: { kind?: string }) => {
+        if (query?.kind === 'prd.drafted') {
+          return [
+            {
+              id: 10,
+              projectId: 'goose-hub-self',
+              workItemId: 'github:shaunnez/goose-hub#55',
+              kind: 'prd.drafted',
+              payload: {
+                prd: {
+                  title: 'Workflow Snapshot Grid',
+                  problem: 'Operators need compact workflow summaries.',
+                  proposedSolution: 'Render overview workflow cards.',
+                  successCriteria: [],
+                  acceptanceCriteria: [],
+                  journeys: [],
+                  functionalSpec: null,
+                  verticalSlices: [],
+                  implementationDecisions: [
+                    {
+                      decision: 'Add planned hook',
+                      moduleRef: {
+                        path: 'apps/web/src/components/detail/hooks/useIssueCostsBreakdown.ts',
+                        status: 'planned',
+                        confidence: 'medium',
+                        evidence: 'feature plan says create hook',
+                      },
+                    },
+                  ],
+                  testingDecisions: {
+                    approach: 'Cover planned hook',
+                    modulesToTest: [
+                      {
+                        path: 'apps/web/src/components/detail/hooks/useIssueCostsBreakdown.test.ts',
+                        status: 'planned',
+                      },
+                    ],
+                  },
+                },
+              },
+              runId: 'prd-run',
+              personaId: null,
+              createdAt: '2026-05-22T00:00:00.000Z',
+            },
+          ] as never;
+        }
+        return [];
+      });
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(
+        makeWorkItem({ type: 'feature' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      const context = mockInvokeSkill.mock.calls[0]?.[0]?.context as {
+        prdContext?: { moduleRefs?: Array<{ path: string; status: string }> };
+      };
+      expect(context.prdContext?.moduleRefs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'apps/web/src/components/detail/hooks/useIssueCostsBreakdown.ts',
+            status: 'planned',
+          }),
+          expect.objectContaining({
+            path: 'apps/web/src/components/detail/hooks/useIssueCostsBreakdown.test.ts',
+            status: 'planned',
+          }),
+        ]),
+      );
+    });
+
     it('derives scopeRoots from scout report digest files when investigation synthesis has no keyFiles', async () => {
       const { collectScopeManifest } = await import('@goose-hub/core/workspaces/scope-manifest.js');
       const scoutRepo = await import('@goose-hub/core/scout-reports/repository.js');
@@ -1231,6 +1414,68 @@ describe('runSpecAuthorWorkflow', () => {
         '/tmp/test-spec-worktree',
         expect.arrayContaining(['apps/web/src/components/detail', 'core/workflows']),
       );
+    });
+
+    it('passes feature grounding scout digest into spec-author when no bug investigation exists', async () => {
+      const scoutRepo = await import('@goose-hub/core/scout-reports/repository.js');
+      vi.mocked(eventStore.replay).mockImplementation((query?: { kind?: string }) => {
+        if (query?.kind === 'feature.grounding-complete') {
+          return [
+            {
+              id: 1,
+              projectId: 'goose-hub-self',
+              workItemId: 'github:shaunnez/goose-hub#55',
+              kind: 'feature.grounding-complete',
+              payload: {
+                groundingRunId: 'grounding-run',
+                existingSurfaces: ['apps/web/src/components/detail/lib/costs.ts'],
+                plannedFiles: ['apps/web/src/components/detail/hooks/useIssueCostsBreakdown.ts'],
+                testSurfaces: ['apps/web/src/components/detail/lib/costs.test.ts'],
+              },
+              runId: 'grounding-run',
+              createdAt: '2026-05-28T00:00:00Z',
+            },
+          ] as never;
+        }
+        return [];
+      });
+      vi.mocked(scoutRepo.listScoutReportsForRun).mockReturnValueOnce([
+        {
+          id: 1,
+          projectId: 'goose-hub-self',
+          workItemId: 'github:shaunnez/goose-hub#55',
+          investigationRunId: 'grounding-run',
+          scoutSkill: 'scout-code-path',
+          report: {
+            findings: [
+              {
+                file: 'apps/web/src/components/detail/lib/costs.ts',
+                fact: 'costs.ts exports useIssueCostsBreakdown.',
+                confidence: 'high',
+              },
+            ],
+          },
+          createdAt: '2026-05-28T00:00:00Z',
+        },
+      ]);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(
+        makeWorkItem({ type: 'feature' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      const context = mockInvokeSkill.mock.calls[0]?.[0]?.context as {
+        scoutReports?: string;
+        featureGrounding?: { plannedFiles?: string[] };
+      };
+      expect(context.scoutReports).toContain('scout-report-digest-v1');
+      expect(context.scoutReports).toContain('apps/web/src/components/detail/lib/costs.ts');
+      expect(context.featureGrounding?.plannedFiles).toEqual([
+        'apps/web/src/components/detail/hooks/useIssueCostsBreakdown.ts',
+      ]);
     });
 
     it('omits existingFileManifest from context when collectScopeManifest returns []', async () => {

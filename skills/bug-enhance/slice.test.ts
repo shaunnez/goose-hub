@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { BugEnhanceOutputSchema } from './schema.js';
+
+function readPrompt(): string {
+  return readFileSync(new URL('prompt.md', import.meta.url), 'utf8');
+}
 
 describe('BugEnhanceOutputSchema', () => {
   it('accepts valid output', () => {
@@ -138,5 +143,17 @@ describe('BugEnhanceOutputSchema', () => {
       decisionSummaries: [{ kind: 'PLAN', summary: 'x' }],
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('bug-enhance prompt', () => {
+  it('grounds server-api request paths through route lookup before generic symbol lookup', () => {
+    const prompt = readPrompt();
+
+    expect(prompt).toContain('If a request path is mentioned');
+    expect(prompt).toContain(
+      'call `repo_intel.query({intent:"find-route", pathPattern:"<path>"})` first',
+    );
+    expect(prompt).toContain('If the request path starts with `/api/`');
   });
 });

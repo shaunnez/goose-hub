@@ -1,3 +1,5 @@
+import { existsSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { firstProjectRepository, listProjectRepositories } from '../projects/repositories.js';
 import type { WorkItem } from '../state-source/interface.js';
 import { LocalDbWorkItemRepository } from '../state-source/local-db-repository.js';
@@ -36,6 +38,22 @@ export function listLocalDbRepoLinks(
   }
 }
 
+function normalizeExistingLocalPath(localPath: string | null | undefined): string | null {
+  if (localPath == null || localPath.length === 0) return null;
+  const expanded =
+    localPath === '~'
+      ? homedir()
+      : localPath.startsWith('~/')
+        ? `${homedir()}${localPath.slice(1)}`
+        : localPath;
+  if (!existsSync(expanded)) return null;
+  try {
+    return statSync(expanded).isDirectory() ? expanded : null;
+  } catch {
+    return null;
+  }
+}
+
 export function resolveRepositoryForWorkItem(input: {
   project: ProjectConfig | null | undefined;
   workItem: WorkItem;
@@ -68,11 +86,15 @@ export function resolveRepositoryForWorkItem(input: {
   if (repoLink != null && project != null && configuredRepo == null) {
     throw new Error(`local-db Work Item repo link '${repoRef}' is not registered in repositories`);
   }
+  const configuredLocalPath = normalizeExistingLocalPath(configuredRepo?.localPath);
+  const targetLocalPath = normalizeExistingLocalPath(project?.targetRepo?.localPath);
   return {
     repoRef,
-    localPath:
-      configuredRepo?.localPath ?? project?.targetRepo?.localPath ?? input.fallbackLocalPath,
-    defaultBranch: configuredRepo?.defaultBranch ?? project?.targetRepo?.defaultBranch ?? 'main',
+    localPath: configuredLocalPath ?? targetLocalPath ?? input.fallbackLocalPath,
+    defaultBranch:
+      (configuredLocalPath != null ? configuredRepo?.defaultBranch : null) ??
+      project?.targetRepo?.defaultBranch ??
+      'main',
     role: repoLink?.role ?? configuredRepo?.role ?? 'unknown',
     selectedBy:
       repoLink?.role === 'primary'

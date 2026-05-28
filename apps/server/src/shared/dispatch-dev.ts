@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
@@ -136,6 +137,92 @@ async function readRoutingLabels(input: {
       error: String(err),
     });
     return [];
+  }
+}
+
+async function recordLegacyFixIssueStartupFailure(input: {
+  source: StateSource;
+  item: WorkItem;
+  slug: string;
+  issueNumber: number;
+  error: Error;
+}): Promise<void> {
+  logger.error('dispatchFixIssue: legacy fix-issue failed before in-progress transition', {
+    slug: input.slug,
+    issueNumber: input.issueNumber,
+    itemId: input.item.id,
+    error: input.error.message,
+  });
+  eventStore.appendEvent({
+    projectId: input.slug,
+    workItemId: input.item.id,
+    kind: 'agent.run-failed',
+    payload: {
+      skill: 'implement',
+      workflowSkill: 'fix-issue',
+      error: input.error.message,
+      reason: 'legacy fix-issue failed before in-progress transition',
+    },
+  });
+
+  try {
+    await input.source.comment(
+      input.item.externalId,
+      buildAgentComment(
+        'Dev',
+        'Failed',
+        'Fix-issue failed before implementation could start — escalating to needs-human',
+        [`Error: ${input.error.message}`],
+      ),
+    );
+  } catch (commentErr) {
+    logger.warn('dispatchFixIssue: failed to comment on pre-start failure', {
+      slug: input.slug,
+      issueNumber: input.issueNumber,
+      error: String(commentErr),
+    });
+  }
+
+  let current: WorkItem;
+  try {
+    current = await input.source.getItem(input.issueNumber.toString());
+  } catch (readErr) {
+    logger.warn('dispatchFixIssue: failed to re-read issue after pre-start failure', {
+      slug: input.slug,
+      issueNumber: input.issueNumber,
+      error: String(readErr),
+    });
+    return;
+  }
+
+  if (current.state !== 'factory:dev-ready') {
+    logger.info('dispatchFixIssue: pre-start failure left state unchanged by dispatcher', {
+      slug: input.slug,
+      issueNumber: input.issueNumber,
+      state: current.state,
+    });
+    return;
+  }
+
+  try {
+    await input.source.transitionState(
+      current.externalId,
+      'factory:dev-ready',
+      'factory:needs-human',
+    );
+    emitStateTransitionEvent({
+      projectId: input.slug,
+      workItemId: current.id,
+      from: 'factory:dev-ready',
+      to: 'factory:needs-human',
+      by: 'fix-issue',
+    });
+  } catch (transitionErr) {
+    logger.warn('dispatchFixIssue: failed to transition pre-start failure to needs-human', {
+      slug: input.slug,
+      issueNumber: input.issueNumber,
+      error: String(transitionErr),
+    });
   }
 }
 
@@ -321,6 +408,21 @@ export async function dispatchInvestigationComplete(
         issueNumber,
         targetState,
       });
+
+      if (targetState === 'factory:dev-ready' && usesLegacyImplementation) {
+        return async () => {
+          const current = await source.getItem(issueNumber.toString());
+          if (current.state !== 'factory:dev-ready') {
+            logger.info('dispatchInvestigationComplete: post-lock implement fallback no-op', {
+              slug,
+              issueNumber,
+              state: current.state,
+            });
+            return;
+          }
+          await dispatchFixIssue(slug, issueNumber);
+        };
+      }
     },
   );
 }
@@ -470,7 +572,18 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
           }
         : undefined;
 
-    await runFixIssueWorkflow(item, source, slug, REPO_ROOT, mockDeps);
+    try {
+      await runFixIssueWorkflow(item, source, slug, REPO_ROOT, mockDeps);
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      await recordLegacyFixIssueStartupFailure({
+        source,
+        item,
+        slug,
+        issueNumber,
+        error,
+      });
+    }
   });
 }
 

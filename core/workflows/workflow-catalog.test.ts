@@ -59,7 +59,7 @@ describe('workflow catalog', () => {
   it('keeps triage routing assumptions aligned with the runtime route helper', () => {
     expect(targetStateForTriage('bug')).toBe('factory:investigating');
     expect(targetStateForTriage('research')).toBe('factory:research-pending');
-    expect(targetStateForTriage('feature')).toBe('factory:grilling');
+    expect(targetStateForTriage('feature')).toBe('factory:grounding');
     expect(targetStateForTriage('feature', ['vague:high'])).toBe('factory:framing');
     expect(targetStateForTriage('chore')).toBe('factory:dev-ready');
 

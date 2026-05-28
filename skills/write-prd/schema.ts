@@ -76,15 +76,24 @@ export const SliceOutlineSchema = z.object({
   journeyRefs: z.array(z.string()),
 });
 
+export const ModuleReferenceSchema = z.object({
+  path: z.string(),
+  status: z.enum(['existing', 'planned']),
+  confidence: z.enum(['high', 'medium', 'low']).optional(),
+  evidence: z.string().optional(),
+});
+
+export const ModuleRefFieldSchema = z.union([z.string(), ModuleReferenceSchema]);
+
 export const ImplementationDecisionSchema = z.object({
   decision: z.string(),
   rationale: z.string().optional(),
-  moduleRef: z.string().optional(),
+  moduleRef: ModuleRefFieldSchema.optional(),
 });
 
 export const TestingDecisionsSchema = z.object({
   approach: z.string(),
-  modulesToTest: z.array(z.string()),
+  modulesToTest: z.array(ModuleRefFieldSchema),
   priorArt: z.string().optional(),
 });
 
@@ -133,5 +142,7 @@ export type Journey = z.infer<typeof JourneySchema>;
 export type AcceptanceCriterion = z.infer<typeof AcceptanceCriterionSchema>;
 export type FunctionalSpec = z.infer<typeof FunctionalSpecSchema>;
 export type SliceOutline = z.infer<typeof SliceOutlineSchema>;
+export type ModuleReference = z.infer<typeof ModuleReferenceSchema>;
+export type ModuleRefField = z.infer<typeof ModuleRefFieldSchema>;
 export type ImplementationDecision = z.infer<typeof ImplementationDecisionSchema>;
 export type TestingDecisions = z.infer<typeof TestingDecisionsSchema>;

@@ -13,6 +13,7 @@ You have **read and search access only**.
 - Start from any issue-provided path, `<investigationSeed>` candidate file, or `<symbolIndexHints>` location before broad search.
 - When you need to locate a symbol, call `repo_intel.query` with `intent: 'find-symbol'`. Use `search_text` only when `repo_intel` returns `not-found` or `index-stale`.
 - If this scout domain does not apply, return explicit irrelevance: `status: "skipped"` with `findings: []` and a decision summary. Do not ask the user for input.
+- If `<investigationSeed>` is empty and this scout is selected, make at least one targeted Factory evidence call (`repo_intel.query`, `search_text`, `list_files`, or `read_file`) before returning `status: "ok"` or an `UNCERTAINTY` result. If the scout domain truly does not apply, return `status: "skipped"` with a domain-not-applicable decision summary instead. `status: "ok"` with `findings: []` is allowed only when backed by a successful Factory evidence call or supplied `<seedEvidence>`.
 
 ## Input
 

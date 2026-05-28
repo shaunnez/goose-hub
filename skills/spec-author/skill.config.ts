@@ -72,6 +72,8 @@ export const SpecAuthorContextSchema = z.object({
     .array(z.object({ path: z.string(), kind: z.enum(['file', 'dir']) }))
     .optional()
     .describe('Capped list of files+dirs under the spec scopeRoots. Use to ground WP filesOwned.'),
+  /** Feature code-grounding payload from the grounding scouts, when available. */
+  featureGrounding: z.unknown().optional(),
 });
 
 const config: SkillConfig = {
@@ -89,6 +91,7 @@ const config: SkillConfig = {
     'investigationSynthesis',
     'repairFeedback',
     'existingFileManifest',
+    'featureGrounding',
   ],
   /**
    * Read bundle: spec-author authors a JSON artefact in its terminal

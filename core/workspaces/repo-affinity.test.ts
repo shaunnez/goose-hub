@@ -1,3 +1,6 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { WorkItem } from '../state-source/interface.js';
 import type {
@@ -20,22 +23,31 @@ function repoLink(repoRef: string, role: string): LocalDbRepoLinkRow {
   };
 }
 
+const appRepoPath = mkdtempSync(join(tmpdir(), 'repo-affinity-app-'));
+const docsRepoPath = mkdtempSync(join(tmpdir(), 'repo-affinity-docs-'));
+const fallbackRepoPath = mkdtempSync(join(tmpdir(), 'repo-affinity-fallback-'));
+const targetRepoPath = mkdtempSync(join(tmpdir(), 'repo-affinity-target-'));
+
+function missingPath(label: string): string {
+  return join(tmpdir(), `repo-affinity-missing-${label}-${Date.now()}`);
+}
+
 const project = {
   id: 'proj',
   repos: ['owner/app', 'owner/docs'],
-  targetRepo: { localPath: '/fallback', defaultBranch: 'main', cloneUrl: '' },
+  targetRepo: { localPath: targetRepoPath, defaultBranch: 'main', cloneUrl: '' },
   repositories: [
     {
       id: 'app',
       repoRef: 'owner/app',
-      localPath: '/repos/app',
+      localPath: appRepoPath,
       defaultBranch: 'main',
       cloneUrl: '',
     },
     {
       id: 'docs',
       repoRef: 'owner/docs',
-      localPath: '/repos/docs',
+      localPath: docsRepoPath,
       defaultBranch: 'trunk',
       cloneUrl: '',
     },
@@ -46,6 +58,11 @@ const workItem = {
   id: 'local:proj#1',
   externalId: '1',
   repoRef: 'owner/app',
+} as WorkItem;
+
+const githubWorkItem = {
+  ...workItem,
+  id: 'github:owner/app#1',
 } as WorkItem;
 
 describe('repo affinity', () => {
@@ -70,12 +87,12 @@ describe('repo affinity', () => {
       resolveRepositoryForWorkItem({
         project,
         workItem,
-        fallbackLocalPath: '/repo',
+        fallbackLocalPath: fallbackRepoPath,
         repository,
       }),
     ).toMatchObject({
       repoRef: 'owner/docs',
-      localPath: '/repos/docs',
+      localPath: docsRepoPath,
       defaultBranch: 'trunk',
       selectedBy: 'repo-link-primary',
     });
@@ -95,4 +112,94 @@ describe('repo affinity', () => {
       }),
     ).toThrow("repo link 'workspace/bitbucket-repo' is not registered");
   });
+
+  it('uses a valid configured repository path before project targetRepo and fallback', () => {
+    expect(
+      resolveRepositoryForWorkItem({
+        project,
+        workItem: githubWorkItem,
+        fallbackLocalPath: fallbackRepoPath,
+      }),
+    ).toMatchObject({
+      repoRef: 'owner/app',
+      localPath: appRepoPath,
+      defaultBranch: 'main',
+      selectedBy: 'work-item',
+    });
+  });
+
+  it('falls back to input fallbackLocalPath when configured path is a missing home path', () => {
+    const missingHomeProject = {
+      ...project,
+      targetRepo: { ...project.targetRepo, localPath: `~/missing-${Date.now()}` },
+      repositories: [
+        {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          ...project.repositories![0],
+          localPath: `~/missing-${Date.now()}`,
+        },
+      ],
+    } as ProjectConfig;
+
+    expect(
+      resolveRepositoryForWorkItem({
+        project: missingHomeProject,
+        workItem: githubWorkItem,
+        fallbackLocalPath: fallbackRepoPath,
+      }),
+    ).toMatchObject({
+      localPath: fallbackRepoPath,
+    });
+  });
+
+  it('uses targetRepo defaultBranch when configured repo path is stale', () => {
+    const staleConfiguredProject = {
+      ...project,
+      targetRepo: { localPath: targetRepoPath, defaultBranch: 'develop', cloneUrl: '' },
+      repositories: [
+        {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          ...project.repositories![0],
+          localPath: missingPath('configured'),
+          defaultBranch: 'feature-branch',
+        },
+      ],
+    } as ProjectConfig;
+
+    expect(
+      resolveRepositoryForWorkItem({
+        project: staleConfiguredProject,
+        workItem: githubWorkItem,
+        fallbackLocalPath: fallbackRepoPath,
+      }),
+    ).toMatchObject({
+      localPath: targetRepoPath,
+      defaultBranch: 'develop',
+    });
+  });
+
+  it('falls back when configured and targetRepo absolute paths are missing', () => {
+    const missingAbsoluteProject = {
+      ...project,
+      targetRepo: { ...project.targetRepo, localPath: missingPath('target') },
+      repositories: [
+        {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          ...project.repositories![0],
+          localPath: missingPath('configured'),
+        },
+      ],
+    } as ProjectConfig;
+
+    expect(
+      resolveRepositoryForWorkItem({
+        project: missingAbsoluteProject,
+        workItem: githubWorkItem,
+        fallbackLocalPath: fallbackRepoPath,
+      }),
+    ).toMatchObject({
+      localPath: fallbackRepoPath,
+    });
+  });
+
 });

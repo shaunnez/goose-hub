@@ -42,6 +42,8 @@ export interface WorkItemDto {
   externalRefs: WorkItemExternalRefDto[];
   createdAt: string;
   closedAt?: string | null;
+  pipelineStartedAt?: string | null;
+  pipelineCompletedAt?: string | null;
   lastPersonaId?: string | null;
 }
 
@@ -776,6 +778,7 @@ export type WorkflowKind = 'bug' | 'feature' | 'chore' | 'research';
 export type WorkflowEdgeKind = 'primary' | 'optional' | 'retry' | 'summary';
 export type WorkflowGroup =
   | 'triage'
+  | 'grounding'
   | 'investigation'
   | 'grill'
   | 'prd'

@@ -806,7 +806,7 @@ describe('runTriageBatch onward routing after accept', () => {
     );
   });
 
-  it('routes fresh type:feature (no factory:from-prd) to factory:grilling after accepting', async () => {
+  it('routes fresh type:feature (no factory:from-prd) to factory:grounding after accepting', async () => {
     const source = makeMockSource([
       makeWorkItem({
         title: 'Show active milestone filter on board',
@@ -838,7 +838,7 @@ describe('runTriageBatch onward routing after accept', () => {
     expect(source.transitionState).toHaveBeenCalledWith(
       '42',
       'factory:accepted',
-      'factory:grilling',
+      'factory:grounding',
     );
   });
 

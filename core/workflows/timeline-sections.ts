@@ -3,6 +3,7 @@ import { WORKFLOW_CATALOG, type WorkflowGroup } from './workflow-catalog.js';
 
 export const TIMELINE_SECTION_DEFINITIONS = [
   { id: 'triage', title: 'Triage' },
+  { id: 'grounding', title: 'Grounding' },
   { id: 'investigation', title: 'Investigation' },
   { id: 'grill', title: 'Grill' },
   { id: 'prd', title: 'PRD' },
@@ -40,6 +41,7 @@ const SECTION_IDS = new Set<TimelineSectionId>(
 
 const WORKFLOW_GROUP_TO_TIMELINE_SECTION: Record<WorkflowGroup, TimelineSectionId> = {
   triage: 'triage',
+  grounding: 'grounding',
   investigation: 'investigation',
   grill: 'grill',
   prd: 'prd',
@@ -60,6 +62,8 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'agent.triage-complete': 'triage',
   'agent.repo-override': 'triage',
   'agent.investigation-complete': 'investigation',
+  'feature.framed': 'grounding',
+  'feature.grounding-complete': 'grounding',
   'agent.investigation-context-injected': 'investigation',
   'agent.investigation-seed-built': 'investigation',
   'agent.investigation-seed-empty': 'investigation',

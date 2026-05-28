@@ -40,6 +40,7 @@ export const OFFICE_ROLES: readonly OfficeRole[] = [
 const STATE_TO_ROLE: Readonly<Record<string, OfficeRole | null>> = {
   'factory:triaging': 'triager',
   'factory:accepted': 'triager',
+  'factory:grounding': 'investigator',
   'factory:grilling': 'griller',
   'factory:prd-drafting': 'prd-writer',
   'factory:prd-review': 'prd-writer',

@@ -22,6 +22,8 @@ export interface RunGrillRoundInput {
   worktreePath: string;
   priorReplies: Array<{ role: 'user' | 'agent'; content: string; crystallized?: string }>;
   projectContext: ProjectContextBundle;
+  codeGrounding?: unknown;
+  scoutDigest?: unknown;
   projectConfig?: Pick<ProjectConfig, 'budgets' | 'stack' | 'targetRepo'> | null;
   deps?: { runtime?: AgentRuntime };
 }
@@ -37,6 +39,8 @@ export async function runGrillRound(input: RunGrillRoundInput): Promise<GrillRou
     worktreePath,
     priorReplies,
     projectContext,
+    codeGrounding,
+    scoutDigest,
     projectConfig,
     deps,
   } = input;
@@ -62,6 +66,8 @@ export async function runGrillRound(input: RunGrillRoundInput): Promise<GrillRou
         priorReplies,
         roundNumber,
         projectContext,
+        ...(codeGrounding != null ? { codeGrounding } : {}),
+        ...(scoutDigest != null ? { scoutDigest } : {}),
       },
       overrides: {
         workspaceDir: worktreePath,

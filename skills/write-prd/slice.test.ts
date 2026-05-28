@@ -85,12 +85,24 @@ const validPRD = {
     {
       decision: 'Stream CSV via existing admin route',
       rationale: 'Follows admin gateway pattern in CONTEXT.md',
-      moduleRef: 'apps/server/src/domains/admin/',
+      moduleRef: {
+        path: 'apps/server/src/domains/admin/',
+        status: 'existing' as const,
+        confidence: 'high' as const,
+        evidence: 'project context',
+      },
     },
   ],
   testingDecisions: {
     approach: 'Verify admin endpoint returns correct CSV rows for date range',
-    modulesToTest: ['slices/admin-csv-export/slice.test.ts'],
+    modulesToTest: [
+      {
+        path: 'slices/admin-csv-export/slice.test.ts',
+        status: 'planned' as const,
+        confidence: 'medium' as const,
+        evidence: 'new feature coverage',
+      },
+    ],
   },
   decisionSummaries: [baseDecisionSummary],
 };
@@ -187,6 +199,25 @@ describe('PRD schema', () => {
     const result = PRDOutputSchema.safeParse({
       ...validPRD,
       engineeringSpecRef: 'docs/eng-specs/audit-export.md',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts existing and planned module refs with evidence', () => {
+    const result = PRDOutputSchema.safeParse(validPRD);
+    expect(result.success).toBe(true);
+  });
+
+  it('keeps legacy bare string module refs backward compatible', () => {
+    const result = PRDOutputSchema.safeParse({
+      ...validPRD,
+      implementationDecisions: [
+        { decision: 'Use legacy ref shape', moduleRef: 'core/state-source/interface.ts' },
+      ],
+      testingDecisions: {
+        approach: 'Existing tests',
+        modulesToTest: ['slices/write-prd/slice.test.ts'],
+      },
     });
     expect(result.success).toBe(true);
   });
