@@ -1,8 +1,4 @@
-export type PostBackKind =
-  | 'prd-summary'
-  | 'investigation-summary'
-  | 'pr-link'
-  | 'needs-human';
+export type PostBackKind = 'prd-summary' | 'investigation-summary' | 'pr-link' | 'needs-human';
 
 export type PostBackProvider = 'jira' | 'bitbucket';
 
