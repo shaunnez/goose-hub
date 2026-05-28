@@ -2,7 +2,7 @@ import { deleteEngineeringSpec } from '../engineering-specs/repository.js';
 import { eventStore } from '../event-stream/store.js';
 import { deleteInterventionsForWorkItem } from '../interventions/repository.js';
 import { resolveState } from '../state-machine/conflict-resolver.js';
-import { STATES } from '../state-machine/states.js';
+import { STATES, TERMINAL_STATES } from '../state-machine/states.js';
 import type { StateName } from '../state-machine/states.js';
 import { isLegalTransition } from '../state-machine/transitions.js';
 import type {
@@ -51,6 +51,7 @@ interface MockIssueStore {
   blocks: string[];
   comments: IssueComment[];
   createdAt: Date;
+  closedAt?: Date;
   prDiff?: string;
   /** Arbitrary extra labels not tracked by the enum fields above. */
   extraLabels: Set<string>;
@@ -109,6 +110,7 @@ export class InMemoryLabelsSource implements StateSource {
       dependsOn: issue.dependsOn,
       blocks: issue.blocks,
       createdAt: issue.createdAt,
+      closedAt: issue.closedAt,
     };
   }
 
@@ -174,6 +176,7 @@ export class InMemoryLabelsSource implements StateSource {
       );
     }
     issue.state = to;
+    issue.closedAt = TERMINAL_STATES.has(to) ? new Date() : undefined;
   }
 
   async forceState(itemId: string, to: StateName): Promise<void> {
@@ -181,6 +184,7 @@ export class InMemoryLabelsSource implements StateSource {
     const issue = this.getByExternalId(number);
     if (issue == null) throw new Error(`InMemoryLabelsSource: issue #${number} not found`);
     issue.state = to;
+    issue.closedAt = TERMINAL_STATES.has(to) ? new Date() : undefined;
   }
 
   async comment(itemId: string, body: string): Promise<void> {
@@ -328,6 +332,7 @@ export class InMemoryLabelsSource implements StateSource {
     if (issue == null) throw new Error('InMemoryLabelsSource: created issue not found');
     if (opts.state != null && opts.state !== 'factory:triaging') {
       issue.state = opts.state;
+      issue.closedAt = TERMINAL_STATES.has(opts.state) ? new Date() : undefined;
     }
     if (opts.schedule != null) issue.schedule = opts.schedule;
     if (opts.dependsOn != null) issue.dependsOn = opts.dependsOn;

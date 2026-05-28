@@ -20,6 +20,10 @@ export interface IssueCostsBreakdown {
   byStage: Map<CostRowDto['stage'], StageBreakdown>;
   total: number;
   totalTokens: number;
+  totalInputTokens: number;
+  totalCachedInputTokens: number;
+  totalReasoningOutputTokens: number;
+  totalCacheHitRatio: number;
   hasEstimated: boolean;
   totalLabel: 'estimated' | 'exact';
   runCount: number;
@@ -31,6 +35,10 @@ const EMPTY: Omit<IssueCostsBreakdown, 'isLoading'> = {
   byStage: new Map(),
   total: 0,
   totalTokens: 0,
+  totalInputTokens: 0,
+  totalCachedInputTokens: 0,
+  totalReasoningOutputTokens: 0,
+  totalCacheHitRatio: 0,
   hasEstimated: false,
   totalLabel: 'exact',
   runCount: 0,
@@ -56,11 +64,17 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
     const byRun = new Map<string, CostRowDto>();
     const byStage = new Map<CostRowDto['stage'], StageBreakdown>();
     let totalTokens = 0;
+    let totalInputTokens = 0;
+    let totalCachedInputTokens = 0;
+    let totalReasoningOutputTokens = 0;
 
     for (const row of data.rows) {
       byRun.set(row.runId, row);
       const tokens = row.inputTokens + row.outputTokens;
       totalTokens += tokens;
+      totalInputTokens += row.inputTokens;
+      totalCachedInputTokens += row.cachedInputTokens;
+      totalReasoningOutputTokens += row.reasoningOutputTokens;
 
       const existing = byStage.get(row.stage);
       if (existing) {
@@ -92,6 +106,10 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
       byStage,
       total: data.totalUsd,
       totalTokens,
+      totalInputTokens,
+      totalCachedInputTokens,
+      totalReasoningOutputTokens,
+      totalCacheHitRatio: totalCachedInputTokens / Math.max(totalInputTokens, 1),
       hasEstimated: data.hasEstimated,
       totalLabel: data.hasEstimated ? 'estimated' : 'exact',
       runCount: data.rows.length,

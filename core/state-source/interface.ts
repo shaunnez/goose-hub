@@ -37,6 +37,7 @@ export interface WorkItem {
   dependsOn: string[]; // repo-qualified refs parsed from body
   blocks: string[];
   createdAt: Date;
+  closedAt?: Date;
 }
 
 export interface Milestone {

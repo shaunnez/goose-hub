@@ -18,6 +18,31 @@ interface TaskHeaderProps {
   hasOpenDep?: boolean;
 }
 
+function formatCacheHit(ratio: number): string {
+  if (!Number.isFinite(ratio)) return '—';
+  return `${Math.round(ratio * 100)}%`;
+}
+
+function formatFixDuration(item?: WorkItemDto): string {
+  if (item == null || item.createdAt === '') return '—';
+  const startMs = new Date(item.createdAt).getTime();
+  if (!Number.isFinite(startMs)) return '—';
+
+  const closedAt = item.closedAt;
+  const closedMs = closedAt != null ? new Date(closedAt).getTime() : Number.NaN;
+  const endMs = Number.isFinite(closedMs) ? closedMs : Date.now();
+  const minutes = Math.max(0, Math.floor((endMs - startMs) / 60000));
+  if (minutes < 60) return `${minutes}m`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours < 48) return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
+
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours === 0 ? `${days}d` : `${days}d ${remainingHours}h`;
+}
+
 export function TaskHeader({ item, projectSlug, hasOpenDep = false }: TaskHeaderProps) {
   const queryClient = useQueryClient();
   const [savingPriority, setSavingPriority] = useState(false);
@@ -36,6 +61,20 @@ export function TaskHeader({ item, projectSlug, hasOpenDep = false }: TaskHeader
 
   const lane = item?.state ? (laneForState(item.state) ?? item.state.replace('factory:', '')) : '—';
   const lastPersonaLabel = getPersonaLabel(personaMap, item?.lastPersonaId) ?? '—';
+  const costTitle =
+    costs.runCount === 0
+      ? 'No agent runs recorded yet'
+      : [
+          `${formatTokens(costs.totalTokens)} tokens`,
+          `${formatTokens(costs.totalCachedInputTokens)} cached input tokens`,
+          `${formatCacheHit(costs.totalCacheHitRatio)} cache hit`,
+          `${costs.runCount} run${costs.runCount === 1 ? '' : 's'}`,
+        ].join(' · ');
+  const costValue = costs.runCount === 0 ? '$—' : formatCost(costs.total, costs.totalLabel);
+  const tokenValue = costs.runCount === 0 ? '—' : formatTokens(costs.totalTokens);
+  const cachedTokenValue = costs.runCount === 0 ? '—' : formatTokens(costs.totalCachedInputTokens);
+  const cacheHitValue = costs.runCount === 0 ? '—' : formatCacheHit(costs.totalCacheHitRatio);
+  const fixDuration = formatFixDuration(item);
 
   const externalId = item?.externalId;
   const invalidate = useCallback(() => {
@@ -123,20 +162,37 @@ export function TaskHeader({ item, projectSlug, hasOpenDep = false }: TaskHeader
           <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
           <span data-testid="task-header-cost">
             cost{' '}
-            <span
-              className="font-mono"
-              title={
-                costs.runCount === 0
-                  ? 'No agent runs recorded yet'
-                  : `${formatTokens(costs.totalTokens)} tokens across ${costs.runCount} run${costs.runCount === 1 ? '' : 's'}`
-              }
-            >
-              {costs.runCount === 0 ? '$—' : formatCost(costs.total, costs.totalLabel)}
+            <span className="font-mono" title={costTitle}>
+              {costValue}
             </span>
           </span>
           <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
-          <span title="Duration tracking available in M9" data-testid="duration-placeholder">
-            duration <span className="font-mono">—</span>
+          <span data-testid="task-header-tokens">
+            tokens{' '}
+            <span className="font-mono" title={costTitle}>
+              {tokenValue}
+            </span>
+          </span>
+          <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+          <span data-testid="task-header-cached-tokens">
+            cached{' '}
+            <span className="font-mono" title={costTitle}>
+              {cachedTokenValue}
+            </span>
+          </span>
+          <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+          <span data-testid="task-header-cache-hit">
+            cache hit{' '}
+            <span className="font-mono" title={costTitle}>
+              {cacheHitValue}
+            </span>
+          </span>
+          <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+          <span
+            title="Elapsed time since this work item opened"
+            data-testid="task-header-fix-duration"
+          >
+            fix duration <span className="font-mono">{fixDuration}</span>
           </span>
           {/* Type — static, leftmost */}
           <span className="inline-flex items-center h-6 px-2.5 rounded-full text-[11.5px] bg-bg-elev border border-line text-fg-2 capitalize">
