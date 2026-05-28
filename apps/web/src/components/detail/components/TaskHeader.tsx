@@ -2,7 +2,7 @@ import { fetchMilestones, setLabel, setMilestone } from '@/lib/api';
 import { PRIORITY_BG, PRIORITY_BORDER, PRIORITY_COLOR, STATE_LABEL } from '@/lib/constants';
 import { parseDependencies } from '@/lib/dependency-parser';
 import { laneForState } from '@/lib/lanes.config';
-import type { MilestoneDto, WorkItemDto } from '@/lib/types';
+import type { AgentEventDto, MilestoneDto, WorkItemDto } from '@/lib/types';
 import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import { formatCost, formatTokens } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,6 +16,7 @@ interface TaskHeaderProps {
   item?: WorkItemDto;
   projectSlug: string;
   hasOpenDep?: boolean;
+  events?: AgentEventDto[];
 }
 
 function formatCacheHit(ratio: number): string {
@@ -23,14 +24,68 @@ function formatCacheHit(ratio: number): string {
   return `${Math.round(ratio * 100)}%`;
 }
 
-function formatFixDuration(item?: WorkItemDto): string {
-  if (item == null || item.createdAt === '') return '—';
-  const startMs = new Date(item.createdAt).getTime();
-  if (!Number.isFinite(startMs)) return '—';
+function eventTimeMs(event: AgentEventDto): number {
+  const ms = new Date(event.createdAt).getTime();
+  return Number.isFinite(ms) ? ms : Number.NaN;
+}
 
-  const closedAt = item.closedAt;
-  const closedMs = closedAt != null ? new Date(closedAt).getTime() : Number.NaN;
-  const endMs = Number.isFinite(closedMs) ? closedMs : Date.now();
+function timestampMs(value?: string | null): number {
+  if (value == null || value === '') return Number.NaN;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : Number.NaN;
+}
+
+function eventPipelineCompletedMs(events: AgentEventDto[]): number | null {
+  const reviewCompletedMs = events
+    .filter((event) => event.kind === 'review.completed')
+    .map(eventTimeMs)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b)
+    .at(-1);
+  if (reviewCompletedMs != null) return reviewCompletedMs;
+
+  const fallbackTerminalMs = events
+    .filter((event) =>
+      [
+        'qa.completed',
+        'qa.verification-blocked',
+        'dev-review.completed',
+        'dev-review.failed',
+        'parallel-implement.exhausted',
+        'parallel-implement.wp-terminal-blocked',
+        'pr.opened',
+      ].includes(event.kind),
+    )
+    .map(eventTimeMs)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b)
+    .at(-1);
+  return fallbackTerminalMs ?? null;
+}
+
+function formatFixDuration(item: WorkItemDto | undefined, events: AgentEventDto[]): string {
+  const itemCompletedMs = timestampMs(item?.pipelineCompletedAt);
+  const eventCompletedMs = eventPipelineCompletedMs(events);
+  const endMs =
+    Number.isFinite(itemCompletedMs) || eventCompletedMs != null
+      ? Math.max(Number.isFinite(itemCompletedMs) ? itemCompletedMs : 0, eventCompletedMs ?? 0)
+      : Date.now();
+
+  const itemStartedMs = timestampMs(item?.pipelineStartedAt);
+  const eventStartedMs = events
+    .filter((event) => event.kind === 'agent.run-started')
+    .map(eventTimeMs)
+    .filter((ms) => Number.isFinite(ms) && ms <= endMs)
+    .sort((a, b) => a - b)
+    .at(0);
+  const startMs =
+    Number.isFinite(itemStartedMs) && eventStartedMs != null
+      ? Math.min(itemStartedMs, eventStartedMs)
+      : Number.isFinite(itemStartedMs)
+        ? itemStartedMs
+        : eventStartedMs;
+  if (startMs == null) return '—';
+
   const minutes = Math.max(0, Math.floor((endMs - startMs) / 60000));
   if (minutes < 60) return `${minutes}m`;
 
@@ -43,7 +98,12 @@ function formatFixDuration(item?: WorkItemDto): string {
   return remainingHours === 0 ? `${days}d` : `${days}d ${remainingHours}h`;
 }
 
-export function TaskHeader({ item, projectSlug, hasOpenDep = false }: TaskHeaderProps) {
+export function TaskHeader({
+  item,
+  projectSlug,
+  hasOpenDep = false,
+  events = [],
+}: TaskHeaderProps) {
   const queryClient = useQueryClient();
   const [savingPriority, setSavingPriority] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
@@ -74,7 +134,7 @@ export function TaskHeader({ item, projectSlug, hasOpenDep = false }: TaskHeader
   const tokenValue = costs.runCount === 0 ? '—' : formatTokens(costs.totalTokens);
   const cachedTokenValue = costs.runCount === 0 ? '—' : formatTokens(costs.totalCachedInputTokens);
   const cacheHitValue = costs.runCount === 0 ? '—' : formatCacheHit(costs.totalCacheHitRatio);
-  const fixDuration = formatFixDuration(item);
+  const fixDuration = formatFixDuration(item, events);
 
   const externalId = item?.externalId;
   const invalidate = useCallback(() => {
@@ -189,7 +249,7 @@ export function TaskHeader({ item, projectSlug, hasOpenDep = false }: TaskHeader
           </span>
           <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
           <span
-            title="Elapsed time since this work item opened"
+            title="Elapsed time from the first agent run to review completion or the current pipeline point"
             data-testid="task-header-fix-duration"
           >
             fix duration <span className="font-mono">{fixDuration}</span>

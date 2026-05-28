@@ -29,6 +29,8 @@ export interface WorkItemDto {
   prdParent?: string;
   createdAt: string;
   closedAt?: string | null;
+  pipelineStartedAt?: string | null;
+  pipelineCompletedAt?: string | null;
   lastPersonaId?: string | null;
 }
 

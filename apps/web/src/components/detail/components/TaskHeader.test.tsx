@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { fetchIssueCosts, fetchMilestones } from '@/lib/api';
-import type { WorkItemCostsDto, WorkItemDto } from '@/lib/types';
+import type { AgentEventDto, WorkItemCostsDto, WorkItemDto } from '@/lib/types';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -48,6 +48,18 @@ function item(partial: Partial<WorkItemDto> = {}): WorkItemDto {
   };
 }
 
+function event(id: number, kind: string, createdAt: string, payload: unknown = {}): AgentEventDto {
+  return {
+    id,
+    projectId: 'proj',
+    workItemId: 'github:owner/repo#42',
+    kind,
+    payload,
+    runId: `run-${id}`,
+    createdAt,
+  };
+}
+
 describe('TaskHeader', () => {
   beforeEach(() => {
     dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-05-01T02:15:00Z').getTime());
@@ -61,7 +73,7 @@ describe('TaskHeader', () => {
     vi.mocked(fetchMilestones).mockReset();
   });
 
-  it('renders cost, token, cache, and fix duration metrics', async () => {
+  it('renders cost, token, cache, and pipeline fix duration metrics', async () => {
     const costs: WorkItemCostsDto = {
       workItemId: 'wi-1',
       totalUsd: 0.42,
@@ -88,7 +100,18 @@ describe('TaskHeader', () => {
     };
     vi.mocked(fetchIssueCosts).mockResolvedValue(costs);
 
-    renderWithQueryClient(<TaskHeader item={item()} projectSlug="proj" />);
+    renderWithQueryClient(
+      <TaskHeader
+        item={item()}
+        projectSlug="proj"
+        events={[
+          event(1, 'agent.run-started', '2026-05-01T00:00:00Z', { skill: 'triage' }),
+          event(2, 'agent.run-started', '2026-05-01T00:02:00Z', { skill: 'investigate' }),
+          event(3, 'review.completed', '2026-05-01T00:17:11Z'),
+          event(4, 'retrospective.completed', '2026-05-01T02:15:00Z'),
+        ]}
+      />,
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId('task-header-cost').textContent).toContain('cost $0.42');
@@ -97,11 +120,11 @@ describe('TaskHeader', () => {
     expect(screen.getByTestId('task-header-cached-tokens').textContent).toContain('cached 600');
     expect(screen.getByTestId('task-header-cache-hit').textContent).toContain('cache hit 50%');
     expect(screen.getByTestId('task-header-fix-duration').textContent).toContain(
-      'fix duration 2h 15m',
+      'fix duration 17m',
     );
   });
 
-  it('freezes fix duration at closedAt for completed work', async () => {
+  it('does not derive fix duration from work item age or closedAt', async () => {
     vi.mocked(fetchIssueCosts).mockResolvedValue({
       workItemId: 'wi-1',
       totalUsd: 0,
@@ -115,13 +138,29 @@ describe('TaskHeader', () => {
           state: 'factory:done',
           createdAt: '2026-05-01T00:00:00Z',
           closedAt: '2026-05-01T00:45:00Z',
+          pipelineStartedAt: '2026-05-01T00:10:00Z',
+          pipelineCompletedAt: '2026-05-01T00:27:00Z',
         })}
         projectSlug="proj"
+        events={[event(4, 'retrospective.completed', '2026-05-01T02:15:00Z')]}
       />,
     );
 
     expect(screen.getByTestId('task-header-fix-duration').textContent).toContain(
-      'fix duration 45m',
+      'fix duration 17m',
     );
+  });
+
+  it('shows an empty fix duration before the agent pipeline starts', async () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValue({
+      workItemId: 'wi-1',
+      totalUsd: 0,
+      hasEstimated: false,
+      rows: [],
+    });
+
+    renderWithQueryClient(<TaskHeader item={item()} projectSlug="proj" events={[]} />);
+
+    expect(screen.getByTestId('task-header-fix-duration').textContent).toContain('fix duration —');
   });
 });

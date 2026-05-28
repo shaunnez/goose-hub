@@ -780,6 +780,59 @@ describe('getIssue', () => {
     const result = await getIssue('unknown', '1');
     expect(result).toMatchObject({ ok: false, status: 404 });
   });
+
+  it('enriches the issue with durable agent pipeline timestamps', async () => {
+    vi.mocked(eventStore.replay)
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([
+        {
+          id: 1,
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          kind: 'agent.run-started',
+          payload: { skill: 'triage' },
+          runId: 'triage-run',
+          personaId: null,
+          createdAt: '2026-05-28T08:10:59Z',
+        },
+        {
+          id: 2,
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          kind: 'review.completed',
+          payload: {},
+          runId: 'review-run',
+          personaId: null,
+          createdAt: '2026-05-28T08:28:10Z',
+        },
+        {
+          id: 3,
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          kind: 'retrospective.completed',
+          payload: {},
+          runId: 'retro-run',
+          personaId: null,
+          createdAt: '2026-05-28T10:43:26Z',
+        },
+      ]);
+
+    const result = await getIssue('proj', '1');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        item: {
+          pipelineStartedAt: '2026-05-28T08:10:59Z',
+          pipelineCompletedAt: '2026-05-28T08:28:10Z',
+        },
+      },
+    });
+    expect(eventStore.replay).toHaveBeenLastCalledWith({
+      projectId: 'proj',
+      workItemId: 'github:owner/repo#1',
+    });
+  });
 });
 
 describe('getIssueWorktreeDiff (#185)', () => {
