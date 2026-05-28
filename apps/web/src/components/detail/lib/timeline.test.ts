@@ -511,17 +511,47 @@ describe('groupEvents — discover phase groups', () => {
     ).toBe(true);
   });
 
+  it('marks grill phase completed when a posted question is followed by an answer resume transition', () => {
+    const SID = 'discover-session-answered';
+    const WID = 'discover-workflow-answered';
+    const result = groupEvents([
+      makeEvent(1, 'agent.run-started', `${WID}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: WID, discoverSessionId: SID },
+      }),
+      makeEvent(2, 'grill.question-posted', WID, {
+        payload: { displaySkill: 'grill-me', workflowRunId: WID, discoverSessionId: SID },
+      }),
+      makeEvent(3, 'state.transitioned', WID, {
+        payload: {
+          workflowRunId: WID,
+          discoverSessionId: SID,
+          from: 'factory:gate-pending',
+          to: 'factory:grilling',
+        },
+      }),
+      makeEvent(4, 'swarm.heartbeat', `${WID}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: WID, discoverSessionId: SID },
+      }),
+    ]);
+
+    expect(result[0].kind).toBe('phase-group');
+    if (result[0].kind !== 'phase-group') return;
+    expect(result[0].phase).toBe('grill');
+    expect(result[0].status).toBe('completed');
+  });
+
   it('does not infer grill phase completion from a posted question alone', () => {
+    const SID = 'discover-session-question-only';
     const WID = 'discover-workflow-question-only';
     const result = groupEvents([
       makeEvent(1, 'agent.run-started', `${WID}:grill-me`, {
-        payload: { skill: 'grill-me', workflowRunId: WID },
+        payload: { skill: 'grill-me', workflowRunId: WID, discoverSessionId: SID },
       }),
       makeEvent(2, 'agent.run-completed', `${WID}:grill-me`, {
-        payload: { skill: 'grill-me', workflowRunId: WID },
+        payload: { skill: 'grill-me', workflowRunId: WID, discoverSessionId: SID },
       }),
       makeEvent(3, 'grill.question-posted', WID, {
-        payload: { displaySkill: 'grill-me', workflowRunId: WID },
+        payload: { displaySkill: 'grill-me', workflowRunId: WID, discoverSessionId: SID },
       }),
     ]);
 

@@ -51,6 +51,12 @@ function isPrdPhaseEvent(event: AgentEventDto): boolean {
   return event.kind.startsWith('prd.');
 }
 
+function isAnsweredGrillTransition(event: AgentEventDto): boolean {
+  if (event.kind !== 'state.transitioned') return false;
+  const payload = event.payload as { from?: unknown; to?: unknown } | null;
+  return payload?.from === 'factory:gate-pending' && payload.to === 'factory:grilling';
+}
+
 function resolveDiscoverPhaseStatus(
   phase: 'grill' | 'prd',
   items: RenderItem[],
@@ -58,7 +64,11 @@ function resolveDiscoverPhaseStatus(
   const events = items.flatMap(eventFromRenderItem);
   if (events.some((event) => event.kind === 'agent.run-failed')) return 'failed';
   if (phase === 'grill') {
-    if (events.some((event) => event.kind === 'grill.completed')) return 'completed';
+    if (
+      events.some((event) => event.kind === 'grill.completed' || isAnsweredGrillTransition(event))
+    ) {
+      return 'completed';
+    }
   } else if (
     events.some((event) =>
       ['prd.drafted', 'prd.approved', 'prd.rejected', 'prd.revised', 'prd.declined'].includes(
