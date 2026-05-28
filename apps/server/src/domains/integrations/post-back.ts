@@ -75,11 +75,17 @@ export async function executePostBack(input: {
     const token =
       process.env.JIRA_API_TOKEN ?? process.env.ATLASSIAN_API_TOKEN ?? process.env.JIRA_TOKEN ?? '';
 
-    if (jiraConfig == null || email.length === 0 || token.length === 0) {
+    if (
+      jiraConfig == null ||
+      jiraConfig.enabled !== true ||
+      jiraConfig.postBack?.comments === false ||
+      email.length === 0 ||
+      token.length === 0
+    ) {
       return {
         ok: false,
         error: 'no-credentials',
-        detail: 'Jira credentials not configured (check JIRA_EMAIL and JIRA_API_TOKEN env vars)',
+        detail: 'Jira credentials not configured or post-back disabled (check JIRA_EMAIL and JIRA_API_TOKEN env vars and jira.postBack.comments config)',
       };
     }
 
@@ -115,8 +121,9 @@ export async function executePostBack(input: {
     };
   }
 
-  // bitbucket
-  const ref = refs.find((r) => r.provider === 'bitbucket' && r.kind === 'pull_request') ?? null;
+  // bitbucket — use latest ref when multiple PRs are linked
+  const ref =
+    refs.filter((r) => r.provider === 'bitbucket' && r.kind === 'pull_request').at(-1) ?? null;
   if (ref == null) {
     return {
       ok: false,
@@ -130,12 +137,18 @@ export async function executePostBack(input: {
   const username = process.env.BITBUCKET_USERNAME ?? '';
   const token = process.env.BITBUCKET_TOKEN ?? process.env.BITBUCKET_APP_PASSWORD ?? '';
 
-  if (bbConfig == null || username.length === 0 || token.length === 0) {
+  if (
+    bbConfig == null ||
+    bbConfig.enabled !== true ||
+    bbConfig.postBack?.comments === false ||
+    username.length === 0 ||
+    token.length === 0
+  ) {
     return {
       ok: false,
       error: 'no-credentials',
       detail:
-        'Bitbucket credentials not configured (check BITBUCKET_USERNAME and BITBUCKET_TOKEN env vars)',
+        'Bitbucket credentials not configured or post-back disabled (check BITBUCKET_USERNAME and BITBUCKET_TOKEN env vars and bitbucket.postBack.comments config)',
     };
   }
 

@@ -43,6 +43,10 @@ router.get('/:slug/issues/:id/integrations/post-back/availability', async (c) =>
   );
   if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status as 400 | 404);
 
+  if (!resolved.data.isLocalDb) {
+    return c.json({ availability: { jira: false, bitbucket: false } });
+  }
+
   const availability = checkPostBackAvailability(
     resolved.data.projectId,
     resolved.data.canonicalWorkItemId,
@@ -64,6 +68,10 @@ router.post('/:slug/issues/:id/integrations/post-back', async (c) => {
     c.req.param('id'),
   );
   if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status as 400 | 404);
+
+  if (!resolved.data.isLocalDb) {
+    return c.json({ ok: false, error: 'no-ref', detail: 'post-back requires a local-db project' }, 422);
+  }
 
   const result = await executePostBack({
     projectSlug: c.req.param('slug'),

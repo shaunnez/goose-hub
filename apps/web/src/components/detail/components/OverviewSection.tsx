@@ -154,6 +154,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
         <PostBackActions
           projectSlug={projectSlug}
           workItemId={item.externalId}
+          investigationText={item.body || undefined}
         />
       )}
     </div>
