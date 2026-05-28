@@ -34,11 +34,12 @@ const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 interface ChatPanelProps {
   open: boolean;
   onClose: () => void;
+  launcherResetToken: number;
 }
 
 type View = 'thread' | 'list';
 
-export function ChatPanel({ open, onClose }: ChatPanelProps) {
+export function ChatPanel({ open, onClose, launcherResetToken }: ChatPanelProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const resolved = useMemo(() => resolveScopeFromPath(location.pathname), [location.pathname]);
@@ -136,6 +137,23 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     }
   }, []);
 
+  const resetToList = useCallback(() => {
+    loadTokenRef.current += 1;
+    setConversation(null);
+    setMessages([]);
+    setInvocations([]);
+    writeActiveId(null);
+    setView('list');
+  }, [writeActiveId]);
+
+  const lastLauncherResetTokenRef = useRef(launcherResetToken);
+
+  useEffect(() => {
+    if (launcherResetToken === lastLauncherResetTokenRef.current) return;
+    lastLauncherResetTokenRef.current = launcherResetToken;
+    resetToList();
+  }, [launcherResetToken, resetToList]);
+
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;
     let cancelled = false;
@@ -208,10 +226,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
           }
         } else {
           if (cancelled) return;
-          setConversation(null);
-          setMessages([]);
-          setInvocations([]);
-          setView('list');
+          resetToList();
         }
       } catch (err) {
         if (!cancelled) setError(`Could not load conversations: ${String(err)}`);
@@ -220,7 +235,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, readActiveId, loadConversation]);
+  }, [open, readActiveId, loadConversation, resetToList]);
 
   const handleNewConversation = useCallback(async () => {
     setBusy(true);
@@ -258,11 +273,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         await deleteConversation(id);
         setConversations((prev) => prev.filter((c) => c.id !== id));
         if (conversation?.id === id) {
-          setConversation(null);
-          setMessages([]);
-          setInvocations([]);
-          writeActiveId(null);
-          setView('list');
+          resetToList();
         }
       } catch (err) {
         setError(`Delete failed: ${String(err)}`);
@@ -270,7 +281,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         setBusy(false);
       }
     },
-    [conversation, writeActiveId],
+    [conversation, resetToList],
   );
 
   // Subscribe to chat.* events for this conversation. The events drive two
