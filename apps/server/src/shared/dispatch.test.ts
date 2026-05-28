@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -11,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockRunTriageBatch = vi.fn();
 const mockRunInvestigateWorkflow = vi.fn();
 const mockRunAcceptanceContractWorkflow = vi.fn();
+const mockRunFixIssueWorkflow = vi.fn();
 const mockRunQaWorkflow = vi.fn();
 const mockRunFixFeedbackWorkflow = vi.fn();
 const mockRunReviewWorkflow = vi.fn();
@@ -67,6 +69,10 @@ vi.mock('../../../../slices/investigate/workflow.js', () => ({
 
 vi.mock('../../../../slices/acceptance-contract/workflow.js', () => ({
   runAcceptanceContractWorkflow: mockRunAcceptanceContractWorkflow,
+}));
+
+vi.mock('../../../../slices/fix-issue/workflow.js', () => ({
+  runFixIssueWorkflow: mockRunFixIssueWorkflow,
 }));
 
 vi.mock('../../../../slices/qa/workflow.js', () => ({
@@ -140,6 +146,7 @@ beforeEach(() => {
   mockRunTriageBatch.mockResolvedValue(undefined);
   mockRunInvestigateWorkflow.mockResolvedValue(undefined);
   mockRunAcceptanceContractWorkflow.mockResolvedValue(undefined);
+  mockRunFixIssueWorkflow.mockResolvedValue(undefined);
   mockRunQaWorkflow.mockResolvedValue(undefined);
   mockRunFixFeedbackWorkflow.mockResolvedValue(undefined);
   mockRunReviewWorkflow.mockResolvedValue(undefined);
@@ -568,6 +575,51 @@ describe('dispatchInvestigationComplete', () => {
       'factory:gate-pending',
     );
   });
+
+  it('starts legacy implement after investigation-complete fallback if the issue remains dev-ready', async () => {
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi
+        .fn()
+        .mockResolvedValueOnce({
+          id: 'github:shaunnez/goose-hub#42',
+          externalId: '42',
+          state: 'factory:investigation-complete',
+          type: 'bug',
+        })
+        .mockResolvedValueOnce({
+          id: 'github:shaunnez/goose-hub#42',
+          externalId: '42',
+          state: 'factory:dev-ready',
+          type: 'bug',
+        })
+        .mockResolvedValueOnce({
+          id: 'github:shaunnez/goose-hub#42',
+          externalId: '42',
+          state: 'factory:dev-ready',
+          type: 'bug',
+        }),
+      comment: vi.fn().mockResolvedValue(undefined),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.investigation-complete',
+        payload: { investigate: { confidence: 'high' } },
+      },
+    ]);
+
+    const { dispatchInvestigationComplete } = await import('./dispatch.js');
+    await dispatchInvestigationComplete('goose-hub-self', 42);
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      'github:shaunnez/goose-hub#42',
+      'factory:investigation-complete',
+      'factory:dev-ready',
+    );
+    expect(mockRunFixIssueWorkflow).toHaveBeenCalledOnce();
+  });
 });
 
 // ─── dispatchFixIssue ─────────────────────────────────────────────────────
@@ -701,6 +753,95 @@ describe('dispatchFixIssue', () => {
     expect(mockLoggerInfo).not.toHaveBeenCalledWith(
       'dispatchFixIssue: item blocked by deps, skipping',
       expect.anything(),
+    );
+  });
+
+  it('passes the real repo root to legacy fix-issue when project targetRepo is stale', async () => {
+    const mockItem = {
+      id: 'github:shaunnez/goose-hub#44',
+      externalId: '44',
+      title: 'stale target repo',
+      body: '',
+      repoRef: 'shaunnez/goose-hub',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'bug',
+    };
+    const mockSource = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(mockItem),
+      comment: vi.fn().mockResolvedValue(undefined),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(mockSource);
+    mockGetProject.mockResolvedValue({
+      id: 'slug',
+      budgets: { maxParallelAgents: 1 },
+      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+      targetRepo: {
+        localPath: '/definitely/missing/goose-hub',
+        defaultBranch: 'main',
+        cloneUrl: '',
+      },
+    });
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [mockItem],
+      blocked: [],
+      unregistered: [],
+    });
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('slug', 44);
+
+    expect(mockRunFixIssueWorkflow).toHaveBeenCalledOnce();
+    const repoRoot = mockRunFixIssueWorkflow.mock.calls[0][3] as string;
+    expect(existsSync(repoRoot)).toBe(true);
+    expect(repoRoot).toContain('goose-hub');
+  });
+
+  it('records pre-in-progress legacy fix-issue failures and escalates only from dev-ready', async () => {
+    const mockItem = {
+      id: 'github:shaunnez/goose-hub#45',
+      externalId: '45',
+      title: 'pre worktree failure',
+      body: '',
+      repoRef: 'shaunnez/goose-hub',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'bug',
+    };
+    const mockSource = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(mockItem),
+      comment: vi.fn().mockResolvedValue(undefined),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(mockSource);
+    mockRunFixIssueWorkflow.mockRejectedValue(new Error('git worktree add failed'));
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await expect(dispatchFixIssue('slug', 45)).resolves.toBeUndefined();
+
+    expect(mockEventStoreAppendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'slug',
+        workItemId: 'github:shaunnez/goose-hub#45',
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({
+          skill: 'implement',
+          workflowSkill: 'fix-issue',
+          error: 'git worktree add failed',
+        }),
+      }),
+    );
+    expect(mockSource.comment).toHaveBeenCalledWith(
+      '45',
+      expect.stringContaining('Fix-issue failed before implementation could start'),
+    );
+    expect(mockSource.transitionState).toHaveBeenCalledWith(
+      '45',
+      'factory:dev-ready',
+      'factory:needs-human',
     );
   });
 });
