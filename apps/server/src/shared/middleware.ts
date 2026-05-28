@@ -7,7 +7,11 @@ export type ParsedBody<T> = { ok: true; data: T } | { ok: false; error: Response
 
 export async function parseBody<T>(c: Context): Promise<ParsedBody<T>> {
   try {
-    const data = (await c.req.json()) as T;
+    const parsed = await c.req.json();
+    if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
+      throw new Error('request body must be a JSON object');
+    }
+    const data = parsed as T;
     return { ok: true, data };
   } catch (err) {
     logger.warn('request body parse failed', { err: String(err) });
