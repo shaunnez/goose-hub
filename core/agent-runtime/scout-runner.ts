@@ -135,6 +135,28 @@ function hasSuccessfulFactoryEvidenceCall(events: readonly AgentEvent[]): boolea
   });
 }
 
+function hasFactoryEvidenceAttempt(events: readonly AgentEvent[]): boolean {
+  return events.some((event) => {
+    if (event.kind !== 'agent.tool-call') return false;
+    const payload = payloadRecord(event.payload);
+    if (payload == null) return false;
+    const toolName = normalizedToolName(payload.tool_name ?? payload.toolName ?? payload.tool);
+    return toolName != null && FACTORY_EVIDENCE_TOOL_NAMES.has(toolName);
+  });
+}
+
+function isUnsupportedToolAvailabilitySkip(decisionSummaries: readonly DecisionSummary[]): boolean {
+  const text = decisionSummaries
+    .map((summary) => `${summary.summary} ${summary.evidence ?? ''}`)
+    .join('\n')
+    .toLowerCase();
+  if (!/\btool/.test(text)) return false;
+  if (!/(read|search|workspace|factory|file)/.test(text)) return false;
+  return /not available|unavailable|not exposed|no .*tool|missing .*tool|required .*tool/.test(
+    text,
+  );
+}
+
 export async function runOneScout(
   spec: ScoutSpec,
   idx: number,
@@ -303,7 +325,11 @@ export async function runOneScout(
     result.decisionSummaries.length > 0 ? result.decisionSummaries : scoutOutput.decisionSummaries;
   let effectiveRunId = runId;
   let evidenceBackedEmptyResult = false;
-  if (scoutOutput.status === 'skipped') {
+  const unsupportedToolSkipWithoutAttempt =
+    scoutOutput.status === 'skipped' &&
+    isUnsupportedToolAvailabilitySkip(decisionSummaries) &&
+    !hasFactoryEvidenceAttempt(result.events);
+  if (scoutOutput.status === 'skipped' && !unsupportedToolSkipWithoutAttempt) {
     return emitSkippedScout({
       append,
       ctx,
@@ -353,17 +379,24 @@ export async function runOneScout(
           const retryOutput = normalizeScoutOutput(retryParsed.data);
           const retryFindings = retryOutput.findings;
           if (retryOutput.status === 'skipped') {
-            return emitSkippedScout({
-              append,
-              ctx,
-              runId: retrySpec.runId,
-              scoutName: spec.scoutName,
-              findings: retryFindings,
-              decisionSummaries:
-                retryResult.decisionSummaries.length > 0
-                  ? retryResult.decisionSummaries
-                  : retryOutput.decisionSummaries,
-            });
+            const retryDecisionSummaries =
+              retryResult.decisionSummaries.length > 0
+                ? retryResult.decisionSummaries
+                : retryOutput.decisionSummaries;
+            if (
+              !isUnsupportedToolAvailabilitySkip(retryDecisionSummaries) ||
+              hasFactoryEvidenceAttempt(retryResult.events)
+            ) {
+              return emitSkippedScout({
+                append,
+                ctx,
+                runId: retrySpec.runId,
+                scoutName: spec.scoutName,
+                findings: retryFindings,
+                decisionSummaries: retryDecisionSummaries,
+              });
+            }
+            decisionSummaries = retryDecisionSummaries;
           }
           if (
             retryFindings.length > 0 ||
