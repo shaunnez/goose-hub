@@ -14,6 +14,7 @@ const STATE_TO_ROOM: Readonly<Record<string, RoomId | null>> = {
   // Triage cluster — intake + early reasoning lives in triage
   'factory:triaging': 'triage',
   'factory:accepted': 'triage',
+  'factory:grounding': 'investigation',
   'factory:grilling': 'triage',
   'factory:prd-drafting': 'triage',
   'factory:prd-review': 'triage',

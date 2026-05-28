@@ -2365,6 +2365,7 @@ describe('implement-wp ownership gate', () => {
         verticalSlices: [{ title: 'Slice 1' }],
         implementationDecisions: [{ decision: 'Use existing dispatch.' }],
         testingDecisions: { approach: 'unit' },
+        moduleRefs: [],
       },
     });
 

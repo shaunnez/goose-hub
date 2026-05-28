@@ -5,7 +5,7 @@ export const TRIAGE_ROUTE_TARGETS = Object.freeze({
   bug: 'factory:investigating',
   vagueBug: 'factory:investigating',
   research: 'factory:research-pending',
-  freshFeature: 'factory:grilling',
+  freshFeature: 'factory:grounding',
   vagueFeature: 'factory:framing',
   chore: 'factory:dev-ready',
   prdFeature: 'factory:dev-ready',

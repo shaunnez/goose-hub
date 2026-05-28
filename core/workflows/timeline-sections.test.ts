@@ -13,6 +13,7 @@ describe('timeline sections', () => {
   it('defines the canonical operator-facing section order', () => {
     expect(TIMELINE_SECTION_DEFINITIONS.map((section) => section.id)).toEqual([
       'triage',
+      'grounding',
       'investigation',
       'grill',
       'prd',

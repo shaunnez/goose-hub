@@ -13,6 +13,7 @@ const ALL_FACTORY_STATES = [
   'factory:accepted',
   'factory:rejected',
   'factory:framing',
+  'factory:grounding',
   'factory:grilling',
   'factory:prd-drafting',
   'factory:prd-review',

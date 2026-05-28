@@ -31,6 +31,8 @@ export const GrillMeContextSchema = z.object({
   priorReplies: z.array(GrillPriorReplyEntrySchema),
   roundNumber: z.number().int().min(1),
   projectContext: ProjectContextSchema,
+  codeGrounding: z.unknown().optional(),
+  scoutDigest: z.unknown().optional(),
 });
 
 const config: SkillConfig = {
@@ -40,7 +42,14 @@ const config: SkillConfig = {
   modelPin: 'sonnet',
   freshContext: false,
   role: 'griller',
-  contextAllowlist: ['workItem', 'priorReplies', 'roundNumber', 'projectContext'],
+  contextAllowlist: [
+    'workItem',
+    'priorReplies',
+    'roundNumber',
+    'projectContext',
+    'codeGrounding',
+    'scoutDigest',
+  ],
 };
 
 export default config;

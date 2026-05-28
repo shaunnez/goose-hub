@@ -36,7 +36,8 @@ export const CHECKLISTS: Record<WorkflowKind, ChecklistItem[]> = {
     { label: 'Done', state: 'factory:done' },
   ],
   feature: [
-    { label: 'Issue triaged → grilling', state: 'factory:grilling' },
+    { label: 'Issue triaged → grounding', state: 'factory:grounding' },
+    { label: 'Feature grounding complete', state: 'factory:grilling' },
     { label: 'PRD drafting', state: 'factory:prd-drafting' },
     { label: 'PRD review (human gate)', state: 'factory:prd-review' },
     { label: 'Decomposing into child issues', state: 'factory:decomposing' },

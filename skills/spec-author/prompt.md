@@ -11,11 +11,12 @@ The `<task>` block contains:
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<issueType>` — `feature` or `bug` (drives strictness of AC→Journey mapping)
 - `<prdContext>` (optional) — canonical compact PRD planning context from the approved parent PRD. Treat this as authoritative for journeys, requirements, acceptance criteria, slice boundaries, implementation decisions, testing decisions, and out-of-scope constraints. If it includes `artifactRef`, the full raw PRD was stored outside prompt context; use the inline fields as the planning contract and targeted repo reads for implementation details.
-  PRD module references may name planned files, not current files. Verify them against `<existingFileManifest>` or targeted reads before citing them as existing code.
+  PRD module references are hints, not proof. They may be existing files, planned files, guesses, or stale paths. Verify them against `<existingFileManifest>`, actual reads/searches, or symbol-index output before citing them as existing code. Planned PRD refs must become `{ "path": "...", "status": "new" }` if owned by a WP.
 - `<prd>` (optional) — legacy compact PRD context string. Prefer `<prdContext>` when both are present. When absent and `issueType: feature`, derive minimal journeys from the work item.
 - `<investigationSynthesis>` (optional) — JSON-stringified `InvestigateOutput` (`findings`, `keyFiles`, `confidence`, `openQuestions`) produced by the synthesis step of the investigate workflow. **Read this first.** It is the distilled signal: use `findings` to understand the root cause or intent, `keyFiles` to orient your architecture section, and `openQuestions` to flag risks. When present, treat it as authoritative; use scout reports only for file:line citations.
 - `<scoutReports>` (optional) — JSON-stringified Wave-1 scout report digest metadata (M19.01). This is `scout-report-digest-v1`, not the raw scout report JSON. It includes top findings, high-confidence facts, files referenced, risks, contradictions, and artifact keys for full reports when they were offloaded.
 - `<wave2Reports>` (optional) — JSON-stringified Wave-2 deep-agent report digest metadata (interface-designer artefacts, risk-analyst register). This is also digest-first and may include artifact keys for full reports.
+- `<featureGrounding>` (optional) — feature code-grounding payload from `feature.grounding-complete`. It may include `existingSurfaces`, `confirmedExports`, `plannedFiles`, `testSurfaces`, and `openQuestions`. Existing surfaces are still citation targets only after verification; planned files must be owned as `{ "path": "...", "status": "new" }`.
 - `<repairFeedback>` (optional) — validator errors from a prior attempt. When present, return a complete corrected JSON object and address every listed error.
 - `<existingFileManifest>` (optional) — JSON array `[{path, kind: 'file' | 'dir'}]` listing files and directories that already exist under the spec scopeRoots. Every WP `filesOwned[].path` that points to a non-test, non-`*.config.ts` production file under `apps/`, `core/`, `slices/`, or `skills/` MUST either appear in this manifest OR be annotated as `{ "path": "…", "status": "new" }`. The validator hard-rejects unannotated missing paths.
 
@@ -42,6 +43,7 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
   - Good: `apps/server/README.md:5`
   - Bad: `core/agent-runtime/event-types.ts:SYMBOL:EventLike`
   - Bad: `apps/server/README.md:5-20`
+- A `constraints[].source` using `path:symbol` may only cite a symbol you observed in an actual read/search result or symbol-index output. If no stable symbol exists, use `path:line` instead.
 - Optional fields should be omitted when they do not apply. Do not emit `null`.
 
 ### Required sections (Steve `01-planning-phase.md:287-300`)
@@ -65,10 +67,10 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
 
 Each WP `filesOwned` entry is one of:
 
-- A bare string path: `"apps/web/src/components/detail/TaskHeader.tsx"` — must exist in `<existingFileManifest>`.
+- A bare string path: `"apps/web/src/components/detail/TaskHeader.tsx"` — must be a verified existing file. It must exist in `<existingFileManifest>` or have been confirmed by a targeted read/search.
 - An object `{ "path": "apps/web/src/components/detail/NewSection.tsx", "status": "new" }` — declares a file to be created. Validator skips the existence check.
 
-Do not invent paths. If `<existingFileManifest>` is absent, fall back to the manual investigation path and read the directory with `list_dir` before authoring `filesOwned`.
+Do not invent paths. `filesOwned` bare strings must be verified existing files. New files must use `{ "path": "...", "status": "new" }`; do not emit unannotated planned paths. If `<existingFileManifest>` is absent, fall back to the manual investigation path and read the directory with `list_dir` before authoring `filesOwned`.
 
 #### File ownership (full-stop, not per-batch)
 
@@ -99,6 +101,7 @@ Every entry in `constraints` must have `source` in the form `path/to/file.ts:LIN
 Do not use line ranges and do not write `SYMBOL:`. For symbols, put the symbol
 name after the final colon: `path/to/file.ts:EventLike`, not
 `path/to/file.ts:SYMBOL:EventLike`.
+Only cite symbols you actually observed in real code reads, searches, or symbol-index output. If you only know the file but not a stable symbol, cite a line number from the read/search result.
 
 You must run constraint inventory for every:
 - State-machine phase referenced (read the enum)
@@ -154,6 +157,7 @@ If it says a constraint cites a file that does not exist, do not cite that
 planned file again. Move planned paths to `filesOwned` or `interfaceContracts`
 and cite an existing host file, exported symbol, or current integration point in
 `constraints`.
+If repair feedback says a symbol is missing, do not introduce new unverified symbols. Use an available export listed in the feedback, or switch that constraint to a `path:line` citation.
 
 Emit: `[decision] READ: Issue #<n> — <one-sentence summary>`
 

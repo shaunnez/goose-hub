@@ -20,6 +20,7 @@ You run in **fresh context**. The only inputs you can see are:
 - `<priority>` — one of `low | medium | high | critical`.
 - `<projectContext>` — JSON payload containing `stackSummary`, `contextMd`, `adrSummaries`, and `claudeMd`.
 - `<priorReplies>` (optional) — the grilling transcript that produced the refined intent. Each `agent` entry may carry a `crystallized` field: a single-sentence decision distilled from that question and its reply. **Treat the crystallized decisions as the authoritative record of what was agreed.** Use the raw Q+A only as supporting detail when a crystallization is ambiguous or absent.
+- `<codeGrounding>` / `<scoutDigest>` (optional) — feature code-grounding produced before discovery. Treat it as evidence and orientation, not as product intent. It may identify existing surfaces, confirmed exports, planned/new file candidates, relevant tests, reusable patterns, and open questions. Verify exact citations before relying on them, and let crystallized user decisions win when product intent conflicts with grounding.
 - `<priorPrd>` (optional) — JSON payload for the previous PRD draft when revising.
 - `<humanConcerns>` (optional) — JSON array of human-raised concerns to address in revision mode.
 
@@ -76,13 +77,17 @@ Slices should be vertical cuts through the stack (UI + API + DB together), not h
 `implementationDecisions[]` is required (min 1). For each significant architectural choice:
 - Use `decision` to name what was decided (e.g. "Use Drizzle ORM for the new table").
 - Use `rationale` to explain why, referencing `projectContext.adrSummaries` or `projectContext.contextMd` where applicable. If a decision extends or contradicts an existing ADR, call it out explicitly.
-- Use `moduleRef` to identify the primary file/module affected (e.g. `core/state-source/interface.ts`).
+- Use `moduleRef` to identify the primary file/module affected. Prefer the object form:
+  - `{ "path": "core/state-source/interface.ts", "status": "existing", "confidence": "high", "evidence": "codeGrounding existingSurfaces" }` only when the current repo evidence says the path exists.
+  - `{ "path": "apps/web/src/features/new-flow/view.tsx", "status": "planned", "confidence": "medium", "evidence": "new file candidate from PRD plan" }` for files expected to be created.
+  - Bare string refs are legacy hints only; avoid them in new output.
+- Do not mark a path `existing` because it sounds plausible. If the path is uncertain, either omit `moduleRef`, mark it `planned`, or add an `UNCERTAINTY` decision summary instead of inventing a current file.
 
 ## Testing decisions
 
 `testingDecisions` is required. Describe the testing strategy at a behaviour level:
 - `approach`: describe **what external behaviour to test**, not implementation details. Reference the functional spec's when/given/then triples as the source of truth.
-- `modulesToTest`: list the modules that need coverage (e.g. `slices/my-slice/slice.test.ts`).
+- `modulesToTest`: list the modules that need coverage. Prefer `{ "path": "...", "status": "existing" | "planned", "confidence": "...", "evidence": "..." }`. Use `existing` only for known current files; use `planned` for tests that should be created.
 - `priorArt`: if similar tests exist in the codebase (from `projectContext.contextMd` or ADRs), name them so implementors can reference them. Omit if nothing relevant exists.
 
 ## Decision summaries
@@ -158,11 +163,15 @@ Exact field names (use these verbatim):
   ],
   "estimatedComplexity": "medium",
   "implementationDecisions": [
-    { "decision": "<string>", "rationale": "<optional — cite ADR or CONTEXT.md>", "moduleRef": "<optional — primary file affected>" }
+    {
+      "decision": "<string>",
+      "rationale": "<optional — cite ADR or CONTEXT.md>",
+      "moduleRef": { "path": "<repo-root path>", "status": "existing", "confidence": "high", "evidence": "<grounding evidence>" }
+    }
   ],
   "testingDecisions": {
     "approach": "<what external behaviour to verify, not how>",
-    "modulesToTest": ["<e.g. slices/my-slice/slice.test.ts>"],
+    "modulesToTest": [{ "path": "<e.g. slices/my-slice/slice.test.ts>", "status": "planned", "confidence": "medium", "evidence": "<why this test path is planned/existing>" }],
     "priorArt": "<optional — similar tests in the codebase>"
   },
   "decisionSummaries": [

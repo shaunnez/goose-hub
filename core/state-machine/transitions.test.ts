@@ -11,14 +11,22 @@ describe('isLegalTransition — section 9.1 happy paths', () => {
     expect(isLegalTransition('factory:rejected', 'factory:archived')).toBe(true));
 
   // feature path
-  it('accepted → grilling', () =>
-    expect(isLegalTransition('factory:accepted', 'factory:grilling')).toBe(true));
+  it('accepted → grounding', () =>
+    expect(isLegalTransition('factory:accepted', 'factory:grounding')).toBe(true));
   it('accepted → framing', () =>
     expect(isLegalTransition('factory:accepted', 'factory:framing')).toBe(true));
-  it('framing can route to grill or PRD drafting', () =>
+  it('framing can route to grounding, grill, or PRD drafting', () =>
     expect(legalTargets('factory:framing')).toStrictEqual([
+      'factory:grounding',
       'factory:grilling',
       'factory:prd-drafting',
+      'factory:archived',
+    ]));
+  it('grounding can route to grill or PRD drafting', () =>
+    expect(legalTargets('factory:grounding')).toStrictEqual([
+      'factory:grilling',
+      'factory:prd-drafting',
+      'factory:needs-human',
       'factory:archived',
     ]));
   it('grilling → prd-drafting', () =>
@@ -171,7 +179,8 @@ describe('legalTargets', () => {
       'factory:archived',
     ]));
 
-  it('accepted yields six targets', () => expect(legalTargets('factory:accepted')).toHaveLength(6));
+  it('accepted yields seven targets', () =>
+    expect(legalTargets('factory:accepted')).toHaveLength(7));
 
   it('dev-ready yields spec-ready, in-progress, needs-human, and archived', () =>
     expect(legalTargets('factory:dev-ready')).toStrictEqual([

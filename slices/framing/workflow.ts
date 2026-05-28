@@ -8,10 +8,9 @@ import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { ProjectConfig } from '@goose-hub/core/types.js';
-import {
-  type GrillAndPrdResult,
-  type ProjectContextBundle,
-  runGrillAndPrdWorkflow,
+import type {
+  GrillAndPrdResult,
+  ProjectContextBundle,
 } from '@goose-hub/core/workflows/grill-and-prd.js';
 import type { FeatureFrameOutput } from '@goose-hub/skills/feature-frame/schema.js';
 
@@ -157,36 +156,28 @@ export async function runFramingWorkflow(
   );
 
   const framedBody = appendFramedContent(workItem.body, featureFrame.framedContent);
-  const nextState = featureFrame.stillNeedsGrilling ? 'factory:grilling' : 'factory:prd-drafting';
+  eventStore.appendEvent({
+    kind: 'feature.framed',
+    projectId,
+    workItemId: workItem.id,
+    runId: frameRunId,
+    payload: {
+      workflowRunId,
+      framedContent: featureFrame.framedContent,
+      framedBody,
+      refinedIntent: featureFrame.refinedIntent,
+      proposedAcceptanceCriteria: featureFrame.proposedAcceptanceCriteria,
+      stillNeedsGrilling: featureFrame.stillNeedsGrilling,
+    },
+  });
+
   await transitionFromFraming({
     source: stateSource,
     workItem,
     projectId,
     runId: frameRunId,
-    to: nextState,
+    to: 'factory:grounding',
   });
 
-  const framedWorkItem: WorkItem = {
-    ...workItem,
-    body: framedBody,
-    state: nextState,
-  };
-
-  return runGrillAndPrdWorkflow({
-    workItem: framedWorkItem,
-    stateSource,
-    projectId,
-    priorReplies: input.priorReplies ?? [],
-    skipGrill: !featureFrame.stillNeedsGrilling,
-    refinedIntent: featureFrame.refinedIntent,
-    deps: {
-      runtime: deps.runtime,
-      projectConfig,
-      totalSpendForSkill: deps.totalSpendForSkill,
-      buildContext: deps.buildContext,
-      createWorktreeImpl: deps.createWorktreeImpl,
-      cleanupWorktreeImpl: deps.cleanupWorktreeImpl,
-      repoRoot: deps.repoRoot,
-    },
-  });
+  return { phase: featureFrame.stillNeedsGrilling ? 'grilling' : 'prd-review' };
 }

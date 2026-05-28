@@ -77,6 +77,7 @@ describe('state → desk role mapping', () => {
     const states = [
       'factory:triaging',
       'factory:accepted',
+      'factory:grounding',
       'factory:grilling',
       'factory:prd-drafting',
       'factory:prd-review',
@@ -139,6 +140,7 @@ describe('state → indicator mapping', () => {
 
   it('uses thought for investigating / pre-thinking states', () => {
     expect(indicatorForState('factory:investigating')).toBe('thought');
+    expect(indicatorForState('factory:grounding')).toBe('thought');
     expect(indicatorForState('factory:research-pending')).toBe('thought');
     expect(indicatorForState('factory:dev-ready')).toBe('thought');
   });
