@@ -362,6 +362,13 @@ describe('proceedToPrd', () => {
     expect(after.state).toBe('factory:prd-drafting');
 
     const evs = eventStore.replay({ projectId, workItemId: item.id });
+    const grillCompleted = evs.find((e) => e.kind === 'grill.completed');
+    expect(grillCompleted?.payload).toMatchObject({
+      source: 'ui-proceed',
+      completedBy: 'ui-proceed',
+      forced: true,
+      discoverSessionId: 'discover-session-proceed',
+    });
     const transitioned = evs.find(
       (e) =>
         e.kind === 'state.transitioned' &&

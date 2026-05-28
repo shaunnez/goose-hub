@@ -511,6 +511,26 @@ describe('groupEvents — discover phase groups', () => {
     ).toBe(true);
   });
 
+  it('does not infer grill phase completion from a posted question alone', () => {
+    const WID = 'discover-workflow-question-only';
+    const result = groupEvents([
+      makeEvent(1, 'agent.run-started', `${WID}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: WID },
+      }),
+      makeEvent(2, 'agent.run-completed', `${WID}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: WID },
+      }),
+      makeEvent(3, 'grill.question-posted', WID, {
+        payload: { displaySkill: 'grill-me', workflowRunId: WID },
+      }),
+    ]);
+
+    expect(result[0].kind).toBe('phase-group');
+    if (result[0].kind !== 'phase-group') return;
+    expect(result[0].phase).toBe('grill');
+    expect(result[0].status).toBe('started');
+  });
+
   it('wraps write-prd and advisor activity with parent PRD events into a PRD phase', () => {
     const WID = 'discover-workflow-prd';
     const result = groupEvents([

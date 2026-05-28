@@ -37,11 +37,13 @@ Your context contains:
   - `body` — the full issue body, including acceptance criteria as `- [ ]` checkboxes
   - `number` — the issue number
 - `prDiff` — the complete git diff of the PR being reviewed
+- `prDiffWithContext` — diff-derived changed-file and hunk metadata
 - `qaVerdict` _(optional)_ — the result of the prior QA holdout run
+- `acceptanceContract` _(optional)_ — canonical acceptance criteria; when present, this is the authoritative criteria list
 
 ## Step 1 — Parse the acceptance criteria
 
-Read `workItem.body` carefully. Find every acceptance criterion marked with a checkbox. Extract ALL criteria — both unchecked `[ ]` and pre-checked `[x]`.
+If `acceptanceContract` is present, use `acceptanceContract.criteria` as the authoritative criteria list. Otherwise, read `workItem.body` carefully. Find every acceptance criterion marked with a checkbox. Extract ALL criteria — both unchecked `[ ]` and pre-checked `[x]`.
 
 Emit:
 ```
@@ -61,7 +63,7 @@ Emit:
 
 For every criterion identified in Step 1, determine: `met`, `unmet`, or `unclear`.
 
-Record a `CriterionCheck` for every criterion. Never skip one.
+Record a `CriterionCheck` for every criterion. Never skip one. When a criterion came from `acceptanceContract.criteria`, copy its `id` into `criterionId` and its `statement` into `criterion`.
 
 Emit:
 ```

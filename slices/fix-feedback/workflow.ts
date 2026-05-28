@@ -14,6 +14,11 @@ import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconc
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import {
+  collectReportedRunTestFailures,
+  collectWrittenTestVerificationFailures,
+  formatWrittenTestVerificationFailure,
+} from '@goose-hub/core/agent-runtime/test-verification-evidence.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -30,7 +35,7 @@ import {
   orchestratorPushBranch,
 } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import { collectScopeManifest } from '@goose-hub/core/workspaces/scope-manifest.js';
-import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
+import { type ImplementOutput, ImplementSchema } from '@goose-hub/skills/implement/schema.js';
 
 /** Maximum prior dev decision-summaries surfaced to the repair agent. */
 const PRIOR_DECISION_LIMIT = 20;
@@ -40,6 +45,56 @@ const PRIOR_CHANGED_FILES_LIMIT = 30;
 interface PriorDevDecision {
   kind: string;
   summary: string;
+}
+
+type FixFeedbackEvent = ReturnType<typeof eventStore.replay>[number];
+
+function runIdsForRepair(events: FixFeedbackEvent[], runId: string): Set<string> {
+  const ids = new Set([runId]);
+  for (const event of events) {
+    if (event.kind !== 'agent.retry-escalated') continue;
+    const payload = event.payload as { runId?: unknown; retryRunId?: unknown };
+    if (payload.runId === runId && typeof payload.retryRunId === 'string') {
+      ids.add(payload.retryRunId);
+    }
+  }
+  return ids;
+}
+
+function eventBelongsToRun(event: FixFeedbackEvent, runIds: Set<string>): boolean {
+  if (typeof event.runId === 'string' && runIds.has(event.runId)) return true;
+  const payload = event.payload as { runId?: unknown; retryRunId?: unknown };
+  return (
+    (typeof payload.runId === 'string' && runIds.has(payload.runId)) ||
+    (typeof payload.retryRunId === 'string' && runIds.has(payload.retryRunId))
+  );
+}
+
+function fixFeedbackAcceptanceFailure(input: {
+  output: ImplementOutput;
+  events: FixFeedbackEvent[];
+  runId: string;
+}): string | null {
+  const runIds = runIdsForRepair(input.events, input.runId);
+  const runEvents = input.events.filter((event) => eventBelongsToRun(event, runIds));
+  if (!runEvents.some((event) => event.kind === 'agent.tool-call')) return null;
+
+  const writtenTestPaths = [...new Set(input.output.testsWritten.map((test) => test.path))];
+  const failedWrittenTests = collectWrittenTestVerificationFailures(runEvents, writtenTestPaths);
+  const writtenFailureReason = formatWrittenTestVerificationFailure(failedWrittenTests);
+  if (writtenFailureReason != null) return writtenFailureReason;
+
+  const reportedRunPaths = [...new Set(input.output.testsRun.paths)];
+  const failedReportedRuns = collectReportedRunTestFailures({
+    events: runEvents,
+    reportedRunPaths,
+    writtenTestPaths,
+  });
+  if (failedReportedRuns.length > 0) {
+    return `required run_tests did not pass for: ${failedReportedRuns.join(', ')}`;
+  }
+
+  return null;
 }
 
 function collectPriorDevDecisions(
@@ -173,6 +228,12 @@ type BaselineComparisonInput = {
   payload: QaPayload;
   worktreePath: string;
   baseBranch?: string;
+};
+
+type BaselineVerificationCommand = {
+  command: string;
+  args: string[];
+  display: string;
 };
 
 type QaPayload = {
@@ -354,9 +415,76 @@ function formatRegressionUnrelatedFeedback(payload: QaPayload): string {
   return lines.join('\n');
 }
 
+function hasPromptContractRegression(payload: QaPayload): boolean {
+  const text = [
+    ...(payload.findings ?? []).map((finding) =>
+      typeof finding === 'string' ? finding : finding.description,
+    ),
+    ...(payload.tierResults?.regression?.findings ?? []).map((finding) => finding.description),
+  ]
+    .join('\n')
+    .toLowerCase();
+  return (
+    text.includes('skills/implement/slice.test') &&
+    (text.includes('implement prompt') || text.includes('prompt contract'))
+  );
+}
+
+function formatPromptContractRegressionFeedback(payload: QaPayload): string {
+  const lines = [
+    'QA regression suite failed on a prompt-contract test rather than this issue-specific implementation surface.',
+    'Failure category: prompt-contract-regression',
+  ];
+  const regressionFindings = payload.tierResults?.regression?.findings ?? [];
+  for (const finding of regressionFindings.slice(0, 5)) {
+    lines.push(`- ${finding.description}`);
+  }
+  return lines.join('\n');
+}
+
 function regressionCommandForPayload(payload: QaPayload): string | null {
   const command = payload.tierResults?.regression?.command;
   return typeof command === 'string' && command.trim().length > 0 ? command.trim() : null;
+}
+
+export function parseBaselineVerificationCommand(
+  command: string,
+): BaselineVerificationCommand | null {
+  const trimmed = command.trim();
+  if (trimmed.length === 0) return null;
+  if (/[;&|<>()`$\\'"\n\r]/.test(trimmed)) return null;
+
+  const tokens = trimmed.split(/\s+/).filter((token) => token.length > 0);
+  if (tokens[0] !== 'pnpm') return null;
+  if (tokens.some((token) => token.length === 0 || token.startsWith('='))) return null;
+
+  const args = tokens.slice(1);
+  const action = findPnpmAction(args);
+  if (action == null || !isPnpmVerificationAction(action.token, args[action.index + 1])) {
+    return null;
+  }
+
+  return { command: 'pnpm', args, display: tokens.join(' ') };
+}
+
+function findPnpmAction(args: string[]): { token: string; index: number } | null {
+  for (let i = 0; i < args.length; i++) {
+    const token = args[i];
+    if (token === '--filter' || token === '-F' || token === '--dir' || token === '-C') {
+      i++;
+      continue;
+    }
+    if (token.startsWith('--filter=') || token.startsWith('--dir=')) continue;
+    if (token.startsWith('-')) continue;
+    return { token, index: i };
+  }
+  return null;
+}
+
+function isPnpmVerificationAction(action: string, next: string | undefined): boolean {
+  if (action === 'vitest') return true;
+  const script = action === 'run' ? next : action;
+  return typeof script === 'string' && /^(?:test|lint|typecheck)(?::|$)/.test(script);
 }
 
 function regressionFailureDescriptions(payload: QaPayload): string[] {
@@ -404,6 +532,14 @@ async function compareRegressionAgainstBaseline({
         'Baseline comparison unavailable: regression tier payload did not include a command.',
     };
   }
+  const baselineCommand = parseBaselineVerificationCommand(command);
+  if (baselineCommand == null) {
+    return {
+      status: 'unavailable',
+      feedback:
+        'Baseline comparison unavailable: regression command is not an argv-safe pnpm verification command.',
+    };
+  }
 
   const baselineDir = mkdtempSync(pathJoin(tmpdir(), 'goose-hub-baseline-'));
   const baseRef = baseBranch.startsWith('origin/') ? baseBranch : `origin/${baseBranch}`;
@@ -423,10 +559,11 @@ async function compareRegressionAgainstBaseline({
       };
     }
 
-    const run = spawnSync('sh', ['-c', command], {
+    const run = spawnSync(baselineCommand.command, baselineCommand.args, {
       cwd: baselineDir,
       encoding: 'utf8',
       env: { ...process.env, CI: '1', FORCE_COLOR: '0' },
+      shell: false,
       timeout: 10 * 60_000,
     });
     if (run.error != null) {
@@ -438,7 +575,7 @@ async function compareRegressionAgainstBaseline({
     if ((run.status ?? 1) === 0) {
       return {
         status: 'head-only-failure',
-        feedback: `Baseline comparison: ${command} passed on ${baseRef}; regression appears head-only.`,
+        feedback: `Baseline comparison: ${baselineCommand.display} passed on ${baseRef}; regression appears head-only.`,
       };
     }
 
@@ -453,13 +590,13 @@ async function compareRegressionAgainstBaseline({
     if (sameFailures) {
       return {
         status: 'same-failures-on-base',
-        feedback: `Baseline comparison: ${command} also failed on ${baseRef}; route as baseline-red/global instead of issue repair.`,
+        feedback: `Baseline comparison: ${baselineCommand.display} also failed on ${baseRef}; route as baseline-red/global instead of issue repair.`,
       };
     }
 
     return {
       status: 'head-only-failure',
-      feedback: `Baseline comparison: ${command} failed on ${baseRef}, but not with the same failure signature; repair the head regression.`,
+      feedback: `Baseline comparison: ${baselineCommand.display} failed on ${baseRef}, but not with the same failure signature; repair the head regression.`,
     };
   } finally {
     spawnSync('git', ['-C', worktreePath, 'worktree', 'remove', '--force', baselineDir], {
@@ -530,6 +667,17 @@ async function findLatestSourceFailure(
       };
     }
     if (payload.failureCategory === 'regression-unrelated') {
+      if (hasPromptContractRegression(payload)) {
+        return {
+          kind: 'qa',
+          runId: sourceRunId(qaEvent),
+          feedback: formatPromptContractRegressionFeedback(payload),
+          actionable: false,
+          baselineRedGlobal: true,
+          skipReason: 'prompt-contract-regression',
+          payload,
+        };
+      }
       return {
         kind: 'qa',
         runId: sourceRunId(qaEvent),
@@ -962,6 +1110,49 @@ export async function runFixFeedbackWorkflow(
         appendSystemPrompt: implementPrompt,
       },
     });
+
+    const acceptanceFailure = fixFeedbackAcceptanceFailure({
+      output: implementOutput,
+      events: eventStore.replay({ workItemId: workItem.id }),
+      runId,
+    });
+    if (acceptanceFailure != null) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.run-failed',
+        payload: {
+          runId,
+          error: `fix-feedback: ${acceptanceFailure}`,
+          failureKind: 'verification-failed',
+          ...repairPayload,
+        },
+        runId,
+      });
+      await stateSource.comment(
+        workItem.externalId,
+        buildAgentComment(
+          'Dev',
+          'Failed',
+          `Fix-feedback verification failed: ${acceptanceFailure}`,
+        ),
+      );
+      await stateSource.transitionState(
+        workItem.externalId,
+        'factory:in-progress',
+        'factory:needs-human',
+      );
+      emitStateTransitionEvent({
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:in-progress',
+        to: 'factory:needs-human',
+        by: 'fix-feedback',
+        runId,
+        extraPayload: repairPayload,
+      });
+      return;
+    }
 
     const observedChangedFiles = deriveObservedChangedFiles(worktreePath);
     const commitResult = commitAllFn(

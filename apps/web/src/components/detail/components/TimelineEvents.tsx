@@ -31,7 +31,10 @@ import {
   EvidencePostedEvent,
   EvidenceSkippedEvent,
 } from './timeline/EvidenceEvents';
-import { AgentFixFeedbackCompleteEvent } from './timeline/FixFeedbackEvents';
+import {
+  AgentFixFeedbackCompleteEvent,
+  AgentFixFeedbackSkippedEvent,
+} from './timeline/FixFeedbackEvents';
 import {
   GateApprovedEvent,
   GateAwaitingHumanEvent,
@@ -366,6 +369,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentImplementCompleteEvent key={event.id} event={event} />;
     case 'agent.fix-feedback-complete':
       return <AgentFixFeedbackCompleteEvent key={event.id} event={event} />;
+    case 'agent.fix-feedback-skipped':
+      return <AgentFixFeedbackSkippedEvent key={event.id} event={event} />;
     case 'agent.retry-escalated':
       return <AgentRetryEscalatedEvent key={event.id} event={event} />;
     case 'grill.question-posted':

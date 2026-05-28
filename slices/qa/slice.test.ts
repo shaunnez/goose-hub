@@ -721,6 +721,26 @@ describe('verification summary harness', () => {
     });
     expect(JSON.stringify(result.verificationSummary)).not.toContain('root cause analysis');
   });
+
+  it('explains absent evidence when no evidence workflow event was recorded', async () => {
+    const { buildVerificationSummary } = await import('./verification-summary.js');
+
+    const result = await buildVerificationSummary({
+      prHints: {},
+      prDiff: '',
+      qaE2eMode: 'off',
+      commands: { testCommand: 'pnpm test --reporter=json' },
+      priorEvents: [],
+      runTests: vi.fn(),
+      runCommand: vi.fn(),
+    });
+
+    expect(result.verificationSummary.evidence).toEqual({
+      status: 'absent',
+      reason:
+        'no evidence event was recorded; no evidence spec was declared or the evidence workflow did not run',
+    });
+  });
 });
 
 describe('runQaWorkflow', () => {
@@ -1087,6 +1107,62 @@ describe('runQaWorkflow', () => {
       expect(specUsed.contextAllowlist).not.toContain('devDecisionSummaries');
     });
 
+    it('stores large QA diffs as artifacts before spawning the holdout agent', async () => {
+      const workspaceDir = mkdtempSync(join(tmpdir(), 'qa-large-diff-'));
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: workspaceDir });
+        execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: workspaceDir });
+        execFileSync('git', ['config', 'user.name', 'Test User'], { cwd: workspaceDir });
+        writeFileSync(join(workspaceDir, 'large.txt'), 'base\n');
+        execFileSync('git', ['add', 'large.txt'], { cwd: workspaceDir });
+        execFileSync('git', ['commit', '-m', 'base'], { cwd: workspaceDir });
+        execFileSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], {
+          cwd: workspaceDir,
+        });
+        writeFileSync(join(workspaceDir, 'large.txt'), `${'changed line\n'.repeat(3_000)}`);
+        execFileSync('git', ['add', 'large.txt'], { cwd: workspaceDir });
+        execFileSync('git', ['commit', '-m', 'large change'], { cwd: workspaceDir });
+
+        const item = makeWorkItem();
+        const source = makeMockSource();
+        mockReplay.mockReturnValue([
+          {
+            id: 1,
+            kind: 'pr.opened',
+            payload: { worktreePath: workspaceDir, baseBranch: 'main' },
+            createdAt: '',
+          },
+        ]);
+        mockRun.mockResolvedValueOnce(makePassResult());
+
+        const { runQaWorkflow } = await import('./workflow.js');
+        const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+          runCommand: vi.fn(async (_cwd, command) => ({ command, status: 'passed' as const })),
+        });
+
+        const specUsed = mockRun.mock.calls[0][0] as {
+          context: { prDiff: string };
+        };
+        expect(specUsed.context.prDiff).toContain('Full PR diff omitted from prompt context');
+        expect(specUsed.context.prDiff).toContain('ArtifactRef:');
+        expect(specUsed.context.prDiff).not.toContain('changed line\n'.repeat(100));
+
+        expect(vi.mocked(eventStore.appendEvent)).toHaveBeenCalledWith(
+          expect.objectContaining({
+            kind: 'agent.disclosure',
+            payload: expect.objectContaining({
+              kind: 'diff_summarized',
+              skill: 'qa',
+            }),
+          }),
+        );
+      } finally {
+        rmSync(workspaceDir, { recursive: true, force: true });
+      }
+    });
+
     it('passes verificationSummary into QA context and allowlist', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
@@ -1127,6 +1203,78 @@ describe('runQaWorkflow', () => {
         },
       });
       expect(spec.contextAllowlist).toContain('verificationSummary');
+    });
+
+    it('emits explicit evidence skip status when no evidence workflow event exists', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc' },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+      });
+
+      expect(vi.mocked(eventStore.appendEvent)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'evidence.post-skipped',
+          payload: expect.objectContaining({
+            source: 'qa',
+            reason: 'non-UI change; browser evidence not required',
+          }),
+        }),
+      );
+      const summaryEvent = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.verification-summary-built');
+      expect(summaryEvent?.[0].payload).toMatchObject({
+        evidenceStatus: 'skipped',
+        evidenceReason: 'non-UI change; browser evidence not required',
+      });
+    });
+
+    it('compacts oversized QA context values before spawning Codex', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const largeAcceptanceContract = {
+        source: 'normalized' as const,
+        criteria: [
+          {
+            id: 'AC1',
+            statement: 'x'.repeat(80_000),
+            executableChecks: [],
+          },
+        ],
+      };
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        acceptanceContract: largeAcceptanceContract,
+        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+      });
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: { acceptanceContract?: unknown };
+      };
+      expect(spec.context.acceptanceContract).toEqual(
+        expect.objectContaining({
+          omitted: true,
+          reason: 'qa-context-value-too-large',
+          key: 'acceptanceContract',
+          criteriaCount: 1,
+        }),
+      );
+      expect(JSON.stringify(spec.context).length).toBeLessThan(80_000);
     });
 
     it('runs workflow-owned e2e with the same controlled ports passed to QA', async () => {
@@ -1484,6 +1632,11 @@ describe('runQaWorkflow', () => {
         expect(result?.passed).toBe(true);
         expect(result?.actual).toHaveLength(4000);
         expect(result?.actual).not.toContain('needle');
+
+        const spec = mockRun.mock.calls[0][0] as {
+          context: { criteriaResults?: Array<{ actual: string }> };
+        };
+        expect(spec.context.criteriaResults?.[0]?.actual).toHaveLength(1000);
       } finally {
         rmSync(worktree, { recursive: true, force: true });
       }
@@ -1614,7 +1767,7 @@ describe('runQaWorkflow', () => {
       expect(spec.context.verificationSummary.testRun).toBeUndefined();
     });
 
-    it('passes testRun into the agent context and allowlists it', async () => {
+    it('keeps raw testRun out of the agent context while preserving compact verificationSummary', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
       mockReplay.mockReturnValue([
@@ -1633,11 +1786,16 @@ describe('runQaWorkflow', () => {
       });
 
       const spec = mockRun.mock.calls[0][0] as {
-        context: { testRun: unknown };
+        context: { testRun?: unknown; verificationSummary?: { testRun?: unknown } };
         contextAllowlist: string[];
       };
-      expect(spec.context.testRun).toEqual(sampleTestRun);
-      expect(spec.contextAllowlist).toContain('testRun');
+      expect(spec.context.testRun).toBeUndefined();
+      expect(spec.contextAllowlist).not.toContain('testRun');
+      expect(spec.context.verificationSummary?.testRun).toMatchObject({
+        total: sampleTestRun.total,
+        passed: sampleTestRun.passed,
+        failed: sampleTestRun.failed,
+      });
     });
 
     it('includes testRun in the qa.completed payload when present', async () => {
@@ -1704,8 +1862,8 @@ describe('runQaWorkflow', () => {
       await runQaWorkflow(item, source, 'test-project', 'owner/repo', { runTests });
 
       expect(runTests).not.toHaveBeenCalled();
-      const spec = mockRun.mock.calls[0][0] as { context: { testRun: unknown } };
-      expect(spec.context.testRun).toBeNull();
+      const spec = mockRun.mock.calls[0][0] as { context: { testRun?: unknown } };
+      expect(spec.context.testRun).toBeUndefined();
     });
   });
 

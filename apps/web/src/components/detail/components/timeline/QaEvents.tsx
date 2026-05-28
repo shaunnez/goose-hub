@@ -18,7 +18,7 @@ type TierPayload = {
   runId?: string;
 };
 
-type VerificationStatus = 'passed' | 'failed' | 'skipped' | 'unknown';
+type VerificationStatus = 'passed' | 'failed' | 'skipped' | 'unknown' | 'posted' | 'absent';
 
 type VerificationSummaryPayload = {
   changedFileCount?: number;
@@ -29,6 +29,7 @@ type VerificationSummaryPayload = {
   testStatus?: VerificationStatus;
   e2eStatus?: VerificationStatus;
   evidenceStatus?: VerificationStatus;
+  evidenceReason?: string;
 };
 
 function tierKeyFromKind(kind: string): string {
@@ -85,9 +86,11 @@ function formatBytes(value: number | undefined): string {
 }
 
 function statusTone(status: VerificationStatus | undefined): string {
-  if (status === 'passed') return 'border-green-500/20 bg-green-500/10 text-green-400';
+  if (status === 'passed' || status === 'posted') {
+    return 'border-green-500/20 bg-green-500/10 text-green-400';
+  }
   if (status === 'failed') return 'border-red-500/20 bg-red-500/10 text-[color:var(--danger)]';
-  if (status === 'skipped') return 'border-fg-5/20 bg-fg-5/10 text-fg-3';
+  if (status === 'skipped' || status === 'absent') return 'border-fg-5/20 bg-fg-5/10 text-fg-3';
   return 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400';
 }
 
@@ -112,17 +115,24 @@ function FailureCategoryBadge({ category }: { category?: string }) {
 function StatusRow({
   label,
   status,
+  detail,
 }: {
   label: string;
   status: VerificationStatus | undefined;
+  detail?: string;
 }) {
   const normalized = status ?? 'unknown';
   return (
-    <div className="flex min-w-0 items-center justify-between gap-3 rounded border border-line bg-bg/40 px-2.5 py-2">
-      <span className="min-w-0 truncate font-mono text-[11px] text-fg-3">{label}</span>
+    <div className="flex min-w-0 items-start justify-between gap-3 rounded border border-line bg-bg/40 px-2.5 py-2">
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="truncate font-mono text-[11px] text-fg-3">{label}</span>
+        {detail != null && detail.length > 0 && (
+          <span className="text-[11px] leading-snug text-fg-4">{detail}</span>
+        )}
+      </span>
       <span
         className={cn(
-          'shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase',
+          'mt-0.5 shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase',
           statusTone(normalized),
         )}
       >
@@ -200,12 +210,12 @@ export function QaFailedEvent({ event }: { event: AgentEventDto }) {
 
 export function QaVerificationSummaryBuiltEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as VerificationSummaryPayload | null;
-  const rows: Array<{ label: string; status: VerificationStatus | undefined }> = [
+  const rows: Array<{ label: string; status: VerificationStatus | undefined; detail?: string }> = [
     { label: 'Lint', status: p?.lintStatus },
     { label: 'Typecheck', status: p?.typecheckStatus },
     { label: 'Tests', status: p?.testStatus },
     { label: 'E2E', status: p?.e2eStatus },
-    { label: 'Evidence', status: p?.evidenceStatus },
+    { label: 'Evidence', status: p?.evidenceStatus, detail: p?.evidenceReason },
   ];
 
   return (
@@ -234,7 +244,7 @@ export function QaVerificationSummaryBuiltEvent({ event }: { event: AgentEventDt
 
       <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((row) => (
-          <StatusRow key={row.label} label={row.label} status={row.status} />
+          <StatusRow key={row.label} label={row.label} status={row.status} detail={row.detail} />
         ))}
       </div>
     </li>

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   DevReviewResponseContextSchema,
@@ -127,5 +128,15 @@ describe('dev-review-response skill.config', () => {
 
   it('uses dev-tools bundle', () => {
     expect(devReviewResponseConfig.toolBundles).toContain('dev-tools');
+  });
+});
+
+describe('dev-review-response prompt', () => {
+  it('keeps repair-turn verification targeted and leaves full-suite proof to QA', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain('Run the smallest tests that cover the finding');
+    expect(prompt).toContain('QA owns full-suite regression verification');
+    expect(prompt).toContain('Do not run the whole project test suite');
   });
 });

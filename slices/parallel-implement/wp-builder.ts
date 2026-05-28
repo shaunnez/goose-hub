@@ -12,7 +12,17 @@ import type {
 import type { InvestigationContext } from '@goose-hub/core/agent-runtime/investigation-context.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
+import {
+  collectReportedRunTestFailures,
+  collectWrittenTestVerificationFailures,
+  formatWrittenTestVerificationFailure,
+  hasSuccessfulVerificationToolCall,
+  isEditToolCall,
+  toolCallInput,
+  toolCallName,
+} from '@goose-hub/core/agent-runtime/test-verification-evidence.js';
 import { getRecordDecisionTool } from '@goose-hub/core/db/repositories/project-settings.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { writeWpBuilderSandbox } from '@goose-hub/core/tool-layer/sandbox.js';
@@ -107,84 +117,6 @@ type NormalizedPathField = {
   ambiguous?: string[];
 };
 
-function toolCallName(event: AgentEvent): string | null {
-  if (event.kind !== 'agent.tool-call') return null;
-  const payload = event.payload as { tool_name?: unknown; toolName?: unknown };
-  const name = payload.tool_name ?? payload.toolName;
-  return typeof name === 'string' ? name : null;
-}
-
-function toolCallInput(event: AgentEvent): Record<string, unknown> {
-  const payload = event.payload as {
-    tool_input?: unknown;
-    toolInput?: unknown;
-  };
-  const input = payload.tool_input ?? payload.toolInput;
-  return input != null && typeof input === 'object' && !Array.isArray(input)
-    ? (input as Record<string, unknown>)
-    : {};
-}
-
-function isEditToolCall(event: AgentEvent): boolean {
-  const name = toolCallName(event)?.toLowerCase();
-  if (name == null) return false;
-  if (name.includes('edit') || name.includes('write')) return true;
-  const command = toolCallInput(event).command;
-  return (
-    typeof command === 'string' &&
-    (/\bapply_patch\b/.test(command) ||
-      /\bsed\s+-[^;&|]*i/.test(command) ||
-      /\btee\s+(?:-[a-zA-Z]+\s+)*(?!\/dev\/null\b)\S+/.test(command) ||
-      /(^|[^<])>{1,2}\s*\S+/.test(command))
-  );
-}
-
-function toolCallStatus(event: AgentEvent): string | null {
-  if (event.kind !== 'agent.tool-call') return null;
-  const payload = event.payload as { status?: unknown };
-  return typeof payload.status === 'string' ? payload.status : null;
-}
-
-function toolCallPaths(event: AgentEvent): string[] {
-  const payload = event.payload as {
-    raw_path?: unknown;
-    canonical_path?: unknown;
-    tool_input?: unknown;
-  };
-  const input = toolCallInput(event);
-  const paths = new Set<string>();
-  const add = (value: unknown) => {
-    if (typeof value === 'string' && value.length > 0) paths.add(value);
-  };
-  const addArray = (value: unknown) => {
-    if (!Array.isArray(value)) return;
-    for (const entry of value) add(entry);
-  };
-  add(payload.raw_path);
-  const canonical = payload.canonical_path;
-  if (canonical != null && typeof canonical === 'object' && !Array.isArray(canonical)) {
-    add((canonical as { path?: unknown }).path);
-  }
-  add(input.path);
-  addArray(input.paths);
-  addArray(input.rawPaths);
-  return [...paths];
-}
-
-function normalizePathForCompare(path: string): string {
-  return path.replace(/^\.\//, '').replace(/\/+$/, '');
-}
-
-function pathsMatch(left: string, right: string): boolean {
-  const a = normalizePathForCompare(left);
-  const b = normalizePathForCompare(right);
-  return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
-}
-
-function pathsExactlyMatch(left: string, right: string): boolean {
-  return normalizePathForCompare(left) === normalizePathForCompare(right);
-}
-
 function isTerminalDecisionKind(kind: unknown): kind is TerminalDecisionKind {
   return kind === 'TOOL_FAILURE' || kind === 'BLOCKER';
 }
@@ -223,50 +155,19 @@ function terminalDecisionFailure(
   return null;
 }
 
-function latestRunTestsStatusForPath(events: AgentEvent[], path: string): string | null {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i];
-    if (toolCallName(event) !== 'run_tests') continue;
-    const paths = toolCallPaths(event);
-    if (paths.length > 0 && !paths.some((candidate) => pathsMatch(candidate, path))) continue;
-    return toolCallStatus(event);
-  }
-  return null;
+function isRetryCapFinalVerificationFailure(failure: ImplementWpAcceptanceFailure | null): boolean {
+  if (failure?.kind !== 'terminal-blocker') return false;
+  return /(?:final|exact-file|rerun|verification).*(?:retry cap|locked out|refused|harness retry)/i.test(
+    failure.reason,
+  );
 }
 
-function latestExactRunTestsStatusForPathAfterLastEdit(
-  events: AgentEvent[],
-  path: string,
-): string | null {
-  let lastEditIndex = -1;
-  for (let i = 0; i < events.length; i++) {
-    const event = events[i];
-    if (toolCallStatus(event) !== 'ok') continue;
-    if (!isEditToolCall(event)) continue;
-    const editedPaths = toolCallPaths(event);
-    if (editedPaths.length === 0 || editedPaths.some((candidate) => pathsMatch(candidate, path))) {
-      lastEditIndex = i;
-    }
-  }
-
-  for (let i = events.length - 1; i > lastEditIndex; i--) {
-    const event = events[i];
-    if (toolCallName(event) !== 'run_tests') continue;
-    const paths = toolCallPaths(event);
-    if (paths.length === 0) continue;
-    if (!paths.some((candidate) => pathsExactlyMatch(candidate, path))) continue;
-    return toolCallStatus(event);
-  }
-  return null;
-}
-
-function hasSuccessfulVerificationToolCall(events: AgentEvent[]): boolean {
-  return events.some((event) => {
-    if (event.kind !== 'agent.tool-call') return false;
-    if (toolCallStatus(event) !== 'ok') return false;
-    const name = toolCallName(event);
-    return name === 'run_tests' || name === 'run_lint' || name === 'run_typecheck';
-  });
+function mergeRuntimeAndDurableEvents(
+  runtimeEvents: AgentEvent[],
+  durableEvents: AgentEvent[],
+): AgentEvent[] {
+  const seenIds = new Set(runtimeEvents.map((event) => event.id));
+  return [...runtimeEvents, ...durableEvents.filter((event) => !seenIds.has(event.id))];
 }
 
 function implementWpAcceptanceFailure(input: {
@@ -275,32 +176,46 @@ function implementWpAcceptanceFailure(input: {
   verificationRequired: boolean;
 }): ImplementWpAcceptanceFailure | null {
   const terminalFailure = terminalDecisionFailure(input.output, input.events);
-  if (terminalFailure != null) {
+  const retryCapFinalVerificationFailure = isRetryCapFinalVerificationFailure(terminalFailure);
+  const writtenTestPaths = [...new Set(input.output.testsWritten.map((test) => test.path))];
+  let writtenTestsCoveredByParentPass = false;
+  if (writtenTestPaths.length > 0) {
+    const failedWrittenTests = collectWrittenTestVerificationFailures(
+      input.events,
+      writtenTestPaths,
+    );
+    const writtenFailureReason = formatWrittenTestVerificationFailure(failedWrittenTests);
+    if (writtenFailureReason != null) {
+      return {
+        kind: 'verification-failed',
+        reason: writtenFailureReason,
+      };
+    }
+    writtenTestsCoveredByParentPass = true;
+  }
+  if (
+    terminalFailure != null &&
+    !(retryCapFinalVerificationFailure && writtenTestsCoveredByParentPass)
+  ) {
     return terminalFailure;
   }
-  if (input.output.confidence === 'low' && input.verificationRequired) {
+  if (
+    input.output.confidence === 'low' &&
+    input.verificationRequired &&
+    !(retryCapFinalVerificationFailure && writtenTestsCoveredByParentPass)
+  ) {
     return {
       kind: 'low-confidence',
       reason: 'implement-wp returned low confidence while verification was required',
     };
   }
-  const writtenTestPaths = [...new Set(input.output.testsWritten.map((test) => test.path))];
-  if (writtenTestPaths.length > 0) {
-    const failedWrittenTestPaths = writtenTestPaths.filter(
-      (path) => latestExactRunTestsStatusForPathAfterLastEdit(input.events, path) !== 'ok',
-    );
-    if (failedWrittenTestPaths.length > 0) {
-      return {
-        kind: 'verification-failed',
-        reason: `written test files need exact-file run_tests success after their last edit: ${failedWrittenTestPaths.join(', ')}`,
-      };
-    }
-  }
   const reportedRunPaths = [...new Set(input.output.testsRun.paths)];
   if (reportedRunPaths.length > 0) {
-    const failedPaths = reportedRunPaths.filter(
-      (path) => latestRunTestsStatusForPath(input.events, path) !== 'ok',
-    );
+    const failedPaths = collectReportedRunTestFailures({
+      events: input.events,
+      reportedRunPaths,
+      writtenTestPaths,
+    });
     if (failedPaths.length > 0) {
       return {
         kind: 'verification-failed',
@@ -791,8 +706,13 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     return { status: 'failed', wpId: wp.id, errorReason: errorReason ?? 'unknown', runId: wpRunId };
   }
 
+  const runEvents = mergeRuntimeAndDurableEvents(
+    result.events,
+    eventStore.replay({ runId: wpRunId }),
+  );
+
   const loopDiagnosis = editTestLoopDiagnosis({
-    events: result.events,
+    events: runEvents,
     maxCycles: opts.implementWpControl?.editTestLoopMaxCycles ?? 3,
   });
   if (loopDiagnosis != null) {
@@ -893,7 +813,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
 
   const acceptanceFailure = implementWpAcceptanceFailure({
     output,
-    events: result.events,
+    events: runEvents,
     verificationRequired:
       output.testsWritten.length > 0 ||
       output.testsRun.paths.length > 0 ||

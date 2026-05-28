@@ -31,11 +31,11 @@ export interface ReviewWaveResult {
   }>;
   parseFailure: boolean;
   parseFailureError?: string;
-  /** True if any reviewer returned verdict: 'needs-human' — must escalate immediately. */
+  /** True if any reviewer returned verdict: 'needs-human' and no actionable repair verdict wins. */
   anyNeedsHuman: boolean;
-  /** True if any reviewer returned verdict: 'needs-fix' — prevents convergence counting. */
+  /** True if any reviewer returned verdict: 'needs-fix' — routes to the repair workflow. */
   anyNeedsFix: boolean;
-  /** True when some reviewers approved and others returned needs-fix — escalate immediately. */
+  /** True when some reviewers approved and others returned needs-fix. */
   verdictsDiverge: boolean;
 }
 
@@ -105,6 +105,22 @@ export function hasCanonicalCriteriaCoverage(
   if (criteria.length === 0) return true;
   const checkedIds = new Set(output.criteriaChecks.map((check) => check.criterionId));
   return criteria.every((criterion) => checkedIds.has(criterion.id));
+}
+
+export function withCanonicalCriterionIds(
+  output: ReviewOutput,
+  acceptanceContract?: AcceptanceContract | null,
+): ReviewOutput {
+  const criteria = acceptanceContract?.criteria ?? [];
+  if (criteria.length === 0) return output;
+  const byStatement = new Map(criteria.map((criterion) => [criterion.statement, criterion.id]));
+  return {
+    ...output,
+    criteriaChecks: output.criteriaChecks.map((check) => ({
+      ...check,
+      criterionId: check.criterionId ?? byStatement.get(check.criterion),
+    })),
+  };
 }
 
 /** Default reviewer slots: constrained + unconstrained. Model/provider come from Skill runtime. */

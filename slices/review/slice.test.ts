@@ -869,6 +869,58 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
     expect(completedEvents[0]?.[0].payload).toMatchObject({ verdict: 'needs-human' });
   });
 
+  it('routes to needs-fix when a needs-human reviewer is paired with actionable needs-fix', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    mockRun.mockResolvedValueOnce(makeNeedsHumanResult());
+    mockRun.mockResolvedValueOnce({
+      output: {
+        verdict: 'needs-fix',
+        confidence: 0.7,
+        criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'unmet' }],
+        findings: [
+          {
+            severity: 'major',
+            description: 'not implemented',
+            disposition: 'needs-fix',
+            dispositionRef: '#999',
+          },
+        ],
+        decisionSummaries: [],
+      },
+      decisionSummaries: [],
+      events: [],
+    } satisfies AgentResult);
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:needs-fix',
+    );
+    expect(mockRun).toHaveBeenCalledTimes(2);
+
+    const completedEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'review.completed');
+    expect(completedEvents).toHaveLength(1);
+    expect(completedEvents[0]?.[0].payload).toMatchObject({
+      verdict: 'needs-fix',
+      findings: [
+        expect.objectContaining({
+          description: 'not implemented',
+          disposition: 'needs-fix',
+        }),
+      ],
+    });
+  });
+
   it('escalates when reviewer outputs omit canonical criterion IDs', async () => {
     const item = makeWorkItem();
     const source = makeMockSource({
@@ -879,7 +931,7 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       output: {
         verdict: 'approved',
         confidence: 0.9,
-        criteriaChecks: [{ criterion: 'Add foo', status: 'met' }],
+        criteriaChecks: [{ criterion: 'Loosely summarized criterion', status: 'met' }],
         findings: [],
         decisionSummaries: [],
       },
@@ -900,6 +952,41 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       '42',
       expect.stringContaining('missing canonical acceptance criteria coverage'),
     );
+  });
+
+  it('canonicalizes review criterion IDs from exact acceptance-contract text', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+    const approvedWithoutIds = (): AgentResult => ({
+      output: {
+        verdict: 'approved',
+        confidence: 0.95,
+        criteriaChecks: [{ criterion: 'Add foo', status: 'met' }],
+        findings: [],
+        decisionSummaries: [],
+      },
+      decisionSummaries: [],
+      events: [],
+    });
+    for (let i = 0; i < 6; i++) mockRun.mockResolvedValueOnce(approvedWithoutIds());
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:approved',
+    );
+    const slotEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'review.slot-completed');
+    expect(slotEvents[0]?.[0].payload).toMatchObject({
+      criteriaChecks: [expect.objectContaining({ criterionId: 'AC-1' })],
+    });
   });
 
   // Test for P2 fix: review.completed emitted on convergence path
@@ -1068,13 +1155,13 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
     ).toEqual(['slot A needs human', 'slot B approves']);
   });
 
-  // M19.20: configurable reviewer slots — divergent verdicts escalate immediately
+  // M19.20: configurable reviewer slots
   describe('configurable reviewer slots (M19.20)', () => {
     beforeEach(() => {
       mockReadProjectReviewSettings.mockReturnValue(null);
     });
 
-    it('escalates to factory:needs-human immediately when 1-claude + 1-codex reviewers return divergent verdicts (approved vs needs-fix)', async () => {
+    it('routes to factory:needs-fix when configured reviewers return actionable divergent verdicts (approved vs needs-fix)', async () => {
       const item = makeWorkItem();
       const source = makeMockSource({
         getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
@@ -1100,15 +1187,24 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       } satisfies AgentResult);
 
       const { runConvergentReviewWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
       await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
 
       expect(source.transitionState).toHaveBeenCalledWith(
         '42',
         'factory:needs-review',
-        'factory:needs-human',
+        'factory:needs-fix',
       );
-      // Must escalate after round 1 only (2 slot calls — no further rounds)
+      // Must send back after round 1 only (2 slot calls — no further rounds).
       expect(mockRun).toHaveBeenCalledTimes(2);
+      const completedEvents = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.filter(([event]) => event.kind === 'review.completed');
+      expect(completedEvents).toHaveLength(1);
+      expect(completedEvents[0]?.[0].payload).toMatchObject({
+        verdict: 'needs-fix',
+        findings: [{ severity: 'minor', description: 'style nit' }],
+      });
     });
 
     it('uses the review skill runtime provider for reviewer slots', async () => {
