@@ -1,31 +1,91 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import type {
+  ChatConversationDto,
+  ChatMessageDto,
+  ChatToolInvocationDto,
+  ChatToolManifestDto,
+} from '@/lib/types';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatDock } from './ChatDock';
 
-vi.mock('./ChatPanel', () => ({
-  ChatPanel: (props: { open: boolean; onClose: () => void; launcherResetToken: number }) => {
-    return (
-      <div data-testid="chat-panel-proxy">
-        <button type="button" data-testid="panel-close-proxy" onClick={props.onClose}>
-          panel close
-        </button>
-        <span data-testid="panel-open-state">{String(props.open)}</span>
-        <span data-testid="panel-reset-token">{String(props.launcherResetToken)}</span>
-      </div>
-    );
-  },
+const { listConversations, fetchConversation, fetchToolManifest, useChatEvents } = vi.hoisted(
+  () => ({
+    listConversations: vi.fn(),
+    fetchConversation: vi.fn(),
+    fetchToolManifest: vi.fn(),
+    useChatEvents: vi.fn(() => []),
+  }),
+);
+
+vi.mock('@/lib/api/chat', () => ({
+  createConversation: vi.fn(),
+  deleteConversation: vi.fn(),
+  fetchConversation,
+  fetchToolManifest,
+  listConversations,
+  postMessage: vi.fn(),
+  resolveInvocation: vi.fn(),
 }));
 
-vi.mock('./ChatLauncher', () => ({
-  ChatLauncher: (props: { open: boolean; onToggle: () => void }) => {
-    return (
-      <button type="button" data-testid="chat-launcher" onClick={props.onToggle}>
-        launcher {String(props.open)}
-      </button>
-    );
-  },
+vi.mock('../lib/useChatEvents', () => ({
+  useChatEvents,
 }));
+
+vi.mock('./ChatInput', () => ({
+  ChatInput: ({ disabled }: { disabled: boolean }) => (
+    <div data-testid="chat-input-proxy" data-disabled={String(disabled)} />
+  ),
+}));
+
+vi.mock('./ChatThread', () => ({
+  ChatThread: ({ messages }: { messages: ChatMessageDto[] }) => (
+    <div data-testid="chat-thread-proxy">thread:{messages.length}</div>
+  ),
+}));
+
+function Providers({ children }: { children: ReactNode }) {
+  return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>;
+}
+
+function conversation(overrides: Partial<ChatConversationDto> = {}): ChatConversationDto {
+  return {
+    id: 'conv-1',
+    scope: 'project',
+    projectId: 'goose-hub-self',
+    workItemId: null,
+    title: 'Conversation one',
+    runtime: 'codex',
+    createdAt: '2026-05-18T00:00:00Z',
+    updatedAt: '2026-05-18T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function message(overrides: Partial<ChatMessageDto> = {}): ChatMessageDto {
+  return {
+    id: 1,
+    conversationId: 'conv-1',
+    role: 'user',
+    content: 'hello',
+    runId: null,
+    meta: null,
+    createdAt: '2026-05-18T00:00:00Z',
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  listConversations.mockReset();
+  fetchConversation.mockReset();
+  fetchToolManifest.mockReset();
+  useChatEvents.mockReset();
+  useChatEvents.mockReturnValue([]);
+  fetchToolManifest.mockResolvedValue([] satisfies ChatToolManifestDto[]);
+});
 
 afterEach(() => {
   cleanup();
@@ -33,30 +93,46 @@ afterEach(() => {
 });
 
 describe('ChatDock', () => {
-  it('increments the launcher reset token only when the launcher closes an open panel', () => {
-    render(<ChatDock />);
+  it('reopens on the conversation list after the launcher closes an open thread', async () => {
+    const existingConversation = conversation();
+    listConversations.mockResolvedValue([existingConversation]);
+    fetchConversation.mockResolvedValue({
+      conversation: existingConversation,
+      messages: [message()],
+      invocations: [] satisfies ChatToolInvocationDto[],
+    });
 
-    expect(screen.getByTestId('panel-open-state').textContent).toBe('false');
-    expect(screen.getByTestId('panel-reset-token').textContent).toBe('0');
-
-    fireEvent.click(screen.getByTestId('chat-launcher'));
-    expect(screen.getByTestId('panel-open-state').textContent).toBe('true');
-    expect(screen.getByTestId('panel-reset-token').textContent).toBe('0');
-
-    fireEvent.click(screen.getByTestId('chat-launcher'));
-    expect(screen.getByTestId('panel-open-state').textContent).toBe('false');
-    expect(screen.getByTestId('panel-reset-token').textContent).toBe('1');
-  });
-
-  it('does not increment the launcher reset token when ChatPanel closes itself', () => {
-    render(<ChatDock />);
+    render(
+      <Providers>
+        <ChatDock />
+      </Providers>,
+    );
 
     fireEvent.click(screen.getByTestId('chat-launcher'));
-    expect(screen.getByTestId('panel-open-state').textContent).toBe('true');
-    expect(screen.getByTestId('panel-reset-token').textContent).toBe('0');
 
-    fireEvent.click(screen.getByTestId('panel-close-proxy'));
-    expect(screen.getByTestId('panel-open-state').textContent).toBe('false');
-    expect(screen.getByTestId('panel-reset-token').textContent).toBe('0');
+    await waitFor(() => {
+      expect(screen.getByTestId('chat-conversation-list')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getAllByTestId('chat-conversation-select')[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('chat-thread-proxy').textContent).toBe('thread:1');
+    });
+    expect(localStorage.getItem('hub-chat-active-conversation-id')).toBe(existingConversation.id);
+
+    fireEvent.click(screen.getByTestId('chat-launcher'));
+
+    await waitFor(() => {
+      expect(localStorage.getItem('hub-chat-active-conversation-id')).toBeNull();
+    });
+    expect(screen.getByTestId('chat-launcher').getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(screen.getByTestId('chat-launcher'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('chat-conversation-list')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('chat-thread-proxy')).toBeNull();
   });
 });

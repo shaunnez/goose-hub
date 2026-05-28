@@ -88,10 +88,10 @@ function Providers({ children }: { children: ReactNode }) {
   return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>;
 }
 
-function renderPanel(launcherResetToken: number) {
+function renderPanel() {
   return render(
     <Providers>
-      <ChatPanel open launcherResetToken={launcherResetToken} onClose={() => {}} />
+      <ChatPanel open onClose={() => {}} />
     </Providers>,
   );
 }
@@ -143,36 +143,6 @@ afterEach(() => {
 });
 
 describe('ChatPanel', () => {
-  it('resets the active thread and clears localStorage when launcherResetToken increments', async () => {
-    const existingConversation = conversation();
-    localStorage.setItem('hub-chat-active-conversation-id', existingConversation.id);
-    listConversations.mockResolvedValue([existingConversation]);
-    fetchConversation.mockResolvedValue({
-      conversation: existingConversation,
-      messages: [message()],
-      invocations: [] satisfies ChatToolInvocationDto[],
-    });
-
-    const view = renderPanel(0);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('chat-thread-proxy').textContent).toBe('thread:1');
-    });
-    expect(localStorage.getItem('hub-chat-active-conversation-id')).toBe(existingConversation.id);
-
-    view.rerender(
-      <Providers>
-        <ChatPanel open launcherResetToken={1} onClose={() => {}} />
-      </Providers>,
-    );
-
-    await waitFor(() => {
-      expect(localStorage.getItem('hub-chat-active-conversation-id')).toBeNull();
-    });
-    expect(screen.getByTestId('chat-conversation-list-proxy')).toBeTruthy();
-    expect(screen.queryByTestId('chat-thread-proxy')).toBeNull();
-  });
-
   it('restores a selected conversation while the panel stays open', async () => {
     const existingConversation = conversation();
     listConversations.mockResolvedValue([existingConversation]);
@@ -182,7 +152,7 @@ describe('ChatPanel', () => {
       invocations: [] satisfies ChatToolInvocationDto[],
     });
 
-    renderPanel(0);
+    renderPanel();
 
     await waitFor(() => {
       expect(screen.getByTestId(`conversation-${existingConversation.id}`)).toBeTruthy();

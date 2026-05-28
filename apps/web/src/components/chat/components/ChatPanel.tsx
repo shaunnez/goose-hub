@@ -34,12 +34,11 @@ const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 interface ChatPanelProps {
   open: boolean;
   onClose: () => void;
-  launcherResetToken: number;
 }
 
 type View = 'thread' | 'list';
 
-export function ChatPanel({ open, onClose, launcherResetToken }: ChatPanelProps) {
+export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const resolved = useMemo(() => resolveScopeFromPath(location.pathname), [location.pathname]);
@@ -145,14 +144,6 @@ export function ChatPanel({ open, onClose, launcherResetToken }: ChatPanelProps)
     writeActiveId(null);
     setView('list');
   }, [writeActiveId]);
-
-  const lastLauncherResetTokenRef = useRef(launcherResetToken);
-
-  useEffect(() => {
-    if (launcherResetToken === lastLauncherResetTokenRef.current) return;
-    lastLauncherResetTokenRef.current = launcherResetToken;
-    resetToList();
-  }, [launcherResetToken, resetToList]);
 
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;
