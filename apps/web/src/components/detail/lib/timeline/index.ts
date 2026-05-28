@@ -241,6 +241,7 @@ export function groupTimelineEventsByCanonicalSection(
   const discoverSessionByWorkflowOrRunId = buildDiscoverSessionRunIndex(normalizedEvents);
   const fixFeedbackAttemptByRunId = buildFixFeedbackAttemptRunIndex(normalizedEvents);
   const prdWorkflowByRevisionEventId = buildPrdRevisionWorkflowIndex(normalizedEvents);
+  const specAuthorRepairByRunId = buildSpecAuthorRepairRunIndex(normalizedEvents);
   const segments = buildTimelineSegments(
     normalizedEvents,
     runMetadata,
@@ -249,6 +250,7 @@ export function groupTimelineEventsByCanonicalSection(
     discoverSessionByWorkflowOrRunId,
     fixFeedbackAttemptByRunId,
     prdWorkflowByRevisionEventId,
+    specAuthorRepairByRunId,
   );
   const standaloneItems: RenderItem[] = [
     ...normalizedEvents
@@ -302,6 +304,7 @@ function buildTimelineSegments(
   discoverSessionByWorkflowOrRunId: DiscoverSessionRunIndex,
   fixFeedbackAttemptByRunId: ReadonlyMap<string, string>,
   prdWorkflowByRevisionEventId: ReadonlyMap<number, string>,
+  specAuthorRepairByRunId: ReadonlyMap<string, string>,
 ): TimelineSegmentAccumulator[] {
   const segments = new Map<string, TimelineSegmentAccumulator>();
   const orderedEvents = [...events].sort(
@@ -323,6 +326,7 @@ function buildTimelineSegments(
       discoverSessionByWorkflowOrRunId,
       fixFeedbackAttemptByRunId,
       prdWorkflowByRevisionEventId,
+      specAuthorRepairByRunId,
     );
     let segment: TimelineSegmentAccumulator | undefined;
 
@@ -367,6 +371,7 @@ function timelineSegmentExplicitKey(
   discoverSessionByWorkflowOrRunId: DiscoverSessionRunIndex,
   fixFeedbackAttemptByRunId: ReadonlyMap<string, string>,
   prdWorkflowByRevisionEventId: ReadonlyMap<number, string>,
+  specAuthorRepairByRunId: ReadonlyMap<string, string>,
 ): string | null {
   const payload = event.payload as Record<string, unknown> | null;
   const stringPayload = (key: string): string | null => {
@@ -396,7 +401,7 @@ function timelineSegmentExplicitKey(
     case 'decompose':
       return workflowRunId ?? runId;
     case 'delivery-router':
-      return pipelineRunId ?? workflowRunId ?? runId;
+      return specAuthorRepairByRunId.get(runId ?? '') ?? pipelineRunId ?? workflowRunId ?? runId;
     case 'implementation':
       return (
         fixFeedbackSegmentIdForEvent(event, fixFeedbackAttemptByRunId) ??
@@ -593,6 +598,22 @@ function isFixFeedbackRelatedEvent(event: AgentEventDto): boolean {
     eventHasWorkflowIdentity(event, 'fix-feedback') ||
     eventPayloadString(event, 'by') === 'fix-feedback'
   );
+}
+
+function buildSpecAuthorRepairRunIndex(events: AgentEventDto[]): Map<string, string> {
+  const repairByRunId = new Map<string, string>();
+
+  for (const event of events) {
+    if (event.kind !== 'agent.run-started') continue;
+    if (eventSkill(event) !== 'spec-author') continue;
+    if (eventPayloadString(event, 'attempt') !== 'repair') continue;
+    const runId = event.runId;
+    const repairOf = eventPayloadString(event, 'repairOf');
+    if (runId == null || runId.trim() === '' || repairOf == null) continue;
+    repairByRunId.set(runId, repairOf);
+  }
+
+  return repairByRunId;
 }
 
 function buildFixFeedbackAttemptRunIndex(events: AgentEventDto[]): Map<string, string> {
