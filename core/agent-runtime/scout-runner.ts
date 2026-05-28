@@ -135,6 +135,28 @@ function hasSuccessfulFactoryEvidenceCall(events: readonly AgentEvent[]): boolea
   });
 }
 
+function hasFactoryEvidenceAttempt(events: readonly AgentEvent[]): boolean {
+  return events.some((event) => {
+    if (event.kind !== 'agent.tool-call') return false;
+    const payload = payloadRecord(event.payload);
+    if (payload == null) return false;
+    const toolName = normalizedToolName(payload.tool_name ?? payload.toolName ?? payload.tool);
+    return toolName != null && FACTORY_EVIDENCE_TOOL_NAMES.has(toolName);
+  });
+}
+
+function isUnsupportedToolAvailabilitySkip(decisionSummaries: readonly DecisionSummary[]): boolean {
+  const text = decisionSummaries
+    .map((summary) => `${summary.summary} ${summary.evidence ?? ''}`)
+    .join('\n')
+    .toLowerCase();
+  if (!/\btool/.test(text)) return false;
+  if (!/(read|search|workspace|factory|file)/.test(text)) return false;
+  return /not available|unavailable|not exposed|no .*tool|missing .*tool|required .*tool/.test(
+    text,
+  );
+}
+
 export async function runOneScout(
   spec: ScoutSpec,
   idx: number,
@@ -303,7 +325,12 @@ export async function runOneScout(
     result.decisionSummaries.length > 0 ? result.decisionSummaries : scoutOutput.decisionSummaries;
   let effectiveRunId = runId;
   let evidenceBackedEmptyResult = false;
-  if (scoutOutput.status === 'skipped') {
+  const unsupportedToolSkipWithoutAttempt =
+    scoutOutput.status === 'skipped' &&
+    isUnsupportedToolAvailabilitySkip(decisionSummaries) &&
+    !hasFactoryEvidenceAttempt(result.events);
+  if (unsupportedToolSkipWithoutAttempt) findings = [];
+  if (scoutOutput.status === 'skipped' && !unsupportedToolSkipWithoutAttempt) {
     return emitSkippedScout({
       append,
       ctx,
@@ -314,7 +341,10 @@ export async function runOneScout(
     });
   }
 
-  if (findings.length === 0 && !hasSuccessfulFactoryEvidenceCall(result.events)) {
+  if (
+    (findings.length === 0 || unsupportedToolSkipWithoutAttempt) &&
+    !hasSuccessfulFactoryEvidenceCall(result.events)
+  ) {
     const seedEvidence = await readSeedEvidenceSnippets(ctx.worktreePath, fullContext);
     if (seedEvidence.length > 0) {
       const retryTimeoutMs = remainingTimeoutMs(start, budgets.timeoutMs);
@@ -352,23 +382,35 @@ export async function runOneScout(
           }
           const retryOutput = normalizeScoutOutput(retryParsed.data);
           const retryFindings = retryOutput.findings;
+          let retryUnsupportedToolSkipWithoutAttempt = false;
           if (retryOutput.status === 'skipped') {
-            return emitSkippedScout({
-              append,
-              ctx,
-              runId: retrySpec.runId,
-              scoutName: spec.scoutName,
-              findings: retryFindings,
-              decisionSummaries:
-                retryResult.decisionSummaries.length > 0
-                  ? retryResult.decisionSummaries
-                  : retryOutput.decisionSummaries,
-            });
+            const retryDecisionSummaries =
+              retryResult.decisionSummaries.length > 0
+                ? retryResult.decisionSummaries
+                : retryOutput.decisionSummaries;
+            retryUnsupportedToolSkipWithoutAttempt =
+              isUnsupportedToolAvailabilitySkip(retryDecisionSummaries) &&
+              !hasFactoryEvidenceAttempt(retryResult.events);
+            if (
+              !retryUnsupportedToolSkipWithoutAttempt ||
+              hasFactoryEvidenceAttempt(retryResult.events)
+            ) {
+              return emitSkippedScout({
+                append,
+                ctx,
+                runId: retrySpec.runId,
+                scoutName: spec.scoutName,
+                findings: retryFindings,
+                decisionSummaries: retryDecisionSummaries,
+              });
+            }
+            decisionSummaries = retryDecisionSummaries;
           }
           if (
-            retryFindings.length > 0 ||
-            hasSuccessfulFactoryEvidenceCall(retryResult.events) ||
-            retryOutput.status === 'ok'
+            !retryUnsupportedToolSkipWithoutAttempt &&
+            (retryFindings.length > 0 ||
+              hasSuccessfulFactoryEvidenceCall(retryResult.events) ||
+              retryOutput.status === 'ok')
           ) {
             result = retryResult;
             findings = retryFindings;
