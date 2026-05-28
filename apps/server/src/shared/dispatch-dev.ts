@@ -8,6 +8,7 @@ import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-tra
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { filterEligibleByDependencies } from '@goose-hub/core/projects/dependency-scheduler.js';
+import { firstProjectRepository } from '@goose-hub/core/projects/repositories.js';
 import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { ProjectConfig } from '@goose-hub/core/types.js';
@@ -40,12 +41,7 @@ function primaryRepoRef(project: ProjectConfig): string {
   if ((source.kind === 'github' || source.type === 'github') && typeof source.repo === 'string') {
     return source.repo;
   }
-  return (
-    project.repositories?.[0]?.repoRef ??
-    project.repos?.[0] ??
-    source.integrations?.github?.repos?.[0] ??
-    `local:${project.id}`
-  );
+  return firstProjectRepository(project)?.repoRef ?? `local:${project.id}`;
 }
 
 function hasEquivalentInvestigationCompleteTransition(

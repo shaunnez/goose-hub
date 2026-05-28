@@ -225,6 +225,64 @@ describe('importJiraIssueToLocalDb', () => {
     });
   });
 
+  it('links imported Jira Work Items to the canonical repositories registry without GitHub ownership', async () => {
+    const { sqlite, repository } = makeRepository();
+    handles.push(sqlite);
+    const integrations =
+      projectConfig.source.kind === 'local-db' ? projectConfig.source.integrations : undefined;
+    const localDbWithBitbucketRepos = {
+      ...projectConfig,
+      repos: [],
+      repositories: [
+        {
+          id: 'widgets-api',
+          repoRef: 'workspace/widgets-api',
+          cloneUrl: 'git@bitbucket.org:workspace/widgets-api.git',
+          defaultBranch: 'main',
+          localPath: '/repos/workspace/widgets-api',
+          role: 'code',
+        },
+      ],
+      source: {
+        kind: 'local-db',
+        stateMachine: 'db',
+        integrations: {
+          ...integrations,
+          bitbucket: {
+            enabled: true,
+            workspace: 'workspace',
+            repos: ['widgets-api'],
+          },
+        },
+      },
+    } as ProjectConfig;
+
+    const result = await importJiraIssueToLocalDb({
+      projectConfig: localDbWithBitbucketRepos,
+      input: 'TAS-123',
+      adapter: adapterWith(jiraDetail()),
+      repository,
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(repository.listRepoLinks('proj', 'local:proj#1')).toMatchObject([
+      {
+        repoRef: 'workspace/widgets-api',
+        role: 'primary',
+        source: 'jira-import',
+      },
+    ]);
+    expect(
+      repository.getExternalRef({
+        projectId: 'proj',
+        provider: 'jira',
+        kind: 'issue',
+        repoRef: null,
+        externalId: 'TAS-123',
+      }),
+    ).toMatchObject({ provider: 'jira', repoRef: null });
+  });
+
   it('moves an existing imported Jira Work Item into the requested milestone on refresh', async () => {
     const { sqlite, repository } = makeRepository();
     handles.push(sqlite);

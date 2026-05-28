@@ -1,4 +1,5 @@
 import { getProjectBySlug } from '../../../projects/loader.js';
+import { firstProjectRepository } from '../../../projects/repositories.js';
 import { GitHubLabelsSource } from '../../../state-source/github-labels.js';
 import type { StateSource } from '../../../state-source/interface.js';
 import { LocalDbStateSource } from '../../../state-source/local-db.js';
@@ -45,11 +46,7 @@ export async function getStateSourceForProject(projectId: string): Promise<State
   if (project == null) throw new ProjectNotFoundError(projectId);
   const sourceKind = (project.source as { kind: string }).kind;
   if (project.source.kind === 'local-db') {
-    const repoRef =
-      project.repositories?.[0]?.repoRef ??
-      project.repos[0] ??
-      project.source.integrations?.github?.repos[0] ??
-      `local:${project.id}`;
+    const repoRef = firstProjectRepository(project)?.repoRef ?? `local:${project.id}`;
     return new LocalDbStateSource(project.id, repoRef);
   }
   if (project.source.kind !== 'github') {

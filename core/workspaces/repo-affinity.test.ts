@@ -80,4 +80,19 @@ describe('repo affinity', () => {
       selectedBy: 'repo-link-primary',
     });
   });
+
+  it('rejects local-db repo links missing from repositories instead of falling back to targetRepo', () => {
+    const repository = {
+      listRepoLinks: () => [repoLink('workspace/bitbucket-repo', 'primary')],
+    } as unknown as LocalDbWorkItemRepository;
+
+    expect(() =>
+      resolveRepositoryForWorkItem({
+        project,
+        workItem,
+        fallbackLocalPath: '/repo',
+        repository,
+      }),
+    ).toThrow("repo link 'workspace/bitbucket-repo' is not registered");
+  });
 });

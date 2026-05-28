@@ -224,11 +224,17 @@ export interface ProjectConfig {
   name: string;
   slug: string;
   source: SourceConfig;
+  /**
+   * Backcompat shim for older single-repo workflows. New code should resolve
+   * code repositories through `repositories`.
+   */
   targetRepo: TargetRepoConfig;
+  /** Canonical registry of code/doc/infra repositories a Work Item may target. */
   repositories?: ProjectRepositoryConfig[];
   stack: StackConfig;
   mode: 'interactive' | 'supervised' | 'autonomous';
   storage: { kind: 'local'; path: string };
+  /** Backcompat repo-ref list derived from `repositories`. Do not treat it as authority. */
   repos: string[];
   agentConfig: AgentConfig;
   budgets: BudgetConfig;

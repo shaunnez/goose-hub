@@ -1,5 +1,6 @@
 import { attachArtifactToWorkItem } from '../../agent-artifacts/repository.js';
 import type { ArtifactRef } from '../../agent-artifacts/types.js';
+import { firstProjectRepository } from '../../projects/repositories.js';
 import type { Priority, WorkItemType } from '../../state-source/interface.js';
 import { LocalDbWorkItemRepository } from '../../state-source/local-db-repository.js';
 import type { ProjectConfig } from '../../types.js';
@@ -133,7 +134,7 @@ export async function importJiraIssueDetailToLocalDb(
 
   attachJiraArtifactsToWorkItem(cfg.id, row.id, input.detail);
 
-  const defaultRepoRef = cfg.repos[0];
+  const defaultRepoRef = firstProjectRepository(cfg)?.repoRef;
   if (defaultRepoRef != null && !defaultRepoRef.startsWith('local:')) {
     repository.createRepoLink({
       projectId: cfg.id,
