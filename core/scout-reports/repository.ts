@@ -107,6 +107,16 @@ export function persistScoutReport(
   return storedReport;
 }
 
+export function persistScoutReportForRun(
+  projectId: string,
+  workItemId: string,
+  scoutRunId: string,
+  scoutSkill: string,
+  report: unknown,
+): unknown {
+  return persistScoutReport(projectId, workItemId, scoutRunId, scoutSkill, report);
+}
+
 export function listScoutReportsForInvestigation(
   projectId: string,
   workItemId: string,
@@ -128,4 +138,12 @@ export function listScoutReportsForInvestigation(
     ...r,
     report: JSON.parse(r.report) as unknown,
   }));
+}
+
+export function listScoutReportsForRun(
+  projectId: string,
+  workItemId: string,
+  scoutRunId: string,
+): ScoutReport[] {
+  return listScoutReportsForInvestigation(projectId, workItemId, scoutRunId);
 }

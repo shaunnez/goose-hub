@@ -3,6 +3,7 @@ export const STATES = Object.freeze([
   'factory:accepted',
   'factory:rejected',
   'factory:framing',
+  'factory:grounding',
   'factory:grilling',
   'factory:prd-drafting',
   'factory:prd-review',

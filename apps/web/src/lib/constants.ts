@@ -6,6 +6,7 @@ export const STATE_LABEL: Record<string, string> = {
   'factory:accepted': 'accepted',
   'factory:rejected': 'rejected',
   'factory:framing': 'framing',
+  'factory:grounding': 'grounding',
   'factory:grilling': 'grilling',
   'factory:prd-drafting': 'prd-drafting',
   'factory:prd-review': 'prd-review',
@@ -68,6 +69,7 @@ export const PRD_ACTIVE_STATES = new Set([
 // the discover lane. Hidden entirely on issues that never went through grill,
 // so triage / dev-ready / coding etc. don't see a Grill tab.
 export const GRILL_ACTIVE_STATES = new Set([
+  'factory:grounding',
   'factory:grilling',
   'factory:gate-pending',
   'factory:prd-drafting',
@@ -94,6 +96,7 @@ export const GATE_STATES: Record<string, string> = {
 
 export const PENDING_NEXT_RUN_STATES: Record<string, string> = {
   'factory:triaging': 'triage',
+  'factory:grounding': 'feature-grounding',
   'factory:grilling': 'grill-me',
   'factory:prd-drafting': 'write-prd',
   'factory:decomposing': 'decompose-issues',

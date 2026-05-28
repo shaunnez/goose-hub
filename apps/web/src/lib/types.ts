@@ -763,6 +763,7 @@ export type WorkflowKind = 'bug' | 'feature' | 'chore' | 'research';
 export type WorkflowEdgeKind = 'primary' | 'optional' | 'retry' | 'summary';
 export type WorkflowGroup =
   | 'triage'
+  | 'grounding'
   | 'investigation'
   | 'grill'
   | 'prd'

@@ -53,13 +53,19 @@ export interface ParsedPRDView {
   implementationDecisions?: Array<{
     decision: string;
     rationale?: string;
-    moduleRef?: string;
+    moduleRef?: string | { path: string; status?: string; confidence?: string; evidence?: string };
   }>;
   testingDecisions?: {
     approach: string;
-    modulesToTest: string[];
+    modulesToTest: Array<string | { path: string; status?: string }>;
     priorArt?: string;
   };
+}
+
+function moduleRefToString(ref: string | { path: string; status?: string } | undefined): string | undefined {
+  if (ref == null) return undefined;
+  if (typeof ref === 'string') return ref;
+  return ref.status != null ? `${ref.path} (${ref.status})` : ref.path;
 }
 
 const COMPLEXITY_COLORS: Record<string, string> = {
@@ -648,8 +654,8 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
               >
                 <p className="text-fg font-medium">{d.decision}</p>
                 {d.rationale != null && <p className="text-fg-2 mt-0.5">{d.rationale}</p>}
-                {d.moduleRef != null && (
-                  <p className="font-mono text-[11px] text-fg-3 mt-0.5">{d.moduleRef}</p>
+                {moduleRefToString(d.moduleRef) != null && (
+                  <p className="font-mono text-[11px] text-fg-3 mt-0.5">{moduleRefToString(d.moduleRef)}</p>
                 )}
               </div>
             ))}
@@ -663,9 +669,10 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
             <p className="text-fg">{prd.testingDecisions.approach}</p>
             {prd.testingDecisions.modulesToTest.length > 0 && (
               <ul className="list-disc pl-5 space-y-0.5">
-                {prd.testingDecisions.modulesToTest.map((m) => (
-                  <li key={m} className="font-mono text-[11.5px] text-fg-2">
-                    {m}
+                {prd.testingDecisions.modulesToTest.map((m, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: modules have no stable id
+                  <li key={i} className="font-mono text-[11.5px] text-fg-2">
+                    {moduleRefToString(m)}
                   </li>
                 ))}
               </ul>

@@ -4,6 +4,7 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
   'factory:triaging': ['factory:accepted', 'factory:rejected', 'factory:archived'],
   'factory:accepted': [
     'factory:framing',
+    'factory:grounding',
     'factory:grilling',
     'factory:investigating',
     'factory:dev-ready',
@@ -11,7 +12,18 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
     'factory:archived',
   ],
   'factory:rejected': ['factory:archived'],
-  'factory:framing': ['factory:grilling', 'factory:prd-drafting', 'factory:archived'],
+  'factory:framing': [
+    'factory:grounding',
+    'factory:grilling',
+    'factory:prd-drafting',
+    'factory:archived',
+  ],
+  'factory:grounding': [
+    'factory:grilling',
+    'factory:prd-drafting',
+    'factory:needs-human',
+    'factory:archived',
+  ],
   'factory:grilling': ['factory:prd-drafting', 'factory:archived'],
   'factory:prd-drafting': ['factory:prd-review', 'factory:archived'],
   'factory:prd-review': ['factory:dev-ready', 'factory:decomposing', 'factory:archived'],

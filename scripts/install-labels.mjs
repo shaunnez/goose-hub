@@ -31,6 +31,7 @@ const LABELS = [
   { name: 'factory:triaging',              color: 'fbca04', description: 'Awaiting triage decision' },
   { name: 'factory:accepted',              color: '0e8a16', description: 'Accepted by triage' },
   { name: 'factory:rejected',              color: 'e6e6e6', description: 'Rejected by triage' },
+  { name: 'factory:grounding',             color: '14b8a6', description: 'Feature code-grounding preflight' },
   { name: 'factory:grilling',              color: '8b5cf6', description: 'Grill-me chat in progress' },
   { name: 'factory:prd-drafting',          color: '8b5cf6', description: 'PRD being written' },
   { name: 'factory:prd-review',            color: '8b5cf6', description: 'Awaiting human PRD approval' },

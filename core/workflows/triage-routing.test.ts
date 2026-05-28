@@ -22,10 +22,10 @@ describe('targetStateForTriage', () => {
       expected: 'factory:framing',
     },
     {
-      name: 'clean fresh feature keeps grilling',
+      name: 'clean fresh feature routes through feature grounding',
       type: 'feature' as const,
       labels: ['vague:low'],
-      expected: 'factory:grilling',
+      expected: 'factory:grounding',
     },
   ])('$name', ({ type, labels, expected }) => {
     expect(targetStateForTriage(type, labels)).toBe(expected);

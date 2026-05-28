@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { persistEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
@@ -6,7 +7,10 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { buildScoutReportDigestBundle } from '@goose-hub/core/scout-reports/digest.js';
-import { listScoutReportsForInvestigation } from '@goose-hub/core/scout-reports/repository.js';
+import {
+  listScoutReportsForInvestigation,
+  listScoutReportsForRun,
+} from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { collectScopeManifest } from '@goose-hub/core/workspaces/scope-manifest.js';
 import {
@@ -67,6 +71,7 @@ type SpecAuthorContext = {
   scoutReports?: string;
   wave2Reports?: string;
   investigationSynthesis?: string;
+  featureGrounding?: unknown;
   existingFileManifest?: Array<{ path: string; kind: 'file' | 'dir' }>;
 };
 
@@ -85,12 +90,129 @@ function formatValidationErrors(validation: Exclude<ValidationResult, { ok: true
   return validation.errors.map((e) => e.message);
 }
 
-function buildRepairFeedback(kind: 'schema' | 'structural', errors: string[]): string {
+function moduleRefPath(value: unknown): string | null {
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (value != null && typeof value === 'object') {
+    const path = (value as { path?: unknown }).path;
+    if (typeof path === 'string' && path.length > 0) return path;
+  }
+  return null;
+}
+
+function nearbyManifestCandidates(
+  missingPath: string,
+  manifest: Array<{ path: string; kind: 'file' | 'dir' }> = [],
+): string[] {
+  const dirname = dirOf(missingPath);
+  const basename = missingPath.slice(missingPath.lastIndexOf('/') + 1).toLowerCase();
+  const basenameStem = basename.replace(/\.[^.]+$/, '');
+  const filePaths = manifest.filter((entry) => entry.kind === 'file').map((entry) => entry.path);
+  const sameDir = filePaths.filter((path) => dirOf(path) === dirname);
+  const sameStem = filePaths.filter((path) =>
+    path
+      .slice(path.lastIndexOf('/') + 1)
+      .toLowerCase()
+      .includes(basenameStem),
+  );
+  const parentDir = dirOf(dirname);
+  const ancestor = filePaths.filter(
+    (path) =>
+      dirname !== '' &&
+      (path.startsWith(`${dirname}/`) ||
+        dirname.startsWith(`${dirOf(path)}/`) ||
+        (parentDir !== '' && dirOf(path).startsWith(`${parentDir}/`))),
+  );
+  return [...new Set([...sameDir, ...sameStem, ...ancestor])].slice(0, 8);
+}
+
+function availableExportsForFile(worktreePath: string | undefined, filePath: string): string[] {
+  if (worktreePath == null) return [];
+  let contents = '';
+  try {
+    contents = readFileSync(`${worktreePath}/${filePath}`, 'utf8');
+  } catch {
+    return [];
+  }
+  const exports = new Set<string>();
+  const declarationRe =
+    /export\s+(?:async\s+)?(?:function|const|let|var|class|interface|type|enum)\s+([A-Za-z_$][\w$]*)/g;
+  for (const match of contents.matchAll(declarationRe)) {
+    if (match[1] != null) exports.add(match[1]);
+  }
+  const namedRe = /export\s*\{([^}]+)\}/g;
+  for (const match of contents.matchAll(namedRe)) {
+    const names = match[1] ?? '';
+    for (const raw of names.split(',')) {
+      const name = raw
+        .trim()
+        .replace(/\s+as\s+.+$/i, '')
+        .trim();
+      if (/^[A-Za-z_$][\w$]*$/.test(name)) exports.add(name);
+    }
+  }
+  return [...exports].sort();
+}
+
+function enrichRepairErrors(
+  errors: string[],
+  options: {
+    existingFileManifest?: Array<{ path: string; kind: 'file' | 'dir' }>;
+    worktreePath?: string;
+  } = {},
+): string[] {
+  const enriched: string[] = [];
+  for (const error of errors) {
+    enriched.push(error);
+    const missingOwned = error.match(/filesOwned path '([^']+)' does not exist/);
+    const missingConstraintFile = error.match(/cites '([^']+)' which does not exist/);
+    const missingPath = missingOwned?.[1] ?? missingConstraintFile?.[1];
+    if (missingPath != null) {
+      const candidates = nearbyManifestCandidates(missingPath, options.existingFileManifest);
+      if (candidates.length > 0) {
+        enriched.push(
+          `Nearby existing manifest candidates for '${missingPath}': ${candidates.join(', ')}`,
+        );
+      } else {
+        enriched.push(
+          `No nearby existing manifest candidates for '${missingPath}'. If this is a new file, mark it with status:"new"; otherwise switch to a verified existing path.`,
+        );
+      }
+    }
+
+    const missingSymbol = error.match(/cites symbol '([^']+)' in '([^']+)' which is not present/);
+    if (missingSymbol != null) {
+      const [, symbol, filePath] = missingSymbol;
+      const exports = availableExportsForFile(options.worktreePath, filePath);
+      if (exports.length > 0) {
+        enriched.push(
+          `Available exports in '${filePath}': ${exports.join(', ')}. Use one of these only if it matches the constraint, otherwise switch to a path:line citation.`,
+        );
+      } else {
+        enriched.push(
+          `No available exports were found for '${filePath}'. Switch this constraint to a path:line citation from an actual read/search result.`,
+        );
+      }
+      enriched.push(`Do not introduce new unverified symbols while repairing '${symbol}'.`);
+    }
+  }
+  return enriched;
+}
+
+function buildRepairFeedback(
+  kind: 'schema' | 'structural',
+  errors: string[],
+  options: {
+    existingFileManifest?: Array<{ path: string; kind: 'file' | 'dir' }>;
+    worktreePath?: string;
+  } = {},
+): string {
+  const enrichedErrors = enrichRepairErrors(errors, options);
   return [
     `Previous spec-author attempt failed ${kind} validation.`,
     'Return a complete corrected EngineeringSpecSchema JSON object only.',
+    'Do not introduce new unverified symbols.',
     'Address every error below:',
-    ...errors.map((error) => `- ${error}`),
+    ...enrichedErrors.map((error) => `- ${error}`),
   ].join('\n');
 }
 
@@ -244,23 +366,29 @@ function addDirWithAncestors(roots: Set<string>, path: unknown): void {
 }
 
 function prdModuleRefPaths(prdContext: {
+  moduleRefs?: Array<{ path?: unknown }>;
   implementationDecisions?: unknown[];
   testingDecisions?: unknown;
 }): string[] {
   const paths: string[] = [];
 
+  for (const ref of prdContext.moduleRefs ?? []) {
+    if (typeof ref.path === 'string' && ref.path.length > 0) paths.push(ref.path);
+  }
+
   for (const decision of prdContext.implementationDecisions ?? []) {
     if (decision == null || typeof decision !== 'object') continue;
-    const moduleRef = (decision as { moduleRef?: unknown }).moduleRef;
-    if (typeof moduleRef === 'string' && moduleRef.length > 0) paths.push(moduleRef);
+    const path = moduleRefPath((decision as { moduleRef?: unknown }).moduleRef);
+    if (path != null) paths.push(path);
   }
 
   const testing = prdContext.testingDecisions;
   if (testing != null && typeof testing === 'object') {
     const modulesToTest = (testing as { modulesToTest?: unknown }).modulesToTest;
     if (Array.isArray(modulesToTest)) {
-      for (const path of modulesToTest) {
-        if (typeof path === 'string' && path.length > 0) paths.push(path);
+      for (const moduleRef of modulesToTest) {
+        const path = moduleRefPath(moduleRef);
+        if (path != null) paths.push(path);
       }
     }
   }
@@ -277,6 +405,7 @@ function deriveSpecScopeRoots(input: {
   investigationSynthesis?: string;
   scoutReports?: string;
   wave2Reports?: string;
+  featureGrounding?: unknown;
 }): string[] {
   const roots = new Set<string>();
   const addPath = (path: unknown) => {
@@ -336,6 +465,22 @@ function deriveSpecScopeRoots(input: {
           }
         }
       }
+    }
+  }
+
+  if (input.featureGrounding != null && typeof input.featureGrounding === 'object') {
+    const grounding = input.featureGrounding as {
+      existingSurfaces?: unknown;
+      plannedFiles?: unknown;
+      testSurfaces?: unknown;
+    };
+    for (const list of [
+      grounding.existingSurfaces,
+      grounding.plannedFiles,
+      grounding.testSurfaces,
+    ]) {
+      if (!Array.isArray(list)) continue;
+      for (const path of list) addDirWithAncestors(roots, path);
     }
   }
 
@@ -401,6 +546,7 @@ export async function runSpecAuthorWorkflow(
     let scoutReports: string | undefined;
     let wave2Reports: string | undefined;
     let investigationSynthesis: string | undefined;
+    let featureGrounding: unknown;
 
     if (latestInv != null) {
       const payload = latestInv.payload as { investigationRunId?: string; investigate?: unknown };
@@ -448,6 +594,25 @@ export async function runSpecAuthorWorkflow(
       if (payload.investigate != null) {
         investigationSynthesis = JSON.stringify(payload.investigate);
       }
+    } else {
+      const [latestGrounding] = eventStore.replay({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'feature.grounding-complete',
+        order: 'desc',
+        limit: 1,
+      });
+      if (latestGrounding != null) {
+        const payload = latestGrounding.payload as { groundingRunId?: string };
+        featureGrounding = latestGrounding.payload;
+        if (payload.groundingRunId != null) {
+          const reports = listScoutReportsForRun(projectId, workItem.id, payload.groundingRunId);
+          if (reports.length > 0) {
+            const bundle = buildScoutReportDigestBundle(reports);
+            scoutReports = stringifyScoutDigestForContext(bundle.reports);
+          }
+        }
+      }
     }
 
     const workItemCtx = {
@@ -477,6 +642,7 @@ export async function runSpecAuthorWorkflow(
     const scopeRoots = deriveSpecScopeRoots({
       prdContext,
       investigationSynthesis,
+      featureGrounding,
       scoutReports,
       wave2Reports,
     });
@@ -492,6 +658,7 @@ export async function runSpecAuthorWorkflow(
       scoutReports,
       wave2Reports,
       investigationSynthesis,
+      ...(featureGrounding != null && { featureGrounding }),
       // Omit when empty so the prompt's fallback behaviour (keyed on field absence) fires correctly.
       ...(existingFileManifest.length > 0 && { existingFileManifest }),
     };
@@ -607,7 +774,11 @@ export async function runSpecAuthorWorkflow(
       const failedRunId = errorRunId(error, pipelineRunId);
       const retryRunId = crypto.randomUUID();
       appendRepairRetryEvent(projectId, workItem.id, failedRunId, 'schema', issues);
-      attempt = await runAttempt(retryRunId, buildRepairFeedback('schema', issues), failedRunId);
+      attempt = await runAttempt(
+        retryRunId,
+        buildRepairFeedback('schema', issues, { existingFileManifest, worktreePath }),
+        failedRunId,
+      );
     }
 
     if (!attempt.validation.ok && !didRepair) {
@@ -617,7 +788,7 @@ export async function runSpecAuthorWorkflow(
       appendRepairRetryEvent(projectId, workItem.id, attempt.runId, 'structural', errors);
       attempt = await runAttempt(
         retryRunId,
-        buildRepairFeedback('structural', errors),
+        buildRepairFeedback('structural', errors, { existingFileManifest, worktreePath }),
         attempt.runId,
       );
     }

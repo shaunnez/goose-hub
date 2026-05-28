@@ -34,6 +34,8 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.triage-complete': 'Triage complete',
   'agent.repo-override': 'Repository override',
   'agent.investigation-complete': 'Investigation complete',
+  'feature.framed': 'Feature framed',
+  'feature.grounding-complete': 'Feature grounding complete',
   'agent.investigation-seed-built': 'Investigation seed built',
   'agent.investigation-seed-empty': 'Investigation seed empty',
   'agent.bug-enhance-lazy': 'Bug grounding seed',

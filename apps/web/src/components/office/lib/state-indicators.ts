@@ -15,6 +15,7 @@ export type IndicatorKind = 'speech' | 'thought' | 'question' | 'coffee' | 'bang
 const STATE_TO_INDICATOR: Readonly<Record<string, IndicatorKind>> = {
   'factory:triaging': 'speech',
   'factory:accepted': 'thought',
+  'factory:grounding': 'thought',
   'factory:grilling': 'speech',
   'factory:prd-drafting': 'speech',
   'factory:prd-review': 'thought',

@@ -13,6 +13,7 @@ import {
 } from './dispatch-dev.js';
 import {
   dispatchDecomposePrd,
+  dispatchFeatureGrounding,
   dispatchFraming,
   dispatchGrillAndPrd,
   dispatchRetryWritePrd,
@@ -111,6 +112,10 @@ export async function dispatchForLabel(
     await dispatchGrillAndPrd(slug, issueNumber);
     return;
   }
+  if (labelName === 'factory:grounding') {
+    await dispatchFeatureGrounding(slug, issueNumber);
+    return;
+  }
   if (labelName === 'factory:framing') {
     await dispatchFraming(slug, issueNumber);
     return;
@@ -191,6 +196,7 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
   'factory:needs-fix': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
   // Discover lane
   'factory:framing': { targetState: 'factory:framing', dispatch: dispatchFraming },
+  'factory:grounding': { targetState: 'factory:grounding', dispatch: dispatchFeatureGrounding },
   'factory:grilling': { targetState: 'factory:grilling', dispatch: dispatchGrillAndPrd },
   // factory:gate-pending is handled above with lane-origin inspection; it is
   // intentionally absent from this table so the special-case runs first.
@@ -429,6 +435,24 @@ export async function dispatchResumeIssue(
         extraPayload: interventionEventPayload(options.intervention),
       });
       await dispatchFixIssue(slug, issueNumber);
+      return;
+    }
+
+    if (failedSkill === 'feature-grounding') {
+      logger.info(
+        'dispatchResumeIssue: needs-human from feature-grounding failure, resuming to grounding',
+        { slug, issueNumber },
+      );
+      await source.forceState(workItemId, 'factory:grounding');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:grounding',
+        by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
+      });
+      await dispatchFeatureGrounding(slug, issueNumber);
       return;
     }
 

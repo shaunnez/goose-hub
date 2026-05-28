@@ -23,6 +23,7 @@ export const LANES: readonly LaneConfig[] = [
     label: 'Discover',
     states: [
       'factory:framing',
+      'factory:grounding',
       'factory:grilling',
       'factory:prd-drafting',
       'factory:prd-review',

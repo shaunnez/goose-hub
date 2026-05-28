@@ -5,6 +5,7 @@ import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import { runDecomposePrdWorkflow } from '@goose-hub/core/workflows/decompose-prd.js';
 import { runGrillAndPrdWorkflow } from '@goose-hub/core/workflows/grill-and-prd.js';
 import type { PRDOutput } from '@goose-hub/skills/write-prd/schema.js';
+import { runFeatureGroundingWorkflow } from '../../../../slices/feature-grounding/workflow.js';
 import { runFramingWorkflow } from '../../../../slices/framing/workflow.js';
 import { getMaxParallelAgents, withParallelLock } from './dispatch-lock.js';
 import { getProject } from './projects.js';
@@ -66,14 +67,58 @@ export async function dispatchFraming(slug: string, issueNumber: number): Promis
             cleanupWorktreeImpl: (_runId: string) => undefined,
           }
         : undefined;
-    await runFramingWorkflow({
+    const result = await runFramingWorkflow({
       workItem: item,
       stateSource: source,
       projectId: slug,
       priorReplies,
       deps: { projectConfig, ...(mockGrillDeps ?? {}) },
     });
+    if (result?.phase !== 'needs-human') {
+      return () => dispatchFeatureGrounding(slug, issueNumber);
+    }
   });
+}
+
+/** Run feature code-grounding for a fresh feature before grill/PRD discovery. */
+export async function dispatchFeatureGrounding(slug: string, issueNumber: number): Promise<void> {
+  await withParallelLock(
+    slug,
+    issueNumber,
+    'dispatchFeatureGrounding',
+    dispatchFeatureGrounding,
+    async () => {
+      const source = await getSourceForSlug(slug);
+      if (source == null) {
+        logger.error('dispatchFeatureGrounding: no source for slug', { slug });
+        return;
+      }
+      const item = await source.getItem(issueNumber.toString());
+      if (item.state !== 'factory:grounding') {
+        logger.info('dispatchFeatureGrounding: state already advanced, skipping', {
+          slug,
+          issueNumber,
+          state: item.state,
+        });
+        return;
+      }
+      const mockDeps =
+        process.env.MOCK_AGENTS === 'true'
+          ? {
+              createWorktreeImpl: (_repo: string, _runId: string) => '/mock/worktree',
+              cleanupWorktreeImpl: (_runId: string) => undefined,
+            }
+          : undefined;
+      const result = await runFeatureGroundingWorkflow(item, source, slug, REPO_ROOT, mockDeps);
+
+      if (result.nextState === 'factory:prd-drafting') {
+        return () => dispatchRetryWritePrd(slug, issueNumber);
+      }
+      if (result.nextState === 'factory:grilling') {
+        return () => dispatchGrillAndPrd(slug, issueNumber);
+      }
+    },
+  );
 }
 
 /**

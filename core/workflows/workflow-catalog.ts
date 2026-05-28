@@ -6,6 +6,7 @@ export type WorkflowKind = 'bug' | 'feature' | 'chore' | 'research';
 export type WorkflowEdgeKind = 'primary' | 'optional' | 'retry' | 'summary';
 export type WorkflowGroup =
   | 'triage'
+  | 'grounding'
   | 'investigation'
   | 'grill'
   | 'prd'
@@ -880,6 +881,11 @@ const featureEntry: WorkflowCatalogEntry = {
       notes:
         'Vague fresh features run feature-frame, then either continue to grill-me or skip directly to PRD drafting.',
     }),
+    stateNode('grounding', 'Grounding', 'factory:grounding', {
+      group: 'grounding',
+      notes:
+        'Feature preflight scout swarm grounds existing files, exports, tests, and planned files.',
+    }),
     stateNode('grilling', 'Grilling', 'factory:grilling', { group: 'grill' }),
     stateNode('prd-drafting', 'PRD draft', 'factory:prd-drafting', { group: 'prd' }),
     stateNode('prd-review', 'PRD review', 'factory:prd-review', { group: 'prd' }),
@@ -897,6 +903,14 @@ const featureEntry: WorkflowCatalogEntry = {
       'triager',
       'factory:framing',
       { group: 'grill' },
+    ),
+    skillNode(
+      'feature-grounding-skill',
+      'feature-grounding',
+      'feature-grounding',
+      'investigator',
+      'factory:grounding',
+      { group: 'grounding', mode: 'swarm', visual: 'fanout' },
     ),
     skillNode('write-prd-skill', 'write-prd', 'write-prd', 'prd-writer', 'factory:prd-drafting', {
       group: 'prd',
@@ -922,10 +936,11 @@ const featureEntry: WorkflowCatalogEntry = {
   edges: [
     summary('triage-skill', 'repo-match-skill'),
     primary('triaging', 'accepted'),
-    primary('accepted', 'grilling'),
+    primary('accepted', 'grounding'),
     optional('accepted', 'framing', 'Vague fresh feature'),
-    optional('framing', 'grilling', 'Still needs grilling'),
-    optional('framing', 'prd-drafting', 'Framed enough for PRD'),
+    optional('framing', 'grounding', 'Framed feature needs code grounding'),
+    primary('grounding', 'grilling'),
+    optional('grounding', 'prd-drafting', 'Framed enough for PRD'),
     primary('grilling', 'prd-drafting'),
     primary('prd-drafting', 'prd-review'),
     primary('prd-review', 'dev-ready'),
@@ -934,6 +949,7 @@ const featureEntry: WorkflowCatalogEntry = {
     optional('issues-created', 'dev-ready', 'Legacy child delivery'),
     optional('issues-created', 'done', 'Parent complete'),
     summary('framing', 'feature-frame-skill'),
+    summary('grounding', 'feature-grounding-skill', 'code-grounding preflight'),
     summary('grilling', 'grill-me-skill'),
     summary('prd-drafting', 'write-prd-skill'),
     summary('prd-review', 'advise-on-prd-skill'),
@@ -943,6 +959,7 @@ const featureEntry: WorkflowCatalogEntry = {
   normalPath: [
     'triaging',
     'accepted',
+    'grounding',
     'grilling',
     'prd-drafting',
     'prd-review',
@@ -961,9 +978,16 @@ const featureEntry: WorkflowCatalogEntry = {
       id: 'grill',
       title: 'Grill',
       description:
-        'Clean fresh feature work enters grill-me; vague fresh feature work first runs feature-frame and either continues to grill-me or skips to PRD drafting.',
+        'Clean fresh feature work enters feature code-grounding before grill-me; vague fresh feature work first runs feature-frame, then grounding, then either grill-me or PRD drafting.',
       group: 'grill',
-      nodes: ['framing', 'feature-frame-skill', 'grilling', 'grill-me-skill'],
+      nodes: [
+        'framing',
+        'feature-frame-skill',
+        'grounding',
+        'feature-grounding-skill',
+        'grilling',
+        'grill-me-skill',
+      ],
     },
     {
       id: 'prd',
