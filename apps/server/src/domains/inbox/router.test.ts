@@ -77,6 +77,17 @@ describe('POST /inbox', () => {
     expect(res.status).toBe(400);
     expect(mockCreateInboxItem).not.toHaveBeenCalled();
   });
+
+  it('returns 400 for null JSON body', async () => {
+    const app = makeApp();
+    const res = await app.request('/inbox', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'null',
+    });
+    expect(res.status).toBe(400);
+    expect(mockCreateInboxItem).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /inbox', () => {
