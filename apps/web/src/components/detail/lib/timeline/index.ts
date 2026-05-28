@@ -826,7 +826,12 @@ function flattenRedundantSectionPhase(
   if (section === 'delivery-router' && item.kind === 'phase-group' && item.phase === 'contract') {
     return item.items;
   }
-  if (section === 'implementation' && item.kind === 'phase-group' && item.phase === 'dev') {
+  if (
+    section === 'implementation' &&
+    item.kind === 'phase-group' &&
+    item.phase === 'dev' &&
+    item.items.length <= 1
+  ) {
     return item.items;
   }
   if (section === 'review' && item.kind === 'review-group') return item.items;

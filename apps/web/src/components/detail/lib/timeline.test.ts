@@ -2,6 +2,7 @@ import type { AgentEventDto, InterventionDto, InterventionEventDto } from '@/lib
 import { describe, expect, it } from 'vitest';
 import {
   EVENT_KIND_LABEL,
+  type RenderItem,
   collectRunIdsForTimelineSection,
   computeIsLive,
   computeIsWritePrdStuck,
@@ -10,6 +11,12 @@ import {
   groupEvents,
   groupTimelineEventsByCanonicalSection,
 } from './timeline';
+import {
+  compareTimelineChildrenForReading,
+  effectiveTimestamp,
+  itemLastEventAt,
+  itemStartedAt,
+} from './timeline/render-items';
 
 function makeEvent(
   id: number,
@@ -855,7 +862,7 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     );
   });
 
-  it('sorts children inside a timeline segment by start time descending', () => {
+  it('sorts children inside a timeline segment by latest activity with earlier starts as ties', () => {
     const items = groupTimelineEventsByCanonicalSection([
       makeEvent(1, 'agent.run-started', 'triage-run', {
         createdAt: '2026-05-22T21:07:39Z',
@@ -876,7 +883,37 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     const triage = section(items, 'triage');
     expect(
       triage?.items.map((item) => (item.kind === 'run-group' ? item.runId : item.kind)),
-    ).toEqual(['repo-run', 'triage-run']);
+    ).toEqual(['triage-run', 'repo-run']);
+  });
+
+  it('uses the latest log-group entry for timeline child activity ordering', () => {
+    const logGroup: RenderItem = {
+      kind: 'log-group',
+      events: [
+        makeEvent(1, 'agent.log', null, { createdAt: '2026-05-22T21:07:39Z' }),
+        makeEvent(2, 'agent.log', null, { createdAt: '2026-05-22T21:08:09Z' }),
+      ],
+    };
+    const runGroup: RenderItem = {
+      kind: 'run-group',
+      runId: 'completed-run',
+      items: [],
+      skill: 'triage',
+      startedAt: '2026-05-22T21:07:50Z',
+      endedAt: '2026-05-22T21:08:04Z',
+      lastEventAt: '2026-05-22T21:08:04Z',
+      personaId: null,
+      modelId: null,
+      runtime: null,
+    };
+
+    expect(effectiveTimestamp(logGroup)).toBe(new Date('2026-05-22T21:08:09Z').getTime());
+    expect(itemStartedAt(logGroup)).toBe('2026-05-22T21:07:39Z');
+    expect(itemLastEventAt(logGroup)).toBe('2026-05-22T21:08:09Z');
+    expect([runGroup, logGroup].sort(compareTimelineChildrenForReading)).toEqual([
+      logGroup,
+      runGroup,
+    ]);
   });
 
   it('keeps repeated Grill rounds together but splits PRD revisions by workflow run', () => {
@@ -1074,30 +1111,45 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     ).toBe(true);
   });
 
-  it('keeps parallel implement parent and WP runs in the spec pipeline implementation segment', () => {
+  it('keeps parallel implement parent and WP runs in one implementation pipeline accordion', () => {
     const PIPELINE_RUN = 'pipeline-implementation-123';
     const PARALLEL_RUN = 'parallel-implement-run-456';
     const WP_RUN = `${PARALLEL_RUN}:wp:WP1:iter:1`;
+    const pipelineEvent = (
+      id: number,
+      kind: string,
+      runId: string | null,
+      payload: Record<string, unknown>,
+    ) =>
+      makeEvent(id, kind, runId, {
+        payload: { ...payload, pipelineRunId: PIPELINE_RUN },
+      });
     const items = groupTimelineEventsByCanonicalSection([
-      makeEvent(1, 'parallel-implement.iteration-started', PIPELINE_RUN, {
-        payload: { pipelineRunId: PIPELINE_RUN, iteration: 1, wpCount: 1, wpIds: ['WP1'] },
-      }),
-      makeEvent(2, 'agent.run-started', PARALLEL_RUN, {
-        payload: { skill: 'implement-wp' },
+      pipelineEvent(1, 'parallel-implement.iteration-started', PARALLEL_RUN, {
+        iteration: 1,
+        wpCount: 1,
+        wpIds: ['WP1'],
       }),
       makeEvent(3, 'agent.run-started', WP_RUN, {
         payload: { skill: 'implement-wp' },
       }),
-      makeEvent(4, 'parallel-implement.wp-started', WP_RUN, {
-        payload: { wpId: 'WP1', wpRunId: WP_RUN },
+      pipelineEvent(4, 'parallel-implement.wp-started', WP_RUN, {
+        wpId: 'WP1',
+        wpRunId: WP_RUN,
       }),
       makeEvent(5, 'agent.run-completed', WP_RUN),
-      makeEvent(6, 'parallel-implement.wp-committed', WP_RUN, {
-        payload: { wpId: 'WP1', wpRunId: WP_RUN, commitSha: 'abc1234' },
+      pipelineEvent(6, 'parallel-implement.wp-committed', WP_RUN, {
+        wpId: 'WP1',
+        wpRunId: WP_RUN,
+        commitSha: 'abc1234',
       }),
-      makeEvent(7, 'agent.run-completed', PARALLEL_RUN),
-      makeEvent(8, 'pr.opened', PIPELINE_RUN, {
-        payload: { pipelineRunId: PIPELINE_RUN, number: 968 },
+      pipelineEvent(7, 'pr.opened', PARALLEL_RUN, {
+        devRunId: PARALLEL_RUN,
+        prNumber: 968,
+      }),
+      pipelineEvent(8, 'agent.run-completed', PARALLEL_RUN, {
+        skill: 'parallel-implement',
+        prNumber: 968,
       }),
     ]);
 
@@ -1108,19 +1160,25 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     expect(implementationSections).toHaveLength(1);
     expect(implementationSections[0].segmentId).toBe(`implementation:${PIPELINE_RUN}`);
 
-    expect(implementationSections[0].items.some((item) => item.kind === 'phase-group')).toBe(false);
+    expect(implementationSections[0].items).toHaveLength(1);
+    expect(implementationSections[0].items[0]).toMatchObject({
+      kind: 'phase-group',
+      phase: 'dev',
+      pipelineRunId: PIPELINE_RUN,
+    });
+    const pipelineGroup = implementationSections[0].items[0];
+    if (pipelineGroup.kind !== 'phase-group') return;
+
     expect(
-      implementationSections[0].items.some(
-        (item) => item.kind === 'run-group' && item.runId === PIPELINE_RUN,
-      ),
-    ).toBe(false);
+      pipelineGroup.items.map((item) => (item.kind === 'run-group' ? item.runId : item.kind)),
+    ).toEqual([PARALLEL_RUN, WP_RUN]);
     expect(
-      implementationSections[0].items.some(
-        (item) => item.kind === 'event' && item.event.kind === 'pr.opened',
-      ),
+      pipelineGroup.items
+        .flatMap((item) => (item.kind === 'run-group' ? item.items : [item]))
+        .some((item) => item.kind === 'event' && item.event.kind === 'pr.opened'),
     ).toBe(true);
     expect(collectRunIdsForTimelineSection(implementationSections[0].items)).toEqual(
-      new Set([PIPELINE_RUN, PARALLEL_RUN, WP_RUN]),
+      new Set([PARALLEL_RUN, WP_RUN]),
     );
   });
 
