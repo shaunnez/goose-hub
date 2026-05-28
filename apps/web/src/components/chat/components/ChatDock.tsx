@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChatLauncher } from './ChatLauncher';
 import { ChatPanel } from './ChatPanel';
 
@@ -10,6 +10,7 @@ const STORAGE_KEY = 'hub-chat-open';
  * available on every page.
  */
 export function ChatDock() {
+  const closePanelRef = useRef<(() => void) | null>(null);
   const [open, setOpen] = useState<boolean>(() => {
     try {
       return localStorage.getItem(STORAGE_KEY) === 'true';
@@ -24,10 +25,28 @@ export function ChatDock() {
     } catch {}
   }, [open]);
 
+  const handlePanelClose = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const handleLauncherToggle = useCallback(() => {
+    if (!open) {
+      setOpen(true);
+      return;
+    }
+    closePanelRef.current?.();
+  }, [open]);
+
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} />
-      <ChatLauncher open={open} onToggle={() => setOpen((o) => !o)} />
+      <ChatPanel
+        open={open}
+        onClose={handlePanelClose}
+        registerCloseHandler={(handler) => {
+          closePanelRef.current = handler;
+        }}
+      />
+      <ChatLauncher open={open} onToggle={handleLauncherToggle} />
     </>
   );
 }
