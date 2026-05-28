@@ -147,6 +147,13 @@ type ResumeEntry = {
   dispatch: (slug: string, issueNumber: number) => Promise<void>;
 };
 
+type ResumeFailureContext = {
+  skill?: string;
+  workflowSkill?: string;
+  runDisposition?: string;
+  runId?: string;
+};
+
 interface InterventionDispatchContext {
   id: string;
   correlationId: string;
@@ -190,6 +197,59 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
   'factory:prd-drafting': { targetState: 'factory:prd-drafting', dispatch: dispatchRetryWritePrd },
   'factory:decomposing': { targetState: 'factory:decomposing', dispatch: dispatchDecomposePrd },
 };
+
+function resolveFailedRunContext(
+  events: { kind: string; payload: unknown; runId?: string | null }[],
+) {
+  const failures = [...events].reverse().filter((e) => e.kind === 'agent.run-failed');
+  for (const failure of failures) {
+    const payload = failure.payload as ResumeFailureContext | undefined;
+    const runId =
+      typeof payload?.runId === 'string'
+        ? payload.runId
+        : typeof failure.runId === 'string'
+          ? failure.runId
+          : undefined;
+    const startedPayload = runId
+      ? ([...events].reverse().find((e) => {
+          if (e.kind !== 'agent.run-started') return false;
+          const started = e.payload as { runId?: unknown } | undefined;
+          return started?.runId === runId;
+        })?.payload as (ResumeFailureContext & { displaySkill?: string }) | undefined)
+      : undefined;
+    const repairPayload = runId
+      ? ([...events].reverse().find((e) => {
+          if (e.kind !== 'agent.output-repair-failed') return false;
+          const repair = e.payload as { runId?: unknown; retryRunId?: unknown } | undefined;
+          return repair?.runId === runId || repair?.retryRunId === runId;
+        })?.payload as ResumeFailureContext | undefined)
+      : undefined;
+    const transitionPayload = runId
+      ? ([...events].reverse().find((e) => {
+          if (e.kind !== 'state.transitioned') return false;
+          const transition = e.payload as { to?: unknown } | undefined;
+          return e.runId === runId && transition?.to === 'factory:needs-human';
+        })?.payload as (ResumeFailureContext & { by?: string; repairMode?: string }) | undefined)
+      : undefined;
+    const workflowSkill =
+      payload?.workflowSkill ??
+      startedPayload?.workflowSkill ??
+      startedPayload?.displaySkill ??
+      repairPayload?.workflowSkill ??
+      transitionPayload?.by;
+    const skill = payload?.skill ?? repairPayload?.skill ?? startedPayload?.skill ?? workflowSkill;
+    if (skill != null || workflowSkill != null || payload?.runDisposition != null) {
+      return {
+        ...payload,
+        runId,
+        skill,
+        workflowSkill,
+        runDisposition: payload?.runDisposition ?? repairPayload?.runDisposition,
+      };
+    }
+  }
+  return undefined;
+}
 
 /**
  * Resume an orphaned or stalled run. Looks up the issue's current state,
@@ -267,11 +327,70 @@ export async function dispatchResumeIssue(
   // needs-human: inspect last agent.run-failed to determine which skill to retry.
   if (fromState === 'factory:needs-human') {
     const allEvents = eventStore.replay({ projectId: slug, workItemId });
-    const lastRunFailed = [...allEvents].reverse().find((e) => e.kind === 'agent.run-failed');
-    const failedPayload = lastRunFailed?.payload as
-      | { skill?: string; runDisposition?: string; runId?: string }
-      | undefined;
+    const lastToNeedsHuman = [...allEvents].reverse().find((e) => {
+      if (e.kind !== 'state.transitioned') return false;
+      const payload = e.payload as { to?: unknown } | undefined;
+      return payload?.to === 'factory:needs-human';
+    });
+    const needsHumanBy = (lastToNeedsHuman?.payload as { by?: unknown } | undefined)?.by;
+
+    if (needsHumanBy === 'qa') {
+      logger.info('dispatchResumeIssue: needs-human from QA transition, resuming to needs-qa', {
+        slug,
+        issueNumber,
+      });
+      await source.forceState(workItemId, 'factory:needs-qa');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:needs-qa',
+        by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
+      });
+      await dispatchQa(slug, issueNumber);
+      return;
+    }
+
+    if (needsHumanBy === 'fix-feedback') {
+      logger.info(
+        'dispatchResumeIssue: needs-human from fix-feedback transition, resuming to needs-fix',
+        { slug, issueNumber },
+      );
+      await source.forceState(workItemId, 'factory:needs-fix');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:needs-fix',
+        by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
+      });
+      await dispatchNeedsFix(slug, issueNumber);
+      return;
+    }
+
+    if (needsHumanBy === 'convergent-review') {
+      logger.info(
+        'dispatchResumeIssue: needs-human from review transition, resuming to needs-review',
+        { slug, issueNumber },
+      );
+      await source.forceState(workItemId, 'factory:needs-review');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:needs-review',
+        by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
+      });
+      await dispatchReview(slug, issueNumber);
+      return;
+    }
+
+    const failedPayload = resolveFailedRunContext(allEvents);
     const failedSkill = failedPayload?.skill;
+    const failedWorkflowSkill = failedPayload?.workflowSkill;
 
     if (failedSkill === 'parallel-implement' && failedPayload?.runDisposition === 'budget-killed') {
       logger.info(
@@ -328,6 +447,60 @@ export async function dispatchResumeIssue(
         extraPayload: interventionEventPayload(options.intervention),
       });
       await dispatchInvestigate(slug, issueNumber);
+      return;
+    }
+
+    if (failedSkill === 'qa' || failedWorkflowSkill === 'qa') {
+      logger.info('dispatchResumeIssue: needs-human from QA failure, resuming to needs-qa', {
+        slug,
+        issueNumber,
+      });
+      await source.forceState(workItemId, 'factory:needs-qa');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:needs-qa',
+        by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
+      });
+      await dispatchQa(slug, issueNumber);
+      return;
+    }
+
+    if (failedWorkflowSkill === 'fix-feedback') {
+      logger.info(
+        'dispatchResumeIssue: needs-human from fix-feedback failure, resuming to needs-fix',
+        { slug, issueNumber },
+      );
+      await source.forceState(workItemId, 'factory:needs-fix');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:needs-fix',
+        by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
+      });
+      await dispatchNeedsFix(slug, issueNumber);
+      return;
+    }
+
+    if (failedSkill === 'review' || failedWorkflowSkill === 'review') {
+      logger.info(
+        'dispatchResumeIssue: needs-human from review failure, resuming to needs-review',
+        { slug, issueNumber },
+      );
+      await source.forceState(workItemId, 'factory:needs-review');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:needs-review',
+        by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
+      });
+      await dispatchReview(slug, issueNumber);
       return;
     }
 

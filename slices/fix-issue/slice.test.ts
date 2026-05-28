@@ -1281,6 +1281,68 @@ describe('runFixIssueWorkflow (#183)', () => {
     );
   });
 
+  it('allows SKIP_GATE evidence rationale without brittle summary wording', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    const worktreePath = makeGitWorktree();
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 100,
+      prUrl: 'https://github.com/owner/repo/pull/100',
+      branch: 'factory/abc',
+      base: 'main',
+    });
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockImplementationOnce(async (spec) => {
+        const wt = spec.workspaceDir as string;
+        const changedPath = join(wt, 'apps/web/src/components/detail/lib/timeline/index.ts');
+        mkdirSync(dirname(changedPath), { recursive: true });
+        writeFileSync(changedPath, 'export const changed = true;\n');
+        return {
+          output: makeImplementOutput({
+            filesWritten: [
+              {
+                path: 'apps/web/src/components/detail/lib/timeline/index.ts',
+                reason: 'frontend reducer change',
+              },
+            ],
+            testsWritten: [],
+            testsRun: { command: 'pnpm test ', paths: [] },
+            evidenceSpecPath: null,
+            decisionSummaries: [
+              {
+                kind: 'SKIP_GATE',
+                summary: 'No evidence spec was added for this apps/web slice',
+                evidence:
+                  'The change is limited to the timeline reducer and unit tests, and there was no applicable evidence spec path to preserve.',
+              },
+            ],
+          }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult;
+      }),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(openPRImpl).toHaveBeenCalled();
+    const blocked = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.contract-gate-blocked');
+    expect(blocked).toBeUndefined();
+  });
+
   it('blocks a declared evidence spec path that does not exist before evidence-post starts', async () => {
     const item = makeWorkItem({ priority: 'medium', type: 'bug' });
     const source = makeStateSource();
@@ -2223,7 +2285,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
     expect(evidenceCall.contextAllowlist).toContain('workItem.beforeCommentUrl');
   });
 
-  it('with evidenceSpecPath null: emits evidence.no-spec-declared and skips evidence-post run', async () => {
+  it('with backend evidenceSpecPath null: emits evidence.post-skipped and skips evidence-post run', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
 
@@ -2257,10 +2319,12 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
     // Only implement run — no evidence-post
     expect(vi.mocked(runtime.run)).toHaveBeenCalledTimes(1);
 
-    const noSpec = vi
+    const skipped = vi
       .mocked(eventStore.appendEvent)
-      .mock.calls.find(([e]) => e.kind === 'evidence.no-spec-declared');
-    expect(noSpec).toBeDefined();
+      .mock.calls.find(([e]) => e.kind === 'evidence.post-skipped');
+    expect(skipped?.[0].payload).toMatchObject({
+      reason: 'non-UI change; browser evidence not required',
+    });
   });
 
   it('evidence-post runtime failure: emits evidence.post-failed and still transitions to needs-qa (best-effort)', async () => {

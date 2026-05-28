@@ -206,8 +206,21 @@ describe('runTestsTool retry cap', () => {
 
     const blocked = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
     expect(blocked.status).toBe('failed');
+    expect(blocked.blocked).toBe(true);
+    expect(blocked.blockedReason).toBe('excessive_test_retries');
     expect(mockRunCommand).not.toHaveBeenCalled();
     expect(blocked.stderr).toMatch(/retry cap|consecutive failures/i);
+
+    const blockedCalls = (await import('../../../event-stream/store.js')).eventStore
+      .replay({ runId: ctx.runId, kind: 'agent.tool-call' })
+      .filter(
+        (event) =>
+          (event.payload as { tool_name?: unknown; blocked?: unknown; reason?: unknown })
+            .tool_name === 'run_tests' &&
+          (event.payload as { blocked?: unknown }).blocked === true &&
+          (event.payload as { reason?: unknown }).reason === 'excessive_test_retries',
+      );
+    expect(blockedCalls).toHaveLength(1);
 
     const violations = (await import('../../../event-stream/store.js')).eventStore
       .replay({ runId: ctx.runId, kind: 'tool.violation' })
@@ -230,7 +243,7 @@ describe('runTestsTool retry cap', () => {
     expect(next.status).toBe('failed');
   });
 
-  it('resets the cap after a source edit, allowing one final exact test rerun', async () => {
+  it('resets the cap after any source edit before rerunning the same test', async () => {
     const { invalidateRunCacheForPaths } = await import('../run-cache.js');
     mockFailed();
     for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
@@ -243,7 +256,7 @@ describe('runTestsTool retry cap', () => {
     expect(next.status).toBe('failed');
   });
 
-  it('does not reset a capped test path after an unrelated edit', async () => {
+  it('resets the cap after an unrelated edit because shared fixtures or setup may affect the test', async () => {
     const { invalidateRunCacheForPaths } = await import('../run-cache.js');
     mockFailed();
     for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
@@ -252,9 +265,8 @@ describe('runTestsTool retry cap', () => {
 
     mockRunCommand.mockClear();
     const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
-    expect(mockRunCommand).not.toHaveBeenCalled();
+    expect(mockRunCommand).toHaveBeenCalledOnce();
     expect(next.status).toBe('failed');
-    expect(next.stderr).toMatch(/retry cap/i);
   });
 
   it('counters are isolated per path', async () => {
@@ -266,6 +278,47 @@ describe('runTestsTool retry cap', () => {
     const other = await runTestsTool(ctx, { path: 'src/bar.test.ts' });
     expect(mockRunCommand).toHaveBeenCalledOnce();
     expect(other.status).toBe('failed');
+  });
+
+  it('blocks parent target rotation after a child test path hits the cap', async () => {
+    mockFailed();
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    mockRunCommand.mockClear();
+    const parent = await runTestsTool(ctx, { path: 'src' });
+
+    expect(parent.status).toBe('failed');
+    expect(mockRunCommand).not.toHaveBeenCalled();
+    expect(parent.stderr).toMatch(/retry cap|consecutive failures/i);
+  });
+
+  it('clears child counters after a covering parent test target passes', async () => {
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'failed',
+      exitCode: 1,
+      stdout: 'FAIL',
+      stderr: '',
+      durationMs: 12,
+      truncated: false,
+    });
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'ok',
+      exitCode: 0,
+      stdout: 'PASS',
+      stderr: '',
+      durationMs: 12,
+      truncated: false,
+    });
+
+    await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    await runTestsTool(ctx, { path: 'src' });
+
+    mockRunCommand.mockClear();
+    mockFailed();
+    const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    expect(mockRunCommand).toHaveBeenCalledOnce();
+    expect(next.status).toBe('failed');
   });
 
   it('blocks repeated failure signatures across different test paths', async () => {

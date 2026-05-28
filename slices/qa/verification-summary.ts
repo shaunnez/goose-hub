@@ -320,7 +320,13 @@ function summarizeEvidence(events: AgentEvent[]): VerificationSummary['evidence'
         'evidence.no-spec-declared',
       ].includes(event.kind),
     );
-  if (evidence == null) return { status: 'absent' };
+  if (evidence == null) {
+    return {
+      status: 'absent',
+      reason:
+        'no evidence event was recorded; no evidence spec was declared or the evidence workflow did not run',
+    };
+  }
 
   const payload = evidence.payload as Record<string, unknown>;
   if (evidence.kind === 'evidence.posted') {
