@@ -1706,6 +1706,82 @@ describe('runInvestigateWorkflow', () => {
       );
     });
 
+    it('passes server API route grounding into the Wave 1 investigation seed', async () => {
+      const seed = {
+        candidateFiles: [
+          {
+            path: 'apps/server/src/domains/inbox/router.ts',
+            root: 'worktree' as const,
+          },
+        ],
+        candidateSymbols: [],
+        testFiles: [],
+        recentlyChangedFiles: [],
+        priorInvestigationRunIds: [],
+        builtAt: '2026-05-28T00:00:00.000Z',
+      };
+      const hints = {
+        candidateFiles: [
+          {
+            path: 'apps/server/src/domains/inbox/router.ts',
+            confidence: 'high' as const,
+            source: 'tool-verified' as const,
+            reason: 'find-route matched POST /api/inbox',
+          },
+        ],
+        candidateComponents: [],
+        candidateRoutes: [{ pattern: '/inbox', component: 'inboxRouter' }],
+      };
+      let artifactReadCount = 0;
+      mockGetArtifact.mockImplementation(() => {
+        artifactReadCount++;
+        return artifactReadCount === 1
+          ? null
+          : {
+              artifactKey: 'investigation-seed:promotion:github:shaunnez/goose-hub#1177',
+              kind: 'investigation-seed',
+              payload: seed,
+            };
+      });
+      mockRunBugEnhance.mockResolvedValue({ markdown: null, groundedHints: hints });
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(
+        makeWorkItem({
+          id: 'github:shaunnez/goose-hub#1177',
+          externalId: '1177',
+          title: 'POST /api/inbox returns 500 when body is null',
+          body: [
+            'POST /api/inbox returns 500 when body is null.',
+            '',
+            'Location No tool-verified file path was found in the current workspace for api/inbox.',
+          ].join('\n'),
+        }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      const wave1Opts = mockDispatchWave.mock.calls[0][0] as {
+        scoutSpecs: Array<{ scoutName: string; extraContext?: { investigationSeed?: unknown } }>;
+      };
+      expect(wave1Opts.scoutSpecs.map((scout) => scout.scoutName).sort()).toEqual([
+        'scout-code-path',
+        'scout-schema',
+        'scout-test-inventory',
+      ]);
+      for (const scout of wave1Opts.scoutSpecs) {
+        expect(scout.extraContext?.investigationSeed).toMatchObject({
+          candidateFiles: [
+            {
+              path: 'apps/server/src/domains/inbox/router.ts',
+              root: 'worktree',
+            },
+          ],
+        });
+      }
+    });
+
     it('skips persistence and emits non-producing event when bug-enhance yields no hints', async () => {
       mockGetArtifact.mockReturnValue(null);
       mockRunBugEnhance.mockResolvedValue({ markdown: null, groundedHints: null });

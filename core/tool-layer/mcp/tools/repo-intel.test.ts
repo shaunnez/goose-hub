@@ -498,6 +498,46 @@ describe('repoIntelQueryTool', () => {
     },
   );
 
+  it('grounds proxied server API routes to the mounted Hono router file', async () => {
+    mkdirSync(join(workspace, 'apps/server/src/domains/inbox'), { recursive: true });
+    writeFileSync(
+      join(workspace, 'apps/server/src/server.ts'),
+      [
+        "import { Hono } from 'hono';",
+        "import { inboxRouter } from './domains/inbox/router.js';",
+        'const app = new Hono();',
+        "app.route('/inbox', inboxRouter);",
+      ].join('\n'),
+    );
+    writeFileSync(
+      join(workspace, 'apps/server/src/domains/inbox/router.ts'),
+      [
+        "import { Hono } from 'hono';",
+        'const router = new Hono();',
+        "router.post('/', async (c) => c.json({ ok: true }));",
+        'export { router as inboxRouter };',
+      ].join('\n'),
+    );
+
+    const result = await repoIntelQueryTool(makeCtx(), {
+      intent: 'find-route',
+      pathPattern: '/api/inbox',
+    });
+
+    expect(result).toMatchObject({ ok: true, intent: 'find-route', source: 'route-index' });
+    if (result.ok) {
+      expect(result.results).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            pathPattern: '/inbox',
+            filePath: 'apps/server/src/domains/inbox/router.ts',
+            line: 3,
+          }),
+        ]),
+      );
+    }
+  });
+
   it('audits original input keys when canonicalizing repo-intel input', async () => {
     const ctx = makeCtx({ runId: 'repo-intel-canonical-audit-keys' });
     await repoIntelQueryTool(

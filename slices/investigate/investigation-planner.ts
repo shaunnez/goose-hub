@@ -53,6 +53,7 @@ function rawTextFor(input: InvestigationPlannerInput): string {
 function hasPathOrSymbolSignal(text: string, rawText: string): boolean {
   return (
     /(?:^|\s)(?:apps|core|slices|skills|packages|target-projects|docs)\/[^\s`'")]+/.test(text) ||
+    /\b(?:get|post|put|patch|delete)\s+\/[a-z0-9/_:.-]+/.test(text) ||
     /\b(?:[A-Z][a-z0-9]+[A-Z][A-Za-z0-9_]*|[a-z][A-Za-z0-9_]*[A-Z][A-Za-z0-9_]*)(?:\.[A-Za-z0-9_]+)?\b/.test(
       rawText,
     )
@@ -72,7 +73,7 @@ function hasSchemaSignal(text: string): boolean {
 }
 
 function hasDependencySignal(text: string): boolean {
-  return /\b(cross[-\s]?package|server\s*(?:and|\+|\/)\s*web|web\s*(?:and|\+|\/)\s*server|runtime|provider|dependency|dependencies|package boundary|workspace)\b/.test(
+  return /\b(cross[-\s]?package|server\s*(?:and|\+|\/)\s*web|web\s*(?:and|\+|\/)\s*server|runtime|provider|dependency|dependencies|package boundary|workspace package|workspace dependency|monorepo boundary|import boundary)\b/.test(
     text,
   );
 }

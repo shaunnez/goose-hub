@@ -31,6 +31,9 @@ function expectFactoryReadDiscipline(prompt: string): void {
   expect(prompt).toContain('Do not assume Factory tools are unavailable');
   expect(prompt).toContain('If a required Factory tool call returns an error');
   expect(prompt).toContain('return explicit irrelevance');
+  expect(prompt).toContain('If `<investigationSeed>` is empty and this scout is selected');
+  expect(prompt).toContain('make at least one targeted Factory evidence call');
+  expect(prompt).toContain('`status: "ok"` with `findings: []`');
 }
 
 describe('scout and Wave 2 prompt tool boundaries', () => {

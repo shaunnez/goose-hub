@@ -325,6 +325,8 @@ export async function runOneScout(
     result.decisionSummaries.length > 0 ? result.decisionSummaries : scoutOutput.decisionSummaries;
   let effectiveRunId = runId;
   let evidenceBackedEmptyResult = false;
+  const seedCandidateFileCount = countSeedCandidateFiles(fullContext);
+  let retrySkippedReason: string | undefined;
   const unsupportedToolSkipWithoutAttempt =
     scoutOutput.status === 'skipped' &&
     isUnsupportedToolAvailabilitySkip(decisionSummaries) &&
@@ -429,6 +431,9 @@ export async function runOneScout(
           }
         }
       }
+    } else {
+      retrySkippedReason =
+        seedCandidateFileCount === 0 ? 'no-seed-evidence' : 'seed-evidence-unavailable';
     }
   }
 
@@ -485,7 +490,19 @@ export async function runOneScout(
       projectId: ctx.projectId,
       workItemId: ctx.workItemId ?? null,
       kind: 'swarm.scout-failed',
-      payload: { runId, scoutName: spec.scoutName, errorReason: SCOUT_NO_EVIDENCE_REASON },
+      payload: {
+        runId,
+        scoutName: spec.scoutName,
+        errorReason: SCOUT_NO_EVIDENCE_REASON,
+        outputStatus: scoutOutput.status,
+        findingsCount: findings.length,
+        decisionSummariesCount: decisionSummaries.length,
+        hasFactoryEvidenceAttempt: hasFactoryEvidenceAttempt(result.events),
+        hasSuccessfulFactoryEvidenceCall: hasSuccessfulFactoryEvidenceCall(result.events),
+        seedCandidateFileCount,
+        modelId: resolvedBudget.modelOverride,
+        ...(retrySkippedReason != null ? { retrySkippedReason } : {}),
+      },
       runId,
     });
     return {
@@ -578,6 +595,12 @@ async function readSeedEvidenceSnippets(
     if (snippets.length >= 3) break;
   }
   return snippets;
+}
+
+function countSeedCandidateFiles(context: Record<string, unknown>): number {
+  const seed = payloadRecord(context.investigationSeed);
+  const candidates = Array.isArray(seed?.candidateFiles) ? seed.candidateFiles : [];
+  return candidates.length;
 }
 
 async function readBoundedSeedFile(

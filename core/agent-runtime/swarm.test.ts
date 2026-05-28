@@ -885,6 +885,61 @@ describe('swarm.dispatchWave', () => {
     expect(result.shouldEscalate).toBe(true);
   });
 
+  it('fails an ok empty scout without evidence and emits diagnostic payload fields', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-schema': () => Promise.resolve(emptyResult()),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-empty-diagnostics',
+      scoutSpecs: [
+        {
+          ...makeScoutSpec('scout-schema'),
+          extraContext: {
+            investigationSeed: {
+              candidateFiles: [],
+              candidateSymbols: [],
+              testFiles: [],
+              recentlyChangedFiles: [],
+              priorInvestigationRunIds: [],
+              builtAt: '2026-05-28T00:00:00.000Z',
+            },
+          },
+        },
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(result.reports[0]).toMatchObject({
+      status: 'error',
+      outcome: 'failed',
+      errorReason:
+        'scout returned no findings and made no successful Factory read/search/file tool calls',
+    });
+    const failed = events.find((e) => e.kind === 'swarm.scout-failed');
+    expect(failed?.payload).toMatchObject({
+      runId: 'parent-empty-diagnostics:scout:scout-schema:0',
+      scoutName: 'scout-schema',
+      outputStatus: 'ok',
+      findingsCount: 0,
+      decisionSummariesCount: 1,
+      hasFactoryEvidenceAttempt: false,
+      hasSuccessfulFactoryEvidenceCall: false,
+      seedCandidateFileCount: 0,
+      modelId: 'model-for-scout-schema',
+      retrySkippedReason: 'no-seed-evidence',
+    });
+  });
+
   it('fails an empty scout with only resources/list advisory for no evidence, not resource misuse', async () => {
     const { fn: appendEvent, events } = makeFakeAppendEvent();
     const seenSpecs: AgentSpec[] = [];
