@@ -833,6 +833,128 @@ describe('getIssue', () => {
       workItemId: 'github:owner/repo#1',
     });
   });
+
+  it('excludes hidden runtime skill runs from pipelineStartedAt', async () => {
+    vi.mocked(eventStore.replay)
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([
+        {
+          id: 1,
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          kind: 'agent.run-started',
+          payload: { skill: 'intervention-proposer' },
+          runId: 'intervention-run',
+          personaId: null,
+          createdAt: '2026-05-28T08:00:00Z',
+        },
+        {
+          id: 2,
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          kind: 'agent.run-started',
+          payload: { skill: 'triage' },
+          runId: 'triage-run',
+          personaId: null,
+          createdAt: '2026-05-28T08:10:59Z',
+        },
+        {
+          id: 3,
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          kind: 'review.completed',
+          payload: {},
+          runId: 'review-run',
+          personaId: null,
+          createdAt: '2026-05-28T08:28:10Z',
+        },
+      ]);
+
+    const result = await getIssue('proj', '1');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { item: { pipelineStartedAt: '2026-05-28T08:10:59Z' } },
+    });
+  });
+
+  it('sets pipelineCompletedAt from agent.run-failed when no review completes', async () => {
+    vi.mocked(eventStore.replay)
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([
+        {
+          id: 1,
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          kind: 'agent.run-started',
+          payload: { skill: 'triage' },
+          runId: 'triage-run',
+          personaId: null,
+          createdAt: '2026-05-28T08:10:59Z',
+        },
+        {
+          id: 2,
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          kind: 'agent.run-failed',
+          payload: { error: 'timeout' },
+          runId: 'triage-run',
+          personaId: null,
+          createdAt: '2026-05-28T08:20:00Z',
+        },
+      ]);
+
+    const result = await getIssue('proj', '1');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        item: {
+          pipelineStartedAt: '2026-05-28T08:10:59Z',
+          pipelineCompletedAt: '2026-05-28T08:20:00Z',
+        },
+      },
+    });
+  });
+
+  it('does not set pipelineCompletedAt from a needs-fix review', async () => {
+    vi.mocked(eventStore.replay)
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([
+        {
+          id: 1,
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          kind: 'agent.run-started',
+          payload: { skill: 'triage' },
+          runId: 'triage-run',
+          personaId: null,
+          createdAt: '2026-05-28T08:10:59Z',
+        },
+        {
+          id: 2,
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          kind: 'review.completed',
+          payload: { verdict: 'needs-fix' },
+          runId: 'review-run',
+          personaId: null,
+          createdAt: '2026-05-28T08:28:10Z',
+        },
+      ]);
+
+    const result = await getIssue('proj', '1');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        item: {
+          pipelineStartedAt: '2026-05-28T08:10:59Z',
+          pipelineCompletedAt: null,
+        },
+      },
+    });
+  });
 });
 
 describe('getIssueWorktreeDiff (#185)', () => {

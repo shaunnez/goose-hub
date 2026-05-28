@@ -151,6 +151,54 @@ describe('TaskHeader', () => {
     );
   });
 
+  it('keeps fix duration live during rework after a needs-fix review', async () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValue({
+      workItemId: 'wi-1',
+      totalUsd: 0,
+      hasEstimated: false,
+      rows: [],
+    });
+
+    renderWithQueryClient(
+      <TaskHeader
+        item={item()}
+        projectSlug="proj"
+        events={[
+          event(1, 'agent.run-started', '2026-05-01T00:00:00Z', { skill: 'triage' }),
+          event(2, 'review.completed', '2026-05-01T00:17:00Z', { verdict: 'needs-fix' }),
+          event(3, 'agent.run-started', '2026-05-01T00:20:00Z', { skill: 'implement' }),
+        ]}
+      />,
+    );
+
+    // Date.now() mocked to 2026-05-01T02:15:00Z → 2h 15m since first run started
+    expect(screen.getByTestId('task-header-fix-duration').textContent).toContain(
+      'fix duration 2h 15m',
+    );
+  });
+
+  it('freezes fix duration at agent.run-failed for failed pipelines', async () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValue({
+      workItemId: 'wi-1',
+      totalUsd: 0,
+      hasEstimated: false,
+      rows: [],
+    });
+
+    renderWithQueryClient(
+      <TaskHeader
+        item={item()}
+        projectSlug="proj"
+        events={[
+          event(1, 'agent.run-started', '2026-05-01T00:00:00Z', { skill: 'triage' }),
+          event(2, 'agent.run-failed', '2026-05-01T00:10:00Z', { error: 'timeout' }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId('task-header-fix-duration').textContent).toContain('fix duration 10m');
+  });
+
   it('shows an empty fix duration before the agent pipeline starts', async () => {
     vi.mocked(fetchIssueCosts).mockResolvedValue({
       workItemId: 'wi-1',

@@ -37,7 +37,11 @@ function timestampMs(value?: string | null): number {
 
 function eventPipelineCompletedMs(events: AgentEventDto[]): number | null {
   const reviewCompletedMs = events
-    .filter((event) => event.kind === 'review.completed')
+    .filter((event) => {
+      if (event.kind !== 'review.completed') return false;
+      const verdict = (event.payload as { verdict?: string } | null)?.verdict;
+      return verdict !== 'needs-fix';
+    })
     .map(eventTimeMs)
     .filter(Number.isFinite)
     .sort((a, b) => a - b)
@@ -54,6 +58,7 @@ function eventPipelineCompletedMs(events: AgentEventDto[]): number | null {
         'parallel-implement.exhausted',
         'parallel-implement.wp-terminal-blocked',
         'pr.opened',
+        'agent.run-failed',
       ].includes(event.kind),
     )
     .map(eventTimeMs)
