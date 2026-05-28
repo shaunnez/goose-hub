@@ -65,6 +65,7 @@ describe('OperatorQueuePage', () => {
     vi.mocked(fetchIssues).mockResolvedValue([
       {
         id: 'github:owner/repo#42',
+        canonicalWorkItemId: 'github:owner/repo#42',
         externalId: '42',
         repoRef: 'owner/repo',
         title: 'Fix stuck issue',
@@ -78,6 +79,7 @@ describe('OperatorQueuePage', () => {
         exec: 'serial',
         dependsOn: [],
         blocks: [],
+        externalRefs: [],
         createdAt: '2026-05-20T00:00:00Z',
       },
     ]);

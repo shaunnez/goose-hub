@@ -98,6 +98,9 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'coach.dispatch-failed': 'retro',
   'audit.completed': 'review',
   'audit.failed': 'review',
+  'github.issue.opened': 'system',
+  'github.label.changed': 'system',
+  'github.label-mirror-warning': 'system',
 };
 
 const TRANSITION_EVENT_KINDS = new Set([

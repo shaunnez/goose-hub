@@ -60,8 +60,8 @@ export function resolveRepositoryForWorkItem(input: {
   return {
     repoRef,
     localPath:
-      configuredRepo?.localPath ?? project?.targetRepo.localPath ?? input.fallbackLocalPath,
-    defaultBranch: configuredRepo?.defaultBranch ?? project?.targetRepo.defaultBranch ?? 'main',
+      configuredRepo?.localPath ?? project?.targetRepo?.localPath ?? input.fallbackLocalPath,
+    defaultBranch: configuredRepo?.defaultBranch ?? project?.targetRepo?.defaultBranch ?? 'main',
     role: repoLink?.role ?? configuredRepo?.role ?? 'unknown',
     selectedBy:
       repoLink?.role === 'primary'

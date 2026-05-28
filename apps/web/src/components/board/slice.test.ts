@@ -31,6 +31,7 @@ describe('issue card lane ordering', () => {
 function makeItem(overrides: Partial<WorkItemWithProject> = {}): WorkItemWithProject {
   return {
     id: 'github:org/repo#1',
+    canonicalWorkItemId: 'github:org/repo#1',
     externalId: '1',
     repoRef: 'org/repo',
     title: 'Test',
@@ -44,6 +45,7 @@ function makeItem(overrides: Partial<WorkItemWithProject> = {}): WorkItemWithPro
     exec: 'serial',
     dependsOn: [],
     blocks: [],
+    externalRefs: [],
     createdAt: new Date().toISOString(),
     projectSlug: 'proj-a',
     projectColor: '#f00',

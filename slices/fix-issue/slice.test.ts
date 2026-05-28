@@ -300,7 +300,7 @@ describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () =
       'proj',
       'github:owner/repo#123',
       '/repo',
-      undefined,
+      'main',
     );
     expect(mockCreateWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'seed-commit-sha');
     expect(mockOpenPR).toHaveBeenCalledWith(
