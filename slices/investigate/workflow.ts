@@ -21,6 +21,7 @@ import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/r
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
 import {
+  type InvestigationSeed,
   buildInvestigationSeed,
   emitInvestigationSeedBuilt,
 } from '@goose-hub/core/agent-runtime/scout-prefetch.js';
@@ -142,6 +143,70 @@ function buildSchemaScoutFocus(workItem: { title: string; body: string }): strin
       : 'DB schemas, Zod schemas, event payload types, state enums, and API contracts relevant to this work item';
 
   return `Schema/type contracts only for ${target}. Do not trace runtime, retry, scheduler, or workflow control flow; return UNCERTAINTY if no schema surface exists after the first targeted reads.`;
+}
+
+export function buildPatternScoutFocus(input: {
+  workItem: { title: string; body: string };
+  symbolIdentifiers: string[];
+  investigationSeed: InvestigationSeed;
+}): string {
+  const text = `${input.workItem.title}\n${input.workItem.body}`;
+  const explicitTerms = extractPatternTerms(text).slice(0, 4);
+  const seedFiles = input.investigationSeed.candidateFiles.map((file) => file.path).slice(0, 3);
+
+  if (explicitTerms.length > 0) {
+    const seedHint =
+      seedFiles.length > 0 ? ` Start from ${formatInlineList(seedFiles)} before broad search.` : '';
+    return `Find existing usages of: ${explicitTerms.join(', ')} — patterns this fix must follow.${seedHint}`;
+  }
+
+  const patternTokens = input.symbolIdentifiers.slice(0, 4);
+  if (patternTokens.length > 0) {
+    return `Find existing usages of: ${patternTokens.join(', ')} — patterns this fix must follow`;
+  }
+
+  if (seedFiles.length > 0) {
+    return `Find the ${patternThemeForWorkItem(text)} used in ${formatInlineList(seedFiles)} and nearby sibling code; identify what this fix must replicate.`;
+  }
+
+  return 'Identify existing patterns the fix should follow';
+}
+
+function extractPatternTerms(text: string): string[] {
+  const terms: string[] = [];
+  const add = (value: string | undefined) => {
+    const trimmed = value?.trim();
+    if (trimmed == null || trimmed.length < 2 || trimmed.length > 64) return;
+    if (terms.includes(trimmed)) return;
+    terms.push(trimmed);
+  };
+
+  for (const match of text.matchAll(/\b[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+\b/g)) {
+    add(match[0]);
+  }
+  for (const [, inner] of text.matchAll(/`([^`]+)`/g)) add(inner);
+  for (const [, inner] of text.matchAll(/"([^"]+)"/g)) add(inner);
+  for (const [, inner] of text.matchAll(/'([^']+)'/g)) add(inner);
+
+  return terms;
+}
+
+function patternThemeForWorkItem(text: string): string {
+  const lower = text.toLowerCase();
+  if (
+    /\btimeline\b|\bbadge\b|\bphase\b|\bstate\b|\bstatus\b/.test(lower) &&
+    /\blive\b|\bcompleted?\b|\banswered?\b|\bfinished?\b/.test(lower)
+  ) {
+    return 'completion/status pattern';
+  }
+  if (/\bevent\b|\bemits?\b|\bappend(?:s|ed)?\b/.test(lower)) {
+    return 'event emission pattern';
+  }
+  return 'code pattern';
+}
+
+function formatInlineList(values: string[]): string {
+  return values.map((value) => `\`${value}\``).join(', ');
 }
 
 function runtimeNameForModel(modelId: string): 'codex-cli' | 'claude-cli' {
@@ -447,11 +512,11 @@ export async function runInvestigateWorkflow(
         builtMs: Date.now() - seedStartedAt,
       });
 
-      const patternTokens = symbolIdentifiers.slice(0, 4);
-      const patternFocus =
-        patternTokens.length > 0
-          ? `Find existing usages of: ${patternTokens.join(', ')} — patterns this fix must follow`
-          : 'Identify existing patterns the fix should follow';
+      const patternFocus = buildPatternScoutFocus({
+        workItem: workItemCtx,
+        symbolIdentifiers,
+        investigationSeed,
+      });
 
       const wave1Scouts = initialPlan.selectedWave1Scouts.map((spec) => {
         const shapedHints =

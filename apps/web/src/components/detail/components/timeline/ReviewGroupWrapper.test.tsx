@@ -2,7 +2,7 @@ import type { AgentEventDto } from '@/lib/types';
 /** @vitest-environment jsdom */
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { RenderItem } from '../../lib/timeline';
+import { type RenderItem, groupByReviewWorkflow } from '../../lib/timeline';
 import { ReviewGroupWrapper } from './ReviewGroupWrapper';
 
 afterEach(cleanup);
@@ -45,5 +45,52 @@ describe('ReviewGroupWrapper', () => {
     expect(screen.getByText('Review Run')).toBeTruthy();
     expect(screen.getByText('Complete')).toBeTruthy();
     expect(screen.queryByText('(Unknown) Run')).toBeNull();
+  });
+
+  it('renders a post-grill review workflow with the completed presentation', () => {
+    const reviewWorkflowRunId = 'review-grill-complete';
+    const grouped = groupByReviewWorkflow([
+      {
+        kind: 'event',
+        event: makeEvent('question.asked', { reviewWorkflowRunId }),
+      },
+      {
+        kind: 'event',
+        event: makeEvent('state.transitioned', {
+          reviewWorkflowRunId,
+          from: 'factory:gate-pending',
+          to: 'factory:grilling',
+        }),
+      },
+      {
+        kind: 'event',
+        event: makeEvent('state.transitioned', {
+          reviewWorkflowRunId,
+          to: 'factory:prd-drafting',
+        }),
+      },
+    ]);
+    const reviewGroup = grouped[0];
+
+    expect(reviewGroup?.kind).toBe('review-group');
+    if (reviewGroup?.kind !== 'review-group') return;
+
+    render(
+      <ul>
+        <ReviewGroupWrapper
+          reviewWorkflowRunId={reviewGroup.reviewWorkflowRunId}
+          items={reviewGroup.items}
+          status={reviewGroup.status}
+          startedAt={reviewGroup.startedAt}
+          endedAt={reviewGroup.endedAt}
+          lastEventAt={reviewGroup.lastEventAt}
+          renderItem={(child, idx) => <li key={`${child.kind}-${idx}`}>review child</li>}
+        />
+      </ul>,
+    );
+
+    expect(screen.getByText('Review Run')).toBeTruthy();
+    expect(screen.getByText('Complete')).toBeTruthy();
+    expect(screen.queryByText('Live')).toBeNull();
   });
 });

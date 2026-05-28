@@ -241,6 +241,7 @@ export function groupTimelineEventsByCanonicalSection(
   const discoverSessionByWorkflowOrRunId = buildDiscoverSessionRunIndex(normalizedEvents);
   const fixFeedbackAttemptByRunId = buildFixFeedbackAttemptRunIndex(normalizedEvents);
   const prdWorkflowByRevisionEventId = buildPrdRevisionWorkflowIndex(normalizedEvents);
+  const specAuthorRepairByRunId = buildSpecAuthorRepairRunIndex(normalizedEvents);
   const segments = buildTimelineSegments(
     normalizedEvents,
     runMetadata,
@@ -249,6 +250,7 @@ export function groupTimelineEventsByCanonicalSection(
     discoverSessionByWorkflowOrRunId,
     fixFeedbackAttemptByRunId,
     prdWorkflowByRevisionEventId,
+    specAuthorRepairByRunId,
   );
   const standaloneItems: RenderItem[] = [
     ...normalizedEvents
@@ -302,6 +304,7 @@ function buildTimelineSegments(
   discoverSessionByWorkflowOrRunId: DiscoverSessionRunIndex,
   fixFeedbackAttemptByRunId: ReadonlyMap<string, string>,
   prdWorkflowByRevisionEventId: ReadonlyMap<number, string>,
+  specAuthorRepairByRunId: ReadonlyMap<string, string>,
 ): TimelineSegmentAccumulator[] {
   const segments = new Map<string, TimelineSegmentAccumulator>();
   const orderedEvents = [...events].sort(
@@ -323,6 +326,7 @@ function buildTimelineSegments(
       discoverSessionByWorkflowOrRunId,
       fixFeedbackAttemptByRunId,
       prdWorkflowByRevisionEventId,
+      specAuthorRepairByRunId,
     );
     let segment: TimelineSegmentAccumulator | undefined;
 
@@ -367,6 +371,7 @@ function timelineSegmentExplicitKey(
   discoverSessionByWorkflowOrRunId: DiscoverSessionRunIndex,
   fixFeedbackAttemptByRunId: ReadonlyMap<string, string>,
   prdWorkflowByRevisionEventId: ReadonlyMap<number, string>,
+  specAuthorRepairByRunId: ReadonlyMap<string, string>,
 ): string | null {
   const payload = event.payload as Record<string, unknown> | null;
   const stringPayload = (key: string): string | null => {
@@ -396,7 +401,7 @@ function timelineSegmentExplicitKey(
     case 'decompose':
       return workflowRunId ?? runId;
     case 'delivery-router':
-      return pipelineRunId ?? workflowRunId ?? runId;
+      return specAuthorRepairByRunId.get(runId ?? '') ?? pipelineRunId ?? workflowRunId ?? runId;
     case 'implementation':
       return (
         fixFeedbackSegmentIdForEvent(event, fixFeedbackAttemptByRunId) ??
@@ -593,6 +598,22 @@ function isFixFeedbackRelatedEvent(event: AgentEventDto): boolean {
     eventHasWorkflowIdentity(event, 'fix-feedback') ||
     eventPayloadString(event, 'by') === 'fix-feedback'
   );
+}
+
+function buildSpecAuthorRepairRunIndex(events: AgentEventDto[]): Map<string, string> {
+  const repairByRunId = new Map<string, string>();
+
+  for (const event of events) {
+    if (event.kind !== 'agent.run-started') continue;
+    if (eventSkill(event) !== 'spec-author') continue;
+    if (eventPayloadString(event, 'attempt') !== 'repair') continue;
+    const runId = event.runId;
+    const repairOf = eventPayloadString(event, 'repairOf');
+    if (runId == null || runId.trim() === '' || repairOf == null) continue;
+    repairByRunId.set(runId, repairOf);
+  }
+
+  return repairByRunId;
 }
 
 function buildFixFeedbackAttemptRunIndex(events: AgentEventDto[]): Map<string, string> {
@@ -826,7 +847,12 @@ function flattenRedundantSectionPhase(
   if (section === 'delivery-router' && item.kind === 'phase-group' && item.phase === 'contract') {
     return item.items;
   }
-  if (section === 'implementation' && item.kind === 'phase-group' && item.phase === 'dev') {
+  if (
+    section === 'implementation' &&
+    item.kind === 'phase-group' &&
+    item.phase === 'dev' &&
+    item.items.length <= 1
+  ) {
     return item.items;
   }
   if (section === 'review' && item.kind === 'review-group') return item.items;
@@ -843,6 +869,55 @@ function reviewWorkflowRunIdsForItem(
     if (reviewWorkflowRunId != null) ids.add(reviewWorkflowRunId);
   }
   return [...ids];
+}
+
+const GRILL_ACTIVE_STATES = new Set(['factory:gate-pending', 'factory:grilling']);
+
+function hasGrillActivity(events: AgentEventDto[]): boolean {
+  return events.some(
+    (event) => event.kind === 'question.asked' || eventSkill(event) === 'grill-me',
+  );
+}
+
+function getOrderedEvents(events: AgentEventDto[]): AgentEventDto[] {
+  return [...events].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id - b.id,
+  );
+}
+
+function getTransitionDestination(event: AgentEventDto): string | null {
+  if (event.kind !== 'state.transitioned') return null;
+  const payload = event.payload as { to?: string; toState?: string } | null;
+  return payload?.to ?? payload?.toState ?? null;
+}
+
+function findAnsweredGrillResumeIndex(orderedEvents: AgentEventDto[]): number {
+  const latestQuestionIndex = orderedEvents.findLastIndex(
+    (event) => event.kind === 'question.asked',
+  );
+  if (latestQuestionIndex < 0) return -1;
+
+  return orderedEvents.findIndex(
+    (event, index) =>
+      index > latestQuestionIndex && getTransitionDestination(event) === 'factory:grilling',
+  );
+}
+
+function hasCompletedAnsweredGrillFlow(events: AgentEventDto[]): boolean {
+  if (!hasGrillActivity(events)) return false;
+  const orderedEvents = getOrderedEvents(events);
+  const answeredResumeIndex = findAnsweredGrillResumeIndex(orderedEvents);
+  if (answeredResumeIndex < 0) return false;
+
+  return orderedEvents.some((event, index) => {
+    if (index <= answeredResumeIndex) return false;
+    const destination = getTransitionDestination(event);
+    return (
+      destination != null &&
+      !GRILL_ACTIVE_STATES.has(destination) &&
+      destination !== 'factory:needs-human'
+    );
+  });
 }
 
 function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs-human' | 'failed' {
@@ -869,6 +944,9 @@ function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs
   const verdict = (completed?.payload as { verdict?: string } | null)?.verdict;
   if (verdict === 'needs-human') return 'needs-human';
   if (verdict === 'approved' || verdict === 'needs-fix') return 'completed';
+  if (hasCompletedAnsweredGrillFlow(events)) {
+    return 'completed';
+  }
   return 'live';
 }
 

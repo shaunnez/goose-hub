@@ -41,6 +41,7 @@ export interface WorkItemDto {
   prdParent?: string;
   externalRefs: WorkItemExternalRefDto[];
   createdAt: string;
+  closedAt?: string | null;
   lastPersonaId?: string | null;
 }
 

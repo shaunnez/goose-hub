@@ -60,8 +60,19 @@ export function PhaseGroupWrapper({
         ? 'PRD Phase'
         : phase === 'contract'
           ? 'Contract Phase'
-          : 'Dev Phase';
+          : idKind === 'pipeline'
+            ? 'Implementation Pipeline'
+            : 'Dev Phase';
   const idLabel = idKind;
+  const countLabel = items.some(
+    (item) =>
+      item.kind === 'run-group' ||
+      item.kind === 'phase-group' ||
+      item.kind === 'review-group' ||
+      item.kind === 'investigation-phase',
+  )
+    ? 'groups'
+    : 'events';
 
   const statusBadge = isStalled ? (
     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
@@ -131,7 +142,9 @@ export function PhaseGroupWrapper({
           <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
           <span className="w-[72px] shrink-0 flex justify-start">{statusBadge}</span>
           <span className="flex-1 min-w-0 truncate">{metaLine}</span>
-          <span className="ml-auto shrink-0 text-fg-5">{items.length} events</span>
+          <span className="ml-auto shrink-0 text-fg-5">
+            {items.length} {countLabel}
+          </span>
         </summary>
         <ol className="flex flex-col gap-2 px-3 pb-3">
           {items.map((item, i) => renderItem(item, i, context))}

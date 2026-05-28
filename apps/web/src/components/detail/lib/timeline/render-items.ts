@@ -19,7 +19,7 @@ export function effectiveTimestamp(item: RenderItem): number {
   if (item.kind === 'review-group') {
     return new Date(item.lastEventAt ?? item.startedAt ?? 0).getTime();
   }
-  return new Date(item.events[0]?.createdAt ?? 0).getTime();
+  return maxEventTimestamp(item.events);
 }
 
 export function optionalTimestamp(value: string | null): number {
@@ -46,11 +46,11 @@ export function compareTopLevelTimelineItems(a: RenderItem, b: RenderItem): numb
 }
 
 export function compareTimelineChildrenForReading(a: RenderItem, b: RenderItem): number {
-  const startDelta = optionalTimestamp(itemStartedAt(b)) - optionalTimestamp(itemStartedAt(a));
-  if (startDelta !== 0) return startDelta;
-
   const activityDelta = effectiveTimestamp(b) - effectiveTimestamp(a);
   if (activityDelta !== 0) return activityDelta;
+
+  const startDelta = optionalTimestamp(itemStartedAt(a)) - optionalTimestamp(itemStartedAt(b));
+  if (startDelta !== 0) return startDelta;
 
   if (a.kind === 'run-group' && b.kind === 'run-group') return a.runId.localeCompare(b.runId);
   if (a.kind === 'event' && b.kind === 'event') return a.event.id - b.event.id;
@@ -110,7 +110,7 @@ export function eventFromRenderItem(item: RenderItem): AgentEventDto[] {
 
 export function itemStartedAt(item: RenderItem): string | null {
   if (item.kind === 'event') return item.event.createdAt;
-  if (item.kind === 'log-group') return item.events.at(-1)?.createdAt ?? null;
+  if (item.kind === 'log-group') return minEventTimestampIso(item.events);
   if (
     item.kind === 'timeline-section' ||
     item.kind === 'run-group' ||
@@ -140,7 +140,7 @@ export function itemEndedAt(item: RenderItem): string | null {
 
 export function itemLastEventAt(item: RenderItem): string | null {
   if (item.kind === 'event') return item.event.createdAt;
-  if (item.kind === 'log-group') return item.events[0]?.createdAt ?? null;
+  if (item.kind === 'log-group') return maxEventTimestampIso(item.events);
   if (
     item.kind === 'timeline-section' ||
     item.kind === 'run-group' ||
@@ -152,6 +152,41 @@ export function itemLastEventAt(item: RenderItem): string | null {
     return item.lastEventAt;
   }
   return null;
+}
+
+function minEventTimestampIso(events: AgentEventDto[]): string | null {
+  let minMs = Number.POSITIVE_INFINITY;
+  let iso: string | null = null;
+  for (const event of events) {
+    const ms = new Date(event.createdAt).getTime();
+    if (ms < minMs) {
+      minMs = ms;
+      iso = event.createdAt;
+    }
+  }
+  return iso;
+}
+
+function maxEventTimestamp(events: AgentEventDto[]): number {
+  let maxMs = Number.NEGATIVE_INFINITY;
+  for (const event of events) {
+    const ms = new Date(event.createdAt).getTime();
+    if (ms > maxMs) maxMs = ms;
+  }
+  return maxMs === Number.NEGATIVE_INFINITY ? 0 : maxMs;
+}
+
+function maxEventTimestampIso(events: AgentEventDto[]): string | null {
+  let maxMs = Number.NEGATIVE_INFINITY;
+  let iso: string | null = null;
+  for (const event of events) {
+    const ms = new Date(event.createdAt).getTime();
+    if (ms > maxMs) {
+      maxMs = ms;
+      iso = event.createdAt;
+    }
+  }
+  return iso;
 }
 
 export function extractTimelineSectionTimes(items: RenderItem[]): {

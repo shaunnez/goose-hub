@@ -116,6 +116,7 @@ export class LocalDbStateSource implements StateSource {
       blocks: mapDependencyRefs(row.body, 'blocks', repoRef),
       createdAt: new Date(row.createdAt),
       externalRefs: this.repository.listExternalRefReadModels(this.projectId, row.id),
+      closedAt: row.closedAt == null ? undefined : new Date(row.closedAt),
     };
   }
 

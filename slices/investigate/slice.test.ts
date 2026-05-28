@@ -356,6 +356,85 @@ describe('runInvestigateWorkflow', () => {
     });
   });
 
+  describe('buildPatternScoutFocus', () => {
+    it('anchors prose bugs to seed files when symbol identifiers are weak', async () => {
+      const { buildPatternScoutFocus } = await import('./workflow.js');
+
+      const focus = buildPatternScoutFocus({
+        workItem: {
+          title: 'Grill timeline stays live',
+          body: 'When a question is answered, mark it as completed like other agents do on the timeline.',
+        },
+        symbolIdentifiers: [],
+        investigationSeed: {
+          candidateFiles: [
+            { path: 'core/workflows/grill-and-prd.ts', root: 'worktree' },
+            { path: 'apps/server/src/domains/issues/prd-actions.ts', root: 'worktree' },
+            {
+              path: 'apps/web/src/components/detail/lib/timeline/phases/discover.ts',
+              root: 'worktree',
+            },
+          ],
+          candidateSymbols: [],
+          testFiles: [],
+          recentlyChangedFiles: [],
+          priorInvestigationRunIds: [],
+          builtAt: '2026-05-28T00:00:00.000Z',
+        },
+      });
+
+      expect(focus).toContain('completion/status pattern');
+      expect(focus).toContain('core/workflows/grill-and-prd.ts');
+      expect(focus).toContain('apps/server/src/domains/issues/prd-actions.ts');
+      expect(focus).not.toBe('Identify existing patterns the fix should follow');
+    });
+
+    it('keeps explicit code/event terms ahead of seed-file fallback', async () => {
+      const { buildPatternScoutFocus } = await import('./workflow.js');
+
+      const focus = buildPatternScoutFocus({
+        workItem: {
+          title: 'Fix timeline after `grill.completed`',
+          body: 'The badge should switch from "live" to "completed".',
+        },
+        symbolIdentifiers: [],
+        investigationSeed: {
+          candidateFiles: [{ path: 'apps/web/src/timeline.ts', root: 'worktree' }],
+          candidateSymbols: [],
+          testFiles: [],
+          recentlyChangedFiles: [],
+          priorInvestigationRunIds: [],
+          builtAt: '2026-05-28T00:00:00.000Z',
+        },
+      });
+
+      expect(focus).toContain('grill.completed');
+      expect(focus).toContain('live');
+      expect(focus).toContain('completed');
+    });
+
+    it('preserves symbol-based focus when identifiers are available', async () => {
+      const { buildPatternScoutFocus } = await import('./workflow.js');
+
+      const focus = buildPatternScoutFocus({
+        workItem: { title: 'Fix AuthService', body: 'Crashes on login' },
+        symbolIdentifiers: ['AuthService', 'SessionStore'],
+        investigationSeed: {
+          candidateFiles: [{ path: 'apps/web/src/timeline.ts', root: 'worktree' }],
+          candidateSymbols: [],
+          testFiles: [],
+          recentlyChangedFiles: [],
+          priorInvestigationRunIds: [],
+          builtAt: '2026-05-28T00:00:00.000Z',
+        },
+      });
+
+      expect(focus).toBe(
+        'Find existing usages of: AuthService, SessionStore — patterns this fix must follow',
+      );
+    });
+  });
+
   describe('swarm dispatch — acceptance criterion 1', () => {
     it('calls dispatchWave exactly twice (Wave 1 then Wave 2)', async () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');

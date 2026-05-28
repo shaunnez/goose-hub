@@ -1105,6 +1105,81 @@ describe('runSpecAuthorWorkflow', () => {
       expect(roots).not.toContain('Slice A');
     });
 
+    it('derives scopeRoots from PRD module refs and includes the nearest parent for planned dirs', async () => {
+      const { collectScopeManifest } = await import('@goose-hub/core/workspaces/scope-manifest.js');
+
+      vi.mocked(eventStore.replay).mockImplementation((query?: { kind?: string }) => {
+        if (query?.kind === 'prd.drafted') {
+          return [
+            {
+              id: 10,
+              projectId: 'goose-hub-self',
+              workItemId: 'github:shaunnez/goose-hub#55',
+              kind: 'prd.drafted',
+              payload: {
+                prd: {
+                  title: 'Workflow Snapshot Grid',
+                  problem: 'Operators need compact workflow summaries.',
+                  proposedSolution: 'Render overview workflow cards.',
+                  successCriteria: [],
+                  acceptanceCriteria: [],
+                  journeys: [],
+                  functionalSpec: null,
+                  verticalSlices: [
+                    { title: 'Slice A', goal: 'Do A', estimatedSize: 'S', journeyRefs: [] },
+                  ],
+                  implementationDecisions: [
+                    {
+                      decision: 'Add a pure summary builder',
+                      moduleRef: 'apps/web/src/components/detail/lib/overview-workflow-summary.ts',
+                    },
+                    {
+                      decision: 'Extend issue costs',
+                      moduleRef: 'apps/web/src/components/detail/hooks/useIssueCostsBreakdown.ts',
+                    },
+                    {
+                      decision: 'Create a deeper planned feature view',
+                      moduleRef: 'apps/web/src/features/new-flow/view.tsx',
+                    },
+                  ],
+                  testingDecisions: {
+                    modulesToTest: [
+                      'apps/web/src/components/detail/components/OverviewSection.test.tsx',
+                    ],
+                  },
+                },
+              },
+              runId: 'prd-run',
+              personaId: null,
+              createdAt: '2026-05-22T00:00:00.000Z',
+            },
+          ] as never;
+        }
+        return [];
+      });
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(
+        makeWorkItem({ type: 'feature' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      expect(collectScopeManifest).toHaveBeenCalledWith(
+        '/tmp/test-spec-worktree',
+        expect.arrayContaining([
+          'apps/web/src/components/detail/lib',
+          'apps/web/src/components/detail/hooks',
+          'apps/web/src/components/detail',
+          'apps/web/src/components/detail/components',
+          'apps/web/src/features/new-flow',
+          'apps/web/src/features',
+          'apps/web/src',
+        ]),
+      );
+    });
+
     it('derives scopeRoots from scout report digest files when investigation synthesis has no keyFiles', async () => {
       const { collectScopeManifest } = await import('@goose-hub/core/workspaces/scope-manifest.js');
       const scoutRepo = await import('@goose-hub/core/scout-reports/repository.js');

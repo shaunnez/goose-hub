@@ -83,3 +83,7 @@ export function extractPlaywrightRepro(events: AgentEventDto[]): PlaywrightRepro
   }
   return null;
 }
+
+export function hasPlaywrightRepro(events: AgentEventDto[]): boolean {
+  return extractPlaywrightRepro(events) != null;
+}

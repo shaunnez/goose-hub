@@ -49,6 +49,7 @@ export interface WorkItem {
   blocks: string[];
   createdAt: Date;
   externalRefs?: WorkItemExternalRef[];
+  closedAt?: Date;
 }
 
 export interface Milestone {

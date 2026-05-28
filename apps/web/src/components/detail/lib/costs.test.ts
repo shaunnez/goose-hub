@@ -89,6 +89,10 @@ describe('useIssueCostsBreakdown', () => {
 
     expect(result.current.total).toBeCloseTo(0.36, 5);
     expect(result.current.totalTokens).toBe(200 + 100 + 300 + 100 + 800 + 400);
+    expect(result.current.totalInputTokens).toBe(200 + 300 + 800);
+    expect(result.current.totalCachedInputTokens).toBe(200);
+    expect(result.current.totalReasoningOutputTokens).toBe(20);
+    expect(result.current.totalCacheHitRatio).toBeCloseTo(200 / 1300, 5);
     expect(result.current.byRun.get('r-dev-1')?.costUsd).toBe(0.25);
 
     const qa = result.current.byStage.get('qa');

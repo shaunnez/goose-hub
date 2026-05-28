@@ -2,8 +2,7 @@
 import type { AgentEventDto, EngineeringSpecDto } from '@/lib/types';
 import { ActiveProjectProvider } from '@/state/active-project';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
-import { cleanup } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InvestigationSection } from './InvestigationSection';
 
@@ -31,6 +30,12 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/lib/markdown', () => ({
   renderMarkdownToHtml: (s: string) => `<p>${s}</p>`,
+}));
+
+vi.mock('./PlaywrightCaptureSection', () => ({
+  PlaywrightCaptureSection: () => (
+    <div data-testid="playwright-capture-content">Bug repro capture</div>
+  ),
 }));
 
 const INVESTIGATION_EVENT: AgentEventDto = {
@@ -76,6 +81,27 @@ const ENGINEERING_SPEC: EngineeringSpecDto = {
   riskRegister: [],
 };
 
+const ACCEPTANCE_CONTRACT = {
+  source: 'engineering-spec' as const,
+  criteria: [{ id: 'AC-1', statement: 'Users can log in.' }],
+};
+
+const HUMAN_NOTES = [
+  {
+    id: 'note-1',
+    body: 'Human review notes:\n\nNeeds follow-up.',
+    createdAt: '2026-05-22T10:00:00Z',
+  },
+];
+
+const PLAYWRIGHT_REPRO = {
+  screenshots: [],
+  gifPath: null,
+  consoleErrors: [],
+  reproSteps: ['Open the page'],
+  reproduced: true,
+};
+
 function investigationEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   return {
     ...INVESTIGATION_EVENT,
@@ -101,55 +127,97 @@ function toolCallEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   };
 }
 
-function renderSection(events: AgentEventDto[] = [], spec?: EngineeringSpecDto | null) {
+function renderSection({
+  events = [],
+  spec,
+  acceptanceContract,
+  comments,
+  itemType,
+  itemState,
+}: {
+  events?: AgentEventDto[];
+  spec?: EngineeringSpecDto | null;
+  acceptanceContract?: typeof ACCEPTANCE_CONTRACT | null;
+  comments?: typeof HUMAN_NOTES;
+  itemType?: string;
+  itemState?: string;
+} = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['events', 'test-proj', '42'], events);
   if (spec !== undefined) qc.setQueryData(['spec', 'test-proj', '42'], spec);
-  render(
-    <QueryClientProvider client={qc}>
-      <ActiveProjectProvider initialSlug="test-proj">
-        <InvestigationSection projectSlug="test-proj" id="42" />
-      </ActiveProjectProvider>
-    </QueryClientProvider>,
-  );
+  if (acceptanceContract !== undefined) {
+    qc.setQueryData(['acceptance-contract', 'test-proj', '42'], acceptanceContract);
+  }
+  if (comments !== undefined) qc.setQueryData(['comments', 'test-proj', '42'], comments);
+  function WrappedSection(props: { itemType?: string; itemState?: string }) {
+    return (
+      <QueryClientProvider client={qc}>
+        <ActiveProjectProvider initialSlug="test-proj">
+          <InvestigationSection
+            projectSlug="test-proj"
+            id="42"
+            itemType={props.itemType}
+            itemState={props.itemState}
+          />
+        </ActiveProjectProvider>
+      </QueryClientProvider>
+    );
+  }
+
+  const view = render(<WrappedSection itemType={itemType} itemState={itemState} />);
+  return { ...view, qc, WrappedSection };
+}
+
+function getAccordionButton(title: string): HTMLElement {
+  const match = screen
+    .getAllByRole('button')
+    .find((button) => within(button).queryByText(new RegExp(`^${title}$`, 'i')) != null);
+
+  if (match == null) {
+    throw new Error(`Accordion button not found for title: ${title}`);
+  }
+
+  return match;
 }
 
 describe('InvestigationSection', () => {
   it('shows empty state when no investigation events exist', () => {
-    renderSection([]);
+    renderSection();
     expect(screen.getByTestId('investigation-empty-state')).toBeTruthy();
     expect(screen.getByText('Investigation has not run yet.')).toBeTruthy();
   });
 
   it('renders findings when investigation event is present', () => {
-    renderSection([INVESTIGATION_EVENT]);
+    renderSection({ events: [INVESTIGATION_EVENT] });
     expect(screen.getByTestId('investigation-section')).toBeTruthy();
     expect(screen.getByTestId('findings-content')).toBeTruthy();
   });
 
   it('renders the Engineering Spec panel when a spec exists', () => {
-    renderSection([INVESTIGATION_EVENT], ENGINEERING_SPEC);
+    renderSection({ events: [INVESTIGATION_EVENT], spec: ENGINEERING_SPEC });
     expect(screen.getByText('Engineering Spec')).toBeTruthy();
     expect(screen.getByText('1 work package · 1 AC')).toBeTruthy();
   });
 
   it('displays the correct confidence badge for high confidence', () => {
-    renderSection([INVESTIGATION_EVENT]);
+    renderSection({ events: [INVESTIGATION_EVENT] });
     const badge = screen.getByTestId('confidence-badge');
     expect(badge).toBeTruthy();
     expect(badge.textContent).toContain('high');
   });
 
-  it('renders key files list', () => {
-    renderSection([INVESTIGATION_EVENT]);
+  it('renders key files list after expanding the accordion', () => {
+    renderSection({ events: [INVESTIGATION_EVENT] });
+    fireEvent.click(getAccordionButton('Key Files'));
     const filesList = screen.getByTestId('key-files-list');
     expect(filesList).toBeTruthy();
     expect(screen.getByText('src/auth/login.ts')).toBeTruthy();
     expect(screen.getByText('src/auth/session.ts')).toBeTruthy();
   });
 
-  it('renders open questions list', () => {
-    renderSection([INVESTIGATION_EVENT]);
+  it('renders open questions list after expanding the accordion', () => {
+    renderSection({ events: [INVESTIGATION_EVENT] });
+    fireEvent.click(getAccordionButton('Open Questions'));
     const questionsList = screen.getByTestId('open-questions-list');
     expect(questionsList).toBeTruthy();
     expect(screen.getByText('Does this affect the mobile app?')).toBeTruthy();
@@ -165,7 +233,7 @@ describe('InvestigationSection', () => {
         },
       },
     };
-    renderSection([lowConfEvent]);
+    renderSection({ events: [lowConfEvent] });
     const badge = screen.getByTestId('confidence-badge');
     expect(badge.textContent).toContain('low');
     expect(badge.className).toContain('text-red-400');
@@ -181,7 +249,7 @@ describe('InvestigationSection', () => {
         },
       },
     };
-    renderSection([medConfEvent]);
+    renderSection({ events: [medConfEvent] });
     const badge = screen.getByTestId('confidence-badge');
     expect(badge.textContent).toContain('medium');
     expect(badge.className).toContain('text-yellow-400');
@@ -197,8 +265,8 @@ describe('InvestigationSection', () => {
         },
       },
     };
-    renderSection([noFilesEvent]);
-    expect(screen.queryByTestId('key-files-list')).toBeNull();
+    renderSection({ events: [noFilesEvent] });
+    expect(screen.queryByRole('button', { name: /key files/i })).toBeNull();
   });
 
   it('does not render open questions when list is empty', () => {
@@ -211,8 +279,8 @@ describe('InvestigationSection', () => {
         },
       },
     };
-    renderSection([noQuestionsEvent]);
-    expect(screen.queryByTestId('open-questions-list')).toBeNull();
+    renderSection({ events: [noQuestionsEvent] });
+    expect(screen.queryByRole('button', { name: /open questions/i })).toBeNull();
   });
 
   it('renders the newest investigation event regardless of event order', () => {
@@ -237,7 +305,7 @@ describe('InvestigationSection', () => {
       },
     });
 
-    renderSection([newer, older]);
+    renderSection({ events: [newer, older] });
 
     expect(screen.getByText('New finding')).toBeTruthy();
     expect(screen.queryByText('Old finding')).toBeNull();
@@ -260,8 +328,162 @@ describe('InvestigationSection', () => {
       },
     });
 
-    renderSection([newer, newRunSearch, older, oldRunRead]);
+    renderSection({ events: [newer, newRunSearch, older, oldRunRead] });
 
     expect(screen.getByText('0 file reads · 1 search')).toBeTruthy();
+  });
+
+  it('shows findings expanded by default and keeps other sections collapsed initially', () => {
+    renderSection({
+      events: [
+        investigationEvent({
+          payload: {
+            investigate: {
+              ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> })
+                .investigate,
+            },
+            playwrightRepro: PLAYWRIGHT_REPRO,
+          } as AgentEventDto['payload'],
+        }),
+      ],
+      spec: ENGINEERING_SPEC,
+      acceptanceContract: ACCEPTANCE_CONTRACT,
+      comments: HUMAN_NOTES,
+      itemType: 'bug',
+    });
+
+    expect(getAccordionButton('Findings').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('findings-content')).toBeTruthy();
+
+    expect(getAccordionButton('Acceptance Criteria').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('acceptance-contract-content')).toBeNull();
+
+    expect(getAccordionButton('Engineering Spec').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('Build the authentication flow with token refresh.')).toBeNull();
+
+    expect(getAccordionButton('Key Files').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('key-files-list')).toBeNull();
+
+    expect(getAccordionButton('Open Questions').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('open-questions-list')).toBeNull();
+
+    expect(getAccordionButton('Investigation Trail').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('investigation-trail')).toBeNull();
+
+    expect(getAccordionButton('Human Review Notes').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('investigation-human-notes')).toBeNull();
+
+    expect(getAccordionButton('Bug Repro Capture').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('playwright-capture-content')).toBeNull();
+  });
+
+  it('reveals collapsed investigation accordions when their headers are clicked', () => {
+    renderSection({
+      events: [
+        investigationEvent({
+          payload: {
+            investigate: {
+              ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> })
+                .investigate,
+            },
+            playwrightRepro: PLAYWRIGHT_REPRO,
+          } as AgentEventDto['payload'],
+        }),
+      ],
+      spec: ENGINEERING_SPEC,
+      acceptanceContract: ACCEPTANCE_CONTRACT,
+      comments: HUMAN_NOTES,
+      itemType: 'bug',
+    });
+
+    fireEvent.click(getAccordionButton('Acceptance Criteria'));
+    expect(screen.getByTestId('acceptance-contract-content')).toBeTruthy();
+    expect(screen.getByText('Users can log in.')).toBeTruthy();
+
+    fireEvent.click(getAccordionButton('Engineering Spec'));
+    expect(screen.getByText('Build the authentication flow with token refresh.')).toBeTruthy();
+
+    fireEvent.click(getAccordionButton('Open Questions'));
+    expect(screen.getByTestId('open-questions-list')).toBeTruthy();
+
+    fireEvent.click(getAccordionButton('Investigation Trail'));
+    expect(screen.getByTestId('investigation-trail')).toBeTruthy();
+
+    fireEvent.click(getAccordionButton('Human Review Notes'));
+    expect(screen.getByTestId('investigation-human-notes')).toBeTruthy();
+
+    fireEvent.click(getAccordionButton('Bug Repro Capture'));
+    expect(screen.getByTestId('playwright-capture-content')).toBeTruthy();
+  });
+
+  it('shows the findings accordion even when only key files exist', () => {
+    renderSection({
+      events: [
+        investigationEvent({
+          payload: {
+            investigate: {
+              ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> })
+                .investigate,
+              findings: '',
+              keyFiles: [{ path: 'src/auth/login.ts', reason: 'Only grounded evidence available' }],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(getAccordionButton('Findings').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('findings-key-files-list')).toBeTruthy();
+    expect(screen.getByText('src/auth/login.ts')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /key files/i })).toBeNull();
+  });
+
+  it('renders the proceed gate as a collapsed accordion for ready investigations', () => {
+    renderSection({
+      events: [INVESTIGATION_EVENT],
+      itemState: 'factory:investigation-complete',
+    });
+
+    expect(getAccordionButton('Proceed Gate').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('investigation-proceed-gate-content')).toBeNull();
+
+    fireEvent.click(getAccordionButton('Proceed Gate'));
+    expect(screen.getByTestId('investigation-proceed-gate-content')).toBeTruthy();
+    expect(screen.getByTestId('investigation-notes-input')).toBeTruthy();
+  });
+
+  it('opens the proceed gate by default when human review is required', () => {
+    renderSection({
+      events: [INVESTIGATION_EVENT],
+      itemState: 'factory:gate-pending',
+    });
+
+    expect(getAccordionButton('Proceed Gate').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('investigation-proceed-gate-content')).toBeTruthy();
+    expect(screen.getByText(/Investigation confidence is low\./)).toBeTruthy();
+  });
+
+  it('updates the proceed gate default state when itemState changes without a new run', () => {
+    const view = renderSection({
+      events: [INVESTIGATION_EVENT],
+      itemState: 'factory:investigation-complete',
+    });
+
+    expect(getAccordionButton('Proceed Gate').getAttribute('aria-expanded')).toBe('false');
+
+    view.rerender(<view.WrappedSection itemState="factory:gate-pending" />);
+
+    expect(getAccordionButton('Proceed Gate').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('investigation-proceed-gate-content')).toBeTruthy();
+  });
+
+  it('does not render the bug repro accordion when no capture payload exists', () => {
+    renderSection({
+      events: [INVESTIGATION_EVENT],
+      itemType: 'bug',
+    });
+
+    expect(screen.queryByRole('button', { name: /bug repro capture/i })).toBeNull();
+    expect(screen.queryByTestId('playwright-capture-content')).toBeNull();
   });
 });

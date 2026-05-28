@@ -100,21 +100,35 @@ const SPEC: EngineeringSpecDto = {
 describe('SpecDetails', () => {
   it('renders collapsed header regardless of lifecycle state', () => {
     render(<SpecDetails spec={SPEC} itemState="factory:investigation-complete" />);
-    expect(screen.getByText('Engineering Spec')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Engineering Spec/i }).getAttribute('aria-expanded'),
+    ).toBe('false');
     expect(screen.getByText('2 work packages · 5 AC')).toBeTruthy();
     expect(screen.queryByText('Build the authentication flow with token refresh.')).toBeNull();
+    expect(screen.queryByText('Update login and token refresh flow.')).toBeNull();
   });
 
   it('renders collapsed header when state is factory:dev-ready', () => {
     render(<SpecDetails spec={SPEC} itemState="factory:dev-ready" />);
-    expect(screen.getByText('Engineering Spec')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Engineering Spec/i }).getAttribute('aria-expanded'),
+    ).toBe('false');
     expect(screen.getByText('2 work packages · 5 AC')).toBeTruthy();
     expect(screen.queryByText('Build the authentication flow with token refresh.')).toBeNull();
   });
 
+  it('honors defaultOpen when requested', () => {
+    render(<SpecDetails spec={SPEC} defaultOpen itemState="factory:dev-ready" />);
+    expect(
+      screen.getByRole('button', { name: /Engineering Spec/i }).getAttribute('aria-expanded'),
+    ).toBe('true');
+    expect(screen.getByText('Build the authentication flow with token refresh.')).toBeTruthy();
+    expect(screen.getByText('Update login and token refresh flow.')).toBeTruthy();
+  });
+
   it('expands to show all populated engineering spec sections', async () => {
     render(<SpecDetails spec={SPEC} itemState="factory:dev-ready" />);
-    await userEvent.click(screen.getByText('Engineering Spec'));
+    await userEvent.click(screen.getByRole('button', { name: /Engineering Spec/i }));
     expect(screen.getByText('Build the authentication flow with token refresh.')).toBeTruthy();
     expect(screen.getByText('Move refresh validation into session middleware.')).toBeTruthy();
     expect(screen.getAllByText('WP1').length).toBeGreaterThan(1);
@@ -141,9 +155,22 @@ describe('SpecDetails', () => {
 
   it('does not render legacy verifyCommand text for canonical criteria without executable checks', async () => {
     render(<SpecDetails spec={SPEC} itemState="factory:dev-ready" />);
-    await userEvent.click(screen.getByText('Engineering Spec'));
+    await userEvent.click(screen.getByRole('button', { name: /Engineering Spec/i }));
     expect(screen.getByText('Expired tokens are rejected.')).toBeTruthy();
     expect(screen.queryByText(/verifyCommand/i)).toBeNull();
     expect(screen.queryByText(/missing/i)).toBeNull();
+  });
+
+  it('collapses the engineering spec content after a second toggle', async () => {
+    render(<SpecDetails spec={SPEC} itemState="factory:dev-ready" />);
+    const toggle = screen.getByRole('button', { name: /Engineering Spec/i });
+
+    await userEvent.click(toggle);
+    expect(screen.getByText('Build the authentication flow with token refresh.')).toBeTruthy();
+
+    await userEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('Build the authentication flow with token refresh.')).toBeNull();
+    expect(screen.queryByText('Update login and token refresh flow.')).toBeNull();
   });
 });
