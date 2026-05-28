@@ -28,6 +28,7 @@ export interface WorkItemDto {
   prdChildren?: string[];
   prdParent?: string;
   createdAt: string;
+  closedAt?: string | null;
   lastPersonaId?: string | null;
 }
 

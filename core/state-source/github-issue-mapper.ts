@@ -33,6 +33,7 @@ export interface GithubIssue {
   milestone: GithubMilestone | null;
   user: { login: string } | null;
   created_at: string;
+  closed_at?: string | null;
   pull_request?: unknown;
 }
 
@@ -105,6 +106,7 @@ export function mapIssueToWorkItem(
     dependsOn: parseDependsOn(body),
     blocks: parseBlocks(body),
     createdAt: new Date(issue.created_at),
+    closedAt: issue.closed_at == null ? undefined : new Date(issue.closed_at),
   };
 }
 
