@@ -80,8 +80,8 @@ describe('Atlassian query resolution', () => {
       text: 'import boundary',
       projects: ['TAS'],
       updated: {
-        from: '2026-02-26T12:00:00.000Z',
-        to: '2026-05-27T12:00:00.000Z',
+        from: '2026-02-26 12:00',
+        to: '2026-05-27 12:00',
       },
       maxResults: 50,
       assignee: undefined,
@@ -136,8 +136,8 @@ describe('Atlassian query resolution', () => {
           level: 'L2',
           projects: ['TAS', 'OPS'],
           updated: {
-            from: '2026-04-27T12:00:00.000Z',
-            to: '2026-05-27T12:00:00.000Z',
+            from: '2026-04-27 12:00',
+            to: '2026-05-27 12:00',
           },
           maxResults: 25,
           assignee: { accountId: 'abc-123' },
@@ -145,6 +145,7 @@ describe('Atlassian query resolution', () => {
       },
     });
     expect(JSON.stringify(resolved)).not.toContain('jql');
+    expect(JSON.stringify(resolved)).not.toContain('T12:00:00.000Z');
   });
 
   it('rejects raw JQL and CQL-shaped normal inputs', () => {

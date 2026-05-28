@@ -1,3 +1,5 @@
+import { attachArtifactToWorkItem } from '../../agent-artifacts/repository.js';
+import type { ArtifactRef } from '../../agent-artifacts/types.js';
 import type { Priority, WorkItemType } from '../../state-source/interface.js';
 import { LocalDbWorkItemRepository } from '../../state-source/local-db-repository.js';
 import type { ProjectConfig } from '../../types.js';
@@ -112,15 +114,24 @@ export async function importJiraIssueDetailToLocalDb(
     externalId: jiraKey,
   });
   const mapped = mapJiraIssueToWorkItem(input.detail);
+  const milestonePatch: Partial<{ milestoneId: string | null; milestoneTitle: string | null }> =
+    input.milestone == null
+      ? {}
+      : {
+          milestoneId: input.milestone.id,
+          milestoneTitle: input.milestone.title ?? null,
+        };
   const row =
     existing == null
       ? repository.createWorkItem({
           projectId: cfg.id,
           ...mapped,
-          milestoneId: input.milestone?.id ?? null,
-          milestoneTitle: input.milestone?.title ?? null,
+          milestoneId: milestonePatch.milestoneId ?? null,
+          milestoneTitle: milestonePatch.milestoneTitle ?? null,
         })
-      : repository.updateWorkItem(cfg.id, existing.id, mapped);
+      : repository.updateWorkItem(cfg.id, existing.id, { ...mapped, ...milestonePatch });
+
+  attachJiraArtifactsToWorkItem(cfg.id, row.id, input.detail);
 
   const defaultRepoRef = cfg.repos[0];
   if (defaultRepoRef != null && !defaultRepoRef.startsWith('local:')) {
@@ -158,6 +169,26 @@ export async function importJiraIssueDetailToLocalDb(
       title: row.title,
     },
   };
+}
+
+function attachJiraArtifactsToWorkItem(
+  projectId: string,
+  workItemId: string,
+  issue: JiraIssueDetailDto,
+): void {
+  for (const ref of [issue.bodyArtifactRef, issue.rawArtifactRef]) {
+    if (!isArtifactRef(ref)) continue;
+    attachArtifactToWorkItem({ projectId, workItemId, artifactKey: ref.artifactKey });
+  }
+}
+
+function isArtifactRef(value: unknown): value is ArtifactRef {
+  return (
+    value != null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof (value as ArtifactRef).artifactKey === 'string'
+  );
 }
 
 function mapJiraIssueToWorkItem(issue: JiraIssueDetailDto): {

@@ -185,8 +185,8 @@ describe('importAssignedJiraIssuesToLocalDb', () => {
       level: 'L2',
       projects: ['TAS', 'OPS'],
       updated: {
-        from: '2026-02-26T02:00:00.000Z',
-        to: '2026-05-27T02:00:00.000Z',
+        from: '2026-02-26 02:00',
+        to: '2026-05-27 02:00',
       },
       maxResults: 50,
       assignee: { accountId: 'ada-1' },

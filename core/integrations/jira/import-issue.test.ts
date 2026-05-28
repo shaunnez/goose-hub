@@ -1,10 +1,14 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getArtifact, storeArtifact } from '../../agent-artifacts/repository.js';
+import { db as defaultDb } from '../../db/db.js';
 import * as schema from '../../db/schema.js';
+import { agentArtifacts } from '../../db/schema.js';
 import {
   LocalDbWorkItemRepository,
   parseExternalRefMetadata,
@@ -90,8 +94,36 @@ function adapterWith(detail: JiraIssueDetailDto): JiraProviderAdapter {
 describe('importJiraIssueToLocalDb', () => {
   const handles: Database.Database[] = [];
 
+  beforeAll(() => {
+    defaultDb.run(sql`CREATE TABLE IF NOT EXISTS agent_artifacts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      artifact_key TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      work_item_id TEXT,
+      run_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      bytes INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      expires_at TEXT
+    )`);
+    defaultDb.run(
+      sql`CREATE UNIQUE INDEX IF NOT EXISTS agent_artifacts_artifact_key_uniq
+          ON agent_artifacts (artifact_key)`,
+    );
+  });
+
+  beforeEach(() => {
+    defaultDb.delete(agentArtifacts).where(sql`project_id = ${projectConfig.id}`).run();
+  });
+
   afterEach(() => {
     for (const handle of handles.splice(0)) handle.close();
+  });
+
+  afterAll(() => {
+    defaultDb.delete(agentArtifacts).where(sql`project_id = ${projectConfig.id}`).run();
   });
 
   it('imports a Jira key idempotently into local Work Items with a Jira external ref', async () => {
@@ -193,6 +225,34 @@ describe('importJiraIssueToLocalDb', () => {
     });
   });
 
+  it('moves an existing imported Jira Work Item into the requested milestone on refresh', async () => {
+    const { sqlite, repository } = makeRepository();
+    handles.push(sqlite);
+
+    await importJiraIssueToLocalDb({
+      projectConfig,
+      input: 'TAS-123',
+      adapter: adapterWith(jiraDetail()),
+      repository,
+    });
+    await importJiraIssueToLocalDb({
+      projectConfig,
+      input: 'TAS-123',
+      adapter: adapterWith(jiraDetail({ title: 'Refresh into milestone' })),
+      repository,
+      milestone: {
+        id: '7',
+        title: 'M7: Atlassian imports',
+      },
+    });
+
+    expect(repository.requireWorkItem('proj', 'local:proj#1')).toMatchObject({
+      title: 'Refresh into milestone',
+      milestoneId: '7',
+      milestoneTitle: 'M7: Atlassian imports',
+    });
+  });
+
   it('does not create a partial Work Item when the provider fails', async () => {
     const { sqlite, repository } = makeRepository();
     handles.push(sqlite);
@@ -268,5 +328,43 @@ describe('importJiraIssueToLocalDb', () => {
       rawArtifactRef: { artifactKey: 'atlassian:jira:raw:TAS-123:raw' },
     });
     expect(JSON.stringify(metadata)).not.toContain('"fields"');
+  });
+
+  it('reattaches stored Jira artifact refs to the imported local Work Item', async () => {
+    const { sqlite, repository } = makeRepository();
+    handles.push(sqlite);
+    const bodyArtifact = storeArtifact({
+      projectId: 'proj',
+      workItemId: null,
+      runId: 'jira-import:proj',
+      kind: 'atlassian:jira:detail:TAS-123',
+      summary: 'Full Jira description',
+      payload: { description: 'long body' },
+      artifactKey: 'atlassian:jira:detail:TAS-123:body',
+    });
+    const rawArtifact = storeArtifact({
+      projectId: 'proj',
+      workItemId: null,
+      runId: 'jira-import:proj',
+      kind: 'atlassian:jira:detail:TAS-123',
+      summary: 'Raw Jira issue response',
+      payload: { fields: { summary: 'Manual Jira import' } },
+      artifactKey: 'atlassian:jira:detail:TAS-123:raw',
+    });
+
+    await importJiraIssueToLocalDb({
+      projectConfig,
+      input: 'TAS-123',
+      adapter: adapterWith(
+        jiraDetail({
+          bodyArtifactRef: bodyArtifact,
+          rawArtifactRef: rawArtifact,
+        }),
+      ),
+      repository,
+    });
+
+    expect(getArtifact(bodyArtifact.artifactKey)?.workItemId).toBe('local:proj#1');
+    expect(getArtifact(rawArtifact.artifactKey)?.workItemId).toBe('local:proj#1');
   });
 });

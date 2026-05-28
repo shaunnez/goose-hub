@@ -140,6 +140,22 @@ export function getArtifact(artifactKey: string): StoredArtifact | null {
   return row == null ? null : rowToArtifact(row);
 }
 
+export function attachArtifactToWorkItem(input: {
+  projectId: string;
+  artifactKey: string;
+  workItemId: string;
+}): void {
+  db.update(agentArtifacts)
+    .set({ workItemId: input.workItemId })
+    .where(
+      and(
+        eq(agentArtifacts.projectId, input.projectId),
+        eq(agentArtifacts.artifactKey, input.artifactKey),
+      ),
+    )
+    .run();
+}
+
 export function getArtifactSlice(
   artifactKey: string,
   slice: { offset?: number; limit?: number },

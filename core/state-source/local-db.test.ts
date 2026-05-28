@@ -163,6 +163,24 @@ describe('LocalDbStateSource', () => {
     ]);
   });
 
+  it('omits open Work Items whose Jira issue ref is hidden', async () => {
+    const { source, repository } = trackedSource();
+    const visible = await source.createIssue({ title: 'Visible item', body: '' });
+    const hidden = await source.createIssue({ title: 'Hidden Jira item', body: '' });
+
+    repository.upsertExternalRef({
+      projectId: 'proj',
+      itemId: hidden.id,
+      provider: 'jira',
+      kind: 'issue',
+      externalId: 'TAS-456',
+      metadata: { hidden: true, stale: true },
+    });
+
+    await expect(source.listOpenWork()).resolves.toMatchObject([{ id: visible.id }]);
+    await expect(source.getItem(hidden.externalId)).resolves.toMatchObject({ id: hidden.id });
+  });
+
   it('rejects illegal transitions and records forced transition history', async () => {
     const { source, repository } = trackedSource();
     const created = await source.createIssue({ title: 'A', body: '' });

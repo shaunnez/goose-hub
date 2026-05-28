@@ -122,6 +122,7 @@ export class LocalDbStateSource implements StateSource {
   async listOpenWork(milestoneNumber?: number): Promise<WorkItem[]> {
     return this.repository
       .listOpenWorkItems(this.projectId, milestoneNumber)
+      .filter((row) => !this.hasHiddenExternalRef(row.id))
       .map((row) => this.toWorkItem(row));
   }
 
@@ -339,6 +340,17 @@ export class LocalDbStateSource implements StateSource {
       repository: this.repository,
     });
   }
+
+  private hasHiddenExternalRef(itemId: string): boolean {
+    return this.repository
+      .listExternalRefReadModels(this.projectId, itemId)
+      .some((ref) => metadataRecord(ref.metadata).hidden === true);
+  }
+}
+
+function metadataRecord(value: unknown): Record<string, unknown> {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
 }
 
 function defaultPrDiffAdapters(): LocalDbPrDiffAdapters {

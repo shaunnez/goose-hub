@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { parseDiff } from '../lib/code-diff';
 import { useIssueCostsBreakdown } from '../lib/costs';
+import { latestInvestigationText } from '../lib/post-back';
 import { CommentsSection } from './CommentsSection';
 import { DependenciesSection } from './DependenciesSection';
 import { ExternalRefsSection } from './ExternalRefsSection';
@@ -57,6 +58,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
     | { testRun?: { passed: number; failed: number; skipped: number } }
     | undefined;
   const testRun = qaPayload?.testRun ?? null;
+  const investigationText = useMemo(() => latestInvestigationText(events), [events]);
 
   return (
     <div data-testid="overview-section" className="px-8 py-6 flex flex-col gap-5">
@@ -154,7 +156,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
         <PostBackActions
           projectSlug={projectSlug}
           workItemId={item.externalId}
-          investigationText={item.body || undefined}
+          investigationText={investigationText}
         />
       )}
     </div>

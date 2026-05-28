@@ -220,8 +220,15 @@ function isMetadataUpdatedWithinRange(
 ): boolean {
   if (typeof value !== 'string') return false;
   const updated = Date.parse(value);
-  const from = Date.parse(range.from);
-  const to = Date.parse(range.to);
+  const from = parseJiraRangeDate(range.from);
+  const to = parseJiraRangeDate(range.to);
   if (!Number.isFinite(updated) || !Number.isFinite(from) || !Number.isFinite(to)) return false;
   return updated >= from && updated <= to;
+}
+
+function parseJiraRangeDate(value: string): number {
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(value)) {
+    return Date.parse(`${value.replace(' ', 'T')}:00.000Z`);
+  }
+  return Date.parse(value);
 }

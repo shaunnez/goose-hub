@@ -162,8 +162,8 @@ describe('Jira REST adapter', () => {
         projects: ['TAS', 'OPS'],
         maxResults: 25,
         updated: {
-          from: '2026-04-27T00:00:00.000Z',
-          to: '2026-05-27T00:00:00.000Z',
+          from: '2026-04-27 00:00',
+          to: '2026-05-27 00:00',
         },
         assignee: { accountId: 'ada-1' },
       }),
@@ -189,7 +189,7 @@ describe('Jira REST adapter', () => {
     expect(url.searchParams.get('maxResults')).toBe('25');
     expect(url.searchParams.get('fields')).toContain('summary');
     expect(url.searchParams.get('jql')).toBe(
-      'project in ("TAS","OPS") AND assignee = "ada-1" AND updated >= "2026-04-27T00:00:00.000Z" AND updated <= "2026-05-27T00:00:00.000Z" ORDER BY updated DESC',
+      'project in ("TAS","OPS") AND assignee = "ada-1" AND updated >= "2026-04-27 00:00" AND updated <= "2026-05-27 00:00" ORDER BY updated DESC',
     );
   });
 });
