@@ -401,7 +401,7 @@ function timelineSegmentExplicitKey(
     case 'decompose':
       return workflowRunId ?? runId;
     case 'delivery-router':
-      return pipelineRunId ?? workflowRunId ?? specAuthorRepairByRunId.get(runId ?? '') ?? runId;
+      return specAuthorRepairByRunId.get(runId ?? '') ?? pipelineRunId ?? workflowRunId ?? runId;
     case 'implementation':
       return (
         fixFeedbackSegmentIdForEvent(event, fixFeedbackAttemptByRunId) ??

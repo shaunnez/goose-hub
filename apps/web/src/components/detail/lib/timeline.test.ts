@@ -1521,8 +1521,8 @@ describe('groupTimelineEventsByCanonicalSection', () => {
       makeEvent(5, 'agent.run-completed', 'spec-repair', {
         payload: { skill: 'spec-author' },
       }),
-      makeEvent(6, 'agent.run-failed', 'spec-repair', {
-        payload: { skill: 'spec-author', error: 'Validation failed' },
+      makeEvent(6, 'spec.completed', 'spec-repair', {
+        payload: { pipelineRunId: 'spec-repair' },
       }),
     ]);
 

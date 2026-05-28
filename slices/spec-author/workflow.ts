@@ -225,13 +225,22 @@ function dirOf(p: string): string {
   return slash === -1 ? '' : p.slice(0, slash);
 }
 
-function addDirWithParent(roots: Set<string>, path: unknown): void {
+function isStableScopeAncestor(path: string): boolean {
+  if (path === 'core') return true;
+  if (path.endsWith('/src')) return true;
+  if (/^(slices|skills)\/[^/]+$/.test(path)) return true;
+  if (/^apps\/[^/]+$/.test(path)) return true;
+  return false;
+}
+
+function addDirWithAncestors(roots: Set<string>, path: unknown): void {
   if (typeof path !== 'string' || path.length === 0) return;
-  const d = dirOf(path);
-  if (d.length === 0) return;
-  roots.add(d);
-  const parent = dirOf(d);
-  if (parent.length > 0) roots.add(parent);
+  let dir = dirOf(path);
+  while (dir.length > 0) {
+    roots.add(dir);
+    if (isStableScopeAncestor(dir)) return;
+    dir = dirOf(dir);
+  }
 }
 
 function prdModuleRefPaths(prdContext: {
@@ -278,7 +287,7 @@ function deriveSpecScopeRoots(input: {
 
   if (input.prdContext != null) {
     for (const path of prdModuleRefPaths(input.prdContext)) {
-      addDirWithParent(roots, path);
+      addDirWithAncestors(roots, path);
     }
   }
 

@@ -1137,6 +1137,10 @@ describe('runSpecAuthorWorkflow', () => {
                       decision: 'Extend issue costs',
                       moduleRef: 'apps/web/src/components/detail/hooks/useIssueCostsBreakdown.ts',
                     },
+                    {
+                      decision: 'Create a deeper planned feature view',
+                      moduleRef: 'apps/web/src/features/new-flow/view.tsx',
+                    },
                   ],
                   testingDecisions: {
                     modulesToTest: [
@@ -1169,6 +1173,9 @@ describe('runSpecAuthorWorkflow', () => {
           'apps/web/src/components/detail/hooks',
           'apps/web/src/components/detail',
           'apps/web/src/components/detail/components',
+          'apps/web/src/features/new-flow',
+          'apps/web/src/features',
+          'apps/web/src',
         ]),
       );
     });
