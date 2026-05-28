@@ -122,10 +122,19 @@ function summarizeGrounding(
   const findings = okReports.flatMap((report) =>
     report.findings.map((finding) => ({ ...finding, scoutName: report.scoutName })),
   );
+  const plannedSet = new Set(
+    findings.flatMap((finding) => {
+      const text = finding.fact.toLowerCase();
+      const file = fileFromFinding(finding);
+      return file != null && /\b(planned|new file|create|candidate)\b/.test(text) ? [file] : [];
+    }),
+  );
   const existingSurfaces = uniqueSorted(
     findings.flatMap((finding) => {
       const file = fileFromFinding(finding);
-      return file != null && !/\.(test|spec)\.[jt]sx?$/.test(file) ? [file] : [];
+      return file != null && !plannedSet.has(file) && !/\.(test|spec)\.[jt]sx?$/.test(file)
+        ? [file]
+        : [];
     }),
   );
   const testSurfaces = uniqueSorted(
@@ -134,13 +143,7 @@ function summarizeGrounding(
       return file != null && /\.(test|spec)\.[jt]sx?$/.test(file) ? [file] : [];
     }),
   );
-  const plannedFiles = uniqueSorted(
-    findings.flatMap((finding) => {
-      const text = finding.fact.toLowerCase();
-      const file = fileFromFinding(finding);
-      return file != null && /\b(planned|new file|create|candidate)\b/.test(text) ? [file] : [];
-    }),
-  );
+  const plannedFiles = uniqueSorted(plannedSet);
   const reusablePatterns = uniqueSorted(
     findings
       .filter((finding) => finding.scoutName === 'scout-pattern')
@@ -258,7 +261,7 @@ export async function runFeatureGroundingWorkflow(
       workItemId: workItem.id,
       runtime,
       personaId,
-      maxScoutAgents: projectConfig?.budgets?.maxParallelAgents,
+      maxScoutAgents: projectConfig?.budgets?.maxScoutAgents,
       projectBudgets: projectConfig?.budgets,
       minSuccessfulScouts: swarmEnabled ? 2 : 1,
       resolveScoutBudget,
@@ -272,6 +275,76 @@ Feature-grounding mode:
         outputJsonSchema: scoutJsonSchema,
       }),
     });
+
+    if (wave.shouldEscalate) {
+      const failedList = wave.failedScouts.join(', ') || 'unknown';
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.run-failed',
+        payload: { skill: 'feature-grounding', runId, error: `Wave halted: ${failedList} failed` },
+        runId,
+        personaId,
+      });
+      await stateSource.comment(
+        workItem.externalId,
+        buildAgentComment(
+          'Feature Grounding',
+          'Failed',
+          `Feature code-grounding halted: scouts ${failedList} failed — escalating to needs-human`,
+          [],
+        ),
+      );
+      await transitionAndEmitState({
+        mode: 'legal',
+        source: stateSource,
+        itemId: workItem.externalId,
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:grounding',
+        to: 'factory:needs-human',
+        by: 'feature-grounding',
+        runId,
+      });
+      return { nextState: 'factory:needs-human' };
+    }
+
+    if (!wave.shouldAdvance) {
+      const summary = `ok=${wave.okCount}/${wave.requiredOkCount}`;
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.run-failed',
+        payload: {
+          skill: 'feature-grounding',
+          runId,
+          error: `Wave incomplete: ${summary}, insufficient successful scouts`,
+        },
+        runId,
+        personaId,
+      });
+      await stateSource.comment(
+        workItem.externalId,
+        buildAgentComment(
+          'Feature Grounding',
+          'Failed',
+          `Feature code-grounding incomplete (${summary}) — escalating to needs-human`,
+          [],
+        ),
+      );
+      await transitionAndEmitState({
+        mode: 'legal',
+        source: stateSource,
+        itemId: workItem.externalId,
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:grounding',
+        to: 'factory:needs-human',
+        by: 'feature-grounding',
+        runId,
+      });
+      return { nextState: 'factory:needs-human' };
+    }
 
     const persistedReports = wave.reports.flatMap((report) => {
       if (report.status !== 'ok' || report.outcome === 'skipped') return [];

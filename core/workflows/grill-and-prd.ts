@@ -340,6 +340,20 @@ export async function runGrillAndPrdWorkflow(
   const fullProjectContext = { ...projectContext, stackSummary };
   const groundingContext = latestFeatureGroundingContext(projectId, workItem.id);
 
+  // Restore framed body for grill and write-prd: the state source re-fetches the
+  // original GitHub issue body, which is unframed. Use the framedBody stored in
+  // the feature.framed event so grill-me sees the enriched description.
+  const [framedEvent] = eventStore.replay({
+    projectId,
+    workItemId: workItem.id,
+    kind: 'feature.framed',
+    order: 'desc',
+    limit: 1,
+  });
+  const framedBody = (framedEvent?.payload as { framedBody?: string } | undefined)?.framedBody;
+  const effectiveWorkItem =
+    framedBody != null && !isReviseMode ? { ...workItem, body: framedBody } : workItem;
+
   // ─── Skip-grill mode: jump directly to write-prd ─────────────────────────
   if (skipGrill) {
     const allEvents = eventStore.replay({ projectId, workItemId: workItem.id });
@@ -355,7 +369,7 @@ export async function runGrillAndPrdWorkflow(
       (featureFramed?.payload as { refinedIntent?: string } | null)?.refinedIntent ??
       workItem.title;
     return runWritePrdStep({
-      workItem,
+      workItem: effectiveWorkItem,
       stateSource,
       projectId,
       workflowRunId,
@@ -450,10 +464,10 @@ export async function runGrillAndPrdWorkflow(
 
         const outcome = await runGrillRound({
           workItem: {
-            id: workItem.id,
-            title: workItem.title,
-            body: workItem.body,
-            externalId: workItem.externalId,
+            id: effectiveWorkItem.id,
+            title: effectiveWorkItem.title,
+            body: effectiveWorkItem.body,
+            externalId: effectiveWorkItem.externalId,
           },
           projectId,
           workItemId: workItem.id,

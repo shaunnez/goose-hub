@@ -438,6 +438,24 @@ export async function dispatchResumeIssue(
       return;
     }
 
+    if (failedSkill === 'feature-grounding') {
+      logger.info(
+        'dispatchResumeIssue: needs-human from feature-grounding failure, resuming to grounding',
+        { slug, issueNumber },
+      );
+      await source.forceState(workItemId, 'factory:grounding');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:grounding',
+        by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
+      });
+      await dispatchFeatureGrounding(slug, issueNumber);
+      return;
+    }
+
     if (failedSkill === 'investigate') {
       logger.info(
         'dispatchResumeIssue: needs-human from investigate failure, resuming to investigating',

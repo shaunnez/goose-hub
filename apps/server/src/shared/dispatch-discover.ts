@@ -67,13 +67,16 @@ export async function dispatchFraming(slug: string, issueNumber: number): Promis
             cleanupWorktreeImpl: (_runId: string) => undefined,
           }
         : undefined;
-    await runFramingWorkflow({
+    const result = await runFramingWorkflow({
       workItem: item,
       stateSource: source,
       projectId: slug,
       priorReplies,
       deps: { projectConfig, ...(mockGrillDeps ?? {}) },
     });
+    if (result?.phase !== 'needs-human') {
+      return () => dispatchFeatureGrounding(slug, issueNumber);
+    }
   });
 }
 
