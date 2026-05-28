@@ -139,6 +139,18 @@ describe('SpecDetails', () => {
     expect(screen.getByText('pipe-test-123')).toBeTruthy();
   });
 
+  it('reveals engineering spec details after a single toggle without nested accordions', async () => {
+    render(<SpecDetails spec={SPEC} itemState="factory:dev-ready" />);
+
+    expect(screen.queryByText('Objective')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: /engineering spec/i }));
+
+    expect(screen.getByText('Objective')).toBeTruthy();
+    expect(screen.getByText('Build the authentication flow with token refresh.')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /engineering spec/i })).toHaveLength(1);
+  });
+
   it('does not render legacy verifyCommand text for canonical criteria without executable checks', async () => {
     render(<SpecDetails spec={SPEC} itemState="factory:dev-ready" />);
     await userEvent.click(screen.getByText('Engineering Spec'));

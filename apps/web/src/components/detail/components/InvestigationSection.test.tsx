@@ -2,8 +2,7 @@
 import type { AgentEventDto, EngineeringSpecDto } from '@/lib/types';
 import { ActiveProjectProvider } from '@/state/active-project';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
-import { cleanup } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InvestigationSection } from './InvestigationSection';
 
@@ -76,6 +75,16 @@ const ENGINEERING_SPEC: EngineeringSpecDto = {
   riskRegister: [],
 };
 
+const ACCEPTANCE_CONTRACT = {
+  source: 'engineering-spec',
+  criteria: [
+    {
+      id: 'AC1',
+      statement: 'Findings and related sections use a consistent accordion pattern.',
+    },
+  ],
+} as const;
+
 function investigationEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   return {
     ...INVESTIGATION_EVENT,
@@ -105,6 +114,7 @@ function renderSection(events: AgentEventDto[] = [], spec?: EngineeringSpecDto |
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['events', 'test-proj', '42'], events);
   if (spec !== undefined) qc.setQueryData(['spec', 'test-proj', '42'], spec);
+  qc.setQueryData(['acceptance-contract', 'test-proj', '42'], null);
   render(
     <QueryClientProvider client={qc}>
       <ActiveProjectProvider initialSlug="test-proj">
@@ -125,6 +135,7 @@ describe('InvestigationSection', () => {
     renderSection([INVESTIGATION_EVENT]);
     expect(screen.getByTestId('investigation-section')).toBeTruthy();
     expect(screen.getByTestId('findings-content')).toBeTruthy();
+    expect(screen.getByTestId('investigation-findings-section')).toBeTruthy();
   });
 
   it('renders the Engineering Spec panel when a spec exists', () => {
@@ -142,6 +153,8 @@ describe('InvestigationSection', () => {
 
   it('renders key files list', () => {
     renderSection([INVESTIGATION_EVENT]);
+    expect(screen.queryByTestId('key-files-list')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /key files/i }));
     const filesList = screen.getByTestId('key-files-list');
     expect(filesList).toBeTruthy();
     expect(screen.getByText('src/auth/login.ts')).toBeTruthy();
@@ -150,8 +163,9 @@ describe('InvestigationSection', () => {
 
   it('renders open questions list', () => {
     renderSection([INVESTIGATION_EVENT]);
-    const questionsList = screen.getByTestId('open-questions-list');
-    expect(questionsList).toBeTruthy();
+    expect(screen.queryByTestId('open-questions-list')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /open questions/i }));
+    expect(screen.getByTestId('open-questions-list')).toBeTruthy();
     expect(screen.getByText('Does this affect the mobile app?')).toBeTruthy();
   });
 
@@ -199,6 +213,7 @@ describe('InvestigationSection', () => {
     };
     renderSection([noFilesEvent]);
     expect(screen.queryByTestId('key-files-list')).toBeNull();
+    expect(screen.queryByTestId('investigation-key-files-section')).toBeNull();
   });
 
   it('does not render open questions when list is empty', () => {
@@ -213,6 +228,56 @@ describe('InvestigationSection', () => {
     };
     renderSection([noQuestionsEvent]);
     expect(screen.queryByTestId('open-questions-list')).toBeNull();
+    expect(screen.queryByTestId('investigation-open-questions-section')).toBeNull();
+  });
+
+  it('keeps findings open by default while acceptance criteria and engineering spec start collapsed', () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['events', 'test-proj', '42'], [INVESTIGATION_EVENT]);
+    qc.setQueryData(['spec', 'test-proj', '42'], ENGINEERING_SPEC);
+    qc.setQueryData(['acceptance-contract', 'test-proj', '42'], ACCEPTANCE_CONTRACT);
+
+    render(
+      <QueryClientProvider client={qc}>
+        <ActiveProjectProvider initialSlug="test-proj">
+          <InvestigationSection projectSlug="test-proj" id="42" />
+        </ActiveProjectProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId('findings-content')).toBeTruthy();
+    expect(screen.getByText('Acceptance Contract')).toBeTruthy();
+    expect(
+      screen.queryByText('Findings and related sections use a consistent accordion pattern.'),
+    ).toBeNull();
+    expect(screen.getByText('Engineering Spec')).toBeTruthy();
+    expect(screen.queryByText('Build the authentication flow with token refresh.')).toBeNull();
+  });
+
+  it('renders investigation sections through accordion wrappers consistently', () => {
+    renderSection([INVESTIGATION_EVENT], ENGINEERING_SPEC);
+
+    expect(screen.getByTestId('investigation-findings-section')).toBeTruthy();
+    expect(screen.getByTestId('investigation-key-files-section')).toBeTruthy();
+    expect(screen.getByTestId('investigation-open-questions-section')).toBeTruthy();
+    expect(screen.getByTestId('investigation-trail-section')).toBeTruthy();
+  });
+
+  it('does not render a findings accordion for whitespace-only findings', () => {
+    const blankFindingsEvent: AgentEventDto = {
+      ...INVESTIGATION_EVENT,
+      payload: {
+        investigate: {
+          ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> }).investigate,
+          findings: '   ',
+        },
+      },
+    };
+
+    renderSection([blankFindingsEvent]);
+
+    expect(screen.queryByTestId('investigation-findings-section')).toBeNull();
+    expect(screen.queryByTestId('findings-content')).toBeNull();
   });
 
   it('renders the newest investigation event regardless of event order', () => {
