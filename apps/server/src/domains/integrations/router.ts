@@ -2,13 +2,13 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { parseBody } from '#shared/middleware.js';
 import { resolveCanonicalWorkItemForRoute } from '#shared/work-item-resolution.js';
+import { checkPostBackAvailability, executePostBack } from './post-back.js';
 import {
   type JiraAssignedImportRequestDto,
   type JiraImportRequestDto,
   importAssignedJiraIssues,
   importJiraIssue,
 } from './service.js';
-import { checkPostBackAvailability, executePostBack } from './post-back.js';
 
 const PostBackBodySchema = z.object({
   kind: z.enum(['prd-summary', 'investigation-summary', 'pr-link', 'needs-human']),
@@ -37,10 +37,7 @@ router.post('/:slug/integrations/jira/import-assigned-to-me', async (c) => {
 });
 
 router.get('/:slug/issues/:id/integrations/post-back/availability', async (c) => {
-  const resolved = await resolveCanonicalWorkItemForRoute(
-    c.req.param('slug'),
-    c.req.param('id'),
-  );
+  const resolved = await resolveCanonicalWorkItemForRoute(c.req.param('slug'), c.req.param('id'));
   if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status as 400 | 404);
 
   if (!resolved.data.isLocalDb) {
@@ -63,14 +60,14 @@ router.post('/:slug/issues/:id/integrations/post-back', async (c) => {
     return c.json({ error: 'invalid request body', details: body.error.flatten() }, 400);
   }
 
-  const resolved = await resolveCanonicalWorkItemForRoute(
-    c.req.param('slug'),
-    c.req.param('id'),
-  );
+  const resolved = await resolveCanonicalWorkItemForRoute(c.req.param('slug'), c.req.param('id'));
   if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status as 400 | 404);
 
   if (!resolved.data.isLocalDb) {
-    return c.json({ ok: false, error: 'no-ref', detail: 'post-back requires a local-db project' }, 422);
+    return c.json(
+      { ok: false, error: 'no-ref', detail: 'post-back requires a local-db project' },
+      422,
+    );
   }
 
   const result = await executePostBack({

@@ -63,31 +63,71 @@ export function PostBackActions({
 
   if (availability.jira) {
     if (prdText != null) {
-      actions.push({ kind: 'prd-summary', provider: 'jira', label: 'Post PRD to Jira', text: prdText });
+      actions.push({
+        kind: 'prd-summary',
+        provider: 'jira',
+        label: 'Post PRD to Jira',
+        text: prdText,
+      });
     }
     if (investigationText != null) {
-      actions.push({ kind: 'investigation-summary', provider: 'jira', label: 'Post Investigation to Jira', text: investigationText });
+      actions.push({
+        kind: 'investigation-summary',
+        provider: 'jira',
+        label: 'Post Investigation to Jira',
+        text: investigationText,
+      });
     }
     if (needsHumanSummary != null) {
-      actions.push({ kind: 'needs-human', provider: 'jira', label: 'Post Needs-Human to Jira', text: needsHumanSummary });
+      actions.push({
+        kind: 'needs-human',
+        provider: 'jira',
+        label: 'Post Needs-Human to Jira',
+        text: needsHumanSummary,
+      });
     }
     if (prLinkText != null) {
-      actions.push({ kind: 'pr-link', provider: 'jira', label: 'Post PR Link to Jira', text: prLinkText });
+      actions.push({
+        kind: 'pr-link',
+        provider: 'jira',
+        label: 'Post PR Link to Jira',
+        text: prLinkText,
+      });
     }
   }
 
   if (availability.bitbucket) {
     if (prdText != null) {
-      actions.push({ kind: 'prd-summary', provider: 'bitbucket', label: 'Post PRD to Bitbucket PR', text: prdText });
+      actions.push({
+        kind: 'prd-summary',
+        provider: 'bitbucket',
+        label: 'Post PRD to Bitbucket PR',
+        text: prdText,
+      });
     }
     if (investigationText != null) {
-      actions.push({ kind: 'investigation-summary', provider: 'bitbucket', label: 'Post Investigation to Bitbucket PR', text: investigationText });
+      actions.push({
+        kind: 'investigation-summary',
+        provider: 'bitbucket',
+        label: 'Post Investigation to Bitbucket PR',
+        text: investigationText,
+      });
     }
     if (needsHumanSummary != null) {
-      actions.push({ kind: 'needs-human', provider: 'bitbucket', label: 'Post Needs-Human to Bitbucket PR', text: needsHumanSummary });
+      actions.push({
+        kind: 'needs-human',
+        provider: 'bitbucket',
+        label: 'Post Needs-Human to Bitbucket PR',
+        text: needsHumanSummary,
+      });
     }
     if (prLinkText != null) {
-      actions.push({ kind: 'pr-link', provider: 'bitbucket', label: 'Post PR Link to Bitbucket PR', text: prLinkText });
+      actions.push({
+        kind: 'pr-link',
+        provider: 'bitbucket',
+        label: 'Post PR Link to Bitbucket PR',
+        text: prLinkText,
+      });
     }
   }
 
@@ -95,7 +135,9 @@ export function PostBackActions({
 
   return (
     <div data-testid="post-back-actions" className="flex flex-col gap-2 pt-2 border-t border-line">
-      <h3 className="text-[11px] uppercase tracking-wider text-fg-3 font-medium">Post to External</h3>
+      <h3 className="text-[11px] uppercase tracking-wider text-fg-3 font-medium">
+        Post to External
+      </h3>
       <div className="flex flex-wrap gap-2">
         {actions.map(({ kind, provider, label, text }) => {
           const key = `${provider}-${kind}`;

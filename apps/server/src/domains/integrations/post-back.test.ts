@@ -23,14 +23,10 @@ vi.mock('../../shared/projects.js', () => ({
   getProject: mockGetProject,
 }));
 
-import { postJiraComment } from '@goose-hub/core/integrations/jira/comment.js';
 import { postBitbucketComment } from '@goose-hub/core/integrations/bitbucket/comment.js';
+import { postJiraComment } from '@goose-hub/core/integrations/jira/comment.js';
 import { storeCommentRef } from '@goose-hub/core/integrations/post-back/store.js';
-import {
-  checkPostBackAvailability,
-  executePostBack,
-  sanitizePostBackText,
-} from './post-back.js';
+import { checkPostBackAvailability, executePostBack, sanitizePostBackText } from './post-back.js';
 
 describe('sanitizePostBackText', () => {
   it('strips HTML tags', () => {
@@ -228,9 +224,7 @@ describe('executePostBack', () => {
       text: '<script>alert("xss")</script>Real content',
     });
 
-    expect(postJiraComment).toHaveBeenCalledWith(
-      expect.objectContaining({ text: 'Real content' }),
-    );
+    expect(postJiraComment).toHaveBeenCalledWith(expect.objectContaining({ text: 'Real content' }));
   });
 
   it('returns empty-text error when text is blank after sanitization', async () => {

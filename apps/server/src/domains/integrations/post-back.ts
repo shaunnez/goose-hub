@@ -85,7 +85,8 @@ export async function executePostBack(input: {
       return {
         ok: false,
         error: 'no-credentials',
-        detail: 'Jira credentials not configured or post-back disabled (check JIRA_EMAIL and JIRA_API_TOKEN env vars and jira.postBack.comments config)',
+        detail:
+          'Jira credentials not configured or post-back disabled (check JIRA_EMAIL and JIRA_API_TOKEN env vars and jira.postBack.comments config)',
       };
     }
 

@@ -32,13 +32,13 @@ import {
   auditClaudeMd as defaultAuditClaudeMd,
 } from '../bootstrap/claude-md-auditor.js';
 import {
-  type InstallResult,
-  installLabels as defaultInstallLabels,
-} from '../bootstrap/label-installer.js';
-import {
   type InspectedGithubRepo,
   inspectGithubRepo as defaultInspectGithubRepo,
 } from '../bootstrap/github-repo-inspector.js';
+import {
+  type InstallResult,
+  installLabels as defaultInstallLabels,
+} from '../bootstrap/label-installer.js';
 import { type StackInfo, detectStack as defaultDetectStack } from '../bootstrap/stack-detector.js';
 import {
   applyLabels,
