@@ -329,6 +329,7 @@ export async function runOneScout(
     scoutOutput.status === 'skipped' &&
     isUnsupportedToolAvailabilitySkip(decisionSummaries) &&
     !hasFactoryEvidenceAttempt(result.events);
+  if (unsupportedToolSkipWithoutAttempt) findings = [];
   if (scoutOutput.status === 'skipped' && !unsupportedToolSkipWithoutAttempt) {
     return emitSkippedScout({
       append,
@@ -340,7 +341,10 @@ export async function runOneScout(
     });
   }
 
-  if (findings.length === 0 && !hasSuccessfulFactoryEvidenceCall(result.events)) {
+  if (
+    (findings.length === 0 || unsupportedToolSkipWithoutAttempt) &&
+    !hasSuccessfulFactoryEvidenceCall(result.events)
+  ) {
     const seedEvidence = await readSeedEvidenceSnippets(ctx.worktreePath, fullContext);
     if (seedEvidence.length > 0) {
       const retryTimeoutMs = remainingTimeoutMs(start, budgets.timeoutMs);
@@ -378,13 +382,17 @@ export async function runOneScout(
           }
           const retryOutput = normalizeScoutOutput(retryParsed.data);
           const retryFindings = retryOutput.findings;
+          let retryUnsupportedToolSkipWithoutAttempt = false;
           if (retryOutput.status === 'skipped') {
             const retryDecisionSummaries =
               retryResult.decisionSummaries.length > 0
                 ? retryResult.decisionSummaries
                 : retryOutput.decisionSummaries;
+            retryUnsupportedToolSkipWithoutAttempt =
+              isUnsupportedToolAvailabilitySkip(retryDecisionSummaries) &&
+              !hasFactoryEvidenceAttempt(retryResult.events);
             if (
-              !isUnsupportedToolAvailabilitySkip(retryDecisionSummaries) ||
+              !retryUnsupportedToolSkipWithoutAttempt ||
               hasFactoryEvidenceAttempt(retryResult.events)
             ) {
               return emitSkippedScout({
@@ -399,9 +407,10 @@ export async function runOneScout(
             decisionSummaries = retryDecisionSummaries;
           }
           if (
-            retryFindings.length > 0 ||
-            hasSuccessfulFactoryEvidenceCall(retryResult.events) ||
-            retryOutput.status === 'ok'
+            !retryUnsupportedToolSkipWithoutAttempt &&
+            (retryFindings.length > 0 ||
+              hasSuccessfulFactoryEvidenceCall(retryResult.events) ||
+              retryOutput.status === 'ok')
           ) {
             result = retryResult;
             findings = retryFindings;

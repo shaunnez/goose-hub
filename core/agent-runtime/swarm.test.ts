@@ -668,6 +668,65 @@ describe('swarm.dispatchWave', () => {
     expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(true);
   });
 
+  it('fails a tool-unavailable skip even when the scout returned findings', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-pattern': () =>
+        Promise.resolve({
+          output: {
+            findings: [
+              {
+                file: 'src/fake.ts',
+                line: 1,
+                fact: 'This finding was returned without using read/search tools.',
+                confidence: 'low',
+              },
+            ],
+            decisionSummaries: [
+              {
+                kind: 'UNCERTAINTY',
+                summary:
+                  'Could not inspect the workspace because the required Factory read/search tools (`read_file` and `search_text`) are not available in this run.',
+              },
+            ],
+            status: 'skipped',
+          },
+          decisionSummaries: [
+            {
+              kind: 'UNCERTAINTY',
+              summary:
+                'Could not inspect the workspace because the required Factory read/search tools (`read_file` and `search_text`) are not available in this run.',
+            },
+          ],
+          events: [],
+        }),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-tool-skip-with-findings',
+      scoutSpecs: [makeScoutSpec('scout-pattern')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(result.reports[0]).toMatchObject({
+      status: 'error',
+      outcome: 'failed',
+      findings: [],
+      errorReason:
+        'scout returned no findings and made no successful Factory read/search/file tool calls',
+    });
+    expect(events.some((e) => e.kind === 'swarm.scout-skipped')).toBe(false);
+    expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(true);
+  });
+
   it('retries a tool-unavailable skip with deterministic seed evidence', async () => {
     const { fn: appendEvent } = makeFakeAppendEvent();
     const worktreePath = await makeSeedWorktree();
