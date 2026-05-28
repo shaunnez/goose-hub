@@ -845,6 +845,55 @@ function reviewWorkflowRunIdsForItem(
   return [...ids];
 }
 
+const GRILL_ACTIVE_STATES = new Set(['factory:gate-pending', 'factory:grilling']);
+
+function hasGrillActivity(events: AgentEventDto[]): boolean {
+  return events.some(
+    (event) => event.kind === 'question.asked' || eventSkill(event) === 'grill-me',
+  );
+}
+
+function getOrderedEvents(events: AgentEventDto[]): AgentEventDto[] {
+  return [...events].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id - b.id,
+  );
+}
+
+function getTransitionDestination(event: AgentEventDto): string | null {
+  if (event.kind !== 'state.transitioned') return null;
+  const payload = event.payload as { to?: string; toState?: string } | null;
+  return payload?.to ?? payload?.toState ?? null;
+}
+
+function findAnsweredGrillResumeIndex(orderedEvents: AgentEventDto[]): number {
+  const latestQuestionIndex = orderedEvents.findLastIndex(
+    (event) => event.kind === 'question.asked',
+  );
+  if (latestQuestionIndex < 0) return -1;
+
+  return orderedEvents.findIndex(
+    (event, index) =>
+      index > latestQuestionIndex && getTransitionDestination(event) === 'factory:grilling',
+  );
+}
+
+function hasCompletedAnsweredGrillFlow(events: AgentEventDto[]): boolean {
+  if (!hasGrillActivity(events)) return false;
+  const orderedEvents = getOrderedEvents(events);
+  const answeredResumeIndex = findAnsweredGrillResumeIndex(orderedEvents);
+  if (answeredResumeIndex < 0) return false;
+
+  return orderedEvents.some((event, index) => {
+    if (index <= answeredResumeIndex) return false;
+    const destination = getTransitionDestination(event);
+    return (
+      destination != null &&
+      !GRILL_ACTIVE_STATES.has(destination) &&
+      destination !== 'factory:needs-human'
+    );
+  });
+}
+
 function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs-human' | 'failed' {
   const events = items.flatMap(eventFromRenderItem);
   if (events.some((event) => event.kind === 'review.wave-failed')) return 'failed';
@@ -869,6 +918,9 @@ function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs
   const verdict = (completed?.payload as { verdict?: string } | null)?.verdict;
   if (verdict === 'needs-human') return 'needs-human';
   if (verdict === 'approved' || verdict === 'needs-fix') return 'completed';
+  if (hasCompletedAnsweredGrillFlow(events)) {
+    return 'completed';
+  }
   return 'live';
 }
 
