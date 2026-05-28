@@ -10,6 +10,7 @@ const TERMINAL_EVENTS = new Set([
   'prd.drafted',
   'pr.opened',
   'parallel-implement.exhausted',
+  'parallel-implement.wp-terminal-blocked',
   'qa.completed',
   'qa.verification-blocked',
 ]);

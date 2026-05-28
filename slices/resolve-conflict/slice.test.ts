@@ -363,4 +363,43 @@ describe('runResolveConflictWorkflow', () => {
     );
     expectStateTransitionEvent('factory:needs-human');
   });
+
+  it('reuses an existing PR branch worktree when the branch is already checked out', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([PR_OPENED_EVENT] as never);
+
+    const gitExecImpl = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error(
+          "fatal: 'feature/conflict' is already checked out at '/tmp/existing-worktree'",
+        );
+      })
+      .mockReturnValueOnce('') // fetch
+      .mockReturnValueOnce('') // clean merge
+      .mockReturnValueOnce(''); // push
+
+    const mergePRImpl = vi.fn().mockResolvedValueOnce({ sha: 'abc123', merged: true });
+
+    const source = makeStateSource();
+    await runResolveConflictWorkflow(makeWorkItem(), source, 'proj', '/repo', {
+      mergePRImpl,
+      gitExecImpl,
+    });
+
+    expect(gitExecImpl).toHaveBeenNthCalledWith(2, ['fetch', 'origin'], '/tmp/existing-worktree');
+    expect(gitExecImpl).toHaveBeenNthCalledWith(
+      4,
+      ['push', 'origin', 'HEAD:refs/heads/factory/run-1'],
+      '/tmp/existing-worktree',
+    );
+    expect(gitExecImpl).not.toHaveBeenCalledWith(
+      ['worktree', 'remove', '--force', '/tmp/existing-worktree'],
+      '/repo',
+    );
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:merge-conflict',
+      'factory:retrospecting',
+    );
+  });
 });

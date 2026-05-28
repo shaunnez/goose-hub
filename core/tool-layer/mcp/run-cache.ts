@@ -45,9 +45,9 @@ const redundantReadCounters = new Map<string, Map<string, { count: number; nudge
 const totalReadCounters = new Map<string, number>();
 
 /** Minimum total reads before the redundancy ratio abort can trigger. */
-const REDUNDANCY_ABORT_MIN_READS = 10;
+const REDUNDANCY_ABORT_MIN_READS = 20;
 /** Ratio threshold at which a run is aborted for excessive redundant reads. */
-const REDUNDANCY_ABORT_RATIO = 0.4;
+const REDUNDANCY_ABORT_RATIO = 0.6;
 
 export class RedundancyAbortError extends Error {
   readonly reason = 'excessive-redundant-reads';
@@ -81,8 +81,8 @@ export interface RedundantReadRecord {
  * count plus an optional one-shot nudge message when the run first crosses
  * the per-path redundancy threshold.
  *
- * Throws `RedundancyAbortError` when more than 40% of total reads this run
- * are redundant AND the run has made at least 10 reads total.
+ * Throws `RedundancyAbortError` when more than 60% of total reads this run
+ * are redundant AND the run has made at least 20 reads total.
  */
 export function recordRead(
   runId: string,
@@ -142,13 +142,13 @@ export function readCount(runId: string, canonicalPath: string): number {
 
 /**
  * Maximum consecutive `run_tests` failures permitted on the same path
- * without an intervening Edit/Write. Hit, and the 4th attempt is blocked
+ * without an intervening Edit/Write. Hit, and the 3rd attempt is blocked
  * with a synthetic failure so the agent must inspect and edit before
  * looping again. Tuneable for flaky suites via env.
  */
 export function testRetryCap(env: NodeJS.ProcessEnv = process.env): number {
   const value = Number.parseInt(env.FACTORY_RUN_TESTS_RETRY_CAP ?? '', 10);
-  return Number.isFinite(value) && value >= 1 ? value : 3;
+  return Number.isFinite(value) && value >= 1 ? value : 2;
 }
 
 export interface TestFailureSignatureRecord {
@@ -231,7 +231,7 @@ export function normalizeRunCacheKey(input: {
           canonicalPath,
           input.args.glob ?? '',
           input.args.contextLines ?? 0,
-          input.args.maxMatches ?? 200,
+          input.args.maxMatches ?? 20,
         ],
         [canonicalPath],
       );
@@ -286,18 +286,10 @@ export function invalidateRunCacheForPaths(runId: string, rawPaths: string[]): v
     }
   }
   if (duplicateMap?.size === 0) duplicateCounters.delete(runId);
-  // Writes invalidate the retry cap for any path they touch — and for the
-  // full-suite sentinel, since the next full run may now produce different
-  // results.
-  for (const [retryKey] of retryMap ?? []) {
-    if (
-      retryKey === TEST_RETRY_ALL_KEY ||
-      changedPaths.some((changedPath) => pathsOverlap(retryKey, changedPath))
-    ) {
-      retryMap?.delete(retryKey);
-    }
-  }
-  if (retryMap?.size === 0) testRetryCounters.delete(runId);
+  // Any edit can legitimately change the next test result: a component test
+  // may fail because of its source file, helper, fixture, or setup import. Keep
+  // the cap focused on unproductive retries without edits.
+  testRetryCounters.delete(runId);
 
   // A write can legitimately change the next failure signature. Keep the
   // signature guard focused on unproductive test rotation between edits.
@@ -368,7 +360,9 @@ export function clearTestFailureCounter(runId: string, canonicalPath: string | n
   const key = normalizeTestPathKey(canonicalPath);
   const runMap = testRetryCounters.get(runId);
   if (runMap == null) return;
-  runMap.delete(key);
+  for (const existingKey of [...runMap.keys()]) {
+    if (testRetryKeysOverlap(existingKey, key)) runMap.delete(existingKey);
+  }
   if (runMap.size === 0) testRetryCounters.delete(runId);
 }
 
@@ -382,7 +376,13 @@ export function clearTestFailureSignatureCounters(runId: string): void {
  */
 export function consecutiveTestFailures(runId: string, canonicalPath: string | null): number {
   const key = normalizeTestPathKey(canonicalPath);
-  return testRetryCounters.get(runId)?.get(key) ?? 0;
+  const runMap = testRetryCounters.get(runId);
+  if (runMap == null) return 0;
+  let max = 0;
+  for (const [existingKey, count] of runMap) {
+    if (testRetryKeysOverlap(existingKey, key)) max = Math.max(max, count);
+  }
+  return max;
 }
 
 export function recordDuplicateToolCall(
@@ -455,6 +455,11 @@ function pathsOverlap(left: string, right: string): boolean {
   const b = normalizePathForOverlap(right);
   if (a === '.' || b === '.') return true;
   return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+}
+
+function testRetryKeysOverlap(left: string, right: string): boolean {
+  if (left === TEST_RETRY_ALL_KEY || right === TEST_RETRY_ALL_KEY) return true;
+  return pathsOverlap(left, right);
 }
 
 function cloneResult<T>(result: T): T {

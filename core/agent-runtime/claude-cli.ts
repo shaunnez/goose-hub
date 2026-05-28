@@ -7,11 +7,11 @@ import { recordCost, recordToolStatsForRun } from '../cost/repository.js';
 import { stageForSkill } from '../cost/skill-stage.js';
 import { getRecordDecisionTool } from '../db/repositories/project-settings.js';
 import { eventStore } from '../event-stream/store.js';
-import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.js';
 import { buildFactoryMcpConfig } from '../tool-layer/mcp/build-config.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
+import { bindToolsForAgentSpec } from '../tool-layer/tool-binding.js';
 import { emitBudgetExceededIfNeeded } from './budget-guard.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
@@ -108,17 +108,18 @@ export class ClaudeCliRuntime implements AgentRuntime {
     mkdirSync(workspaceDir, { recursive: true });
     const projectId = (spec.context.projectId as string) ?? 'unknown';
     const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
+    const toolBinding = bindToolsForAgentSpec(spec);
     // Per-run MCP config under <worktree>/.factory/mcp-config.json (ADR 0045).
     // Always written; the factory-tools server entry carries the run's
-    // identity via env. Bundle-specific servers (playwright-mcp) are
-    // merged in from their workspace-relative configs when declared.
+    // identity via env.
     const { configPath: factoryMcpConfigPath } = buildFactoryMcpConfig({
       workspaceDir,
       runId,
       projectId,
       workItemId,
       skill: spec.skill,
-      toolBundles: spec.toolBundles,
+      personaId: spec.personaId,
+      toolBundles: toolBinding.mcpServerBundles,
     });
     const recordDecisionTool = getRecordDecisionTool(projectId);
     if (spec.sandboxMode !== 'preconfigured') {
@@ -141,7 +142,32 @@ export class ClaudeCliRuntime implements AgentRuntime {
           personaId: spec.personaId,
           modelId: model,
           runtime: 'claude-cli',
+          toolBundles: spec.toolBundles,
+          toolBindingHash: toolBinding.fingerprints.toolBindingHash,
+          toolAllowlistHash: toolBinding.fingerprints.toolAllowlistHash,
+          mcpServerSetHash: toolBinding.fingerprints.mcpServerSetHash,
+          nativeToolCount: toolBinding.nativeTools.length,
+          mcpServerNames: toolBinding.mcpServerNames,
+          toolBindingWarningCount: toolBinding.warnings.length,
+          toolBindingWarnings: toolBinding.warnings,
           ...spec.extraEventPayload,
+        },
+        runId,
+        personaId: spec.personaId,
+      });
+    }
+    if (toolBinding.warnings.length > 0) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.log',
+        payload: {
+          runId,
+          skill: spec.skill,
+          stream: 'telemetry',
+          metric: 'tool_binding_warnings',
+          warningCount: toolBinding.warnings.length,
+          warnings: toolBinding.warnings,
         },
         runId,
         personaId: spec.personaId,
@@ -149,7 +175,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
     }
 
     const { contextXml } = assembleSpawnContext(spec);
-    const allowedTools = computeAllowlist(spec);
+    const allowedTools = toolBinding.allowlist;
     const mcpConfigPath = spec.mcpConfigPath ?? factoryMcpConfigPath;
 
     // Build argv array — Security rule: never use shell: true

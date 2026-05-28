@@ -12,12 +12,13 @@ import {
 } from './verify.js';
 
 const REAL_PROJECT_SLUG = 'goose-hub-self';
-const { mockRunCommand } = vi.hoisted(() => ({
+const { mockMinimalEnv, mockRunCommand } = vi.hoisted(() => ({
+  mockMinimalEnv: vi.fn((extras: Record<string, string> = {}) => extras),
   mockRunCommand: vi.fn(),
 }));
 
 vi.mock('../command-policy.js', () => ({
-  minimalEnv: () => ({}),
+  minimalEnv: (extras?: Record<string, string>) => mockMinimalEnv(extras),
   runCommand: (...args: unknown[]) => mockRunCommand(...args),
 }));
 
@@ -25,6 +26,7 @@ let workspace: string;
 let ctx: FactoryContext;
 
 beforeEach(() => {
+  mockMinimalEnv.mockClear();
   mockRunCommand.mockResolvedValue({
     status: 'ok',
     exitCode: 0,
@@ -84,6 +86,21 @@ describe('runTypecheckTool', () => {
 });
 
 describe('runTestsTool', () => {
+  it('runs tests with NODE_ENV=test so React test builds expose act()', async () => {
+    writeFileSync(join(workspace, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+    writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'demo' }));
+    writeFileSync(join(workspace, 'README.md'), '# demo\n');
+
+    await runTestsTool(ctx, {});
+
+    expect(mockMinimalEnv).toHaveBeenCalledWith({ NODE_ENV: 'test' });
+    expect(mockRunCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: { NODE_ENV: 'test' },
+      }),
+    );
+  });
+
   it('returns raw and canonical test paths for a targeted test run', async () => {
     writeFileSync(join(workspace, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
     writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'demo' }));
@@ -116,6 +133,38 @@ describe('runTestsTool', () => {
       },
     });
   });
+
+  it('rejects Playwright e2e spec paths because e2e is QA/evidence-owned', async () => {
+    writeFileSync(join(workspace, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+    writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'demo' }));
+    writeFileSync(join(workspace, 'README.md'), '# demo\n');
+    mkdirSync(join(workspace, 'apps/web/e2e'), { recursive: true });
+    writeFileSync(join(workspace, 'apps/web/e2e/issue-1107.spec.ts'), 'test("x", () => {});\n');
+
+    mockRunCommand.mockClear();
+    const result = await runTestsTool(ctx, { path: 'apps/web/e2e/issue-1107.spec.ts' });
+
+    expect(result.status).toBe('failed');
+    expect(result.stderr).toContain('QA/evidence-owned');
+    expect(mockRunCommand).not.toHaveBeenCalled();
+    expect(result.paths?.map((path) => path.path)).toEqual(['apps/web/e2e/issue-1107.spec.ts']);
+  });
+
+  it('rejects Playwright e2e directory paths because e2e is QA/evidence-owned', async () => {
+    writeFileSync(join(workspace, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+    writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'demo' }));
+    writeFileSync(join(workspace, 'README.md'), '# demo\n');
+    mkdirSync(join(workspace, 'apps/web/e2e/pipeline'), { recursive: true });
+    writeFileSync(join(workspace, 'apps/web/e2e/pipeline/seed.spec.ts'), 'test("x", () => {});\n');
+
+    mockRunCommand.mockClear();
+    const result = await runTestsTool(ctx, { path: 'apps/web/e2e/pipeline' });
+
+    expect(result.status).toBe('failed');
+    expect(result.stderr).toContain('QA/evidence-owned');
+    expect(mockRunCommand).not.toHaveBeenCalled();
+    expect(result.paths?.map((path) => path.path)).toEqual(['apps/web/e2e/pipeline']);
+  });
 });
 
 describe('runTargetedCommandTool', () => {
@@ -147,9 +196,9 @@ describe('runTestsTool retry cap', () => {
     });
   }
 
-  it('blocks the 4th consecutive failed run on the same path and emits tool.violation', async () => {
+  it('blocks the 3rd consecutive failed run on the same path and emits tool.violation', async () => {
     mockFailed();
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       const result = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
       expect(result.status).toBe('failed');
     }
@@ -157,8 +206,21 @@ describe('runTestsTool retry cap', () => {
 
     const blocked = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
     expect(blocked.status).toBe('failed');
+    expect(blocked.blocked).toBe(true);
+    expect(blocked.blockedReason).toBe('excessive_test_retries');
     expect(mockRunCommand).not.toHaveBeenCalled();
     expect(blocked.stderr).toMatch(/retry cap|consecutive failures/i);
+
+    const blockedCalls = (await import('../../../event-stream/store.js')).eventStore
+      .replay({ runId: ctx.runId, kind: 'agent.tool-call' })
+      .filter(
+        (event) =>
+          (event.payload as { tool_name?: unknown; blocked?: unknown; reason?: unknown })
+            .tool_name === 'run_tests' &&
+          (event.payload as { blocked?: unknown }).blocked === true &&
+          (event.payload as { reason?: unknown }).reason === 'excessive_test_retries',
+      );
+    expect(blockedCalls).toHaveLength(1);
 
     const violations = (await import('../../../event-stream/store.js')).eventStore
       .replay({ runId: ctx.runId, kind: 'tool.violation' })
@@ -171,9 +233,35 @@ describe('runTestsTool retry cap', () => {
   it('resets the cap after a write/edit invalidates the same path', async () => {
     const { invalidateRunCacheForPaths } = await import('../run-cache.js');
     mockFailed();
-    for (let i = 0; i < 3; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
 
     invalidateRunCacheForPaths(ctx.runId, ['apps/web/src/foo.test.ts']);
+
+    mockRunCommand.mockClear();
+    const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    expect(mockRunCommand).toHaveBeenCalledOnce();
+    expect(next.status).toBe('failed');
+  });
+
+  it('resets the cap after any source edit before rerunning the same test', async () => {
+    const { invalidateRunCacheForPaths } = await import('../run-cache.js');
+    mockFailed();
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    invalidateRunCacheForPaths(ctx.runId, ['apps/web/src/foo.ts']);
+
+    mockRunCommand.mockClear();
+    const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    expect(mockRunCommand).toHaveBeenCalledOnce();
+    expect(next.status).toBe('failed');
+  });
+
+  it('resets the cap after an unrelated edit because shared fixtures or setup may affect the test', async () => {
+    const { invalidateRunCacheForPaths } = await import('../run-cache.js');
+    mockFailed();
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    invalidateRunCacheForPaths(ctx.runId, ['apps/web/src/other.ts']);
 
     mockRunCommand.mockClear();
     const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
@@ -184,12 +272,53 @@ describe('runTestsTool retry cap', () => {
   it('counters are isolated per path', async () => {
     mockFailed();
     writeFileSync(join(workspace, 'apps/web/src/bar.test.ts'), 'test("y", () => {});\n');
-    for (let i = 0; i < 3; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
 
     mockRunCommand.mockClear();
     const other = await runTestsTool(ctx, { path: 'src/bar.test.ts' });
     expect(mockRunCommand).toHaveBeenCalledOnce();
     expect(other.status).toBe('failed');
+  });
+
+  it('blocks parent target rotation after a child test path hits the cap', async () => {
+    mockFailed();
+    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    mockRunCommand.mockClear();
+    const parent = await runTestsTool(ctx, { path: 'src' });
+
+    expect(parent.status).toBe('failed');
+    expect(mockRunCommand).not.toHaveBeenCalled();
+    expect(parent.stderr).toMatch(/retry cap|consecutive failures/i);
+  });
+
+  it('clears child counters after a covering parent test target passes', async () => {
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'failed',
+      exitCode: 1,
+      stdout: 'FAIL',
+      stderr: '',
+      durationMs: 12,
+      truncated: false,
+    });
+    mockRunCommand.mockResolvedValueOnce({
+      status: 'ok',
+      exitCode: 0,
+      stdout: 'PASS',
+      stderr: '',
+      durationMs: 12,
+      truncated: false,
+    });
+
+    await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    await runTestsTool(ctx, { path: 'src' });
+
+    mockRunCommand.mockClear();
+    mockFailed();
+    const next = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+
+    expect(mockRunCommand).toHaveBeenCalledOnce();
+    expect(next.status).toBe('failed');
   });
 
   it('blocks repeated failure signatures across different test paths', async () => {
@@ -232,17 +361,8 @@ describe('runTestsTool retry cap', () => {
       durationMs: 18,
       truncated: false,
     });
-    mockRunCommand.mockResolvedValueOnce({
-      status: 'failed',
-      exitCode: 1,
-      stdout: vitestJson('bar.test.ts'),
-      stderr: '',
-      durationMs: 18,
-      truncated: false,
-    });
 
     await runTestsTool(ctx, { path: 'src/foo.test.ts' });
-    await runTestsTool(ctx, { path: 'src/bar.test.ts' });
     const blocked = await runTestsTool(ctx, { path: 'src/bar.test.ts' });
 
     expect(blocked.status).toBe('failed');
@@ -313,7 +433,7 @@ describe('runTestsTool retry cap', () => {
 
   it('a successful run clears the failure counter for that path', async () => {
     mockFailed();
-    for (let i = 0; i < 2; i++) await runTestsTool(ctx, { path: 'src/foo.test.ts' });
+    await runTestsTool(ctx, { path: 'src/foo.test.ts' });
 
     mockRunCommand.mockResolvedValueOnce({
       status: 'ok',
@@ -328,11 +448,11 @@ describe('runTestsTool retry cap', () => {
 
     mockFailed();
     mockRunCommand.mockClear();
-    // Now should permit at least 3 more failures before blocking.
-    for (let i = 0; i < 3; i++) {
+    // Now should permit at least 2 more failures before blocking.
+    for (let i = 0; i < 2; i++) {
       const result = await runTestsTool(ctx, { path: 'src/foo.test.ts' });
       expect(result.status).toBe('failed');
     }
-    expect(mockRunCommand).toHaveBeenCalledTimes(3);
+    expect(mockRunCommand).toHaveBeenCalledTimes(2);
   });
 });

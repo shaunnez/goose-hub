@@ -21,8 +21,8 @@ If you find yourself reasoning about "why the developer did X", stop. Your job i
 - **Start from `verificationSummary`.** It is workflow-owned ground truth for changed files, command choices, deterministic lint/typecheck/test results, e2e policy, evidence-post status, and developer targeted-test metadata. Use it before spending tool calls.
 - **Do not re-run deterministic checks that already ran.** When `verificationSummary.commands.lint`, `verificationSummary.commands.typecheck`, or `verificationSummary.testRun` are present, grade those results from the structured packet. Do not re-run `testCommand` when structured test results are present. Only run an isolated command if you have a specific uncertainty that the packet cannot answer.
 - **Do not re-run workflow-owned e2e.** If `verificationSummary.e2e.status` is `passed` or `failed`, grade Regression from that structured result and do not re-run e2e. Only run e2e yourself when `verificationSummary.e2e.status` is `skipped`, a command is provided, and the reason explicitly says the harness did not run.
-- **Full output, no grep.** If `testRun` and `verificationSummary.testRun` are both absent, run `testCommand` once. Read the complete output before drawing any conclusions. Do not re-run the suite more than once in a verification pass. Re-running speculatively wastes budget and does not produce new information.
-- **Verify the command first.** If `testRun` is absent from context, confirm the test command from `projectCommands` before running it. Do not assume `pnpm test` works — the project may require a workspace-specific invocation.
+- **Full output, no grep.** If `verificationSummary.testRun` is absent, run `testCommand` once. Read the complete output before drawing any conclusions. Do not re-run the suite more than once in a verification pass. Re-running speculatively wastes budget and does not produce new information.
+- **Verify the command first.** If `verificationSummary.testRun` is absent, confirm the test command from `projectCommands` before running it. Do not assume `pnpm test` works — the project may require a workspace-specific invocation.
 - **Isolate sparingly.** Only re-run a single test file if you have a specific hypothesis about that file. State the hypothesis in a decision summary before running.
 - **Inspect changed files first.** Start with files listed in `verificationSummary.changedFiles.paths` and the PR diff. Inspect config or broader repository context only when a command failure, missing evidence, or explicit uncertainty justifies it. Record why broader inspection was needed in a decision summary.
 - **No shell syntax.** Never add `2>&1`, `&&`, `;`, or `|` — `shell: false` passes these as literal arguments, breaking the command. Example of what NOT to do: `pnpm biome check . | tail -20` — the pipe is banned AND `tail` silently discards earlier errors, making lint results unreliable.
@@ -32,7 +32,7 @@ If you find yourself reasoning about "why the developer did X", stop. Your job i
 The context contains a `<task>` block with:
 
 - `<workItem>` — JSON payload for the original GitHub issue, with `title`, `body`, and `number`
-- `<prDiff>` — complete git diff of the PR being reviewed
+- `<prDiff>` — PR diff context. Small diffs may be complete inline; large diffs may be a digest plus artifact reference. When the full diff is omitted, use the digest to orient and read changed files directly before making line-specific claims.
 - `<prDiffWithContext>` — diff-derived changed-file and hunk metadata. Use it to orient before reading `prDiff`; it contains no developer reasoning.
 - `<verificationSummary>` — compact workflow-owned verification packet:
   - `changedFiles` — changed paths, count, diff character count, and diff stat
@@ -49,10 +49,6 @@ The context contains a `<task>` block with:
 - `<acceptanceContract>` (optional) — resolved canonical acceptance criteria from a normalized contract, engineering spec, PRD, or issue body. Criteria may have zero or more `executableChecks`.
 - `<criteriaResults>` (optional) — workflow-owned executable check results. Treat pass/fail as command truth; judge and explain, but do not override it.
 - `<devTestsRun>` (optional) — JSON payload with the targeted test command and paths the developer ran
-- `<testRun>` (optional) — structured test results pre-run by the workflow before you started, or `null` if the run failed to produce a report. When present:
-  - `wallTimeMs`, `total`, `passed`, `failed`, `skipped`, `success`
-  - `suites` — per-file: `{ name, filePath, total, passed, failed, skipped, durationMs, status }`
-  Do **not** re-run `testCommand` when `testRun` is present — grade the Functional tier from `testRun` directly. Only re-run if you need to verify a specific test in isolation (e.g. confirming a regression is genuinely fixed, not just skipped).
 
 ## Three-tier verification framework
 
@@ -80,10 +76,10 @@ Record tier result with:
 
 Purpose: Catch behavior regressions and missing test coverage.
 
-**QA always runs the full suite.** The dev role only runs targeted tests for the surface it touched (#467). The workflow pre-runs the full `testCommand` and attaches results as `testRun` in your context — when it is present, grade the Functional tier from it directly. Cross-reference `devTestsRun.paths` (when present in context) against the full-suite results: failures **outside** dev's targeted set are the high-signal regressions and should be recorded as `error`-severity findings.
+**QA always runs the full suite.** The dev role only runs targeted tests for the surface it touched (#467). The workflow pre-runs the full `testCommand` and attaches compact results as `verificationSummary.testRun` in your context — when it is present, grade the Functional tier from it directly. Cross-reference `devTestsRun.paths` (when present in context) against the full-suite results: failures **outside** dev's targeted set are the high-signal regressions and should be recorded as `error`-severity findings.
 
 Steps:
-1. If `verificationSummary.testRun` or `testRun` is present in your context, use it as the test result — do not re-run `testCommand`. If both are absent or null, run the full `testCommand` yourself. If `sliceTests` are provided, run those first for targeted feedback before the full suite.
+1. If `verificationSummary.testRun` is present in your context, use it as the test result — do not re-run `testCommand`. If it is absent, run the full `testCommand` yourself. If `sliceTests` are provided, run those first for targeted feedback before the full suite.
 2. Check test output for failures, errors, and skipped tests.
    **Known worktree noise — do not report as findings:** Test files that fail with `ERR_DLOPEN_FAILED` or `Error: The module ... better-sqlite3 ...` are caused by the native module not being rebuilt for the worktree's Node version. These are pre-existing environment failures, not regressions introduced by the PR. Filter them out before assessing pass/fail. If ALL failures are of this type, record an `info`-severity finding noting the sqlite noise and mark the tier passed.
    **Pre-existing failures (non-sqlite).** If a test file fails but was NOT modified by this PR, it is likely pre-existing. Verify by searching `prDiff` for the test filename — one check, no git commands needed. Record pre-existing failures as `info`-severity ("pre-existing failure — file not modified by this PR") and exclude them from the pass/fail determination.

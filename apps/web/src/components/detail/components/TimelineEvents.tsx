@@ -31,7 +31,10 @@ import {
   EvidencePostedEvent,
   EvidenceSkippedEvent,
 } from './timeline/EvidenceEvents';
-import { AgentFixFeedbackCompleteEvent } from './timeline/FixFeedbackEvents';
+import {
+  AgentFixFeedbackCompleteEvent,
+  AgentFixFeedbackSkippedEvent,
+} from './timeline/FixFeedbackEvents';
 import {
   GateApprovedEvent,
   GateAwaitingHumanEvent,
@@ -73,6 +76,7 @@ import {
   ParallelExhaustedEvent,
   ParallelIterationStartedEvent,
   ParallelWpCommittedEvent,
+  ParallelWpContextAssembledEvent,
   ParallelWpFailedEvent,
   ParallelWpPersistedEvent,
   ParallelWpStartedEvent,
@@ -114,6 +118,7 @@ import {
   SwarmHeartbeatEvent,
   SwarmScoutCompletedEvent,
   SwarmScoutFailedEvent,
+  SwarmScoutSkippedEvent,
   SwarmScoutTimeoutEvent,
   SwarmWaveEvent,
 } from './timeline/SwarmEvents';
@@ -364,6 +369,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentImplementCompleteEvent key={event.id} event={event} />;
     case 'agent.fix-feedback-complete':
       return <AgentFixFeedbackCompleteEvent key={event.id} event={event} />;
+    case 'agent.fix-feedback-skipped':
+      return <AgentFixFeedbackSkippedEvent key={event.id} event={event} />;
     case 'agent.retry-escalated':
       return <AgentRetryEscalatedEvent key={event.id} event={event} />;
     case 'grill.question-posted':
@@ -403,6 +410,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <SwarmHeartbeatEvent key={event.id} event={event} />;
     case 'swarm.scout-completed':
       return <SwarmScoutCompletedEvent key={event.id} event={event} />;
+    case 'swarm.scout-skipped':
+      return <SwarmScoutSkippedEvent key={event.id} event={event} />;
     case 'swarm.scout-failed':
       return <SwarmScoutFailedEvent key={event.id} event={event} />;
     case 'swarm.scout-timeout':
@@ -419,12 +428,15 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <ParallelIterationStartedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-started':
       return <ParallelWpStartedEvent key={event.id} event={event} />;
+    case 'parallel-implement.wp-context-assembled':
+      return <ParallelWpContextAssembledEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-committed':
       return <ParallelWpCommittedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-persisted':
       return <ParallelWpPersistedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-failed':
     case 'parallel-implement.wp-loop-cap-hit':
+    case 'parallel-implement.wp-terminal-blocked':
     case 'parallel-implement.wp-commit-failed':
       return <ParallelWpFailedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-timeout':

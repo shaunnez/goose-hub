@@ -48,10 +48,10 @@ Written to `<worktree>/.factory/mcp-config.json` at spawn time by the runtime. T
 - `validate` — context + read/search + evidence
 - `core` — empty (no-tool skills)
 - `emergency-debug` — `Bash` only; opt-in
-- `playwright-mcp` — Microsoft's playwright-test MCP server tools
-- `decision-record-only` — legacy single-tool bundle, holdout-blocked
 
-Every agent-facing bundle is `mcp__factory-tools__*` only — no native `Read` / `Write` / `Edit` / `Glob` / `Grep` / `Bash`. Enforced by a slice test.
+Every agent-facing bundle is `mcp__factory-tools__*` only — no native `Read` / `Write` / `Edit` / `Glob` / `Grep` / `Bash`. Enforced by a slice test. The MCP `record_decision` context tool remains available to holdout roles for their own live decision summaries; there is no separate single-tool decision bundle.
+
+Playwright evidence is owned by Factory workflows through the evidence tools (`write_playwright_spec`, `run_playwright_spec`, `collect_evidence`) and project commands. There is no separate `playwright-mcp` bundle or per-run merge of `apps/web/.mcp.json`.
 
 ## GitHub-backed tools
 

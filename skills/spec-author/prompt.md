@@ -53,7 +53,7 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
 6. **`interfaceContracts`** — descriptive `name`, paste-ready `signature` (function decl, type alias, or full Zod block), and `file` it lives in. Use `requiredExports` only for real exported symbols Tier 1 must verify. ≥1 entry required when there are ≥2 WPs (cross-WP boundaries need typed contracts).
 7. **`workPackages`** — see rules below.
 8. **`executionOrder`** — DAG of batches: `[{batch: 0, wpIds: ['WP1', 'WP2']}, {batch: 1, wpIds: ['WP3']}]`. Every WP appears exactly once.
-9. **`verificationTooling`** — required when there are >2 WPs. Each tool: `name`, `command`, `expectedExitCodes`, optional `inputSpec`. `command` must be an executable repo-root command such as `pnpm vitest run apps/web/src/lib/lanes.config.test.ts`; never emit a bare file path. For Playwright specs under `apps/web/e2e`, emit a canonical repo-root command such as `pnpm exec playwright test apps/web/e2e/pipeline/<spec>.spec.ts`; for `chat.spec.ts`, include `--config playwright-chat.config.ts`. The workflow may adapt canonical repo-root commands to package-local execution internally; do not emit package-relative paths like `e2e/<spec>.spec.ts` in `verificationTooling` or `acceptanceCriteria[].executableChecks`.
+9. **`verificationTooling`** — required when there are >2 WPs. Each tool: `name`, `command`, `expectedExitCodes`, optional `inputSpec`. `command` must be executable from the repo root, such as `pnpm vitest run apps/web/src/lib/lanes.config.test.ts`; never emit a bare file path. For Playwright specs under `apps/web/e2e`, use the web package binary explicitly with a repo-root spec path: `pnpm --filter @goose-hub/web exec playwright test apps/web/e2e/pipeline/<spec>.spec.ts`; for `chat.spec.ts`, include `--config playwright-chat.config.ts`. Do not use root `pnpm exec playwright ...` commands.
 10. **`acceptanceCriteria`** — see rules below.
 11. **`constraints`** — see rules below.
 12. **`riskRegister`** — at least one risk when the spec touches `auth | session | crypto | secret` paths.
@@ -81,6 +81,10 @@ If a WP owns production `.ts` or `.tsx` files, that same WP must also include a
 relevant `*.test.ts`, `*.test.tsx`, `*.spec.ts`, or `*.spec.tsx` file in
 `filesOwned`. Do not put the test file only in `verificationTooling` or
 `acceptanceCriteria`; it must be owned by the WP that owns the production edit.
+For ordinary product fixes, this paired coverage should be unit/component
+coverage near the changed surface. Do not assign `apps/web/e2e/*.spec.ts` to an
+implement WP unless the work item or WP is explicitly about e2e/test
+infrastructure. Browser/e2e validation is owned by QA/evidence workflows.
 
 Test-only WPs are allowed. Files that are not implementation surfaces, such as
 `*.config.ts`, `*.d.ts`, `*types.ts`, `*interfaces.ts`, `*schema.ts`,

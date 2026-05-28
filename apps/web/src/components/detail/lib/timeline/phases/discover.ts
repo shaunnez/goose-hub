@@ -59,7 +59,6 @@ function resolveDiscoverPhaseStatus(
   if (events.some((event) => event.kind === 'agent.run-failed')) return 'failed';
   if (phase === 'grill') {
     if (events.some((event) => event.kind === 'grill.completed')) return 'completed';
-    if (events.some((event) => event.kind === 'grill.question-posted')) return 'completed';
   } else if (
     events.some((event) =>
       ['prd.drafted', 'prd.approved', 'prd.rejected', 'prd.revised', 'prd.declined'].includes(

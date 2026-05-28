@@ -511,7 +511,7 @@ export async function runInvestigateWorkflow(
 
       const wave1HandoffReports: unknown[] = [];
       for (const report of wave1Result.reports) {
-        if (report.status === 'ok') {
+        if (report.status === 'ok' && report.outcome !== 'skipped') {
           const storedReport = persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
             findings: report.findings,
             decisionSummaries: report.decisionSummaries,
@@ -569,7 +569,7 @@ export async function runInvestigateWorkflow(
           payload: {
             skill: 'investigate',
             runId,
-            error: `Wave incomplete — only ${wave1Result.reports.filter((report) => report.status === 'ok').length} scouts succeeded`,
+            error: `Wave incomplete — only ${wave1Result.okCount} scouts succeeded`,
           },
           runId,
         });
@@ -580,8 +580,10 @@ export async function runInvestigateWorkflow(
             'Escalated',
             'Not enough scouts succeeded — escalating to needs-human',
             [
-              `Required scouts: ${initialPlan.minSuccessfulScouts}`,
+              `Required applicable scouts: ${wave1Result.requiredOkCount}`,
+              `Applicable scouts: ${wave1Result.applicableCount}`,
               `Failed scouts: ${wave1Result.failedScouts.join(', ') || '(none)'}`,
+              `Skipped scouts: ${wave1Result.skippedScouts.join(', ') || '(none)'}`,
             ],
           ),
         );
@@ -661,7 +663,7 @@ export async function runInvestigateWorkflow(
         });
 
         for (const report of wave2Result.reports) {
-          if (report.status === 'ok') {
+          if (report.status === 'ok' && report.outcome !== 'skipped') {
             const storedReport = persistScoutReport(
               projectId,
               workItem.id,

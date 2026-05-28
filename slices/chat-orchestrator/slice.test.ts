@@ -249,7 +249,7 @@ describe('chat-orchestrator slice', () => {
     expect(result.telemetry.tokens.estimatedInput.contextSections.priorMessages).toBeGreaterThan(0);
   });
 
-  it('drops proposals for unknown tool names', async () => {
+  it('rejects output with unknown proposal tool names', async () => {
     mockInvokeOnce({
       resolve: {
         ...baseInvokeResult,
@@ -269,7 +269,11 @@ describe('chat-orchestrator slice', () => {
       history: [],
       runId: 'chat_test_run_2',
     });
-    expect(result.reply?.proposals.map((p) => p.toolName)).toEqual(['list_projects']);
+    expect(result.reply).toMatchObject({
+      say: 'I tried to reply but the structured output failed validation. Please try again.',
+      proposals: [],
+      done: false,
+    });
   });
 
   it('decodes proposal input JSON before returning dispatcher-ready proposals', async () => {

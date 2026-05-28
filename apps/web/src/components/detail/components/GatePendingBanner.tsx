@@ -5,10 +5,11 @@ import { interventionKeys, invalidateInterventionDecision } from '@/lib/query-ke
 import type { InterventionDto, InterventionOptionDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Info, ShieldAlert } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 const ACTIVE_INTERVENTION_STATUSES = ['OPEN', 'PROPOSED'] as const;
+const OPEN_INTERVENTION_REFETCH_MS = 3_000;
 
 function interventionVariant(
   interventionType: InterventionDto['interventionType'],
@@ -37,6 +38,10 @@ function targetLabel(target: string): string {
   return target.replace(/^factory:/, '').replace(/-/g, ' ');
 }
 
+function isVersionConflict(err: unknown): boolean {
+  return err instanceof Error && err.message.includes('409') && err.message.includes('Conflict');
+}
+
 interface GatePendingBannerProps {
   state?: string;
   projectSlug?: string;
@@ -55,7 +60,7 @@ export function GatePendingBanner({
   const [error, setError] = useState<string | null>(null);
   const isGateState = state != null && GATE_STATES[state] != null;
 
-  const { data: interventions = [] } = useQuery({
+  const interventionsQuery = useQuery({
     queryKey:
       projectSlug && id
         ? [...interventionKeys.issue(projectSlug, id, [...ACTIVE_INTERVENTION_STATUSES]), state]
@@ -65,6 +70,7 @@ export function GatePendingBanner({
     enabled: isGateState && !!projectSlug && !!id,
   });
 
+  const interventions = interventionsQuery.data ?? [];
   const primary = selectPrimaryIntervention(interventions);
   const isPrdReviewIntervention = primary?.interventionType === 'prd_review';
   const shouldFetchLegalTargets =
@@ -78,6 +84,14 @@ export function GatePendingBanner({
     queryFn: () => fetchLegalTargets(projectSlug ?? '', id ?? ''),
     enabled: shouldFetchLegalTargets,
   });
+
+  useEffect(() => {
+    if (!isGateState || primary?.status !== 'OPEN') return;
+    const interval = setInterval(() => {
+      void interventionsQuery.refetch();
+    }, OPEN_INTERVENTION_REFETCH_MS);
+    return () => clearInterval(interval);
+  }, [isGateState, primary?.status, interventionsQuery.refetch]);
 
   if (!isGateState || !primary || !projectSlug || !id) return null;
 
@@ -98,20 +112,38 @@ export function GatePendingBanner({
     setBusy(true);
     setError(null);
     try {
-      await decideIntervention(intervention.id, {
+      const refreshed = await interventionsQuery.refetch();
+      if (refreshed.error != null) throw refreshed.error;
+      const freshPrimary = selectPrimaryIntervention(refreshed.data ?? []);
+      if (
+        freshPrimary == null ||
+        freshPrimary.id !== intervention.id ||
+        freshPrimary.version !== intervention.version ||
+        freshPrimary.status !== intervention.status
+      ) {
+        return;
+      }
+      await decideIntervention(freshPrimary.id, {
         actionType,
         actionPayload,
-        expectedVersion: intervention.version,
+        expectedVersion: freshPrimary.version,
         decidedBy: 'operator',
         reason,
       });
       await invalidateInterventionDecision(queryClient, {
         projectSlug,
         issueId: id,
-        interventionId: intervention.id,
+        interventionId: freshPrimary.id,
       });
       onTransitioned?.();
     } catch (err) {
+      if (isVersionConflict(err)) {
+        await interventionsQuery.refetch();
+        await queryClient.invalidateQueries({
+          queryKey: interventionKeys.legalTargets(projectSlug, id),
+        });
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setBusy(false);

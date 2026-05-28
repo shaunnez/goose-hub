@@ -48,6 +48,7 @@ class MockEventSource {
 beforeEach(() => {
   MockEventSource.instances = [];
   vi.clearAllMocks();
+  mockCostsBreakdown.byRun.clear();
   vi.stubGlobal('EventSource', MockEventSource);
 });
 
@@ -62,8 +63,10 @@ vi.mock('@/lib/api', () => ({
   fetchIssueInterventions: vi.fn().mockResolvedValue([]),
 }));
 
+const mockCostsBreakdown = vi.hoisted(() => ({ byRun: new Map<string, CostRowDto>() }));
+
 vi.mock('../lib/costs', () => ({
-  useIssueCostsBreakdown: () => ({ byRun: new Map() }),
+  useIssueCostsBreakdown: () => ({ byRun: mockCostsBreakdown.byRun }),
 }));
 
 vi.mock('@/lib/usePersonaMap', () => ({
@@ -73,7 +76,7 @@ vi.mock('@/lib/usePersonaMap', () => ({
 
 // ─── Test data: two run-groups ────────────────────────────────────────────────
 
-import type { AgentEventDto, InterventionDto, InterventionEventDto } from '@/lib/types';
+import type { AgentEventDto, CostRowDto, InterventionDto, InterventionEventDto } from '@/lib/types';
 
 function renderTimeline(ui: React.ReactElement, queryClient = new QueryClient()) {
   return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
@@ -93,6 +96,27 @@ function makeRunEvent(
     payload,
     runId,
     createdAt: new Date(Date.now() + id * 1000).toISOString(),
+  };
+}
+
+function makeCostRow(runId: string, overrides: Partial<CostRowDto> = {}): CostRowDto {
+  return {
+    runId,
+    workItemId: 'wi-1',
+    stage: 'investigate',
+    skill: 'scout-schema',
+    modelId: 'model-a',
+    provider: 'codex',
+    inputTokens: 100,
+    cachedInputTokens: 0,
+    outputTokens: 50,
+    reasoningOutputTokens: 0,
+    costUsd: 0.01,
+    costLabel: 'exact',
+    cacheHitRatio: 0,
+    personaId: null,
+    createdAt: new Date(0).toISOString(),
+    ...overrides,
   };
 }
 
@@ -333,6 +357,78 @@ describe('TimelineSection — expand/collapse all', () => {
       await screen.findByText('Codex transport warning: websocket 503; run recovered'),
     ).toBeTruthy();
     expect(screen.queryByText(rawWarning)).toBeNull();
+  });
+
+  it('uses swarm scout events, not lifecycle completion, for scout row status badges', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [
+        makeRunEvent(1, 'run-investigate:scout:scout-schema:0', 'agent.run-started', {
+          skill: 'scout-schema',
+        }),
+        makeRunEvent(2, 'run-investigate:scout:scout-schema:0', 'swarm.scout-skipped', {
+          scoutName: 'scout-schema',
+          skippedReason: 'No schema boundary applies',
+        }),
+        makeRunEvent(3, 'run-investigate:scout:scout-schema:0', 'agent.run-completed', {
+          skill: 'scout-schema',
+        }),
+        makeRunEvent(4, 'run-investigate:scout:scout-code-path:1', 'agent.run-started', {
+          skill: 'scout-code-path',
+        }),
+        makeRunEvent(5, 'run-investigate:scout:scout-code-path:1', 'swarm.scout-failed', {
+          scoutName: 'scout-code-path',
+          errorReason: 'no evidence',
+        }),
+        makeRunEvent(6, 'run-investigate:scout:scout-code-path:1', 'agent.run-completed', {
+          skill: 'scout-code-path',
+        }),
+      ],
+      hasMore: false,
+    });
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    expect(await screen.findByText('Skipped')).toBeTruthy();
+    expect(await screen.findByText('Failed')).toBeTruthy();
+  });
+
+  it('aggregates base and evidence-retry costs in the collapsed scout row', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    const baseRunId = 'run-investigate:scout:scout-schema:0';
+    const retryRunId = `${baseRunId}:evidence-retry`;
+    mockCostsBreakdown.byRun.set(
+      baseRunId,
+      makeCostRow(baseRunId, { inputTokens: 100, outputTokens: 50, costUsd: 0.01 }),
+    );
+    mockCostsBreakdown.byRun.set(
+      retryRunId,
+      makeCostRow(retryRunId, { inputTokens: 40, outputTokens: 10, costUsd: 0.02 }),
+    );
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [
+        makeRunEvent(1, baseRunId, 'agent.run-started', { skill: 'scout-schema' }),
+        makeRunEvent(2, baseRunId, 'agent.run-completed', { skill: 'scout-schema' }),
+        makeRunEvent(3, retryRunId, 'agent.run-started', { skill: 'scout-schema' }),
+        makeRunEvent(4, retryRunId, 'swarm.scout-completed', {
+          scoutName: 'scout-schema',
+          findingsCount: 0,
+        }),
+        makeRunEvent(5, retryRunId, 'agent.run-completed', { skill: 'scout-schema' }),
+      ],
+      hasMore: false,
+    });
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    const badges = await screen.findAllByTestId('cost-badge');
+    expect(
+      badges.some(
+        (badge) => badge.textContent?.includes('200') && badge.textContent.includes('$0.03'),
+      ),
+    ).toBe(true);
   });
 
   it('renders non-lifecycle terminal runs with transport warnings as recovered', async () => {

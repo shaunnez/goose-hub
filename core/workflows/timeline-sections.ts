@@ -77,6 +77,7 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'agent.implement-complete': 'implementation',
   'agent.fix-feedback-complete': 'implementation',
   'agent.fix-feedback-skipped': 'implementation',
+  'parallel-implement.wp-context-assembled': 'implementation',
   'parallel-implement.wp-persisted': 'implementation',
   'pr.opened': 'implementation',
   'decompose.completed': 'decompose',
@@ -147,6 +148,9 @@ export const RUNTIME_INHERIT_TIMELINE_EVENT_KINDS = new Set<string>([
 ]);
 
 const INTENTIONALLY_SYSTEM_EVENT_KINDS = new Set<string>([
+  'github.issue.opened',
+  'github.label.changed',
+  'github.label-mirror-warning',
   'milestone.activated',
   'system.note',
   'project.budget-exceeded',
@@ -198,6 +202,7 @@ const DIRECT_TIMELINE_EVENT_KINDS = new Set<string>([
   'prd.lifecycle-routed',
   'swarm.heartbeat',
   'swarm.scout-completed',
+  'swarm.scout-skipped',
   'swarm.scout-timeout',
   'swarm.scout-failed',
   'swarm.wave-completed',
@@ -205,9 +210,11 @@ const DIRECT_TIMELINE_EVENT_KINDS = new Set<string>([
   'swarm.wave-halted',
   'parallel-implement.iteration-started',
   'parallel-implement.wp-started',
+  'parallel-implement.wp-context-assembled',
   'parallel-implement.wp-committed',
   'parallel-implement.wp-failed',
   'parallel-implement.wp-loop-cap-hit',
+  'parallel-implement.wp-terminal-blocked',
   'parallel-implement.wp-timeout',
   'parallel-implement.wp-commit-failed',
   'parallel-implement.exhausted',

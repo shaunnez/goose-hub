@@ -94,11 +94,6 @@ export interface RoleModel {
   advisorProvider?: ModelProvider;
 }
 
-export interface ToolAllowlist {
-  bundles: string[];
-  extras?: string[];
-}
-
 export interface CoachPolicy {
   /** Whether the auto-trigger is active. Default false in supervised mode. */
   enabled: boolean;
@@ -117,7 +112,6 @@ export interface AgentConfig {
   runtime: 'claude-cli' | 'codex-cli' | 'auto';
   rolesModels: Partial<Record<Role, RoleModel>>;
   fallbackPolicy: Record<string, FallbackPolicy>;
-  toolAllowlists: Partial<Record<Role, ToolAllowlist>>;
   advisorMode: {
     enabled: boolean;
     triggerOn: { priorities: string[] };

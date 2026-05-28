@@ -223,6 +223,7 @@ export function extractPhaseTimes(items: RenderItem[]): {
       event.kind === 'agent.investigation-complete' ||
       event.kind === 'agent.run-completed' ||
       event.kind === 'agent.run-failed' ||
+      event.kind === 'parallel-implement.wp-terminal-blocked' ||
       event.kind === 'swarm.wave-halted'
     ) {
       if (endedAt == null || ms > new Date(endedAt).getTime()) endedAt = event.createdAt;

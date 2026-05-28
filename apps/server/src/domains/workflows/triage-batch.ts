@@ -11,7 +11,7 @@ import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-tra
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
-import type { StateSource } from '@goose-hub/core/state-source/interface.js';
+import type { StateSource, WorkItemType } from '@goose-hub/core/state-source/interface.js';
 import { targetStateForTriage } from '@goose-hub/core/workflows/triage-routing.js';
 import { type VaguenessScore, scoreVagueness } from '@goose-hub/core/workflows/vagueness-gate.js';
 import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
@@ -36,6 +36,14 @@ function buildTriageComment(
     .map((c) => `- ${c.repo} (${c.confidence}%, ${c.evidence}) [tier ${c.tier}]`)
     .join('\n');
   return `<!-- factory:system -->\n**Triage complete**\nType: ${type} | Priority: ${priority}\n\n**Repo candidates:**\n${candidateLines || '- none'}`;
+}
+
+function typeFromLabels(labels: readonly string[]): WorkItemType | null {
+  if (labels.includes('type:bug')) return 'bug';
+  if (labels.includes('type:feature')) return 'feature';
+  if (labels.includes('type:chore')) return 'chore';
+  if (labels.includes('type:research')) return 'research';
+  return null;
 }
 
 function readReposContext(slug: string): string {
@@ -315,7 +323,9 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     // Only stamp type on first triage — never reclassify an already-typed item.
     // `WorkItem.type` is normalized with a default, so label presence is the
     // source of truth for whether this item was explicitly typed already.
-    if (!itemLabels.some((label) => label.startsWith('type:'))) {
+    const existingType = typeFromLabels(itemLabels);
+    const effectiveType = existingType ?? triageOutput.type;
+    if (existingType == null) {
       await stateSource.setLabelInGroup(item.externalId, 'type', triageOutput.type);
     }
     await stateSource.setLabelInGroup(
@@ -323,7 +333,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       'priority',
       mapPriority(triageOutput.priority),
     );
-    const vagueness = scoreVagueness({ ...item, type: triageOutput.type });
+    const vagueness = scoreVagueness({ ...item, type: effectiveType });
     const routingLabels = await syncVaguenessLabels({
       source: stateSource,
       itemId: item.externalId,
@@ -333,7 +343,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
 
     // Post comment
     const comment = buildTriageComment(
-      triageOutput.type,
+      effectiveType,
       triageOutput.priority,
       repoMatchOutput.candidates,
     );
@@ -344,7 +354,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       projectId,
       workItemId,
       kind: 'agent.triage-complete',
-      payload: { triage: triageOutput, repoMatch: repoMatchOutput },
+      payload: { triage: { ...triageOutput, type: effectiveType }, repoMatch: repoMatchOutput },
       runId,
     });
 
@@ -359,7 +369,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       runId,
     });
 
-    const finalState = targetStateForTriage(triageOutput.type, routingLabels);
+    const finalState = targetStateForTriage(effectiveType, routingLabels);
     await stateSource.transitionState(item.externalId, 'factory:accepted', finalState);
     emitStateTransitionEvent({
       projectId,

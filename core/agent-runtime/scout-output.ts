@@ -26,7 +26,7 @@ const ScoutDecisionSummarySchema = z.object({
   evidence: z.string().optional(),
 });
 
-export const ScoutStatusSchema = z.enum(['ok', 'timeout', 'error']);
+export const ScoutStatusSchema = z.enum(['ok', 'skipped', 'timeout', 'error']);
 
 export const ScoutOutputSchema = z.object({
   findings: z.array(ScoutFindingSchema),

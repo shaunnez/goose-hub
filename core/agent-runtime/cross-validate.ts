@@ -45,7 +45,7 @@ export function crossValidate(reports: ScoutReport[]): CrossValidationResult {
   // Group findings by `file::line` (line absent → "?").
   const groups = new Map<string, ContradictionFact[]>();
   for (const report of reports) {
-    if (report.status !== 'ok') continue;
+    if (report.status !== 'ok' || report.outcome === 'skipped') continue;
     for (const finding of report.findings) {
       const key = `${finding.file}::${finding.line ?? '?'}`;
       let arr = groups.get(key);

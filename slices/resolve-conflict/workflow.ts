@@ -23,6 +23,7 @@ import config from '@goose-hub/skills/resolve-conflict/skill.config.js';
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 
 const CONFLICT_MARKER_RE = /^(<{7}|={7}|>{7})/m;
+const ALREADY_CHECKED_OUT_RE = /already checked out at '([^']+)'/;
 
 type GitExec = (args: string[], cwd: string) => string;
 
@@ -96,13 +97,21 @@ export async function runResolveConflictWorkflow(
   };
 
   const runId = crypto.randomUUID();
-  const wtPath = join(WORKSPACES_DIR, runId);
+  let wtPath = join(WORKSPACES_DIR, runId);
+  let createdWorktree = false;
   mkdirSync(WORKSPACES_DIR, { recursive: true });
   const projectConfig = await getProjectBySlug(slug);
 
   try {
     // Worktree on the PR branch (committable, not detached).
-    gitExecImpl(['worktree', 'add', wtPath, branch], repoRoot);
+    try {
+      gitExecImpl(['worktree', 'add', wtPath, branch], repoRoot);
+      createdWorktree = true;
+    } catch (err) {
+      const existingPath = ALREADY_CHECKED_OUT_RE.exec(String(err))?.[1];
+      if (existingPath == null) throw err;
+      wtPath = existingPath;
+    }
 
     gitExecImpl(['fetch', 'origin'], wtPath);
 
@@ -246,10 +255,12 @@ export async function runResolveConflictWorkflow(
       ),
     );
   } finally {
-    try {
-      gitExecImpl(['worktree', 'remove', '--force', wtPath], repoRoot);
-    } catch {
-      // best-effort cleanup
+    if (createdWorktree) {
+      try {
+        gitExecImpl(['worktree', 'remove', '--force', wtPath], repoRoot);
+      } catch {
+        // best-effort cleanup
+      }
     }
   }
 }

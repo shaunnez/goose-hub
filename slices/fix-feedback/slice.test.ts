@@ -70,7 +70,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 
 // Import after mocks
-import { runFixFeedbackWorkflow } from './workflow.js';
+import { parseBaselineVerificationCommand, runFixFeedbackWorkflow } from './workflow.js';
 
 function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
@@ -192,6 +192,34 @@ function makeQaCompletedEvent(passed = false) {
   };
 }
 
+function makeToolCallEvent(
+  runId: string,
+  toolName: string,
+  status: 'ok' | 'failed',
+  path: string,
+  id = 3,
+) {
+  return {
+    id,
+    kind: 'agent.tool-call' as EventKind,
+    payload: {
+      tool_name: toolName,
+      status,
+      raw_path: path,
+      canonical_path: { path },
+      tool_input: {
+        path,
+        rawPaths: [path],
+        paths: [path],
+      },
+    },
+    projectId: 'proj',
+    workItemId: 'github:owner/repo#42',
+    createdAt: new Date().toISOString(),
+    runId,
+  };
+}
+
 describe('runFixFeedbackWorkflow', () => {
   let stateSource: StateSource;
 
@@ -211,6 +239,28 @@ describe('runFixFeedbackWorkflow', () => {
     vi.mocked(eventStore.appendEvent).mockReturnValue({ id: 1 } as ReturnType<
       typeof eventStore.appendEvent
     >);
+  });
+
+  it('parses baseline verification commands as argv without shell metacharacters', () => {
+    expect(
+      parseBaselineVerificationCommand('pnpm --filter @goose-hub/web test:e2e:pipeline'),
+    ).toEqual({
+      command: 'pnpm',
+      args: ['--filter', '@goose-hub/web', 'test:e2e:pipeline'],
+      display: 'pnpm --filter @goose-hub/web test:e2e:pipeline',
+    });
+    expect(
+      parseBaselineVerificationCommand('pnpm test --reporter=json apps/web/src/foo.test.ts'),
+    ).toMatchObject({
+      command: 'pnpm',
+      args: ['test', '--reporter=json', 'apps/web/src/foo.test.ts'],
+    });
+  });
+
+  it('rejects baseline commands that would require shell interpretation', () => {
+    expect(parseBaselineVerificationCommand('pnpm test; curl https://example.com')).toBeNull();
+    expect(parseBaselineVerificationCommand('npm test')).toBeNull();
+    expect(parseBaselineVerificationCommand('pnpm dlx arbitrary-tool')).toBeNull();
   });
 
   it('escalates to needs-human when no pr.opened event exists', async () => {
@@ -409,6 +459,221 @@ describe('runFixFeedbackWorkflow', () => {
 
     expect(eventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'agent.fix-feedback-complete' }),
+    );
+  });
+
+  it('escalates when written repair tests lack a post-edit run_tests success', async () => {
+    const replay = vi.mocked(eventStore.replay);
+    const initialEvents = [makePrOpenedEvent(), makeQaCompletedEvent()];
+    replay.mockReturnValueOnce(initialEvents);
+    const customRuntime: AgentRuntime = {
+      run: vi.fn().mockImplementation(async (spec) => {
+        replay.mockReturnValue([
+          ...initialEvents,
+          makeToolCallEvent(spec.runId, 'edit_file', 'ok', 'src/utils.test.ts', 3),
+          makeToolCallEvent(spec.runId, 'run_tests', 'failed', 'src/utils.test.ts', 4),
+        ]);
+        return {
+          output: makeImplementOutput({
+            testsWritten: [{ path: 'src/utils.test.ts', cases: 1 }],
+            testsRun: { command: 'pnpm test', paths: ['src/utils.test.ts'] },
+          }),
+          decisionSummaries: [],
+          events: [],
+        };
+      }),
+    };
+
+    await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo', {
+      runtime: customRuntime,
+    });
+
+    expect(mockOrchestratorCommitAll).not.toHaveBeenCalled();
+    expect(stateSource.transitionState).toHaveBeenLastCalledWith(
+      '42',
+      'factory:in-progress',
+      'factory:needs-human',
+    );
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({
+          failureKind: 'verification-failed',
+          error: expect.stringContaining('exact-file run_tests success'),
+        }),
+      }),
+    );
+  });
+
+  it('routes regression-unrelated QA failures to needs-human instead of issue repair', async () => {
+    const workItem = makeWorkItem();
+    const compareBaseline = vi.fn().mockResolvedValue({
+      status: 'same-failures-on-base',
+      feedback: 'Baseline comparison: same failures on origin/main',
+    });
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makePrOpenedEvent(),
+      {
+        ...makeQaCompletedEvent(false),
+        payload: {
+          verdict: 'fail',
+          overallScore: 40,
+          threshold: 70,
+          failureCategory: 'regression-unrelated',
+          tierResults: {
+            structural: { passed: true, findings: [] },
+            functional: { passed: true, findings: [] },
+            regression: {
+              passed: false,
+              findings: [
+                {
+                  tier: 'regression',
+                  severity: 'error',
+                  description: 'Global e2e seed fails on base',
+                  suggestion: 'Fix pipeline seed data',
+                },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo', {
+      baselineRegressionComparisonImpl: compareBaseline,
+    });
+
+    expect(compareBaseline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        worktreePath: '/work/wt',
+        baseBranch: 'main',
+      }),
+    );
+    expect(mockClaudeCliRun).not.toHaveBeenCalled();
+    expect(stateSource.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-fix',
+      'factory:needs-human',
+    );
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.fix-feedback-skipped',
+        payload: expect.objectContaining({
+          reason: 'baseline-red-global',
+          sourceFeedback: expect.stringContaining('regression suite failed'),
+        }),
+      }),
+    );
+  });
+
+  it('skips prompt-contract regression failures without launching repair', async () => {
+    const workItem = makeWorkItem();
+    const compareBaseline = vi.fn();
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makePrOpenedEvent(),
+      {
+        ...makeQaCompletedEvent(false),
+        payload: {
+          verdict: 'fail',
+          overallScore: 0,
+          threshold: 70,
+          deterministic: true,
+          agentSkipped: true,
+          failureCategory: 'regression-unrelated',
+          tierResults: {
+            structural: { passed: true, findings: [] },
+            functional: { passed: true, findings: [] },
+            regression: {
+              passed: false,
+              command: 'pnpm test',
+              findings: [
+                {
+                  tier: 'regression',
+                  severity: 'error',
+                  description:
+                    'Regression [escalate]: FAIL skills/implement/slice.test.ts > implement prompt > bounds frontend evidence discovery when e2e support is missing or unclear',
+                  suggestion: 'Update brittle prompt contract assertion.',
+                },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo', {
+      baselineRegressionComparisonImpl: compareBaseline,
+    });
+
+    expect(compareBaseline).not.toHaveBeenCalled();
+    expect(mockClaudeCliRun).not.toHaveBeenCalled();
+    expect(stateSource.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-fix',
+      'factory:needs-human',
+    );
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.fix-feedback-skipped',
+        payload: expect.objectContaining({
+          reason: 'prompt-contract-regression',
+          sourceFeedback: expect.stringContaining('prompt-contract'),
+        }),
+      }),
+    );
+  });
+
+  it('repairs regression-unrelated QA failures when baseline comparison is head-only', async () => {
+    const workItem = makeWorkItem();
+    const compareBaseline = vi.fn().mockResolvedValue({
+      status: 'head-only-failure',
+      feedback: 'Baseline comparison: regression passed on origin/main',
+    });
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makePrOpenedEvent(),
+      {
+        ...makeQaCompletedEvent(false),
+        payload: {
+          verdict: 'fail',
+          overallScore: 40,
+          threshold: 70,
+          failureCategory: 'regression-unrelated',
+          tierResults: {
+            structural: { passed: true, findings: [] },
+            functional: { passed: true, findings: [] },
+            regression: {
+              passed: false,
+              findings: [
+                {
+                  tier: 'regression',
+                  severity: 'error',
+                  description: 'Regression [escalate]: failing head-only suite',
+                  suggestion: 'Repair the regression',
+                },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+    mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo', {
+      baselineRegressionComparisonImpl: compareBaseline,
+    });
+
+    expect(mockClaudeCliRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          advisorFeedback: expect.stringContaining('head-only'),
+        }),
+      }),
+    );
+    expect(stateSource.transitionState).toHaveBeenNthCalledWith(
+      1,
+      '42',
+      'factory:needs-fix',
+      'factory:in-progress',
     );
   });
 

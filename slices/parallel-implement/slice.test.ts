@@ -27,6 +27,7 @@ import { buildParallelPrBody } from './parallel-helpers.js';
 import { runParallelImplementWorkflow } from './workflow.js';
 import { resolveImplementWpBudget, resolveImplementWpControl } from './wp-budget.js';
 import { runOneWpBuilder } from './wp-builder.js';
+import { buildImplementWpContextFromSpec, commandMentionsWpFile } from './wp-context.js';
 
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
   selectPersona: vi.fn().mockReturnValue({
@@ -212,6 +213,175 @@ function makeAppendEvent(): {
     events,
   };
 }
+
+describe('parallel-implement WP spec context handoff', () => {
+  it('filters #1080-shaped spec material to current and dependency WP contracts', () => {
+    const wp1: WorkPackage = {
+      id: 'WP1',
+      filesOwned: [
+        { path: 'apps/web/src/components/detail/overview-workflow-summary.ts', status: 'new' },
+        {
+          path: 'apps/web/src/components/detail/overview-workflow-summary.test.ts',
+          status: 'new',
+        },
+      ],
+      changes: 'Build the overview workflow summary helper and focused tests.',
+      dependsOn: [],
+      builderTier: 'sonnet',
+    };
+    const wp2 = makeWp('WP2', ['apps/web/src/components/detail/costs.ts']);
+    const wp3: WorkPackage = {
+      ...makeWp('WP3', ['apps/web/src/components/detail/OverviewSection.tsx']),
+      dependsOn: ['WP1'],
+    };
+    const spec: EngineeringSpec = {
+      ...makeSpec([wp1, wp2, wp3]),
+      objective: 'Show workflow, cost, and review summaries on the overview page.',
+      functionalRequirements: [
+        { id: 'FR1', statement: 'Overview workflow summary displays pipeline status.' },
+        { id: 'FR2', statement: 'Costs summary displays cost totals.' },
+        { id: 'FR3', statement: 'WP10 displays unrelated future workflow data.' },
+      ],
+      interfaceContracts: [
+        {
+          name: 'Overview workflow summary builder',
+          signature: 'export function buildOverviewWorkflowSummary(events: AgentEvent[]): Summary',
+          file: 'apps/web/src/components/detail/overview-workflow-summary.ts',
+          requiredExports: [{ name: 'buildOverviewWorkflowSummary' }],
+          lineRange: null,
+        },
+        {
+          name: 'Costs summary builder',
+          signature: 'export function buildCostsSummary(events: AgentEvent[]): Summary',
+          file: 'apps/web/src/components/detail/costs.ts',
+          requiredExports: [{ name: 'buildCostsSummary' }],
+          lineRange: null,
+        },
+        {
+          name: 'OverviewSection consumer',
+          signature: 'export function OverviewSection(props: Props): JSX.Element',
+          file: 'apps/web/src/components/detail/OverviewSection.tsx',
+          requiredExports: [{ name: 'OverviewSection' }],
+          lineRange: null,
+        },
+      ],
+      constraints: [
+        {
+          kind: 'output-format',
+          name: 'summary shape',
+          source:
+            'apps/web/src/components/detail/overview-workflow-summary.ts:buildOverviewWorkflowSummary',
+        },
+        {
+          kind: 'output-format',
+          name: 'cost shape',
+          source: 'apps/web/src/components/detail/costs.ts:buildCostsSummary',
+        },
+      ],
+      verificationTooling: [
+        {
+          name: 'workflow summary',
+          command: 'pnpm vitest run overview-workflow-summary',
+          expectedExitCodes: [0],
+          inputSpec: null,
+        },
+        {
+          name: 'costs',
+          command: 'pnpm vitest run costs',
+          expectedExitCodes: [0],
+          inputSpec: null,
+        },
+        {
+          name: 'overview section',
+          command: 'pnpm vitest run -t OverviewSection',
+          expectedExitCodes: [0],
+          inputSpec: null,
+        },
+      ],
+      acceptanceCriteria: [
+        {
+          id: 'AC1',
+          statement: 'Overview workflow summary handles running, failed, and complete states.',
+          executableChecks: [
+            { id: 'AC1-check', command: 'pnpm vitest run overview-workflow-summary' },
+          ],
+          crossCutting: false,
+        },
+        {
+          id: 'AC2',
+          statement: 'Costs are displayed.',
+          executableChecks: [{ id: 'AC2-check', command: 'pnpm vitest run costs' }],
+          crossCutting: false,
+        },
+        {
+          id: 'AC10',
+          statement: 'WP10 handles unrelated future workflow data.',
+          crossCutting: false,
+        },
+        {
+          id: 'AC3',
+          statement: 'No overview regression.',
+          crossCutting: true,
+        },
+      ],
+    };
+
+    const wp1Context = buildImplementWpContextFromSpec({
+      spec,
+      wp: wp1,
+      pipelineRunId: 'pipeline-1080',
+    });
+    expect(wp1Context.specContext.interfaceContracts.map((contract) => contract.name)).toEqual([
+      'Overview workflow summary builder',
+    ]);
+    expect(wp1Context.specContext.functionalRequirements.map((req) => req.id)).toEqual(['FR1']);
+    expect(wp1Context.verificationCommands.map((check) => check.command)).toEqual([
+      'pnpm vitest run overview-workflow-summary',
+    ]);
+    expect(wp1Context.acceptanceContract.criteria.map((criterion) => criterion.id)).toEqual([
+      'AC1',
+      'AC3',
+    ]);
+
+    const wp3Context = buildImplementWpContextFromSpec({
+      spec,
+      wp: wp3,
+      pipelineRunId: 'pipeline-1080',
+    });
+    expect(wp3Context.specContext.interfaceContracts.map((contract) => contract.name)).toEqual([
+      'Overview workflow summary builder',
+      'OverviewSection consumer',
+    ]);
+    expect(wp3Context.specContext.dependencyFilesOwned).toEqual([
+      'apps/web/src/components/detail/overview-workflow-summary.ts',
+      'apps/web/src/components/detail/overview-workflow-summary.test.ts',
+    ]);
+    expect(wp3Context.verificationCommands.map((check) => check.command)).toEqual([
+      'pnpm vitest run -t OverviewSection',
+    ]);
+  });
+
+  it('matches verification commands by path, basename, stem, and component-style test name', () => {
+    expect(
+      commandMentionsWpFile('pnpm vitest run apps/web/src/components/detail/costs.ts', [
+        'apps/web/src/components/detail/costs.ts',
+      ]),
+    ).toBe(true);
+    expect(
+      commandMentionsWpFile('pnpm vitest run overview-workflow-summary', [
+        'apps/web/src/components/detail/overview-workflow-summary.test.ts',
+      ]),
+    ).toBe(true);
+    expect(
+      commandMentionsWpFile('pnpm vitest run -t OverviewSection', [
+        'apps/web/src/components/detail/overview-section.tsx',
+      ]),
+    ).toBe(true);
+    expect(commandMentionsWpFile('pnpm vitest run captcha.spec.ts', ['core/api.ts'])).toBe(false);
+    expect(commandMentionsWpFile('pnpm vitest run roadmap.spec.ts', ['core/map.ts'])).toBe(false);
+    expect(commandMentionsWpFile('pnpm vitest run oauth.spec.ts', ['core/auth.ts'])).toBe(false);
+  });
+});
 
 describe('implement-wp budget sizing', () => {
   it('derives per-WP budgets from project config and applies global caps', () => {
@@ -599,6 +769,97 @@ describe('parallel-implement repo-relative path normalization', () => {
     }
   });
 
+  it('blocks a WP before spawning implement-wp when dependency preflight fails', async () => {
+    const repoPath = makeTempRepo(['apps/web/src/foo.ts']);
+    const issueWorktree = makeTempRepo(['apps/web/src/foo.ts']);
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts']);
+    const spec = makeSpec([makeWp('WP1', ['apps/web/src/foo.ts'])]);
+    const verified: string[] = [];
+    const iterations: Array<{ wpId: string; status: string; errorReason?: string }> = [];
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const stateSource = makeStateSource();
+    let runtimeCalled = false;
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        makeWorkItem({ priority: 'medium' }),
+        spec,
+        'pipeline-run-preflight',
+        stateSource,
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: {
+            run: async () => {
+              runtimeCalled = true;
+              throw new Error('runtime should not be called');
+            },
+          },
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          createIssueWorktreeImpl: () => issueWorktree,
+          createWpWorktreeImpl: () => scratchWorktree,
+          prewarmWorktreeImpl: () => undefined,
+          verifyWorktreeDependenciesImpl: (worktreePath) => {
+            verified.push(worktreePath);
+            if (worktreePath === scratchWorktree) {
+              throw new Error(
+                'worktree dependencies unavailable: @goose-hub/web playwright binary not resolvable',
+              );
+            }
+          },
+          cleanupWpWorktreesImpl: () => undefined,
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: (_runId, wpId, _iteration, status, errorReason) => {
+            iterations.push({ wpId, status, errorReason });
+          },
+          getLastStatusImpl: () => null,
+          appendEvent,
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+        },
+      );
+
+      expect(result.status).toBe('failed');
+      if (result.status !== 'failed') throw new Error('expected dependency preflight failure');
+      expect(result.errorReason).toContain('@goose-hub/web playwright binary not resolvable');
+      expect(runtimeCalled).toBe(false);
+      expect(verified).toEqual([issueWorktree, scratchWorktree]);
+      expect(iterations).toContainEqual({
+        wpId: 'WP1',
+        status: 'failed',
+        errorReason:
+          'worktree dependencies unavailable: @goose-hub/web playwright binary not resolvable',
+      });
+      expect(events.find((event) => event.kind === 'parallel-implement.wp-failed')).toMatchObject({
+        payload: {
+          wpId: 'WP1',
+          failureKind: 'terminal-blocker',
+          decisionKind: 'BLOCKER',
+        },
+      });
+      expect(
+        events.find((event) => event.kind === 'parallel-implement.wp-terminal-blocked'),
+      ).toMatchObject({
+        payload: {
+          wpId: 'WP1',
+          decisionKind: 'BLOCKER',
+        },
+      });
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
   it('commits only observed changed files, so uncreated filesOwned paths do not break WP commit', async () => {
     const repoPath = makeGitRepo({ 'apps/web/src/foo.ts': 'export const foo = 1;\n' });
     const issueWorktree = makeTempRepo();
@@ -928,6 +1189,102 @@ describe('parallel-implement repo-relative path normalization', () => {
 });
 
 describe('implement-wp ownership gate', () => {
+  it('stops retrying when a WP returns a terminal TOOL_FAILURE decision', async () => {
+    const repoPath = makeTempRepo(['core/a.ts']);
+    const issueWorktree = makeTempRepo(['core/a.ts']);
+    const scratchWorktree = makeTempRepo(['core/a.ts']);
+    const spec = makeSpec([makeWp('WP1', ['core/a.ts'])]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const stateSource = makeStateSource();
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+    const iterations: Array<{ wpId: string; status: string; reason?: string }> = [];
+    let runtimeCalls = 0;
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        makeWorkItem({ priority: 'medium' }),
+        spec,
+        'pipeline-terminal-tool-failure',
+        stateSource,
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: {
+            run: async () => {
+              runtimeCalls++;
+              const output: ImplementWpOutput = {
+                wpId: 'WP1',
+                plan: 'Cannot verify while harness is unavailable',
+                filesWritten: [],
+                testsWritten: [],
+                testsRun: { command: 'not run', paths: [] },
+                confidence: 'high',
+                decisionSummaries: [{ kind: 'TOOL_FAILURE', summary: 'test harness unavailable' }],
+              };
+              return { output, decisionSummaries: [], events: [] };
+            },
+          },
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          createIssueWorktreeImpl: () => issueWorktree,
+          createWpWorktreeImpl: () => scratchWorktree,
+          cleanupWpWorktreesImpl: () => undefined,
+          orchestratorCommitWpImpl: vi.fn(),
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: (_runId, wpId, _iteration, status, reason) => {
+            iterations.push({ wpId, status, reason });
+          },
+          getLastStatusImpl: (_runId, wpId) => {
+            const last = [...iterations].reverse().find((entry) => entry.wpId === wpId);
+            return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+          },
+          openPRImpl: vi.fn(),
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+          appendEvent,
+        },
+      );
+
+      expect(result).toMatchObject({
+        status: 'failed',
+        errorReason: expect.stringContaining('TOOL_FAILURE'),
+      });
+      expect(runtimeCalls).toBe(1);
+      expect(
+        events.filter((event) => event.kind === 'parallel-implement.iteration-started'),
+      ).toHaveLength(1);
+      expect(
+        events.some(
+          (event) =>
+            event.kind === 'parallel-implement.iteration-started' &&
+            (event.payload as { iteration?: number }).iteration === 2,
+        ),
+      ).toBe(false);
+      const terminalEvent = events.find(
+        (event) => event.kind === 'parallel-implement.wp-terminal-blocked',
+      );
+      expect(terminalEvent?.payload).toMatchObject({
+        wpId: 'WP1',
+        decisionKind: 'TOOL_FAILURE',
+        errorReason: expect.stringContaining('test harness unavailable'),
+      });
+      expect(stateSource.comment).toHaveBeenCalledWith(
+        '560',
+        expect.stringContaining('Parallel implement stopped on terminal WP blocker'),
+      );
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
   it('fails schema-valid WPs that wrote tests without passing matching run_tests', async () => {
     const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']);
     const { fn: appendEvent, events } = makeAppendEvent();
@@ -998,7 +1355,7 @@ describe('implement-wp ownership gate', () => {
     expect(result).toMatchObject({
       status: 'failed',
       wpId: 'WP1',
-      errorReason: expect.stringContaining('TOOL_FAILURE'),
+      errorReason: expect.stringContaining('exact-file run_tests success'),
     });
     expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(true);
     expect(events.some((event) => event.kind === 'parallel-implement.wp-committed')).toBe(false);
@@ -1006,7 +1363,7 @@ describe('implement-wp ownership gate', () => {
     expect(iterations).toContainEqual({
       wpId: 'WP1',
       status: 'failed',
-      reason: expect.stringContaining('TOOL_FAILURE'),
+      reason: expect.stringContaining('exact-file run_tests success'),
     });
   });
 
@@ -1075,6 +1432,807 @@ describe('implement-wp ownership gate', () => {
       errorReason: expect.stringContaining('apps/web/src/foo.test.ts'),
     });
     expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(true);
+  });
+
+  it('accepts parent-directory run_tests success after the last edit to each written test', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add regression coverage',
+      filesWritten: [{ path: 'apps/web/src/foo.ts', reason: 'Implement behavior' }],
+      testsWritten: [{ path: 'apps/web/src/foo.test.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test apps/web/src/foo.test.ts',
+        paths: ['apps/web/src/foo.test.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const runId = 'run-wp-exact-final:wp:WP1:iter:1';
+    const passingBeforeEdit: AgentEvent = {
+      id: 1003,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_tests',
+        status: 'ok',
+        tool_input: {
+          path: 'apps/web/src/foo.test.ts',
+          paths: ['apps/web/src/foo.test.ts'],
+        },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const editAfterPass: AgentEvent = {
+      id: 1004,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'edit_file',
+        status: 'ok',
+        tool_input: { path: 'apps/web/src/foo.test.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const directoryPassAfterEdit: AgentEvent = {
+      id: 1005,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_tests',
+        status: 'ok',
+        tool_input: {
+          path: 'apps/web/src',
+          paths: ['apps/web/src'],
+        },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']),
+      iteration: 1,
+      runId: 'run-wp-exact-final',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockResolvedValue({
+          output,
+          events: [passingBeforeEdit, editAfterPass, directoryPassAfterEdit],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'built',
+      wp: expect.objectContaining({ id: 'WP1' }),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(false);
+  });
+
+  it('accepts parent-directory coverage when the final exact-file rerun hit the retry guard', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add regression coverage',
+      filesWritten: [{ path: 'apps/web/src/foo.ts', reason: 'Implement behavior' }],
+      testsWritten: [{ path: 'apps/web/src/foo.test.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test apps/web/src',
+        paths: ['apps/web/src'],
+      },
+      confidence: 'low',
+      decisionSummaries: [
+        {
+          kind: 'TOOL_FAILURE',
+          summary: 'Final exact-file rerun of foo.test.ts was blocked by the harness retry cap',
+        },
+      ],
+    };
+    const runId = 'run-wp-parent-covered-retry:wp:WP1:iter:1';
+    const editAfterFailures: AgentEvent = {
+      id: 1016,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'edit_file',
+        status: 'ok',
+        tool_input: { path: 'apps/web/src/foo.test.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const retryGuard: AgentEvent = {
+      id: 1017,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'tool.violation',
+      payload: {
+        tool: 'run_tests',
+        reason: 'excessive-test-retries',
+        path: 'apps/web/src/foo.test.ts',
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const directoryPassAfterEdit: AgentEvent = {
+      id: 1018,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_tests',
+        status: 'ok',
+        tool_input: {
+          path: 'apps/web/src',
+          paths: ['apps/web/src'],
+        },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']),
+      iteration: 1,
+      runId: 'run-wp-parent-covered-retry',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockResolvedValue({
+          output,
+          events: [editAfterFailures, retryGuard, directoryPassAfterEdit],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'built',
+      wp: expect.objectContaining({ id: 'WP1' }),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(false);
+  });
+
+  it('accepts durable parent-directory tool-call evidence even when output omits that testsRun path', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add regression coverage',
+      filesWritten: [{ path: 'apps/web/src/foo.ts', reason: 'Implement behavior' }],
+      testsWritten: [{ path: 'apps/web/src/foo.test.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test apps/web/src/foo.test.ts',
+        paths: ['apps/web/src/foo.test.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const runId = 'run-wp-durable-parent-covered:wp:WP1:iter:1';
+    const editAfterFailures: AgentEvent = {
+      id: 1020,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'edit_file',
+        status: 'ok',
+        tool_input: { path: 'apps/web/src/foo.test.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const retryGuard: AgentEvent = {
+      id: 1021,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'tool.violation',
+      payload: {
+        tool: 'run_tests',
+        reason: 'excessive-test-retries',
+        path: 'apps/web/src/foo.test.ts',
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']),
+      iteration: 1,
+      runId: 'run-wp-durable-parent-covered',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockImplementation(async () => {
+          eventStore.appendEvent({
+            projectId: 'goose-hub-self',
+            workItemId: 'wi-560',
+            kind: 'agent.tool-call',
+            payload: {
+              runId,
+              skill: 'implement-wp',
+              tool_name: 'run_tests',
+              status: 'ok',
+              tool_input: {
+                path: 'apps/web/src',
+                paths: ['apps/web/src'],
+              },
+            },
+            runId,
+          });
+          return { output, events: [editAfterFailures, retryGuard] };
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'built',
+      wp: expect.objectContaining({ id: 'WP1' }),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(false);
+  });
+
+  it('accepts a later parent-directory pass after an earlier exact-file retry failure', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add regression coverage',
+      filesWritten: [{ path: 'apps/web/src/foo.ts', reason: 'Implement behavior' }],
+      testsWritten: [{ path: 'apps/web/src/foo.test.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test apps/web/src/foo.test.ts',
+        paths: ['apps/web/src/foo.test.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const runId = 'run-wp-parent-after-exact-retry:wp:WP1:iter:1';
+    const editAfterFailures: AgentEvent = {
+      id: 1030,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'apply_patch',
+        status: 'ok',
+        tool_input: { fileCount: 1 },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const exactRetryFailure: AgentEvent = {
+      id: 1031,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_tests',
+        status: 'failed',
+        tool_input: {
+          path: 'apps/web/src/foo.test.ts',
+          paths: ['apps/web/src/foo.test.ts'],
+        },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const directoryPassAfterExactFailure: AgentEvent = {
+      id: 1032,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_tests',
+        status: 'ok',
+        tool_input: {
+          path: 'apps/web/src',
+          paths: ['apps/web/src'],
+        },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']),
+      iteration: 1,
+      runId: 'run-wp-parent-after-exact-retry',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockResolvedValue({
+          output,
+          events: [editAfterFailures, exactRetryFailure, directoryPassAfterExactFailure],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'built',
+      wp: expect.objectContaining({ id: 'WP1' }),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(false);
+  });
+
+  it('accepts run_playwright_spec success for written Playwright specs', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/e2e/chat.spec.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add e2e regression coverage',
+      filesWritten: [{ path: 'apps/web/e2e/chat.spec.ts', reason: 'Add regression coverage' }],
+      testsWritten: [{ path: 'apps/web/e2e/chat.spec.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test:e2e:pipeline apps/web/e2e/chat.spec.ts',
+        paths: ['apps/web/e2e/chat.spec.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const runId = 'run-wp-playwright-spec:wp:WP1:iter:1';
+    const writeSpec: AgentEvent = {
+      id: 1019,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'write_playwright_spec',
+        status: 'ok',
+        tool_input: { path: 'apps/web/e2e/chat.spec.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const playwrightPass: AgentEvent = {
+      id: 1020,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_playwright_spec',
+        status: 'ok',
+        tool_input: { spec: 'apps/web/e2e/chat.spec.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/e2e/chat.spec.ts']),
+      iteration: 1,
+      runId: 'run-wp-playwright-spec',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockResolvedValue({
+          output,
+          events: [writeSpec, playwrightPass],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'built',
+      wp: expect.objectContaining({ id: 'WP1' }),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(false);
+  });
+
+  it('treats latest failing run_playwright_spec as blocking written Playwright specs', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/e2e/chat.spec.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add e2e regression coverage',
+      filesWritten: [{ path: 'apps/web/e2e/chat.spec.ts', reason: 'Add regression coverage' }],
+      testsWritten: [{ path: 'apps/web/e2e/chat.spec.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test:e2e:pipeline apps/web/e2e/chat.spec.ts',
+        paths: ['apps/web/e2e/chat.spec.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const runId = 'run-wp-playwright-latest-failed:wp:WP1:iter:1';
+    const writeSpec: AgentEvent = {
+      id: 1021,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'write_playwright_spec',
+        status: 'ok',
+        tool_input: { path: 'apps/web/e2e/chat.spec.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const playwrightPass: AgentEvent = {
+      id: 1022,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_playwright_spec',
+        status: 'ok',
+        tool_input: { spec: 'apps/web/e2e/chat.spec.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const playwrightFail: AgentEvent = {
+      id: 1023,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_playwright_spec',
+        status: 'failed',
+        tool_input: { spec: 'apps/web/e2e/chat.spec.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/e2e/chat.spec.ts']),
+      iteration: 1,
+      runId: 'run-wp-playwright-latest-failed',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockResolvedValue({
+          output,
+          events: [writeSpec, playwrightPass, playwrightFail],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      wpId: 'WP1',
+      errorReason: expect.stringContaining('run_playwright_spec'),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(true);
+  });
+
+  it('accepts broad e2e package-script success for written Playwright specs', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/e2e/chat.spec.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add e2e regression coverage',
+      filesWritten: [{ path: 'apps/web/e2e/chat.spec.ts', reason: 'Add regression coverage' }],
+      testsWritten: [{ path: 'apps/web/e2e/chat.spec.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test:e2e:pipeline',
+        paths: ['apps/web/e2e/chat.spec.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const runId = 'run-wp-playwright-unrelated-e2e:wp:WP1:iter:1';
+    const writeSpec: AgentEvent = {
+      id: 1024,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'write_playwright_spec',
+        status: 'ok',
+        tool_input: { path: 'apps/web/e2e/chat.spec.ts' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const e2ePass: AgentEvent = {
+      id: 1025,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_package_script',
+        status: 'ok',
+        tool_input: { script: 'test:e2e:pipeline' },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/e2e/chat.spec.ts']),
+      iteration: 1,
+      runId: 'run-wp-playwright-unrelated-e2e',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockResolvedValue({
+          output,
+          events: [writeSpec, e2ePass],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({ status: 'built' });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(false);
+  });
+
+  it('asks for Playwright verification instead of run_tests for written e2e specs', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/e2e/chat.spec.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add e2e regression coverage',
+      filesWritten: [{ path: 'apps/web/e2e/chat.spec.ts', reason: 'Add regression coverage' }],
+      testsWritten: [{ path: 'apps/web/e2e/chat.spec.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test apps/web/e2e/chat.spec.ts',
+        paths: ['apps/web/e2e/chat.spec.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const runId = 'run-wp-playwright-missing-proof:wp:WP1:iter:1';
+    const rejectedRunTests: AgentEvent = {
+      id: 1021,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_tests',
+        status: 'failed',
+        tool_input: {
+          path: 'apps/web/e2e/chat.spec.ts',
+          paths: ['apps/web/e2e/chat.spec.ts'],
+        },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/e2e/chat.spec.ts']),
+      iteration: 1,
+      runId: 'run-wp-playwright-missing-proof',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockResolvedValue({
+          output,
+          events: [rejectedRunTests],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      wpId: 'WP1',
+      errorReason: expect.stringContaining('run_playwright_spec'),
+    });
+    expect(events.some((event) => event.kind === 'parallel-implement.wp-failed')).toBe(true);
+  });
+
+  it('treats pathless successful shell writes as invalidating written-test proof', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']);
+    const { fn: appendEvent } = makeAppendEvent();
+    const output: ImplementWpOutput = {
+      wpId: 'WP1',
+      plan: 'Add regression coverage',
+      filesWritten: [{ path: 'apps/web/src/foo.ts', reason: 'Implement behavior' }],
+      testsWritten: [{ path: 'apps/web/src/foo.test.ts', cases: 1 }],
+      testsRun: {
+        command: 'pnpm test apps/web/src/foo.test.ts',
+        paths: ['apps/web/src/foo.test.ts'],
+      },
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+    };
+    const runId = 'run-wp-pathless-edit:wp:WP1:iter:1';
+    const exactPassBeforePathlessEdit: AgentEvent = {
+      id: 1013,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'run_tests',
+        status: 'ok',
+        tool_input: {
+          path: 'apps/web/src/foo.test.ts',
+          paths: ['apps/web/src/foo.test.ts'],
+        },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+    const pathlessWriteAfterPass: AgentEvent = {
+      id: 1014,
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      kind: 'agent.tool-call',
+      payload: {
+        runId,
+        skill: 'implement-wp',
+        tool_name: 'bash',
+        status: 'ok',
+        tool_input: { command: "sed -i '' 's/a/b/' apps/web/src/foo.test.ts" },
+      },
+      runId,
+      createdAt: new Date().toISOString(),
+    };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['apps/web/src/foo.ts', 'apps/web/src/foo.test.ts']),
+      iteration: 1,
+      runId: 'run-wp-pathless-edit',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: vi.fn().mockResolvedValue({
+          output,
+          events: [exactPassBeforePathlessEdit, pathlessWriteAfterPass],
+        }),
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: vi.fn(),
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      wpId: 'WP1',
+      errorReason: expect.stringContaining('exact-file run_tests success'),
+    });
   });
 
   it('fails required verification when no verification tool passed even with high confidence', async () => {
@@ -1211,6 +2369,27 @@ describe('implement-wp ownership gate', () => {
       recordIterationFn: () => undefined,
       implementWpPrompt: '# prompt',
       implementWpJsonSchema: {},
+      specContext: {
+        objective: 'Build foo',
+        architecture: {
+          current: 'No foo helper',
+          new: 'Foo helper is exported',
+          decisionRationale: 'Keep it local to the web package',
+        },
+        functionalRequirements: [{ id: 'FR1', statement: 'Foo renders correctly.' }],
+        interfaceContracts: [
+          {
+            name: 'Foo helper',
+            signature: 'export function foo(): string',
+            file: 'apps/web/src/foo.ts',
+            requiredExports: [{ name: 'foo' }],
+            lineRange: null,
+          },
+        ],
+        constraints: [],
+        dependencyWpIds: [],
+        dependencyFilesOwned: [],
+      },
       parentPrdContext: {
         source: 'event',
         parentWorkItemId: 'github:shaunnez/goose-hub#55',
@@ -1232,6 +2411,15 @@ describe('implement-wp ownership gate', () => {
     expect(result).toMatchObject({ status: 'failed', wpId: 'WP1' });
     expect(specs[0]?.context).toMatchObject({
       wp: { id: 'WP1', filesOwned: ['apps/web/src/foo.ts'] },
+      specContext: {
+        objective: 'Build foo',
+        interfaceContracts: [
+          expect.objectContaining({
+            name: 'Foo helper',
+            signature: 'export function foo(): string',
+          }),
+        ],
+      },
       parentPrdContext: {
         outOfScope: ['Do not rebuild settings.'],
         acceptanceCriteria: [{ id: 'AC1', statement: 'Approval routes correctly.' }],
@@ -1243,7 +2431,19 @@ describe('implement-wp ownership gate', () => {
       FACTORY_WP_FILESOWNED: 'apps/web/src/foo.ts',
       FACTORY_WP_ID: 'WP1',
     });
+    expect(specs[0]?.contextAllowlist).toContain('specContext');
     expect(reverted).toEqual([['apps/web/src/foo.ts']]);
+    expect(
+      events.find((event) => event.kind === 'parallel-implement.wp-context-assembled'),
+    ).toMatchObject({
+      payload: {
+        wpId: 'WP1',
+        counts: expect.objectContaining({
+          ownedFiles: 1,
+          specContracts: 1,
+        }),
+      },
+    });
     const repaired = events.find((event) => event.kind === 'agent.output-repaired');
     expect(repaired?.payload).toMatchObject({
       skill: 'implement-wp',

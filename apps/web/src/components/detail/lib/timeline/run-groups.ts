@@ -39,9 +39,15 @@ export function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {
 
 function getRunId(item: RenderItem): string | null {
   if (item.kind === 'event') {
-    return (item.event as AgentEventDto & { runId?: string | null }).runId ?? null;
+    const runId = (item.event as AgentEventDto & { runId?: string | null }).runId ?? null;
+    return scoutBaseRunId(runId);
   }
   return null;
+}
+
+function scoutBaseRunId(runId: string | null): string | null {
+  if (runId == null) return null;
+  return runId.endsWith(':evidence-retry') ? runId.slice(0, -':evidence-retry'.length) : runId;
 }
 
 export function extractRunMeta(items: RenderItem[]): {
@@ -110,6 +116,13 @@ export function extractRunMeta(items: RenderItem[]): {
       if (lifecycleSkill == null && p?.skill != null) lifecycleSkill = p.skill;
     } else if (ev.kind === 'agent.investigation-complete') {
       if (endedAt == null) endedAt = ev.createdAt;
+    } else if (
+      ev.kind === 'swarm.scout-completed' ||
+      ev.kind === 'swarm.scout-skipped' ||
+      ev.kind === 'swarm.scout-failed' ||
+      ev.kind === 'swarm.scout-timeout'
+    ) {
+      if (endedAt == null || ms > new Date(endedAt).getTime()) endedAt = ev.createdAt;
     } else if (ev.kind === 'retrospective.completed') {
       // retrospective runs don't always emit agent.run-completed; treat this as terminal
       if (endedAt == null) endedAt = ev.createdAt;
@@ -134,6 +147,7 @@ export function extractRunMeta(items: RenderItem[]): {
       if (
         ev.kind === 'pr.opened' ||
         ev.kind === 'parallel-implement.exhausted' ||
+        ev.kind === 'parallel-implement.wp-terminal-blocked' ||
         (ev.kind === 'state.transitioned' &&
           ((ev.payload as { to?: string; toState?: string } | null)?.to === 'factory:needs-qa' ||
             (ev.payload as { to?: string; toState?: string } | null)?.toState ===

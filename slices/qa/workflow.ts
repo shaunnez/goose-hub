@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { preparePrDiffContext } from '@goose-hub/core/agent-runtime/dev-review-advisor.js';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
@@ -32,6 +33,7 @@ import {
   type QaOutput,
   QaOutputSchema,
   type TestRun,
+  type VerificationSummary,
 } from '@goose-hub/skills/qa/schema.js';
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
 import {
@@ -74,10 +76,108 @@ export interface QaWorkflowDeps {
 
 const DEFAULT_TEST_COMMAND = 'pnpm test --reporter=json';
 const EXECUTABLE_CHECK_OUTPUT_LIMIT = 4_000;
+const QA_CONTEXT_CRITERIA_OUTPUT_LIMIT = 1_000;
+const QA_CONTEXT_VALUE_LIMIT_BYTES = 60_000;
+const QA_CONTEXT_STRING_PREVIEW_CHARS = 4_000;
 
 function localIssueRef(ref: string | undefined): string | null {
   const match = ref?.trim().match(/^#?(\d+)$/);
   return match?.[1] != null ? match[1] : null;
+}
+
+function estimateJsonBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
+}
+
+function compactLargeQaContextValue(key: string, value: unknown): unknown {
+  const byteSize = estimateJsonBytes(value);
+  if (byteSize <= QA_CONTEXT_VALUE_LIMIT_BYTES) return value;
+
+  if (typeof value === 'string') {
+    return {
+      omitted: true,
+      reason: 'qa-context-value-too-large',
+      key,
+      byteSize,
+      preview: value.slice(0, QA_CONTEXT_STRING_PREVIEW_CHARS),
+    };
+  }
+
+  if (key === 'workItem' && value != null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return {
+      ...record,
+      body:
+        typeof record.body === 'string'
+          ? record.body.slice(0, QA_CONTEXT_STRING_PREVIEW_CHARS)
+          : record.body,
+      bodyTruncated: typeof record.body === 'string',
+      originalByteSize: byteSize,
+    };
+  }
+
+  if (key === 'acceptanceContract' && value != null && typeof value === 'object') {
+    const record = value as { criteria?: unknown };
+    return {
+      omitted: true,
+      reason: 'qa-context-value-too-large',
+      key,
+      byteSize,
+      criteriaCount: Array.isArray(record.criteria) ? record.criteria.length : undefined,
+    };
+  }
+
+  return {
+    omitted: true,
+    reason: 'qa-context-value-too-large',
+    key,
+    byteSize,
+  };
+}
+
+function compactQaContextForPrompt(context: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(context).map(([key, value]) => [key, compactLargeQaContextValue(key, value)]),
+  );
+}
+
+function hasUiChangedPath(paths: readonly string[]): boolean {
+  return paths.some((path) => path.startsWith('apps/web/'));
+}
+
+function explicitEvidenceSkipReason(summary: VerificationSummary): string {
+  return hasUiChangedPath(summary.changedFiles.paths)
+    ? 'no evidence workflow event was recorded for UI changes; browser evidence did not run or no evidence spec was declared'
+    : 'non-UI change; browser evidence not required';
+}
+
+function ensureExplicitEvidenceSummary(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  summary: VerificationSummary;
+}): VerificationSummary {
+  if (input.summary.evidence.status !== 'absent') return input.summary;
+  const reason = explicitEvidenceSkipReason(input.summary);
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'evidence.post-skipped',
+    payload: {
+      runId: input.runId,
+      reason,
+      source: 'qa',
+      changedPaths: input.summary.changedFiles.paths,
+    },
+    runId: input.runId,
+  });
+  return {
+    ...input.summary,
+    evidence: {
+      status: 'skipped',
+      reason,
+    },
+  };
 }
 
 async function verifiedFollowUpRefsForQaOutput(
@@ -363,6 +463,16 @@ async function runExecutableChecks(input: {
   return results;
 }
 
+function compactCriteriaResultsForQaContext(results: CriteriaResult[]): CriteriaResult[] {
+  return results.map((result) => ({
+    ...result,
+    actual:
+      result.actual.length > QA_CONTEXT_CRITERIA_OUTPUT_LIMIT
+        ? result.actual.slice(-QA_CONTEXT_CRITERIA_OUTPUT_LIMIT)
+        : result.actual,
+  }));
+}
+
 /**
  * Runs the QA holdout workflow for a work item in `factory:needs-qa` state.
  * QA is a holdout: fresh context, no advisor, no fallback (FACTORY_RULES 1, 20, 23).
@@ -625,7 +735,11 @@ export async function runQaWorkflow(
             SERVER_PORT: String(apiPort),
           }
         : undefined;
-    const { verificationSummary, testRun, e2eDecision } = await buildVerificationSummary({
+    const {
+      verificationSummary: rawVerificationSummary,
+      testRun,
+      e2eDecision,
+    } = await buildVerificationSummary({
       workspaceDir,
       prHints,
       prDiff,
@@ -643,6 +757,12 @@ export async function runQaWorkflow(
       commandTimeoutMs: resolvedBudget.budgets.timeoutMs,
       runTests,
       ...(runCommand != null ? { runCommand } : {}),
+    });
+    const verificationSummary = ensureExplicitEvidenceSummary({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      runId,
+      summary: rawVerificationSummary,
     });
     const criteriaResults = await runExecutableChecks({
       workspaceDir,
@@ -664,6 +784,7 @@ export async function runQaWorkflow(
         testStatus: verificationSummary.commands.test.status,
         e2eStatus: verificationSummary.e2e.status,
         evidenceStatus: verificationSummary.evidence.status,
+        evidenceReason: verificationSummary.evidence.reason,
         executableCheckCount: criteriaResults.length,
         executableCheckPassedCount: criteriaResults.filter((result) => result.passed).length,
       },
@@ -673,36 +794,59 @@ export async function runQaWorkflow(
     const deterministicTierResults = deterministic
       ? toAgentTierResults(deterministic.tierResults)
       : undefined;
+    const criteriaResultsForContext = compactCriteriaResultsForQaContext(criteriaResults);
+    const preparedDiff = preparePrDiffContext({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      runId,
+      prDiff,
+    });
+    if (preparedDiff.disclosure != null) {
+      eventStore.appendEvent({
+        projectId: projectSlug,
+        workItemId: workItem.id,
+        kind: 'agent.disclosure',
+        payload: {
+          ...preparedDiff.disclosure,
+          skill: 'qa',
+          ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
+        },
+        runId,
+      });
+    }
     const prDiffWithContext = buildPrDiffWithContext(prDiff);
+
+    const qaContext = compactQaContextForPrompt({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      workItem: {
+        title: workItem.title,
+        body: workItem.body,
+        number: Number(workItem.externalId),
+      },
+      prDiff: preparedDiff.prDiffContext,
+      prDiffWithContext,
+      projectCommands: {
+        testCommand,
+        lintCommand,
+        ...(e2eDecision.command != null ? { e2eCommand: e2eDecision.command } : {}),
+      },
+      verificationSummary,
+      e2eDecision,
+      ...(criteriaResultsForContext.length > 0
+        ? { criteriaResults: criteriaResultsForContext }
+        : {}),
+      ...(acceptanceContract != null ? { acceptanceContract } : {}),
+      ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
+      ...(devTestsRun != null ? { devTestsRun } : {}),
+      ...(deterministicTierResults != null ? { deterministicTierResults } : {}),
+    });
 
     const qaResult = await runtime.run({
       runId,
       role: 'qa',
       skill: 'qa',
-      context: {
-        projectId: projectSlug,
-        workItemId: workItem.id,
-        workItem: {
-          title: workItem.title,
-          body: workItem.body,
-          number: Number(workItem.externalId),
-        },
-        prDiff,
-        prDiffWithContext,
-        projectCommands: {
-          testCommand,
-          lintCommand,
-          ...(e2eDecision.command != null ? { e2eCommand: e2eDecision.command } : {}),
-        },
-        verificationSummary,
-        e2eDecision,
-        ...(criteriaResults.length > 0 ? { criteriaResults } : {}),
-        ...(acceptanceContract != null ? { acceptanceContract } : {}),
-        testRun,
-        ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
-        ...(devTestsRun != null ? { devTestsRun } : {}),
-        ...(deterministicTierResults != null ? { deterministicTierResults } : {}),
-      },
+      context: qaContext,
       contextAllowlist: [
         'workItem',
         'prDiff',
@@ -710,7 +854,6 @@ export async function runQaWorkflow(
         'projectCommands',
         'verificationSummary',
         'e2eDecision',
-        'testRun',
         'criteriaResults',
         ...(acceptanceContract != null ? ['acceptanceContract'] : []),
         ...(evidenceCommentUrl != null ? ['evidenceCommentUrl'] : []),

@@ -719,6 +719,42 @@ describe('runTriageBatch onward routing after accept', () => {
     );
   });
 
+  it('routes from an existing type label when model triage disagrees', async () => {
+    const source = makeMockSource([makeWorkItem({ type: 'bug' })]);
+    const listLabels = vi.mocked(source.listLabels as NonNullable<typeof source.listLabels>);
+    listLabels.mockResolvedValue(['factory:triaging', 'type:bug']);
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: { ...makeTriageOutput(), type: 'feature', priority: 'p2' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(source.setLabelInGroup).not.toHaveBeenCalledWith('42', 'type', 'feature');
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:accepted',
+      'factory:investigating',
+    );
+    expect(source.comment).toHaveBeenCalledWith('42', expect.stringContaining('Type: bug'));
+
+    const triageComplete = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.triage-complete');
+    expect((triageComplete?.[0].payload as { triage?: { type?: string } }).triage?.type).toBe(
+      'bug',
+    );
+  });
+
   it('routes type:chore to factory:dev-ready after accepting', async () => {
     const source = makeMockSource([makeWorkItem()]);
     mockRuntime.run

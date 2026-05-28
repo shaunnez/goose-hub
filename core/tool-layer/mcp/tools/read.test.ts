@@ -128,22 +128,37 @@ describe('readFileTool redundant-read detection', () => {
     expect(redundantEvents).toHaveLength(0);
   });
 
-  it('throws RedundancyAbortError and emits agent.run-aborted when >40% of reads are redundant and total >= 10', async () => {
-    // 4 unique files + 6 reads on the same file = 10 total, 5 redundant (50% > 40%)
+  it('does not abort a small focused run with moderate redundant reads', async () => {
+    // This pattern appears in focused TDD loops: a few files get revisited while
+    // the agent is still below the hard-abort floor.
     for (const name of ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'target.txt']) {
       writeFileSync(join(workspace, name), `content of ${name}`);
     }
-    // Reset counters so this test starts clean
     clearRunCache(ctx.runId);
     await readFileTool(ctx, { path: 'a.txt' });
     await readFileTool(ctx, { path: 'b.txt' });
     await readFileTool(ctx, { path: 'c.txt' });
     await readFileTool(ctx, { path: 'd.txt' });
-    // 5 reads of target.txt: first is fine, each subsequent is redundant
     for (let i = 0; i < 5; i++) {
-      await readFileTool(ctx, { path: 'target.txt' }).catch(() => {});
+      await readFileTool(ctx, { path: 'target.txt' });
     }
-    // 10th read should throw
+    await expect(readFileTool(ctx, { path: 'target.txt' })).resolves.toBeDefined();
+
+    const abortedEvents = eventStore.replay({ runId: ctx.runId, kind: 'agent.run-aborted' });
+    expect(abortedEvents).toHaveLength(0);
+  });
+
+  it('throws RedundancyAbortError and emits agent.run-aborted when >60% of reads are redundant and total >= 20', async () => {
+    for (const name of ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt', 'target.txt']) {
+      writeFileSync(join(workspace, name), `content of ${name}`);
+    }
+    clearRunCache(ctx.runId);
+    for (const name of ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt']) {
+      await readFileTool(ctx, { path: name });
+    }
+    for (let i = 0; i < 14; i++) {
+      await readFileTool(ctx, { path: 'target.txt' });
+    }
     await expect(readFileTool(ctx, { path: 'target.txt' })).rejects.toMatchObject({
       name: 'RedundancyAbortError',
     });
@@ -218,17 +233,23 @@ describe('listFilesTool', () => {
 });
 
 describe('searchTextTool', () => {
-  it('finds a literal needle and returns structured matches', async () => {
+  it('finds a literal needle and returns compact structured matches', async () => {
     const result = await searchTextTool(ctx, { query: 'NEEDLE' });
+    expect(result.query).toBe('NEEDLE');
+    expect(result.matchCount).toBeGreaterThan(0);
+    expect(result.resultBytes).toBeGreaterThan(0);
     expect(result.matches.length).toBeGreaterThan(0);
     const hit = result.matches.find((m) => m.path.path.endsWith('index.ts'));
     expect(hit).toBeTruthy();
     expect(hit?.line).toBe(1);
-    expect(hit?.text).toContain('NEEDLE');
+    expect(hit?.preview).toContain('NEEDLE');
+    expect(hit).not.toHaveProperty('text');
   });
 
   it('returns empty matches array when nothing matches (rg exit 1)', async () => {
     const result = await searchTextTool(ctx, { query: 'NO_SUCH_TOKEN_xyzzy' });
+    expect(result.query).toBe('NO_SUCH_TOKEN_xyzzy');
+    expect(result.matchCount).toBe(0);
     expect(result.matches).toEqual([]);
     expect(result.truncated).toBe(false);
 
@@ -237,6 +258,32 @@ describe('searchTextTool', () => {
       (e) => (e.payload as { tool_name?: string }).tool_name === 'search_text',
     );
     expect(audit?.payload).toMatchObject({ status: 'ok', noMatches: true });
+  });
+
+  it('defaults to 20 matches so search stays an index instead of a context dump', async () => {
+    writeFileSync(
+      join(workspace, 'many.txt'),
+      Array.from({ length: 30 }, (_, i) => `TOKEN ${i + 1}`).join('\n'),
+    );
+
+    const result = await searchTextTool(ctx, { query: 'TOKEN' });
+
+    expect(result.matches).toHaveLength(20);
+    expect(result.matchCount).toBe(20);
+    expect(result.truncated).toBe(true);
+  });
+
+  it('caps default search result bytes and reports byte truncation', async () => {
+    writeFileSync(
+      join(workspace, 'wide.txt'),
+      Array.from({ length: 40 }, (_, i) => `BLOAT ${i + 1} ${'x'.repeat(260)}`).join('\n'),
+    );
+
+    const result = await searchTextTool(ctx, { query: 'BLOAT', maxMatches: 40 });
+
+    expect(result.resultBytes).toBeLessThanOrEqual(8 * 1024);
+    expect(result.truncated).toBe(true);
+    expect(result.truncationReason).toBe('result_bytes');
   });
 });
 

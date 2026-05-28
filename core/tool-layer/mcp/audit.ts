@@ -7,14 +7,22 @@ import {
 import type { FactoryContext } from './context.js';
 import type { PathPolicyReason } from './path-policy.js';
 
-export type BlockedReason = PathPolicyReason | 'command_not_allowed' | 'timeout' | 'destructive';
+export type BlockedReason =
+  | PathPolicyReason
+  | 'command_not_allowed'
+  | 'timeout'
+  | 'destructive'
+  | 'e2e_owned_path'
+  | 'excessive_test_retries';
 
 export interface ToolCallAudit {
   tool: string;
   input: Record<string, unknown>;
   durationMs?: number;
   truncated?: boolean;
+  truncationReason?: string;
   bytesRead?: number;
+  resultBytes?: number;
   cached?: boolean;
   duplicateCount?: number;
   repo_intel_intent?: string;

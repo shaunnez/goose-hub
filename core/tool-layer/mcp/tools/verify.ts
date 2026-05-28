@@ -29,6 +29,7 @@ const TEST_TIMEOUT_MS = 5 * 60 * 1000;
 const LINT_TIMEOUT_MS = 90 * 1000;
 const TYPECHECK_TIMEOUT_MS = 3 * 60 * 1000;
 const PACKAGE_SCRIPT_TIMEOUT_MS = 5 * 60 * 1000;
+const E2E_PATH_PREFIX = 'apps/web/e2e';
 
 export class StackCommandMissingError extends Error {
   readonly kind = 'StackCommandMissingError' as const;
@@ -62,6 +63,8 @@ export interface VerifyResult {
   displayTruncated: boolean;
   fullOutputPath?: string;
   command: ReadonlyArray<string>;
+  blocked?: true;
+  blockedReason?: string;
   rawPaths?: string[];
   paths?: RepoRelativePath[];
   /**
@@ -158,12 +161,29 @@ export async function runTestsTool(
     pathMetadata = { rawPaths: [input.path], paths: [canonical] };
   }
 
+  if (pathMetadata?.paths.some((path) => isE2eOwnedPath(path.path)) === true) {
+    const blocked = buildE2eOwnedBlockedResult(argv, pathMetadata);
+    emitBlockedToolCall(ctx, {
+      tool: 'run_tests',
+      input: {
+        path: input.path ?? null,
+        command: argv.join(' '),
+        rawPaths: pathMetadata.rawPaths,
+        paths: pathMetadata.paths.map((path) => path.path),
+      },
+      blocked: true,
+      reason: 'e2e_owned_path',
+      message: blocked.stderr,
+    });
+    return blocked;
+  }
+
   const retryPathKey = pathMetadata?.paths[0]?.path ?? null;
   const cap = testRetryCap();
   const priorFailures = consecutiveTestFailures(ctx.runId, retryPathKey);
   if (priorFailures >= cap) {
     const blocked = buildRetryCapBlockedResult(argv, cap, priorFailures, retryPathKey);
-    emitToolCall(ctx, {
+    emitBlockedToolCall(ctx, {
       tool: 'run_tests',
       input: {
         path: input.path ?? null,
@@ -171,10 +191,9 @@ export async function runTestsTool(
         rawPaths: pathMetadata?.rawPaths ?? [],
         paths: pathMetadata?.paths.map((path) => path.path) ?? [],
       },
-      status: 'failed',
-      exitCode: blocked.exitCode,
-      durationMs: blocked.durationMs,
-      truncated: false,
+      blocked: true,
+      reason: 'excessive_test_retries',
+      message: blocked.stderr,
     });
     eventStore.appendEvent({
       projectId: ctx.projectId,
@@ -202,7 +221,7 @@ export async function runTestsTool(
     runId: ctx.runId,
     displayOutput: true,
     timeoutMs: TEST_TIMEOUT_MS,
-    env: minimalEnv(),
+    env: minimalEnv({ NODE_ENV: 'test' }),
   });
 
   if (result.status === 'ok') {
@@ -262,6 +281,32 @@ export async function runTestsTool(
   return failureSummary != null ? { ...verifyResult, failureSummary } : verifyResult;
 }
 
+function isE2eOwnedPath(path: string): boolean {
+  const normalized = path.replace(/^\.\//, '').replace(/\/+$/, '');
+  return normalized === E2E_PATH_PREFIX || normalized.startsWith(`${E2E_PATH_PREFIX}/`);
+}
+
+function buildE2eOwnedBlockedResult(
+  argv: ReadonlyArray<string>,
+  paths: { rawPaths: string[]; paths: RepoRelativePath[] },
+): VerifyResult {
+  const canonicalPaths = paths.paths.map((path) => path.path);
+  return {
+    status: 'failed',
+    exitCode: null,
+    stdout: '',
+    stderr: `[harness] run_tests does not run Playwright e2e paths (${canonicalPaths.join(', ')}). E2e specs are QA/evidence-owned; add or run unit/component tests here, or let QA run the project's e2eCommand.`,
+    durationMs: 0,
+    truncated: false,
+    displayTruncated: false,
+    command: argv,
+    rawPaths: paths.rawPaths,
+    paths: paths.paths,
+    blocked: true,
+    blockedReason: 'e2e_owned_path',
+  };
+}
+
 function buildRetryCapBlockedResult(
   argv: ReadonlyArray<string>,
   cap: number,
@@ -278,6 +323,8 @@ function buildRetryCapBlockedResult(
     truncated: false,
     displayTruncated: false,
     command: argv,
+    blocked: true,
+    blockedReason: 'excessive_test_retries',
   };
 }
 
@@ -294,6 +341,8 @@ function buildRetrySignatureBlockedResult(
     truncated: false,
     displayTruncated: false,
     command: argv,
+    blocked: true,
+    blockedReason: 'repeated_test_failure_signature',
   };
 }
 

@@ -7,7 +7,7 @@ export { DecisionSummarySchema };
 const RepoRelativePathDescription =
   'Repo-root/worktree-root relative POSIX path. Do not use package-relative paths like src/... for files under apps/web; use apps/web/src/....';
 const VerificationCommandDescription =
-  'Executable repo-root/worktree-root command, for example: pnpm vitest run apps/web/src/lib/lanes.config.test.ts or pnpm exec playwright test apps/web/e2e/pipeline/example.spec.ts. Do not use a bare file path or package-relative path arguments like e2e/example.spec.ts.';
+  'Executable repo-root/worktree-root command, for example: pnpm vitest run apps/web/src/lib/lanes.config.test.ts or pnpm --filter @goose-hub/web exec playwright test apps/web/e2e/pipeline/example.spec.ts. Do not use a bare file path or package-relative path arguments like e2e/example.spec.ts.';
 
 /**
  * Engineering Spec schema (M19.02, issue #559).

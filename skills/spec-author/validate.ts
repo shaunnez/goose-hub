@@ -51,7 +51,8 @@ export type ValidationRule =
   | 'self-check-verification-tooling'
   | 'verification-tool-command-malformed'
   | 'verification-tool-command-package-relative'
-  | 'wp-missing-test-file';
+  | 'wp-missing-test-file'
+  | 'wp-e2e-owned-for-product';
 
 export type ValidationResult = { ok: true } | { ok: false; errors: ValidationError[] };
 
@@ -74,6 +75,7 @@ export interface ValidationOptions {
 
 const DEFAULT_SENSITIVE_PATTERN = /(auth|session|crypto|secret)/i;
 const BARE_REPO_PATH_PATTERN = /^(?:\.\/)?[\w@./-]+\.[A-Za-z0-9]+$/;
+const WEB_E2E_SPEC_PATTERN = /^apps\/web\/e2e\/.*\.spec\.ts$/;
 
 function isBareRepoPathCommand(command: string): boolean {
   const trimmed = command.trim();
@@ -332,10 +334,21 @@ export function validateEngineeringSpec(
   const isProductionTs = (f: string) =>
     (f.endsWith('.ts') || f.endsWith('.tsx')) && !EXEMPT_SUFFIX.test(f);
   const isTestFile = (f: string) => /\.(test|spec)\.(ts|tsx)$/.test(f);
+  const isWebE2eSpec = (f: string) => WEB_E2E_SPEC_PATTERN.test(f.replace(/^\.\//, ''));
+  const isExplicitE2eWp = (wp: EngineeringSpec['workPackages'][number]) =>
+    /\b(e2e|playwright|test[- ]?infra|test infrastructure)\b/i.test(`${wp.id} ${wp.changes}`);
   for (const wp of spec.workPackages) {
     const paths = wp.filesOwned.map(fileOwnedPath);
     const hasProductionTs = paths.some(isProductionTs);
     const hasTestFile = paths.some(isTestFile);
+    const e2eSpecs = paths.filter(isWebE2eSpec);
+    if (e2eSpecs.length > 0 && !isExplicitE2eWp(wp)) {
+      errors.push({
+        rule: 'wp-e2e-owned-for-product',
+        message: `WP '${wp.id}' owns e2e spec path(s) ${e2eSpecs.join(', ')} without explicit e2e/test-infra scope; product WPs should use unit/component tests and leave e2e to QA/evidence`,
+        ref: wp.id,
+      });
+    }
     if (hasProductionTs && !hasTestFile) {
       errors.push({
         rule: 'wp-missing-test-file',

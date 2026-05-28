@@ -1,3 +1,4 @@
+import { hasEvidenceBlockerDecision } from '@goose-hub/core/agent-runtime/evidence-blocker.js';
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 import { QualityScoresSchema, computeOverallScore } from '../qa/schema.js';
@@ -91,14 +92,7 @@ export const ImplementSchema = z
   })
   .superRefine((val, ctx) => {
     const touchesWeb = val.filesWritten.some((f) => f.path.startsWith('apps/web/'));
-    const hasEvidenceBlockerSummary = val.decisionSummaries.some(
-      (summary) =>
-        (summary.kind === 'TOOL_FAILURE' ||
-          summary.kind === 'UNCERTAINTY' ||
-          summary.kind === 'SKIP_GATE') &&
-        /\b(e2e|evidence|playwright)\b/i.test(summary.summary) &&
-        /\b(block\w*|fail\w*|unclear|disabled|setting|skip\w*)\b/i.test(summary.summary),
-    );
+    const hasEvidenceBlockerSummary = hasEvidenceBlockerDecision(val.decisionSummaries);
     if (touchesWeb && val.evidenceSpecPath === null && !hasEvidenceBlockerSummary) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

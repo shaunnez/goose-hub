@@ -2,7 +2,6 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '../../core/db/db.js';
 import { agentDecisions } from '../../core/db/schema.js';
-import { computeAllowlist } from '../../core/tool-layer/allowlist.js';
 import { readRunDecisions, recordDecision } from '../../core/tool-layer/tools/record-decision.js';
 
 const RUN_A = 'test-record-decision-run-a';
@@ -150,56 +149,9 @@ describe('readRunDecisions', () => {
   });
 });
 
-// ─── holdout role blocked bundle ──────────────────────────────────────────────
-
-describe('holdout role denied bundle assignment', () => {
-  it('qa role does not receive record-decision from decision-record-only bundle', () => {
-    const list = computeAllowlist({
-      toolBundles: ['decision-record-only'],
-      toolExtras: [],
-      role: 'qa',
-    });
-    expect(list).not.toContain('record-decision');
-  });
-
-  it('reviewer role does not receive record-decision from decision-record-only bundle', () => {
-    const list = computeAllowlist({
-      toolBundles: ['decision-record-only'],
-      toolExtras: [],
-      role: 'reviewer',
-    });
-    expect(list).not.toContain('record-decision');
-  });
-
-  it('developer role receives record-decision from decision-record-only bundle', () => {
-    const list = computeAllowlist({
-      toolBundles: ['decision-record-only'],
-      toolExtras: [],
-      role: 'developer',
-    });
-    expect(list).toContain('record-decision');
-  });
-
-  it('investigator role receives record-decision from decision-record-only bundle', () => {
-    const list = computeAllowlist({
-      toolBundles: ['decision-record-only'],
-      toolExtras: [],
-      role: 'investigator',
-    });
-    expect(list).toContain('record-decision');
-  });
-});
-
 // ─── flag-off fallback ────────────────────────────────────────────────────────
 
 describe('flag-off behaviour', () => {
-  it('decision-record-only excluded from bundles when flag not set', () => {
-    // When the flag is off, the orchestrator simply does not add 'decision-record-only'
-    // to the toolBundles list. computeAllowlist returns nothing for it in that case.
-    const listWithout = computeAllowlist({ toolBundles: ['dev-tools'], toolExtras: [] });
-    expect(listWithout).not.toContain('record-decision');
-  });
-
   it('readRunDecisions returns empty when no tool calls were made (flag-off run)', () => {
     const decisions = readRunDecisions('flag-off-run-no-decisions');
     expect(decisions).toHaveLength(0);

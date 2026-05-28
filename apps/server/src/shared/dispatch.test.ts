@@ -12,6 +12,9 @@ const mockRunTriageBatch = vi.fn();
 const mockRunInvestigateWorkflow = vi.fn();
 const mockRunAcceptanceContractWorkflow = vi.fn();
 const mockRunQaWorkflow = vi.fn();
+const mockRunFixFeedbackWorkflow = vi.fn();
+const mockRunReviewWorkflow = vi.fn();
+const mockRunConvergentReviewWorkflow = vi.fn();
 const mockGetSourceForSlug = vi.fn();
 const mockGetProject = vi.fn();
 const mockLoggerError = vi.fn();
@@ -68,6 +71,15 @@ vi.mock('../../../../slices/acceptance-contract/workflow.js', () => ({
 
 vi.mock('../../../../slices/qa/workflow.js', () => ({
   runQaWorkflow: mockRunQaWorkflow,
+}));
+
+vi.mock('../../../../slices/fix-feedback/workflow.js', () => ({
+  runFixFeedbackWorkflow: mockRunFixFeedbackWorkflow,
+}));
+
+vi.mock('../../../../slices/review/workflow.js', () => ({
+  runReviewWorkflow: mockRunReviewWorkflow,
+  runConvergentReviewWorkflow: mockRunConvergentReviewWorkflow,
 }));
 
 vi.mock('../domains/workflows/retro-batch.js', () => ({
@@ -129,6 +141,9 @@ beforeEach(() => {
   mockRunInvestigateWorkflow.mockResolvedValue(undefined);
   mockRunAcceptanceContractWorkflow.mockResolvedValue(undefined);
   mockRunQaWorkflow.mockResolvedValue(undefined);
+  mockRunFixFeedbackWorkflow.mockResolvedValue(undefined);
+  mockRunReviewWorkflow.mockResolvedValue(undefined);
+  mockRunConvergentReviewWorkflow.mockResolvedValue(undefined);
   mockRunRetroForItem.mockResolvedValue(undefined);
   mockRunGrillAndPrdWorkflow.mockResolvedValue(undefined);
   mockRunFramingWorkflow.mockResolvedValue(undefined);
@@ -1295,6 +1310,111 @@ describe('dispatchForLabel', () => {
     expect(mockRunTriageBatch).not.toHaveBeenCalled();
   });
 
+  it('dispatches the review fix-feedback QA review loop from current issue state', async () => {
+    let state = 'factory:needs-review';
+    const baseItem = {
+      id: 'github:shaunnez/goose-hub#1151',
+      externalId: '1151',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'grill bug',
+      body: 'body',
+      priority: 'medium',
+      type: 'bug',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockImplementation(async () => ({ ...baseItem, state })),
+      transitionState: vi
+        .fn()
+        .mockImplementation(async (_id: string, _from: string, to: string) => {
+          state = to;
+        }),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      budgets: { maxParallelAgents: 1 },
+    });
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockRunConvergentReviewWorkflow
+      .mockImplementationOnce(async (item, reviewSource) => {
+        await (reviewSource as { transitionState: typeof source.transitionState }).transitionState(
+          (item as typeof baseItem).externalId,
+          'factory:needs-review',
+          'factory:needs-fix',
+        );
+      })
+      .mockImplementationOnce(async (item, reviewSource) => {
+        await (reviewSource as { transitionState: typeof source.transitionState }).transitionState(
+          (item as typeof baseItem).externalId,
+          'factory:needs-review',
+          'factory:approved',
+        );
+      });
+    mockRunFixFeedbackWorkflow.mockImplementationOnce(async (item, fixSource) => {
+      await (fixSource as { transitionState: typeof source.transitionState }).transitionState(
+        (item as typeof baseItem).externalId,
+        'factory:needs-fix',
+        'factory:in-progress',
+      );
+      await (fixSource as { transitionState: typeof source.transitionState }).transitionState(
+        (item as typeof baseItem).externalId,
+        'factory:in-progress',
+        'factory:needs-qa',
+      );
+    });
+    mockRunQaWorkflow.mockImplementationOnce(async (item, qaSource) => {
+      await (qaSource as { transitionState: typeof source.transitionState }).transitionState(
+        (item as typeof baseItem).externalId,
+        'factory:needs-qa',
+        'factory:needs-review',
+      );
+    });
+
+    const { dispatchForIssue } = await import('./dispatch.js');
+    await dispatchForIssue('goose-hub-self', 1151);
+    await dispatchForIssue('goose-hub-self', 1151);
+    await dispatchForIssue('goose-hub-self', 1151);
+    await dispatchForIssue('goose-hub-self', 1151);
+
+    expect(mockRunConvergentReviewWorkflow).toHaveBeenCalledTimes(2);
+    expect(mockRunFixFeedbackWorkflow).toHaveBeenCalledOnce();
+    expect(mockRunQaWorkflow).toHaveBeenCalledOnce();
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      1,
+      '1151',
+      'factory:needs-review',
+      'factory:needs-fix',
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      2,
+      '1151',
+      'factory:needs-fix',
+      'factory:in-progress',
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      3,
+      '1151',
+      'factory:in-progress',
+      'factory:needs-qa',
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      4,
+      '1151',
+      'factory:needs-qa',
+      'factory:needs-review',
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      5,
+      '1151',
+      'factory:needs-review',
+      'factory:approved',
+    );
+    expect(state).toBe('factory:approved');
+  });
+
   it('routes factory:spec-ready through parallel-implement when M19 pipeline is enabled', async () => {
     const item = {
       id: 'github:shaunnez/goose-hub#694',
@@ -1715,6 +1835,166 @@ describe('dispatchForLabel', () => {
       'factory:spec-ready',
       'factory:in-progress',
     );
+  });
+
+  it('resumes needs-human QA failures even when the latest failure wrapper omits skill', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#1152',
+      externalId: '1152',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'investigation UI',
+      body: 'body',
+      state: 'factory:needs-human',
+      priority: 'medium',
+      type: 'bug',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      forceState: vi.fn().mockResolvedValue(undefined),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.run-started',
+        runId: 'qa-run',
+        payload: { runId: 'qa-run', skill: 'qa' },
+      },
+      {
+        kind: 'agent.run-failed',
+        runId: 'qa-run',
+        payload: { runId: 'qa-run', skill: 'qa', exitCode: 1 },
+      },
+      {
+        kind: 'agent.run-failed',
+        runId: 'qa-run',
+        payload: { runId: 'qa-run', error: 'Codex CLI exited with code 1' },
+      },
+    ]);
+
+    const { dispatchResumeIssue } = await import('./dispatch.js');
+    await dispatchResumeIssue('goose-hub-self', 1152);
+
+    expect(source.forceState).toHaveBeenCalledWith(item.id, 'factory:needs-qa');
+    expect(mockRunQaWorkflow).toHaveBeenCalledOnce();
+  });
+
+  it('resumes needs-human fix-feedback implement failures through needs-fix', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#1151',
+      externalId: '1151',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'grill bug',
+      body: 'body',
+      state: 'factory:needs-human',
+      priority: 'medium',
+      type: 'bug',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi
+        .fn()
+        .mockResolvedValueOnce(item)
+        .mockResolvedValue({ ...item, state: 'factory:needs-fix' }),
+      forceState: vi.fn().mockResolvedValue(undefined),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'state.transitioned',
+        runId: 'fix-run',
+        payload: { from: 'factory:needs-fix', to: 'factory:in-progress', by: 'fix-feedback' },
+      },
+      {
+        kind: 'agent.run-started',
+        runId: 'fix-run',
+        payload: {
+          runId: 'fix-run',
+          skill: 'implement',
+          displaySkill: 'fix-feedback',
+          workflowSkill: 'fix-feedback',
+        },
+      },
+      {
+        kind: 'agent.output-repair-failed',
+        runId: 'repair-run',
+        payload: { runId: 'fix-run', retryRunId: 'repair-run', skill: 'implement' },
+      },
+      {
+        kind: 'agent.run-failed',
+        runId: 'fix-run',
+        payload: { runId: 'fix-run', error: 'implement terminal output validation failed' },
+      },
+      {
+        kind: 'state.transitioned',
+        runId: 'fix-run',
+        payload: { from: 'factory:in-progress', to: 'factory:needs-human', by: 'fix-feedback' },
+      },
+    ]);
+
+    const { dispatchResumeIssue } = await import('./dispatch.js');
+    await dispatchResumeIssue('goose-hub-self', 1151);
+
+    expect(source.forceState).toHaveBeenCalledWith(item.id, 'factory:needs-fix');
+    expect(mockRunFixFeedbackWorkflow).toHaveBeenCalledOnce();
+  });
+
+  it('resumes needs-human review wave failures through needs-review', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#1152',
+      externalId: '1152',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'investigation UI',
+      body: 'body',
+      state: 'factory:needs-human',
+      priority: 'medium',
+      type: 'bug',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      forceState: vi.fn().mockResolvedValue(undefined),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({ id: 'project-config-id' });
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'review.wave-failed',
+        runId: 'wave-failure',
+        payload: { error: 'slot 1 missing canonical acceptance criteria coverage' },
+      },
+      {
+        kind: 'state.transitioned',
+        runId: 'wave-failure',
+        payload: {
+          from: 'factory:needs-review',
+          to: 'factory:needs-human',
+          by: 'convergent-review',
+        },
+      },
+      {
+        kind: 'agent.run-failed',
+        runId: 'old-qa-run',
+        payload: { runId: 'old-qa-run', skill: 'qa', exitCode: 1 },
+      },
+    ]);
+
+    const { dispatchResumeIssue } = await import('./dispatch.js');
+    await dispatchResumeIssue('goose-hub-self', 1152);
+
+    expect(source.forceState).toHaveBeenCalledWith(item.id, 'factory:needs-review');
+    expect(mockRunConvergentReviewWorkflow).toHaveBeenCalledOnce();
+    expect(mockRunQaWorkflow).not.toHaveBeenCalled();
   });
 });
 

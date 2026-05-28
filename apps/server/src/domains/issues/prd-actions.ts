@@ -274,6 +274,18 @@ export async function proceedToPrd(slug: string, id: string): Promise<Result<{ o
   const sessionPayload =
     discoverSessionId != null ? { discoverSessionId } : ({} as Record<string, never>);
 
+  eventStore.appendEvent({
+    projectId: slug,
+    workItemId,
+    kind: 'grill.completed',
+    payload: {
+      source: 'ui-proceed',
+      completedBy: 'ui-proceed',
+      forced: true,
+      ...sessionPayload,
+    },
+  });
+
   emitStateTransitionEvent({
     projectId: slug,
     workItemId,

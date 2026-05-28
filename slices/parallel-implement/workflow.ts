@@ -1,8 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
-import type { ExecutableCheck } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import {
   type EffectiveDevReviewConfig,
@@ -46,6 +44,7 @@ import {
   revertWpChanges,
 } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import {
+  assertGooseHubWebPlaywrightReady,
   type cleanupWorktree,
   createIntegrationWorktree,
   createWorktree,
@@ -73,6 +72,7 @@ import {
   resolveImplementWpControl,
 } from './wp-budget.js';
 import { runOneWpBuilder } from './wp-builder.js';
+import { buildImplementWpContextFromSpec } from './wp-context.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -95,6 +95,8 @@ export interface ParallelImplementDeps {
   createIssueWorktreeImpl?: typeof createWorktree;
   /** Override dependency prewarm for tests or alternate package managers. */
   prewarmWorktreeImpl?: typeof prewarmWorktree;
+  /** Override post-prewarm dependency verification for tests or alternate package managers. */
+  verifyWorktreeDependenciesImpl?: (worktreePath: string) => void;
   resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
   createIntegrationWorktreeImpl?: typeof createIntegrationWorktree;
   reattachIntegrationWorktreeAtRemoteTipImpl?: typeof reattachIntegrationWorktreeAtRemoteTip;
@@ -164,36 +166,6 @@ function filterWpObservedFiles(
 
 function declaredWpFilesWritten(paths: Array<{ path: string }>): string[] {
   return uniqueSorted(paths.map((file) => file.path));
-}
-
-function acceptanceContractFromSpec(
-  spec: EngineeringSpec,
-  pipelineRunId: string,
-): AcceptanceContract {
-  return {
-    source: 'engineering-spec',
-    runId: pipelineRunId,
-    criteria: spec.acceptanceCriteria.map((ac, index) => ({
-      id: ac.id ?? `AC-${index + 1}`,
-      statement: ac.statement,
-      ...(ac.executableChecks != null && ac.executableChecks.length > 0
-        ? { executableChecks: ac.executableChecks }
-        : {}),
-      ...(ac.journeyRef != null ? { journeyRef: ac.journeyRef } : {}),
-      ...(ac.stepIdx != null ? { stepIdx: ac.stepIdx } : {}),
-      ...(ac.crossCutting != null ? { crossCutting: ac.crossCutting } : {}),
-      sourceRef: 'engineering_specs.spec.acceptanceCriteria',
-    })),
-  };
-}
-
-function verificationCommandsFromSpec(spec: EngineeringSpec): ExecutableCheck[] {
-  return spec.verificationTooling.map((tool, index) => ({
-    id: `verification-tool-${index + 1}`,
-    command: tool.command,
-    expectedExitCodes: tool.expectedExitCodes,
-    kind: 'custom',
-  }));
 }
 
 function emitWpObservedMismatch(input: {
@@ -590,6 +562,15 @@ export async function runParallelImplementWorkflow(
     (deps.createIssueWorktreeImpl == null && deps.createWpWorktreeImpl == null
       ? prewarmWorktree
       : () => undefined);
+  const shouldRunDefaultWorktreeDependencyPreflight =
+    deps.prewarmWorktreeImpl == null &&
+    deps.createIssueWorktreeImpl == null &&
+    deps.createWpWorktreeImpl == null;
+  const verifyWorktreeDepsFn =
+    deps.verifyWorktreeDependenciesImpl ??
+    (shouldRunDefaultWorktreeDependencyPreflight
+      ? assertGooseHubWebPlaywrightReady
+      : () => undefined);
   const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBase;
   const cleanupWpsFn = deps.cleanupWpWorktreesImpl ?? cleanupAllWpWorktrees;
   // cleanupIssueWorktreeImpl is available for test injection but unused in production:
@@ -710,8 +691,6 @@ export async function runParallelImplementWorkflow(
     };
   }
   const specForRun = normalizedSpec.spec;
-  const acceptanceContract = acceptanceContractFromSpec(specForRun, pipelineRunId);
-  const verificationCommands = verificationCommandsFromSpec(specForRun);
 
   const stack = projectConfig?.stack
     ? {
@@ -825,6 +804,21 @@ export async function runParallelImplementWorkflow(
     issueWorktreePath = integrationWorktree.worktreePath;
     integrationHeadSha = latestPersisted?.pushedSha ?? integrationWorktree.previousHeadSha;
     prewarmWtFn(issueWorktreePath);
+    try {
+      verifyWorktreeDepsFn(issueWorktreePath);
+    } catch (err) {
+      const reason =
+        err instanceof Error
+          ? err.message
+          : 'worktree dependencies unavailable: verification tooling not resolvable';
+      await stateSource.comment(
+        workItem.externalId,
+        buildAgentComment('Dev', 'Failed', 'Parallel implement dependency preflight failed', [
+          reason,
+        ]),
+      );
+      return { status: 'failed', devRunId: runId, errorReason: reason };
+    }
 
     const allWpResults: WpDispatchResult[] = [...persistedByWp.values()].map((checkpoint) => ({
       wpId: checkpoint.wpId,
@@ -868,8 +862,13 @@ export async function runParallelImplementWorkflow(
         }
 
         // Phase 1 — concurrent build (no git writes to integration worktree).
-        const buildPhaseResults = await runWithConcurrencyCap(batchWps, maxParallel, (wp) =>
-          runOneWpBuilder({
+        const buildPhaseResults = await runWithConcurrencyCap(batchWps, maxParallel, (wp) => {
+          const specHandoff = buildImplementWpContextFromSpec({
+            spec: specForRun,
+            wp,
+            pipelineRunId,
+          });
+          return runOneWpBuilder({
             wp,
             iteration,
             runId,
@@ -895,12 +894,14 @@ export async function runParallelImplementWorkflow(
             implementWpPrompt,
             implementWpJsonSchema,
             investigation,
-            acceptanceContract,
-            verificationCommands,
+            specContext: specHandoff.specContext,
+            acceptanceContract: specHandoff.acceptanceContract,
+            verificationCommands: specHandoff.verificationCommands,
             parentPrdContext,
             implementWpControl,
-          }),
-        );
+            verifyWorktreeDependenciesFn: verifyWorktreeDepsFn,
+          });
+        });
 
         // Phase 2 — serial commit (one WP at a time into the integration worktree).
         for (const buildResult of buildPhaseResults) {
@@ -912,6 +913,37 @@ export async function runParallelImplementWorkflow(
               errorReason: r.errorReason,
               runId: r.runId,
             });
+            if (r.acceptanceFailure?.kind === 'terminal-blocker') {
+              const reason =
+                r.errorReason ??
+                `implement-wp emitted terminal ${r.acceptanceFailure.decisionKind}`;
+              append({
+                projectId,
+                workItemId: workItem.id,
+                kind: 'parallel-implement.wp-terminal-blocked',
+                payload: {
+                  wpId: r.wpId,
+                  wpRunId: r.runId,
+                  decisionKind: r.acceptanceFailure.decisionKind,
+                  errorReason: reason,
+                },
+                runId: r.runId,
+              });
+              await stateSource.comment(
+                workItem.externalId,
+                buildAgentComment(
+                  'Dev',
+                  'Failed',
+                  'Parallel implement stopped on terminal WP blocker',
+                  [`${r.wpId}: ${reason}`],
+                ),
+              );
+              return {
+                status: 'failed',
+                devRunId: runId,
+                errorReason: `Terminal implement-wp ${r.acceptanceFailure.decisionKind} for ${r.wpId}: ${reason}`,
+              };
+            }
             continue;
           }
 

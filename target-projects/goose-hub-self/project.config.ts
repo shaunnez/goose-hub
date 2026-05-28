@@ -52,23 +52,6 @@ const config: ProjectConfig = {
       medium: 'allow-down-tier',
       low: 'allow-down-tier',
     },
-    toolAllowlists: {
-      triager: { bundles: ['core'], extras: ['work-item-label'] },
-      griller: { bundles: ['core'], extras: ['work-item-comment'] },
-      'prd-writer': { bundles: ['read', 'core'], extras: ['work-item-comment'] },
-      decomposer: { bundles: ['read', 'core', 'workItemAdmin'] },
-      investigator: { bundles: ['read', 'core'] },
-      developer: { bundles: ['read', 'write', 'shell'] },
-      qa: { bundles: ['read', 'shell', 'validate'] },
-      reviewer: { bundles: ['read', 'validate'] },
-      retrospector: { bundles: ['core'], extras: ['event-read', 'persona-stats'] },
-      researcher: { bundles: ['web', 'workItemAdmin'] },
-      auditor: { bundles: ['read', 'shell'] },
-      // Hub Chat assistant needs broad read across the workspace; tool
-      // permissions for chat-tool dispatch are scoped per-tool in
-      // core/chat-tools/registry.ts (mutating tools always require approval).
-      assistant: { bundles: ['read', 'core'] },
-    },
     advisorMode: {
       enabled: true,
       triggerOn: { priorities: ['critical', 'high'] },

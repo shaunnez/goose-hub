@@ -79,7 +79,8 @@ describe('QA timeline events', () => {
       typecheckStatus: 'passed',
       testStatus: 'failed',
       e2eStatus: 'skipped',
-      evidenceStatus: 'skipped',
+      evidenceStatus: 'absent',
+      evidenceReason: 'no evidence event was recorded',
     });
 
     render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
@@ -92,7 +93,9 @@ describe('QA timeline events', () => {
     expect(screen.getByText('Typecheck')).toBeTruthy();
     expect(screen.getByText('Tests')).toBeTruthy();
     expect(screen.getByText('failed')).toBeTruthy();
-    expect(screen.getAllByText('skipped')).toHaveLength(2);
+    expect(screen.getAllByText('skipped')).toHaveLength(1);
+    expect(screen.getByText('absent')).toBeTruthy();
+    expect(screen.getByText('no evidence event was recorded')).toBeTruthy();
     expect(document.body.textContent).not.toContain('"changedFileCount"');
   });
 
@@ -139,6 +142,40 @@ describe('QA timeline events', () => {
     expect(document.body.textContent).not.toContain('"repairMode"');
   });
 
+  it('renders skipped prompt-contract regression repair context without raw JSON or ANSI codes', () => {
+    const event = makeEvent('agent.fix-feedback-skipped', {
+      pipelineRunId: 'a4ec956d-49c7-468d-a454-66d92b792d73',
+      attemptId: 'd4bb85ec-fc83-4977-923e-30a68ff6b2fd',
+      repairMode: 'legacy-implement',
+      repairCycle: 1,
+      sourceFailureKind: 'qa',
+      sourceFailureRunId: '8fb1f0bf-9389-49b2-a781-9cfde65cd87c',
+      prNumber: 1145,
+      devRunId: '9d83b68f-8c53-4019-b07f-ec8ebe4c1194',
+      branch: 'factory/run/a4ec956d-49c7-468d-a454-66d92b792d73',
+      branchSource: 'pr.opened',
+      reason: 'prompt-contract-regression',
+      sourceFeedback:
+        'QA regression suite failed on a prompt-contract test rather than this issue-specific implementation surface.\nFailure category: prompt-contract-regression\n- Regression [escalate]: \u001b[41m\u001b[1m FAIL \u001b[22m\u001b[49m skills/implement/slice.test.ts',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Legacy Repair Cycle 1 Skipped')).toBeTruthy();
+    expect(screen.getByText('QA source failure')).toBeTruthy();
+    expect(screen.getAllByText('Prompt Contract Regression')).toHaveLength(1);
+    expect(screen.getByText('PR #1145')).toBeTruthy();
+    expect(screen.getByText('factory/run/a4ec956d-49c7-468d-a454-66d92b792d73')).toBeTruthy();
+    expect(screen.getByText('branch source pr.opened')).toBeTruthy();
+    expect(screen.getByText('source run 8fb1f0bf')).toBeTruthy();
+    expect(screen.getByText('dev run 9d83b68f')).toBeTruthy();
+    expect(screen.getByText('Source feedback')).toBeTruthy();
+    expect(screen.getByText(/QA regression suite failed/)).toBeTruthy();
+    expect(screen.getByText(/FAIL\s+skills\/implement\/slice\.test\.ts/)).toBeTruthy();
+    expect(document.body.textContent).not.toContain('\u001b');
+    expect(document.body.textContent).not.toContain('"sourceFeedback"');
+  });
+
   it('only names affected WPs when affectedWpIds exists', () => {
     const event = makeEvent('agent.fix-feedback-complete', {
       repairMode: 'legacy-implement',
@@ -180,6 +217,29 @@ describe('QA timeline events', () => {
 
     expect(screen.getByText('QA completed')).toBeTruthy();
     expect(screen.getByText('Product')).toBeTruthy();
+  });
+
+  it('labels regression tier as a suite and surfaces the actual command', () => {
+    const event = makeEvent('qa.completed', {
+      verdict: 'fail',
+      overallScore: 40,
+      threshold: 70,
+      tierResults: {
+        structural: { passed: true, findings: [] },
+        functional: { passed: true, findings: [] },
+        regression: {
+          passed: false,
+          command: 'pnpm --filter @goose-hub/web test:e2e:pipeline',
+          findings: [],
+        },
+      },
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Regression suite')).toBeTruthy();
+    expect(screen.getByText('pnpm --filter @goose-hub/web test:e2e:pipeline')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('Regression (playwright)');
   });
 
   it('renders verification-blocked failure category badges', () => {

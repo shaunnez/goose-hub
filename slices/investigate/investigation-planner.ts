@@ -66,7 +66,7 @@ function hasUiSignal(text: string): boolean {
 }
 
 function hasSchemaSignal(text: string): boolean {
-  return /\b(api|schema|zod|json schema|contract|endpoint|route handler|request|response|payload|dto|graphql|openapi|drizzle|migration|ddl|type|triage|repo[-\s]?match|repo run|run-failed|needs-human|state|transition)\b/.test(
+  return /\b(api|endpoint|payload|request|response|contract|dto|zod|schema|json schema|graphql|openapi|drizzle|migration|ddl|boundary type|type contract|interface contract|repo[-\s]?match|repo run|run-failed|event payload|state label|human intervention)\b/.test(
     text,
   );
 }

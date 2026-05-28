@@ -7,8 +7,10 @@ Tool management and security infrastructure for agent runtime.
 | File | Exports | Issue |
 |------|---------|-------|
 | `secret-redaction.ts` | `redactSecrets` | M4.05 |
-| `bundles.ts` | `TOOL_BUNDLES`, `BundleName` | M4.08 |
-| `allowlist.ts` | `computeAllowlist`, `TOOL_BUNDLES` | M4.08 |
+| `tool-repository.ts` | canonical tool definitions, bundle definitions, fingerprint helper | tool binding |
+| `tool-binding.ts` | `bindToolsForAgentSpec` | tool binding |
+| `bundles.ts` | `TOOL_BUNDLES`, `BundleName` compatibility export | M4.08 |
+| `allowlist.ts` | `computeAllowlist`, `TOOL_BUNDLES` compatibility wrapper | M4.08 |
 | `sandbox.ts` | `writeWorkspaceSandbox` | M4.08 |
 | `pre-tool-use-hook.ts` | `deployHooks`, `HOOK_PATH` | M4.08 |
 | `post-tool-use-hook.ts` | `deployPostHook`, `POST_HOOK_PATH` | M9.XX (#465) |
@@ -25,7 +27,7 @@ Patterns detected: AWS AKIA keys, GitHub tokens (`ghp_`, `ghs_`, `github_pat_`),
 
 ## Tool Bundles
 
-Named bundles passed via `AgentSpec.toolBundles`. At spawn, `computeAllowlist(spec)` expands them into a flat list for `--allowedTools`.
+Named bundles passed via `AgentSpec.toolBundles`. At spawn, `bindToolsForAgentSpec(spec)` expands them into one `ToolBinding` artifact. `computeAllowlist(spec)` remains as a compatibility wrapper over `binding.allowlist`.
 
 | Bundle | Tools | Used by |
 |--------|-------|---------|
@@ -35,10 +37,14 @@ Named bundles passed via `AgentSpec.toolBundles`. At spawn, `computeAllowlist(sp
 | `validate` | `mcp__factory-tools__*` context, read/search, evidence tools | Playwright/evidence validation skills |
 | `core` | no tools | Prompt-only skills |
 | `emergency-debug` | `Bash` | Explicit opt-in escape hatch |
-| `playwright-mcp` | `mcp__playwright-test__*` (browser/planner/generator) | `spec-author` skill (auto-merges `apps/web/.mcp.json`) |
-| `decision-record-only` | `record-decision` | Legacy A/B surface; blocked from holdouts |
 
 Every default agent-facing bundle is composed of `mcp__factory-tools__*` names only. Native `Read`, `Write`, `Edit`, `Glob`, `Grep`, and broad `Bash` are not in default bundles; native `Bash` is available only through `emergency-debug`.
+
+Playwright automation runs through workflow-owned commands and evidence tools (`write_playwright_spec`, `run_playwright_spec`, `collect_evidence`), not a separate `playwright-mcp` bundle. Unknown bundle names and unknown `toolExtras` are skipped and recorded as `ToolBinding.warnings`; they are visible in `agent.run-started` payloads and telemetry logs without aborting the run.
+
+`mcp__factory-tools__record_decision` is part of the context tools and stays available to holdout roles so QA/reviewer runs can emit their own live decision summaries without seeing implementation reasoning. There is no separate single-tool decision bundle; runtime code should use the MCP context tool.
+
+`ToolBinding` is the orchestrator-owned runtime contract for a run's tool surface. It contains the flat Claude allowlist, Codex `enabled_tools` grouped by MCP server, native tool names, sandbox/approval policy, non-fatal drift warnings, and stable fingerprints for cache/cost analysis. Runtime code consumes this artifact instead of re-deriving bundle policy.
 
 ## Canonical Path Contract
 

@@ -38,7 +38,6 @@ function projectStub(slug: string, localPath: string): import('../types.js').Pro
       runtime: 'auto',
       rolesModels: {},
       fallbackPolicy: {},
-      toolAllowlists: {},
       advisorMode: {
         enabled: false,
         triggerOn: { priorities: [] },

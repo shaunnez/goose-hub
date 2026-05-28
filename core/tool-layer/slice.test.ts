@@ -10,6 +10,7 @@ import {
   writeWpBuilderSandbox,
 } from './sandbox.js';
 import { redactSecrets } from './secret-redaction.js';
+import { bindToolsForAgentSpec } from './tool-binding.js';
 import { evaluateWorkspaceBoundary } from './workspace-boundary.js';
 
 // ─── secret-redaction ────────────────────────────────────────────────────────
@@ -165,19 +166,8 @@ describe('TOOL_BUNDLES', () => {
     expect(TOOL_BUNDLES['emergency-debug']).toEqual(['Bash']);
   });
 
-  it('playwright-mcp bundle contains browser_* and planner_* and generator_* tools', () => {
-    expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__browser_navigate');
-    expect(TOOL_BUNDLES['playwright-mcp']).toContain(
-      'mcp__playwright-test__browser_take_screenshot',
-    );
-    expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__planner_save_plan');
-    expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__generator_write_test');
-  });
-
-  it('playwright-mcp bundle entries are all mcp__playwright-test__ prefixed', () => {
-    for (const tool of TOOL_BUNDLES['playwright-mcp']) {
-      expect(tool.startsWith('mcp__playwright-test__')).toBe(true);
-    }
+  it('does not expose the legacy playwright-mcp bundle', () => {
+    expect(TOOL_BUNDLES).not.toHaveProperty('playwright-mcp');
   });
 });
 
@@ -207,37 +197,162 @@ describe('computeAllowlist', () => {
     expect(list).toHaveLength(0);
   });
 
-  it('strips decision-record-only from qa role', () => {
-    const list = computeAllowlist({
-      toolBundles: ['decision-record-only'],
-      toolExtras: [],
-      role: 'qa',
-    });
-    expect(list).not.toContain('record-decision');
-    expect(list).toHaveLength(0);
+  it('keeps MCP record_decision in read bundles for live decision signaling', () => {
+    const list = computeAllowlist({ toolBundles: ['read'], toolExtras: [] });
+    expect(list).toContain('mcp__factory-tools__record_decision');
   });
 
-  it('strips decision-record-only from reviewer role', () => {
-    const list = computeAllowlist({
-      toolBundles: ['decision-record-only'],
-      toolExtras: [],
-      role: 'reviewer',
-    });
-    expect(list).not.toContain('record-decision');
+  it('ignores unknown bundle names', () => {
+    const list = computeAllowlist({ toolBundles: ['unknown-bundle'], toolExtras: [] });
+    expect(list).toEqual([]);
   });
 
-  it('allows decision-record-only for non-holdout roles', () => {
-    const list = computeAllowlist({
-      toolBundles: ['decision-record-only'],
+  it('ignores unknown extra tool names', () => {
+    const list = computeAllowlist({ toolBundles: [], toolExtras: ['mcp__unknown__surface'] });
+    expect(list).toEqual([]);
+  });
+});
+
+describe('bindToolsForAgentSpec', () => {
+  it('builds a single binding artifact for read-only runs', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['read'],
+      toolExtras: [],
+      role: 'investigator',
+      skill: 'investigate',
+    });
+
+    expect(binding.allowlist).toContain('mcp__factory-tools__read_file');
+    expect(binding.allowlist).toContain('mcp__factory-tools__get_diff');
+    expect(binding.enabledToolsByServer['factory-tools']).toContain('read_file');
+    expect(binding.enabledToolsByServer['factory-tools']).toContain('get_diff');
+    expect(binding.nativeTools).toEqual([]);
+    expect(binding.mcpServerBundles).toEqual([]);
+    expect(binding.sandboxMode).toBe('read-only');
+  });
+
+  it('binds dev-tools to workspace-write without native Bash', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['dev-tools'],
       toolExtras: [],
       role: 'developer',
+      skill: 'implement',
     });
-    expect(list).toContain('record-decision');
+
+    expect(binding.allowlist).toContain('mcp__factory-tools__write_file');
+    expect(binding.allowlist).toContain('mcp__factory-tools__run_tests');
+    expect(binding.nativeTools).toEqual([]);
+    expect(binding.sandboxMode).toBe('workspace-write');
   });
 
-  it('allows decision-record-only when no role specified', () => {
-    const list = computeAllowlist({ toolBundles: ['decision-record-only'], toolExtras: [] });
-    expect(list).toContain('record-decision');
+  it('binds evidence validation browser skills to danger-full-access and never approval', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['validate'],
+      toolExtras: [],
+      role: 'developer',
+      skill: 'playwright-repro',
+    });
+
+    expect(binding.sandboxMode).toBe('danger-full-access');
+    expect(binding.approvalPolicy).toBe('never');
+  });
+
+  it('keeps QA validate-like bundles read-only unless the skill needs browser process access', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['read', 'validate'],
+      toolExtras: [],
+      role: 'qa',
+      skill: 'qa',
+    });
+
+    expect(binding.sandboxMode).toBe('read-only');
+    expect(binding.approvalPolicy).toBeUndefined();
+  });
+
+  it('records warnings for unknown bundle names without failing binding', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['read', 'playwright-mcp'],
+      toolExtras: [],
+      role: 'developer',
+      skill: 'spec-author',
+    });
+
+    expect(binding.mcpServerBundles).toEqual([]);
+    expect(binding.enabledToolsByServer['playwright-test']).toBeUndefined();
+    expect(binding.allowlist).not.toContain('mcp__playwright-test__browser_navigate');
+    expect(binding.warnings).toEqual([{ kind: 'unknown-bundle', name: 'playwright-mcp' }]);
+  });
+
+  it('records warnings and skips unknown toolExtras', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: [],
+      toolExtras: ['mcp__factory-tools__read_file', 'mcp__unknown__surface'],
+      role: 'developer',
+      skill: 'spec-author',
+    });
+
+    expect(binding.allowlist).toEqual(['mcp__factory-tools__read_file']);
+    expect(binding.enabledToolsByServer).toEqual({ 'factory-tools': ['read_file'] });
+    expect(binding.warnings).toEqual([
+      { kind: 'unknown-tool-extra', name: 'mcp__unknown__surface' },
+    ]);
+  });
+
+  it('keeps MCP record_decision available to QA holdouts', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['read', 'qa-tools'],
+      toolExtras: [],
+      role: 'qa',
+      skill: 'qa',
+    });
+
+    expect(binding.allowlist).toContain('mcp__factory-tools__record_decision');
+    expect(binding.enabledToolsByServer['factory-tools']).toContain('record_decision');
+  });
+
+  it('keeps MCP record_decision available to reviewer holdouts', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['read', 'validate'],
+      toolExtras: [],
+      role: 'reviewer',
+      skill: 'review',
+    });
+
+    expect(binding.allowlist).toContain('mcp__factory-tools__record_decision');
+    expect(binding.enabledToolsByServer['factory-tools']).toContain('record_decision');
+  });
+
+  it('strips holdout-blocked capabilities from holdout roles', () => {
+    const binding = bindToolsForAgentSpec({
+      toolBundles: ['emergency-debug'],
+      toolExtras: ['mcp__factory-tools__write_file'],
+      role: 'reviewer',
+      skill: 'review',
+    });
+
+    expect(binding.allowlist).toEqual([]);
+    expect(binding.nativeTools).toEqual([]);
+    expect(binding.sandboxMode).toBe('read-only');
+  });
+
+  it('normalizes bundle order before fingerprinting equivalent bindings', () => {
+    const first = bindToolsForAgentSpec({
+      toolBundles: ['read', 'qa-tools'],
+      toolExtras: [],
+      role: 'qa',
+      skill: 'qa',
+    });
+    const second = bindToolsForAgentSpec({
+      toolBundles: ['qa-tools', 'read'],
+      toolExtras: [],
+      role: 'qa',
+      skill: 'qa',
+    });
+
+    expect(first.allowlist).toEqual(second.allowlist);
+    expect(first.fingerprints.toolBindingHash).toBe(second.fingerprints.toolBindingHash);
+    expect(first.fingerprints.toolAllowlistHash).toBe(second.fingerprints.toolAllowlistHash);
+    expect(first.fingerprints.mcpServerSetHash).toBe(second.fingerprints.mcpServerSetHash);
   });
 });
 

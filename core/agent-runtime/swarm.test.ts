@@ -1,7 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { type ScoutSpec, dispatchWave, resolveScoutConcurrencyCap } from './swarm.js';
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
 
 function makeFakeAppendEvent(): {
   fn: (input: AppendEventInput) => AgentEvent;
@@ -37,6 +47,17 @@ function makeScoutSpec(scoutName: string): ScoutSpec {
   };
 }
 
+function makeInvestigationSeed() {
+  return {
+    candidateFiles: [{ path: 'src/auth.ts', root: 'worktree' }],
+    candidateSymbols: [],
+    testFiles: [],
+    recentlyChangedFiles: [],
+    priorInvestigationRunIds: [],
+    builtAt: '2026-05-23T00:00:00.000Z',
+  };
+}
+
 function okResult(scoutName: string): AgentResult {
   return {
     output: {
@@ -59,6 +80,30 @@ function emptyResult(events: AgentResult['events'] = []): AgentResult {
     decisionSummaries: [{ kind: 'READ', summary: 'scout completed without findings' }],
     events,
   };
+}
+
+function skippedResult(summary = 'Scout domain does not apply'): AgentResult {
+  return {
+    output: {
+      findings: [],
+      decisionSummaries: [{ kind: 'INSIGHT', summary }],
+      status: 'skipped',
+    },
+    decisionSummaries: [{ kind: 'INSIGHT', summary }],
+    events: [],
+  };
+}
+
+async function makeSeedWorktree(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'goose-scout-seed-'));
+  tempDirs.push(dir);
+  await mkdir(join(dir, 'src'), { recursive: true });
+  await writeFile(
+    join(dir, 'src/auth.ts'),
+    'export function authState() { return "signed-in"; }\n',
+    'utf8',
+  );
+  return dir;
 }
 
 function runtimeAdvisoryEvent(
@@ -557,11 +602,157 @@ describe('swarm.dispatchWave', () => {
     expect(result.shouldAdvance).toBe(true);
   });
 
-  it('fails an empty scout with only resources/list advisory for no evidence, not resource misuse', async () => {
+  it('treats an irrelevant schema scout as skipped without counting it as failed', async () => {
     const { fn: appendEvent, events } = makeFakeAppendEvent();
     const runtime = makeRuntime({
-      'scout-schema': (spec) =>
-        Promise.resolve(emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/list failed')])),
+      'scout-schema': () => Promise.resolve(skippedResult('No schema boundary applies')),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-skipped-schema',
+      scoutSpecs: [makeScoutSpec('scout-schema')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(result.reports[0]).toMatchObject({
+      status: 'ok',
+      outcome: 'skipped',
+      skippedReason: 'No schema boundary applies',
+    });
+    expect(result.failedScouts).toEqual([]);
+    expect(result.skippedScouts).toEqual(['scout-schema']);
+    expect(events.some((e) => e.kind === 'swarm.scout-skipped')).toBe(true);
+    expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(false);
+  });
+
+  it('does not halt when two scouts skip and enough useful evidence remains', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-code-path': () => Promise.resolve(okResult('scout-code-path')),
+      'scout-schema': () => Promise.resolve(skippedResult('No schema boundary applies')),
+      'scout-test-inventory': () => Promise.resolve(skippedResult('No test surface applies')),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-two-skips',
+      scoutSpecs: [
+        makeScoutSpec('scout-code-path'),
+        makeScoutSpec('scout-schema'),
+        makeScoutSpec('scout-test-inventory'),
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+      minSuccessfulScouts: 1,
+    });
+
+    expect(result.status).toBe('ok');
+    expect(result.summary).toBe('completed-with-skips');
+    expect(result.okCount).toBe(1);
+    expect(result.skippedScouts.sort()).toEqual(['scout-schema', 'scout-test-inventory']);
+    expect(result.failedScouts).toEqual([]);
+    expect(events.some((e) => e.kind === 'swarm.wave-halted')).toBe(false);
+  });
+
+  it('advances when skipped scouts make the original success threshold inapplicable', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-code-path': () => Promise.resolve(okResult('scout-code-path')),
+      'scout-test-inventory': () => Promise.resolve(okResult('scout-test-inventory')),
+      'scout-schema': () => Promise.resolve(skippedResult('No schema boundary applies')),
+      'scout-dependency': () => Promise.resolve(skippedResult('No dependency boundary applies')),
+      'scout-user-journey': () => Promise.resolve(skippedResult('No user journey applies')),
+      'scout-pattern': () => Promise.resolve(skippedResult('No reusable pattern applies')),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-skips-reduce-threshold',
+      scoutSpecs: [
+        makeScoutSpec('scout-code-path'),
+        makeScoutSpec('scout-test-inventory'),
+        makeScoutSpec('scout-schema'),
+        makeScoutSpec('scout-dependency'),
+        makeScoutSpec('scout-user-journey'),
+        makeScoutSpec('scout-pattern'),
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+      minSuccessfulScouts: 3,
+    });
+
+    expect(result.status).toBe('ok');
+    expect(result.shouldAdvance).toBe(true);
+    expect(result.summary).toBe('completed-with-skips');
+    expect(result.okCount).toBe(2);
+    expect(result.skippedScouts).toHaveLength(4);
+    const waveCompleted = events.find((event) => event.kind === 'swarm.wave-completed');
+    expect(waveCompleted?.payload).toMatchObject({
+      okCount: 2,
+      applicableCount: 2,
+      requiredOkCount: 2,
+      scoutCount: 6,
+    });
+  });
+
+  it('still halts when two applicable scouts fail with no evidence', async () => {
+    const { fn: appendEvent } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-schema': () => Promise.resolve(emptyResult()),
+      'scout-code-path': () => Promise.resolve(emptyResult()),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-two-no-evidence',
+      scoutSpecs: [makeScoutSpec('scout-schema'), makeScoutSpec('scout-code-path')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+      minSuccessfulScouts: 1,
+    });
+
+    expect(result.status).toBe('halted');
+    expect(result.summary).toBe('halted');
+    expect(result.failedScouts.sort()).toEqual(['scout-code-path', 'scout-schema']);
+    expect(result.shouldEscalate).toBe(true);
+  });
+
+  it('fails an empty scout with only resources/list advisory for no evidence, not resource misuse', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const seenSpecs: AgentSpec[] = [];
+    const runtime = makeRuntime({
+      'scout-schema': (spec) => {
+        seenSpecs.push(spec);
+        return Promise.resolve(
+          emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/list failed')]),
+        );
+      },
     });
 
     const result = await dispatchWave({
@@ -591,6 +782,295 @@ describe('swarm.dispatchWave', () => {
     expect((failed?.payload as { errorReason?: string }).errorReason).not.toContain(
       'forbidden MCP resource probes',
     );
+    expect(seenSpecs).toHaveLength(1);
+  });
+
+  it('accepts a seeded empty scout after deterministic seed-evidence retry', async () => {
+    const { fn: appendEvent } = makeFakeAppendEvent();
+    const worktreePath = await makeSeedWorktree();
+    const seenSpecs: AgentSpec[] = [];
+    const runtime = makeRuntime({
+      'scout-schema': (spec) => {
+        seenSpecs.push(spec);
+        return Promise.resolve(
+          emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/list failed')]),
+        );
+      },
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-seeded-retry-empty',
+      scoutSpecs: [
+        {
+          ...makeScoutSpec('scout-schema'),
+          extraContext: { investigationSeed: makeInvestigationSeed() },
+        },
+      ],
+      workItem: makeWorkItem(),
+      worktreePath,
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(seenSpecs).toHaveLength(2);
+    expect(seenSpecs[1].runId).toBe(
+      'parent-seeded-retry-empty:scout:scout-schema:0:evidence-retry',
+    );
+    expect(seenSpecs[1].appendSystemPrompt).toContain('use provided <seedEvidence>');
+    expect(seenSpecs[1].appendSystemPrompt).not.toContain('read_file or search_text');
+    expect(
+      (seenSpecs[1].context as { seedEvidence?: Array<{ file: string; text: string }> })
+        .seedEvidence?.[0],
+    ).toMatchObject({
+      file: 'src/auth.ts',
+      text: expect.stringContaining('authState'),
+    });
+    expect(result.reports[0]).toMatchObject({
+      status: 'ok',
+      outcome: 'ok',
+    });
+  });
+
+  it('accepts a seeded scout when the evidence retry records a successful read_file call', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const worktreePath = await makeSeedWorktree();
+    const seenSpecs: AgentSpec[] = [];
+    const runtime = makeRuntime({
+      'scout-schema': (spec) => {
+        seenSpecs.push(spec);
+        if (seenSpecs.length === 1) {
+          return Promise.resolve(
+            emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/list failed')]),
+          );
+        }
+        return Promise.resolve(emptyResult([toolCallEvent(spec.runId, 'read_file', 'ok')]));
+      },
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-seeded-retry-evidence',
+      scoutSpecs: [
+        {
+          ...makeScoutSpec('scout-schema'),
+          extraContext: { investigationSeed: makeInvestigationSeed() },
+        },
+      ],
+      workItem: makeWorkItem(),
+      worktreePath,
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+      minSuccessfulScouts: 1,
+    });
+
+    expect(seenSpecs).toHaveLength(2);
+    expect(result.reports[0]?.status).toBe('ok');
+    expect(result.reports[0]?.runId).toBe(
+      'parent-seeded-retry-evidence:scout:scout-schema:0:evidence-retry',
+    );
+    const completed = events.find((e) => e.kind === 'swarm.scout-completed');
+    expect((completed?.payload as { runId?: string }).runId).toBe(
+      'parent-seeded-retry-evidence:scout:scout-schema:0:evidence-retry',
+    );
+    expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(false);
+    expect(result.shouldAdvance).toBe(true);
+  });
+
+  it('caps seeded evidence retry to the remaining scout timeout budget', async () => {
+    const { fn: appendEvent } = makeFakeAppendEvent();
+    const worktreePath = await makeSeedWorktree();
+    let now = 1_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const seenSpecs: AgentSpec[] = [];
+    const runtime = makeRuntime({
+      'scout-schema': (spec) => {
+        seenSpecs.push(spec);
+        if (seenSpecs.length === 1) {
+          now = 1_060;
+          return Promise.resolve(
+            emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/list failed')]),
+          );
+        }
+        return Promise.resolve(emptyResult([toolCallEvent(spec.runId, 'read_file', 'ok')]));
+      },
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-seeded-retry-timeout',
+      scoutSpecs: [
+        {
+          ...makeScoutSpec('scout-schema'),
+          extraContext: { investigationSeed: makeInvestigationSeed() },
+        },
+      ],
+      workItem: makeWorkItem(),
+      worktreePath,
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 100,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+      minSuccessfulScouts: 1,
+    });
+
+    expect(result.reports[0]?.status).toBe('ok');
+    expect(seenSpecs).toHaveLength(2);
+    expect(seenSpecs[1].budgets.timeoutMs).toBe(40);
+  });
+
+  it('preserves first-attempt decision summaries when retry output fails schema validation without summaries', async () => {
+    const { fn: appendEvent } = makeFakeAppendEvent();
+    const worktreePath = await makeSeedWorktree();
+    const seenSpecs: AgentSpec[] = [];
+    const runtime = makeRuntime({
+      'scout-schema': (spec) => {
+        seenSpecs.push(spec);
+        if (seenSpecs.length === 1) {
+          return Promise.resolve({
+            ...emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/list failed')]),
+            decisionSummaries: [{ kind: 'READ', summary: 'first attempt summary' }],
+          });
+        }
+        return Promise.resolve({
+          output: { invalid: true },
+          decisionSummaries: [],
+          events: [],
+        } as unknown as AgentResult);
+      },
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-seeded-retry-invalid',
+      scoutSpecs: [
+        {
+          ...makeScoutSpec('scout-schema'),
+          extraContext: { investigationSeed: makeInvestigationSeed() },
+        },
+      ],
+      workItem: makeWorkItem(),
+      worktreePath,
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(result.reports[0]).toMatchObject({
+      status: 'error',
+      decisionSummaries: [{ kind: 'READ', summary: 'first attempt summary' }],
+    });
+  });
+
+  it('does not load seed evidence from path-policy denied workspace internals', async () => {
+    const { fn: appendEvent } = makeFakeAppendEvent();
+    const worktreePath = await makeSeedWorktree();
+    await mkdir(join(worktreePath, '.factory'), { recursive: true });
+    await writeFile(join(worktreePath, '.factory/mcp-config.json'), '{"secret":true}', 'utf8');
+    const seenSpecs: AgentSpec[] = [];
+    const runtime = makeRuntime({
+      'scout-schema': (spec) => {
+        seenSpecs.push(spec);
+        return Promise.resolve(
+          emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/list failed')]),
+        );
+      },
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-seed-denylist',
+      scoutSpecs: [
+        {
+          ...makeScoutSpec('scout-schema'),
+          extraContext: {
+            investigationSeed: {
+              ...makeInvestigationSeed(),
+              candidateFiles: [{ path: '.factory/mcp-config.json', root: 'worktree' }],
+            },
+          },
+        },
+      ],
+      workItem: makeWorkItem(),
+      worktreePath,
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(seenSpecs).toHaveLength(1);
+    expect(result.reports[0]).toMatchObject({
+      status: 'error',
+      outcome: 'failed',
+      errorReason:
+        'scout returned no findings and made no successful Factory read/search/file tool calls',
+    });
+  });
+
+  it('does not halt a wave when seeded retry evidence leaves only one no-evidence scout', async () => {
+    const { fn: appendEvent } = makeFakeAppendEvent();
+    const worktreePath = await makeSeedWorktree();
+    const seenBySkill: Record<string, AgentSpec[]> = {};
+    const runtime = makeRuntime({
+      'scout-schema': (spec) => {
+        seenBySkill[spec.skill] = [...(seenBySkill[spec.skill] ?? []), spec];
+        if ((seenBySkill[spec.skill] ?? []).length === 1) {
+          return Promise.resolve(
+            emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/list failed')]),
+          );
+        }
+        return Promise.resolve(emptyResult([toolCallEvent(spec.runId, 'read_file', 'ok')]));
+      },
+      'scout-pattern': (spec) => {
+        seenBySkill[spec.skill] = [...(seenBySkill[spec.skill] ?? []), spec];
+        return Promise.resolve(
+          emptyResult([runtimeAdvisoryEvent(spec.runId, 'resources/list failed')]),
+        );
+      },
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-seeded-wave',
+      scoutSpecs: [
+        {
+          ...makeScoutSpec('scout-schema'),
+          extraContext: { investigationSeed: makeInvestigationSeed() },
+        },
+        makeScoutSpec('scout-pattern'),
+      ],
+      workItem: makeWorkItem(),
+      worktreePath,
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+      minSuccessfulScouts: 1,
+    });
+
+    expect(seenBySkill['scout-schema']).toHaveLength(2);
+    expect(seenBySkill['scout-pattern']).toHaveLength(1);
+    expect(result.status).toBe('ok');
+    expect(result.shouldEscalate).toBe(false);
+    expect(result.failedScouts).toEqual(['scout-pattern']);
   });
 
   it('fails an empty scout with only resources/templates/list advisory for no evidence, not resource misuse', async () => {
@@ -876,6 +1356,36 @@ describe('swarm.dispatchWave', () => {
     expect(defaultSpecs).toHaveLength(0);
     expect(perScoutSpecs).toHaveLength(1);
     expect(perScoutSpecs[0].modelOverride).toBe('gpt-5.4-mini');
+  });
+
+  it('converts resolveScoutRuntime exceptions into scout error reports', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-schema': () => Promise.resolve(okResult('scout-schema')),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-runtime-resolver-error',
+      scoutSpecs: [makeScoutSpec('scout-schema')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      heartbeatIntervalMs: 60_000,
+      scoutTimeoutMs: 1_000,
+      resolveScoutBudget: testBudgetResolver,
+      resolveScoutRuntime: () => {
+        throw new Error('runtime selection failed');
+      },
+    });
+
+    expect(result.reports[0]).toMatchObject({
+      status: 'error',
+      errorReason: 'runtime selection failed',
+    });
+    expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(true);
   });
 
   it('routes each child spawn through assembleSpawnContext (freshContext: true per scout)', async () => {

@@ -50,6 +50,48 @@ export const ImplementWpContextSchema = z.object({
       }),
     )
     .optional(),
+  /** WP-scoped Engineering Spec context selected by the parallel implement handoff. */
+  specContext: z
+    .object({
+      objective: z.string(),
+      architecture: z.object({
+        current: z.string(),
+        new: z.string(),
+        decisionRationale: z.string(),
+      }),
+      functionalRequirements: z.array(
+        z.object({
+          id: z.string(),
+          statement: z.string(),
+        }),
+      ),
+      interfaceContracts: z.array(
+        z.object({
+          name: z.string(),
+          signature: z.string(),
+          file: z.string(),
+          requiredExports: z
+            .array(
+              z.object({
+                name: z.string(),
+                file: z.string().optional(),
+              }),
+            )
+            .optional(),
+          lineRange: z.string().nullable().optional(),
+        }),
+      ),
+      constraints: z.array(
+        z.object({
+          kind: z.enum(['phase', 'gate', 'hook', 'model', 'output-format']),
+          name: z.string(),
+          source: z.string(),
+        }),
+      ),
+      dependencyWpIds: z.array(z.string()),
+      dependencyFilesOwned: z.array(z.string()),
+    })
+    .optional(),
   verificationCommands: z.array(ExecutableCheckSchema).optional(),
   investigation: z
     .object({
@@ -123,6 +165,7 @@ const config: SkillConfig = {
     'wp.dependsOn',
     'codeSnippets',
     'codeContext',
+    'specContext',
     'verificationCommands',
     'investigation',
     'acceptanceContract',

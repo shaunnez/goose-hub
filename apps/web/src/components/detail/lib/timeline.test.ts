@@ -315,6 +315,37 @@ describe('groupEvents — investigation runs', () => {
     }
   });
 
+  it('groups scout evidence retry events under the base scout run row', () => {
+    const baseRunId = 'run-investigate:scout:scout-schema:0';
+    const retryRunId = `${baseRunId}:evidence-retry`;
+    const items = groupEvents([
+      makeEvent(1, 'agent.run-started', baseRunId, {
+        payload: { skill: 'scout-schema' },
+      }),
+      makeEvent(2, 'agent.run-completed', baseRunId),
+      makeEvent(3, 'agent.run-started', retryRunId, {
+        payload: { skill: 'scout-schema' },
+      }),
+      makeEvent(4, 'swarm.scout-skipped', retryRunId, {
+        payload: { scoutName: 'scout-schema', skippedReason: 'No schema boundary applies' },
+      }),
+      makeEvent(5, 'agent.run-completed', retryRunId),
+    ]);
+
+    const phase = items.find((item) => item.kind === 'investigation-phase');
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind !== 'investigation-phase') return;
+    const runGroups = phase.items.filter((item) => item.kind === 'run-group');
+    expect(runGroups).toHaveLength(1);
+    const [group] = runGroups;
+    expect(group?.kind).toBe('run-group');
+    if (group?.kind !== 'run-group') return;
+    expect(group.runId).toBe(baseRunId);
+    expect(
+      group.items.some((item) => item.kind === 'event' && item.event.runId === retryRunId),
+    ).toBe(true);
+  });
+
   it('uses start time and runId as stable tie-breakers for same-second activity', () => {
     const sameActivity = '2026-05-12T10:00:10Z';
     const sameStart = '2026-05-12T10:00:01Z';
@@ -380,6 +411,15 @@ describe('computeIsLive', () => {
   it('returns false when run-started followed by prd.drafted', () => {
     expect(
       computeIsLive([makeEvent(1, 'agent.run-started', 'r1'), makeEvent(2, 'prd.drafted', 'r1')]),
+    ).toBe(false);
+  });
+
+  it('returns false when parallel implement stops on a terminal WP blocker', () => {
+    expect(
+      computeIsLive([
+        makeEvent(1, 'agent.run-started', 'r1'),
+        makeEvent(2, 'parallel-implement.wp-terminal-blocked', 'r1'),
+      ]),
     ).toBe(false);
   });
 });
@@ -469,6 +509,26 @@ describe('groupEvents — discover phase groups', () => {
         (item) => item.kind === 'event' && item.event.kind === 'grill.completed',
       ),
     ).toBe(true);
+  });
+
+  it('does not infer grill phase completion from a posted question alone', () => {
+    const WID = 'discover-workflow-question-only';
+    const result = groupEvents([
+      makeEvent(1, 'agent.run-started', `${WID}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: WID },
+      }),
+      makeEvent(2, 'agent.run-completed', `${WID}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: WID },
+      }),
+      makeEvent(3, 'grill.question-posted', WID, {
+        payload: { displaySkill: 'grill-me', workflowRunId: WID },
+      }),
+    ]);
+
+    expect(result[0].kind).toBe('phase-group');
+    if (result[0].kind !== 'phase-group') return;
+    expect(result[0].phase).toBe('grill');
+    expect(result[0].status).toBe('started');
   });
 
   it('wraps write-prd and advisor activity with parent PRD events into a PRD phase', () => {
@@ -1767,6 +1827,32 @@ describe('groupByDevPhase', () => {
     >;
 
     expect(pg.status).toBe('failed');
+  });
+
+  it('marks dev phase failed when parallel implement hits a terminal WP blocker', () => {
+    const PID = 'pipe-terminal-123';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'parallel-implement.wp-terminal-blocked', 'parallel-run-456:wp:WP1:iter:1', {
+        payload: {
+          pipelineRunId: PID,
+          wpId: 'WP1',
+          decisionKind: 'TOOL_FAILURE',
+          errorReason: 'test harness unavailable',
+        },
+      }),
+    ];
+
+    const result = groupEvents(events);
+    const pg = result.find((item) => item.kind === 'phase-group') as Extract<
+      (typeof result)[0],
+      { kind: 'phase-group' }
+    >;
+
+    expect(pg.status).toBe('failed');
+    expect(pg.endedAt).toBe(events[3].createdAt);
   });
 
   it('groups dev-review.* events with matching pipelineRunId into the phase-group', () => {

@@ -28,6 +28,8 @@ export interface TierResult {
   passed: boolean;
   evidence: string[];
   findings: VerifyFinding[];
+  command?: string;
+  output?: string;
 }
 
 export interface RunArtifacts {
@@ -52,7 +54,7 @@ export interface TierDeps {
   runRegressionTestsImpl?: (
     command: string,
     cwd: string,
-  ) => Promise<{ passed: boolean; failedTests: string[] }>;
+  ) => Promise<{ passed: boolean; failedTests: string[]; output?: string }>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -160,6 +162,10 @@ export function verifyStructural(
 const BARE_REPO_PATH_PATTERN = /^(?:\.\/)?[\w@./-]+\.[A-Za-z0-9]+$/;
 const LAUNCH_ERROR_MARKER = 'GOOSE_VERIFICATION_COMMAND_LAUNCH_ERROR';
 const ROOT_WEB_PLAYWRIGHT_PREFIX = 'pnpm exec playwright test apps/web/e2e/';
+const FILTERED_WEB_PLAYWRIGHT_REPO_PATH_PREFIX =
+  'pnpm --filter @goose-hub/web exec playwright test apps/web/e2e/';
+const FILTERED_WEB_PLAYWRIGHT_PACKAGE_PATH_PREFIX =
+  'pnpm --filter @goose-hub/web exec playwright test e2e/';
 
 export function isBareVerificationPath(command: unknown): boolean {
   if (typeof command !== 'string') return false;
@@ -230,11 +236,22 @@ function isLikelyVerificationHarnessFailure(detail: string): boolean {
 
 function normalizeVerificationCommand(command: string): string {
   const trimmed = command.trim();
-  if (!trimmed.startsWith(ROOT_WEB_PLAYWRIGHT_PREFIX)) {
+  if (trimmed.startsWith(FILTERED_WEB_PLAYWRIGHT_PACKAGE_PATH_PREFIX)) {
     return command;
   }
+  if (trimmed.startsWith(FILTERED_WEB_PLAYWRIGHT_REPO_PATH_PREFIX)) {
+    return normalizeWebPlaywrightCommand(
+      trimmed.slice(FILTERED_WEB_PLAYWRIGHT_REPO_PATH_PREFIX.length),
+    );
+  }
+  if (trimmed.startsWith(ROOT_WEB_PLAYWRIGHT_PREFIX)) {
+    return normalizeWebPlaywrightCommand(trimmed.slice(ROOT_WEB_PLAYWRIGHT_PREFIX.length));
+  }
 
-  const webSpecAndArgs = trimmed.slice(ROOT_WEB_PLAYWRIGHT_PREFIX.length);
+  return command;
+}
+
+function normalizeWebPlaywrightCommand(webSpecAndArgs: string): string {
   const specPath = webSpecAndArgs.split(/\s+/, 1)[0] ?? '';
   const packageRelative = `e2e/${webSpecAndArgs}`;
 
@@ -361,7 +378,7 @@ function extractFailedTests(output: string): string[] {
 async function defaultRunRegressionTests(
   command: string,
   cwd: string,
-): Promise<{ passed: boolean; failedTests: string[] }> {
+): Promise<{ passed: boolean; failedTests: string[]; output?: string }> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     const child = spawn('sh', ['-c', command], {
@@ -373,10 +390,10 @@ async function defaultRunRegressionTests(
     child.stderr?.on('data', (d: Buffer) => chunks.push(d));
     child.on('exit', (code) => {
       const output = Buffer.concat(chunks).toString('utf8');
-      resolve({ passed: (code ?? 1) === 0, failedTests: extractFailedTests(output) });
+      resolve({ passed: (code ?? 1) === 0, failedTests: extractFailedTests(output), output });
     });
     child.on('error', (err) => {
-      resolve({ passed: false, failedTests: [err.message] });
+      resolve({ passed: false, failedTests: [err.message], output: err.message });
     });
   });
 }
@@ -433,6 +450,8 @@ export async function verifyRegression(
     passed: findings.filter((f) => f.severity === 'error').length === 0,
     evidence,
     findings,
+    command: testCommand,
+    output: testResult.output,
   };
 }
 

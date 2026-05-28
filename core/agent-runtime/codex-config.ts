@@ -130,16 +130,6 @@ export function buildCodexMcpInlineArgs(
   return out;
 }
 
-export function codexMcpEnabledToolsForServer(
-  serverName: string,
-  allowedTools: ReadonlyArray<string>,
-): string[] {
-  const prefix = `mcp__${serverName}__`;
-  return allowedTools
-    .filter((tool) => tool.startsWith(prefix))
-    .map((tool) => tool.slice(prefix.length));
-}
-
 function tomlString(value: string): string {
   // TOML basic string: escape `\` and `"`. Other characters pass through
   // literally; agent-supplied content is never routed here (server name,
