@@ -136,6 +136,31 @@ describe('repo affinity', () => {
     });
   });
 
+  it('uses targetRepo defaultBranch when configured repo path is stale', () => {
+    const staleConfiguredProject = {
+      ...project,
+      targetRepo: { localPath: targetRepoPath, defaultBranch: 'develop', cloneUrl: '' },
+      repositories: [
+        {
+          ...project.repositories[0],
+          localPath: missingPath('configured'),
+          defaultBranch: 'feature-branch',
+        },
+      ],
+    } as ProjectConfig;
+
+    expect(
+      resolveRepositoryForWorkItem({
+        project: staleConfiguredProject,
+        workItem: githubWorkItem,
+        fallbackLocalPath: fallbackRepoPath,
+      }),
+    ).toMatchObject({
+      localPath: targetRepoPath,
+      defaultBranch: 'develop',
+    });
+  });
+
   it('falls back when configured and targetRepo absolute paths are missing', () => {
     const missingAbsoluteProject = {
       ...project,
