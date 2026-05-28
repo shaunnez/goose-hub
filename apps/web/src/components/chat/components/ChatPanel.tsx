@@ -396,7 +396,7 @@ export function ChatPanel({ open, onClose, registerCloseHandler }: ChatPanelProp
           const path = (res.invocation.result as { path?: string }).path;
           if (typeof path === 'string' && path.startsWith('/')) {
             navigate(path);
-            handleClose();
+            onClose();
           }
         }
       } catch (err) {
@@ -405,7 +405,7 @@ export function ChatPanel({ open, onClose, registerCloseHandler }: ChatPanelProp
         setPendingDecision(null);
       }
     },
-    [conversation, navigate, handleClose],
+    [conversation, navigate, onClose],
   );
 
   const handleReject = useCallback(
@@ -429,9 +429,9 @@ export function ChatPanel({ open, onClose, registerCloseHandler }: ChatPanelProp
   const handleNavigate = useCallback(
     (path: string) => {
       navigate(path);
-      handleClose();
+      onClose();
     },
-    [navigate, handleClose],
+    [navigate, onClose],
   );
 
   const toggleView = useCallback(() => {
