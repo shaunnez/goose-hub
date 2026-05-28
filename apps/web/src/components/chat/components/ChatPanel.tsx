@@ -34,11 +34,12 @@ const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 interface ChatPanelProps {
   open: boolean;
   onClose: () => void;
+  registerCloseHandler?: (handler: (() => void) | null) => void;
 }
 
 type View = 'thread' | 'list';
 
-export function ChatPanel({ open, onClose }: ChatPanelProps) {
+export function ChatPanel({ open, onClose, registerCloseHandler }: ChatPanelProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const resolved = useMemo(() => resolveScopeFromPath(location.pathname), [location.pathname]);
@@ -135,6 +136,24 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       // localStorage unavailable — accept the loss; selection is best-effort.
     }
   }, []);
+
+  const handleClose = useCallback(() => {
+    loadTokenRef.current += 1;
+    setConversation(null);
+    setMessages([]);
+    setInvocations([]);
+    setError(null);
+    writeActiveId(null);
+    setView('list');
+    onClose();
+  }, [onClose, writeActiveId]);
+
+  useEffect(() => {
+    registerCloseHandler?.(handleClose);
+    return () => {
+      registerCloseHandler?.(null);
+    };
+  }, [handleClose, registerCloseHandler]);
 
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;
@@ -463,7 +482,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         </select>
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleClose}
           aria-label="Close chat"
           className="p-1 text-fg-2 hover:text-fg rounded"
         >
