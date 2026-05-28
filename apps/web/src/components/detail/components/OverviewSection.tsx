@@ -12,6 +12,7 @@ import { useIssueCostsBreakdown } from '../lib/costs';
 import { CommentsSection } from './CommentsSection';
 import { DependenciesSection } from './DependenciesSection';
 import { ExternalRefsSection } from './ExternalRefsSection';
+import { PostBackActions } from './PostBackActions';
 import { StatCard } from './StatCard';
 
 interface OverviewSectionProps {
@@ -148,6 +149,13 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
             />
           </div>
         </div>
+      )}
+      {projectSlug != null && item != null && (
+        <PostBackActions
+          projectSlug={projectSlug}
+          workItemId={item.externalId}
+          investigationText={item.body || undefined}
+        />
       )}
     </div>
   );
