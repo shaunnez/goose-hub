@@ -1496,6 +1496,46 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     });
   });
 
+  it('keeps spec-author structural repair retries in the same delivery-router section', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'spec-original', {
+        payload: { skill: 'spec-author' },
+      }),
+      makeEvent(2, 'agent.run-completed', 'spec-original', {
+        payload: { skill: 'spec-author' },
+      }),
+      makeEvent(3, 'agent.log', 'spec-original', {
+        payload: {
+          skill: 'spec-author',
+          stream: 'validation',
+          text: 'Spec author structural validation failed; retrying once.',
+        },
+      }),
+      makeEvent(4, 'agent.run-started', 'spec-repair', {
+        payload: {
+          skill: 'spec-author',
+          attempt: 'repair',
+          repairOf: 'spec-original',
+        },
+      }),
+      makeEvent(5, 'agent.run-completed', 'spec-repair', {
+        payload: { skill: 'spec-author' },
+      }),
+      makeEvent(6, 'agent.run-failed', 'spec-repair', {
+        payload: { skill: 'spec-author', error: 'Validation failed' },
+      }),
+    ]);
+
+    const deliverySections = items.filter(
+      (item) => item.kind === 'timeline-section' && item.section === 'delivery-router',
+    );
+
+    expect(deliverySections).toHaveLength(1);
+    expect(collectRunIdsForTimelineSection(deliverySections[0]?.items ?? [])).toEqual(
+      new Set(['spec-original', 'spec-repair']),
+    );
+  });
+
   it('uses run-started metadata before grouping sparse runtime events', () => {
     const items = groupTimelineEventsByCanonicalSection([
       makeEvent(1, 'agent.run-completed', 'run-prd-sparse'),

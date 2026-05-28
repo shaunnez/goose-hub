@@ -11,6 +11,7 @@ The `<task>` block contains:
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<issueType>` — `feature` or `bug` (drives strictness of AC→Journey mapping)
 - `<prdContext>` (optional) — canonical compact PRD planning context from the approved parent PRD. Treat this as authoritative for journeys, requirements, acceptance criteria, slice boundaries, implementation decisions, testing decisions, and out-of-scope constraints. If it includes `artifactRef`, the full raw PRD was stored outside prompt context; use the inline fields as the planning contract and targeted repo reads for implementation details.
+  PRD module references may name planned files, not current files. Verify them against `<existingFileManifest>` or targeted reads before citing them as existing code.
 - `<prd>` (optional) — legacy compact PRD context string. Prefer `<prdContext>` when both are present. When absent and `issueType: feature`, derive minimal journeys from the work item.
 - `<investigationSynthesis>` (optional) — JSON-stringified `InvestigateOutput` (`findings`, `keyFiles`, `confidence`, `openQuestions`) produced by the synthesis step of the investigate workflow. **Read this first.** It is the distilled signal: use `findings` to understand the root cause or intent, `keyFiles` to orient your architecture section, and `openQuestions` to flag risks. When present, treat it as authoritative; use scout reports only for file:line citations.
 - `<scoutReports>` (optional) — JSON-stringified Wave-1 scout report digest metadata (M19.01). This is `scout-report-digest-v1`, not the raw scout report JSON. It includes top findings, high-confidence facts, files referenced, risks, contradictions, and artifact keys for full reports when they were offloaded.
@@ -149,6 +150,10 @@ Identify the change being requested. Pull `userJourneys` and `functionalRequirem
 If `<repairFeedback>` is present, read it first. Treat it as mandatory
 feedback from the validator and make the smallest correction needed while still
 returning a complete `EngineeringSpecSchema` JSON object.
+If it says a constraint cites a file that does not exist, do not cite that
+planned file again. Move planned paths to `filesOwned` or `interfaceContracts`
+and cite an existing host file, exported symbol, or current integration point in
+`constraints`.
 
 Emit: `[decision] READ: Issue #<n> — <one-sentence summary>`
 

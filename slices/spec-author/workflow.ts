@@ -225,8 +225,46 @@ function dirOf(p: string): string {
   return slash === -1 ? '' : p.slice(0, slash);
 }
 
+function addDirWithParent(roots: Set<string>, path: unknown): void {
+  if (typeof path !== 'string' || path.length === 0) return;
+  const d = dirOf(path);
+  if (d.length === 0) return;
+  roots.add(d);
+  const parent = dirOf(d);
+  if (parent.length > 0) roots.add(parent);
+}
+
+function prdModuleRefPaths(prdContext: {
+  implementationDecisions?: unknown[];
+  testingDecisions?: unknown;
+}): string[] {
+  const paths: string[] = [];
+
+  for (const decision of prdContext.implementationDecisions ?? []) {
+    if (decision == null || typeof decision !== 'object') continue;
+    const moduleRef = (decision as { moduleRef?: unknown }).moduleRef;
+    if (typeof moduleRef === 'string' && moduleRef.length > 0) paths.push(moduleRef);
+  }
+
+  const testing = prdContext.testingDecisions;
+  if (testing != null && typeof testing === 'object') {
+    const modulesToTest = (testing as { modulesToTest?: unknown }).modulesToTest;
+    if (Array.isArray(modulesToTest)) {
+      for (const path of modulesToTest) {
+        if (typeof path === 'string' && path.length > 0) paths.push(path);
+      }
+    }
+  }
+
+  return paths;
+}
+
 function deriveSpecScopeRoots(input: {
-  prdContext?: { verticalSlices?: Array<unknown> };
+  prdContext?: {
+    verticalSlices?: Array<unknown>;
+    implementationDecisions?: Array<unknown>;
+    testingDecisions?: unknown;
+  };
   investigationSynthesis?: string;
   scoutReports?: string;
   wave2Reports?: string;
@@ -237,6 +275,12 @@ function deriveSpecScopeRoots(input: {
     const d = dirOf(path);
     if (d.length > 0) roots.add(d);
   };
+
+  if (input.prdContext != null) {
+    for (const path of prdModuleRefPaths(input.prdContext)) {
+      addDirWithParent(roots, path);
+    }
+  }
 
   if (input.investigationSynthesis != null) {
     let parsed: unknown;
