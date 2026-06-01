@@ -119,7 +119,7 @@ describe('repo affinity', () => {
       targetRepo: { ...project.targetRepo, localPath: `~/missing-${Date.now()}` },
       repositories: [
         {
-          ...project.repositories[0],
+          ...project.repositories![0],
           localPath: `~/missing-${Date.now()}`,
         },
       ],
@@ -142,7 +142,7 @@ describe('repo affinity', () => {
       targetRepo: { localPath: targetRepoPath, defaultBranch: 'develop', cloneUrl: '' },
       repositories: [
         {
-          ...project.repositories[0],
+          ...project.repositories![0],
           localPath: missingPath('configured'),
           defaultBranch: 'feature-branch',
         },
@@ -167,7 +167,7 @@ describe('repo affinity', () => {
       targetRepo: { ...project.targetRepo, localPath: missingPath('target') },
       repositories: [
         {
-          ...project.repositories[0],
+          ...project.repositories![0],
           localPath: missingPath('configured'),
         },
       ],
@@ -183,5 +183,4 @@ describe('repo affinity', () => {
       localPath: fallbackRepoPath,
     });
   });
-
 });

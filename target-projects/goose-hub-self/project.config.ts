@@ -12,7 +12,7 @@ const config: ProjectConfig = {
   targetRepo: {
     cloneUrl: 'git@github.com:shaunnez/goose-hub.git',
     defaultBranch: 'main',
-    localPath: '~/code/goose-hub',
+    localPath: '/Users/shaunnesbitt/projects/goose-hub',
   },
   stack: {
     runtime: 'node',
