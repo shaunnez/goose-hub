@@ -1,3 +1,4 @@
+import { firstProjectRepository } from '@goose-hub/core/projects/repositories.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { ProjectConfig } from '@goose-hub/core/types.js';
 import type { Result } from './middleware.js';
@@ -28,7 +29,10 @@ function githubCanonicalResolution(
   routeId: string,
 ): ResolvedCanonicalWorkItemForRoute {
   const externalId = routeId.match(/#([^#]+)$/)?.[1] ?? routeId;
-  const repoRef = project.source.kind === 'github' ? project.source.repo : project.repos[0];
+  const repoRef =
+    project.source.kind === 'github'
+      ? project.source.repo
+      : (firstProjectRepository(project)?.repoRef ?? `local:${project.id}`);
   return {
     routeId,
     canonicalWorkItemId: `github:${repoRef}#${externalId}`,

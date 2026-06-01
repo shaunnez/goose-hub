@@ -101,6 +101,32 @@ describe('getSourceForSlug', () => {
     }
   });
 
+  it('does not use GitHub integration repos as local-db source authority', async () => {
+    vi.doMock('./projects.js', () => ({
+      getProject: vi.fn().mockResolvedValue({
+        id: 'proj-local',
+        name: 'Local',
+        slug: 'local-project',
+        source: {
+          kind: 'local-db',
+          stateMachine: 'db',
+          integrations: {
+            github: {
+              repos: ['org/github-mirror'],
+              importIssues: true,
+              mirrorLabels: true,
+            },
+          },
+        },
+      }),
+    }));
+    const { getSourceForSlug } = await import('./source.js');
+
+    const source = await getSourceForSlug('local-project');
+
+    expect(source?.repoRef).toBe('local:proj-local');
+  });
+
   it('throws when GITHUB_TOKEN is an empty string (exercises the token guard)', async () => {
     // process.env values are always strings; empty string exercises `token.length === 0`.
     // The null/undefined path (token == null) cannot be reached via env var directly.

@@ -98,6 +98,21 @@ describe('repo affinity', () => {
     });
   });
 
+  it('rejects local-db repo links missing from repositories instead of falling back to targetRepo', () => {
+    const repository = {
+      listRepoLinks: () => [repoLink('workspace/bitbucket-repo', 'primary')],
+    } as unknown as LocalDbWorkItemRepository;
+
+    expect(() =>
+      resolveRepositoryForWorkItem({
+        project,
+        workItem,
+        fallbackLocalPath: '/repo',
+        repository,
+      }),
+    ).toThrow("repo link 'workspace/bitbucket-repo' is not registered");
+  });
+
   it('uses a valid configured repository path before project targetRepo and fallback', () => {
     expect(
       resolveRepositoryForWorkItem({
@@ -119,6 +134,7 @@ describe('repo affinity', () => {
       targetRepo: { ...project.targetRepo, localPath: `~/missing-${Date.now()}` },
       repositories: [
         {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           ...project.repositories![0],
           localPath: `~/missing-${Date.now()}`,
         },
@@ -142,6 +158,7 @@ describe('repo affinity', () => {
       targetRepo: { localPath: targetRepoPath, defaultBranch: 'develop', cloneUrl: '' },
       repositories: [
         {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           ...project.repositories![0],
           localPath: missingPath('configured'),
           defaultBranch: 'feature-branch',
@@ -167,6 +184,7 @@ describe('repo affinity', () => {
       targetRepo: { ...project.targetRepo, localPath: missingPath('target') },
       repositories: [
         {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           ...project.repositories![0],
           localPath: missingPath('configured'),
         },

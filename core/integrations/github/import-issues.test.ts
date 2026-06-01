@@ -99,4 +99,38 @@ describe('importGitHubIssuesToLocalDb', () => {
       source: 'github-import',
     });
   });
+
+  it('does not implicitly import from legacy repos when github integration repos are empty', async () => {
+    const { sqlite, repository } = makeRepository();
+    handles.push(sqlite);
+
+    const result = await importGitHubIssuesToLocalDb({
+      projectConfig: {
+        ...projectConfig,
+        source: {
+          kind: 'local-db',
+          stateMachine: 'db',
+          integrations: { github: { repos: [], importIssues: true } },
+        },
+        repos: ['owner/legacy-repo'],
+      } as ProjectConfig,
+      repository,
+      issuesByRepo: {
+        'owner/legacy-repo': [
+          {
+            number: 42,
+            title: 'Should not import',
+            body: 'Body',
+            labels: [],
+            milestone: null,
+            user: { login: 'octo' },
+            created_at: '2026-05-26T00:00:00Z',
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual({ imported: 0, updated: 0, skipped: 0, repoRefs: [] });
+    expect(repository.listWorkItems('proj')).toEqual([]);
+  });
 });

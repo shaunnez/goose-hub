@@ -93,9 +93,15 @@ const config: ProjectConfig = {
   name: ${JSON.stringify(name)},
   slug: ${JSON.stringify(slug)},
   source: {
-    kind: 'github',
-    repo: ${JSON.stringify(firstRepo.repoRef)},
-    stateMachine: 'labels',
+    kind: 'local-db',
+    stateMachine: 'db',
+    integrations: {
+      github: {
+        repos: ${JSON.stringify(repoRefs)},
+        mirrorLabels: true,
+        importIssues: true,
+      },
+    },
   },
   targetRepo: {
     cloneUrl: ${JSON.stringify(cloneUrl)},

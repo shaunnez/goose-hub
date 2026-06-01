@@ -23,6 +23,20 @@ export async function fetchIssue(slug: string, id: string): Promise<WorkItemDto>
   return item;
 }
 
+export async function createLocalIssue(
+  slug: string,
+  input: {
+    title: string;
+    body?: string;
+    type?: string;
+    priority?: string;
+    milestoneNumber?: number | null;
+  },
+): Promise<WorkItemDto> {
+  const { item } = await postJson<{ item: WorkItemDto }>(`/projects/${slug}/issues`, input);
+  return item;
+}
+
 export async function fetchEngineeringSpec(
   slug: string,
   id: string,
