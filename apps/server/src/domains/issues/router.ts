@@ -6,6 +6,7 @@ import {
   approveIssue,
   approvePRD,
   commentOnIssue,
+  createIssue,
   declinePRD,
   getIssue,
   getIssueAcceptanceContract,
@@ -36,6 +37,21 @@ router.get('/:slug/issues', async (c) => {
     ? await listIssues(c.req.param('slug'), { all })
     : await listIssues(c.req.param('slug'));
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
+});
+
+router.post('/:slug/issues', async (c) => {
+  const body = await parseBody<{
+    title?: unknown;
+    body?: unknown;
+    type?: unknown;
+    priority?: unknown;
+    milestoneNumber?: unknown;
+  }>(c);
+  if (!body.ok) return body.error;
+  const result = await createIssue(c.req.param('slug'), body.data);
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404);
 });
 
 router.get('/:slug/issues/:id', async (c) => {
@@ -92,11 +108,15 @@ router.get('/:slug/issues/:id/prd', async (c) => {
 });
 
 router.get('/:slug/issues/:id/artifacts/:artifactKey', async (c) => {
-  const result = await getIssueArtifact(
-    c.req.param('slug'),
-    c.req.param('id'),
-    c.req.param('artifactKey'),
-  );
+  const offset = c.req.query('offset');
+  const limit = c.req.query('limit');
+  const result =
+    offset != null || limit != null
+      ? await getIssueArtifact(c.req.param('slug'), c.req.param('id'), c.req.param('artifactKey'), {
+          offset: offset == null ? undefined : Number(offset),
+          limit: limit == null ? undefined : Number(limit),
+        })
+      : await getIssueArtifact(c.req.param('slug'), c.req.param('id'), c.req.param('artifactKey'));
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 

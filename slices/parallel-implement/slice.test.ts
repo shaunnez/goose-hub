@@ -23,6 +23,7 @@ import type { DevReviewResponseOutput } from '@goose-hub/skills/dev-review-respo
 import type { DevReviewOutput } from '@goose-hub/skills/dev-review/schema.js';
 import type { ImplementWpOutput } from '@goose-hub/skills/implement-wp/schema.js';
 import type { EngineeringSpec, WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
+import { buildParallelPrBody } from './parallel-helpers.js';
 import { runParallelImplementWorkflow } from './workflow.js';
 import { resolveImplementWpBudget, resolveImplementWpControl } from './wp-budget.js';
 import { runOneWpBuilder } from './wp-builder.js';
@@ -89,6 +90,45 @@ function makeSpec(workPackages: WorkPackage[]): EngineeringSpec {
     decisionSummaries: [{ kind: 'PLAN', summary: 'Test spec' }],
   };
 }
+
+describe('parallel PR body local-db semantics', () => {
+  it('uses a local Work Item reference instead of fake GitHub close keywords', () => {
+    const body = buildParallelPrBody({
+      workItem: makeWorkItem({
+        id: 'local:proj#1',
+        externalId: '1',
+        externalRefs: [
+          {
+            id: 1,
+            provider: 'jira',
+            kind: 'issue',
+            repoRef: null,
+            externalId: 'TAS-123',
+            url: 'https://company.atlassian.net/browse/TAS-123',
+            metadata: null,
+            createdAt: '2026-05-27T00:00:00.000Z',
+          },
+        ],
+      }),
+      spec: makeSpec([makeWp('WP1', ['core/a.ts'])]),
+      wpResults: [{ wpId: 'WP1', status: 'ok', runId: 'wp-run-1' }],
+    });
+
+    expect(body).toContain('Local Work Item: local:proj#1');
+    expect(body).not.toMatch(/(?:Closes|Fixes|Resolves) #1/);
+    expect(body).not.toContain('TAS-123');
+  });
+
+  it('keeps close keywords for GitHub Work Items', () => {
+    const body = buildParallelPrBody({
+      workItem: makeWorkItem(),
+      spec: makeSpec([makeWp('WP1', ['core/a.ts'])]),
+      wpResults: [{ wpId: 'WP1', status: 'ok', runId: 'wp-run-1' }],
+    });
+
+    expect(body).toContain('Closes #560');
+  });
+});
 
 function makeInvestigationEvent(workItem: WorkItem) {
   return {
@@ -2674,6 +2714,99 @@ describe('parallel-implement durable integration branch persistence', () => {
       skill: 'parallel-implement',
       runDisposition: 'completed',
     });
+  });
+
+  it('opens local-db Work Item PRs without GitHub close keywords and stores PR refs', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent } = makeAppendEvent();
+    const iterations: Array<{ wpId: string; status: string }> = [];
+    const openPRImpl = vi.fn();
+    const localPrCalls: Array<{ body: string; repo: string }> = [];
+    const upsertedRefs: Array<{ kind: string; externalId: string; repoRef: string }> = [];
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem({
+        id: 'local:proj#1',
+        externalId: '1',
+        externalRefs: [
+          {
+            id: 1,
+            provider: 'jira',
+            kind: 'issue',
+            repoRef: null,
+            externalId: 'TAS-123',
+            url: 'https://company.atlassian.net/browse/TAS-123',
+            metadata: null,
+            createdAt: '2026-05-27T00:00:00.000Z',
+          },
+        ],
+      }),
+      spec,
+      'pipeline-run-local',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        createIntegrationWorktreeImpl: () => ({
+          worktreePath: '/tmp/issue-wt',
+          previousHeadSha: 'base-sha',
+        }),
+        createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha-wp1',
+        pushBranchImpl: () => undefined,
+        resolveRemoteBranchHeadImpl: () => 'sha-wp1',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: (_runId, wpId, _iteration, status) => {
+          iterations.push({ wpId, status });
+        },
+        getLastStatusImpl: (_runId, wpId) => {
+          const last = [...iterations].reverse().find((i) => i.wpId === wpId);
+          return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+        },
+        openPRImpl,
+        openLocalDbPRImpl: async (input) => {
+          localPrCalls.push({ body: input.body, repo: input.repo });
+          return {
+            prNumber: 5,
+            prUrl: 'https://github.com/owner/repo/pull/5',
+            branch: input.branchName,
+            base: input.baseBranch ?? 'main',
+          };
+        },
+        upsertGithubExternalRefImpl: (input) => {
+          upsertedRefs.push({
+            kind: input.kind,
+            externalId: input.externalId,
+            repoRef: input.repoRef,
+          });
+          return {} as never;
+        },
+        appendEvent,
+      },
+    );
+
+    expect(result.status).toBe('success');
+    expect(openPRImpl).not.toHaveBeenCalled();
+    expect(localPrCalls).toEqual([
+      expect.objectContaining({
+        repo: 'shaunnez/goose-hub',
+        body: expect.stringContaining('Local Work Item: local:proj#1'),
+      }),
+    ]);
+    expect(localPrCalls[0]?.body).not.toMatch(/(?:Closes|Fixes|Resolves) #1/);
+    expect(localPrCalls[0]?.body).not.toContain('TAS-123');
+    expect(upsertedRefs).toEqual([
+      { kind: 'pull_request', repoRef: 'shaunnez/goose-hub', externalId: '5' },
+      {
+        kind: 'branch',
+        repoRef: 'shaunnez/goose-hub',
+        externalId: 'factory/run/pipeline-run-local',
+      },
+    ]);
   });
 
   it('persists green WP work before stopping a post-run budget-killed workflow', async () => {

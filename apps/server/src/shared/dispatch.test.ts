@@ -692,7 +692,7 @@ describe('dispatchFixIssue', () => {
     mockGetSourceForSlug.mockResolvedValue(mockSource);
     mockGetProject.mockResolvedValue({
       budgets: { maxParallelAgents: 1 },
-      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
     });
     mockFilterEligibleByDependencies.mockResolvedValue({
       eligible: [],
@@ -731,7 +731,7 @@ describe('dispatchFixIssue', () => {
     mockGetSourceForSlug.mockResolvedValue(mockSource);
     mockGetProject.mockResolvedValue({
       budgets: { maxParallelAgents: 1 },
-      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
     });
     mockFilterEligibleByDependencies.mockResolvedValue({
       eligible: [mockItem],
@@ -967,7 +967,7 @@ describe('dispatchFixIssue: bug routing', () => {
     mockGetProject.mockResolvedValue({
       id: 'slug',
       budgets: { maxParallelAgents: 1 },
-      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
     });
     const bugItem = {
       id: 'item-bug',
@@ -1030,7 +1030,7 @@ describe('dispatchFixIssue: bug routing', () => {
     mockGetProject.mockResolvedValue({
       id: 'slug',
       budgets: { maxParallelAgents: 1 },
-      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
     });
     const featureItem = {
       id: 'item-feat',
@@ -1063,7 +1063,7 @@ describe('dispatchFixIssue: bug routing', () => {
     mockGetProject.mockResolvedValue({
       id: 'slug',
       budgets: { maxParallelAgents: 1 },
-      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
     });
     const featureItem = {
       id: 'item-feat-child',
@@ -1095,7 +1095,7 @@ describe('dispatchFixIssue: bug routing', () => {
     mockGetProject.mockResolvedValue({
       id: 'slug',
       budgets: { maxParallelAgents: 1 },
-      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
     });
     const featureItem = {
       id: 'item-feat-label-failure',

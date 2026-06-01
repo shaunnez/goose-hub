@@ -1,5 +1,6 @@
 import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { firstProjectRepository, listProjectRepositories } from '../projects/repositories.js';
 import type { WorkItem } from '../state-source/interface.js';
 import { LocalDbWorkItemRepository } from '../state-source/local-db-repository.js';
 import type { LocalDbRepoLinkRow } from '../state-source/local-db-repository.js';
@@ -69,12 +70,22 @@ export function resolveRepositoryForWorkItem(input: {
     throw new Error('local-db Work Item has no repo link for implementation');
   }
 
-  const repoRef = repoLink?.repoRef ?? input.workItem.repoRef ?? project?.repos?.[0] ?? '';
+  const repoRef =
+    repoLink?.repoRef ??
+    input.workItem.repoRef ??
+    (project == null ? null : firstProjectRepository(project)?.repoRef) ??
+    '';
   if (repoRef.length === 0) {
     throw new Error('Work Item has no repository affinity');
   }
 
-  const configuredRepo = project?.repositories?.find((repo) => repo.repoRef === repoRef);
+  const configuredRepo =
+    project == null
+      ? undefined
+      : listProjectRepositories(project).find((repo) => repo.repoRef === repoRef);
+  if (repoLink != null && project != null && configuredRepo == null) {
+    throw new Error(`local-db Work Item repo link '${repoRef}' is not registered in repositories`);
+  }
   const configuredLocalPath = normalizeExistingLocalPath(configuredRepo?.localPath);
   const targetLocalPath = normalizeExistingLocalPath(project?.targetRepo?.localPath);
   return {

@@ -71,9 +71,9 @@ const GLOBAL_FIELDS: Array<{
 const IMPLEMENT_WP_FIELDS: Array<{
   key: Exclude<
     keyof NonNullable<ProjectSettingsDto['dbImplementWpOverrides']>,
-    'updatedAt' | 'updatedBy'
+    'updatedAt' | 'updatedBy' | 'implementWpContractKeywords'
   >;
-  defaultKey: keyof ProjectSettingsDto['implementWpDefaults'];
+  defaultKey: Exclude<keyof ProjectSettingsDto['implementWpDefaults'], 'contractKeywords'>;
   label: string;
   isFloat?: boolean;
 }> = [

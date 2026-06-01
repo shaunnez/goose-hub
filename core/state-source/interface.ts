@@ -7,6 +7,17 @@ export type Mode = 'interactive' | 'supervised' | 'autonomous';
 export type Schedule = 'current' | 'next' | 'later' | 'blocked-by';
 export type ExecMode = 'serial' | 'parallel';
 
+export interface WorkItemExternalRef {
+  id: number;
+  provider: string;
+  kind: string;
+  repoRef: string | null;
+  externalId: string;
+  url: string | null;
+  metadata: unknown | null;
+  createdAt: string;
+}
+
 /**
  * Default values applied when a work item has no label in the corresponding
  * group. Used by the ingress parsers in `github-labels.ts` so the fallback
@@ -37,6 +48,7 @@ export interface WorkItem {
   dependsOn: string[]; // repo-qualified refs parsed from body
   blocks: string[];
   createdAt: Date;
+  externalRefs?: WorkItemExternalRef[];
   closedAt?: Date;
 }
 

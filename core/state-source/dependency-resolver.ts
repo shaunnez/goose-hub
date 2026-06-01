@@ -1,5 +1,6 @@
 import { logger } from '../logger.js';
 import { loadProjects } from '../projects/loader.js';
+import { listProjectRepoRefs } from '../projects/repositories.js';
 import type { ProjectConfig } from '../types.js';
 import type { DependencyRef } from './dependency-parser.js';
 
@@ -142,7 +143,8 @@ export async function createProjectAwareTargetSource(
   const fetchers = new Map<string, ProjectIssueFetcher>();
 
   for (const project of projects) {
-    const repoRefs = project.source.kind === 'github' ? [project.source.repo] : project.repos;
+    const repoRefs =
+      project.source.kind === 'github' ? [project.source.repo] : listProjectRepoRefs(project);
     const fetcher =
       options.fetchTargetForProject != null
         ? options.fetchTargetForProject(project)

@@ -1,3 +1,4 @@
+import { firstProjectRepository } from '@goose-hub/core/projects/repositories.js';
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
 import { InMemoryLabelsSource } from '@goose-hub/core/state-source/in-memory-labels.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
@@ -21,12 +22,7 @@ export function isValidSlug(slug: string): boolean {
 
 function compatibilityRepoRef(cfg: ProjectConfig): string {
   if (cfg.source.kind === 'github') return cfg.source.repo;
-  return (
-    cfg.repositories?.[0]?.repoRef ??
-    cfg.repos[0] ??
-    cfg.source.integrations?.github?.repos[0] ??
-    `local:${cfg.id}`
-  );
+  return firstProjectRepository(cfg)?.repoRef ?? `local:${cfg.id}`;
 }
 
 export async function getSourceForSlug(slug: string): Promise<StateSource | null> {

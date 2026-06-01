@@ -38,7 +38,7 @@ export async function importGitHubIssuesToLocalDb(
     return { imported: 0, updated: 0, skipped: 0, repoRefs: [] };
   }
 
-  const repoRefs = github.repos.length > 0 ? github.repos : cfg.repos;
+  const repoRefs = github.repos;
   const repository = input.repository ?? new LocalDbWorkItemRepository();
   let imported = 0;
   let updated = 0;

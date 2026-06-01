@@ -1,5 +1,5 @@
 import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
-import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
+import { getArtifact, getArtifactSlice } from '@goose-hub/core/agent-artifacts/repository.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { isIssueTimelineEvent } from '@goose-hub/core/event-stream/issue-timeline.js';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -12,6 +12,7 @@ import {
   type ScheduleUIValue,
 } from '@goose-hub/core/state-source/github-labels.js';
 import type { Result } from '#shared/middleware.js';
+import { getProject } from '#shared/projects.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
 import {
@@ -265,6 +266,22 @@ function buildPrdRelationships(projectId: string): {
   return { byParent, byChild };
 }
 
+function workItemServerDto(item: { id: string; externalRefs?: unknown }): object {
+  return {
+    ...(item as object),
+    canonicalWorkItemId: item.id,
+    externalRefs: Array.isArray(item.externalRefs) ? item.externalRefs : [],
+  };
+}
+
+export interface CreateIssueRequestDto {
+  title?: unknown;
+  body?: unknown;
+  type?: unknown;
+  priority?: unknown;
+  milestoneNumber?: unknown;
+}
+
 // Public surface for the issues domain. The implementation is split across
 // sibling files to keep each concern focused; this barrel re-exports the
 // pieces the router and tests depend on.
@@ -288,8 +305,8 @@ export async function listIssues(
   const titleByExternalId = new Map(items.map((i) => [i.externalId, i.title]));
   const { byParent, byChild } = buildPrdRelationships(slug);
   const enriched = items.map((item) => ({
-    ...(item as object),
-    lastPersonaId: lastPersonaMap.get((item as { id: string }).id) ?? null,
+    ...workItemServerDto(item),
+    lastPersonaId: lastPersonaMap.get(item.id) ?? null,
     dependsOnTitles: Object.fromEntries(
       (item.dependsOn ?? [])
         .filter((ref) => titleByExternalId.has(ref))
@@ -301,6 +318,56 @@ export async function listIssues(
   return { ok: true, data: { items: enriched } };
 }
 
+export async function createIssue(
+  slug: string,
+  body: CreateIssueRequestDto,
+): Promise<Result<{ item: unknown }>> {
+  const title = typeof body.title === 'string' ? body.title.trim() : '';
+  if (title.length === 0) return { ok: false, error: 'title is required', status: 400 };
+
+  const project = await getProject(slug);
+  if (project == null) return { ok: false, error: 'project not found', status: 404 };
+  if (project.source.kind !== 'local-db') {
+    return {
+      ok: false,
+      error: 'local Work Item creation requires a local-db project',
+      status: 400,
+    };
+  }
+
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+
+  const type =
+    body.type === 'feature' ||
+    body.type === 'bug' ||
+    body.type === 'chore' ||
+    body.type === 'research'
+      ? body.type
+      : undefined;
+  const priority =
+    body.priority === 'critical' ||
+    body.priority === 'high' ||
+    body.priority === 'medium' ||
+    body.priority === 'low'
+      ? body.priority
+      : undefined;
+  const milestoneId =
+    typeof body.milestoneNumber === 'number' && Number.isInteger(body.milestoneNumber)
+      ? String(body.milestoneNumber)
+      : undefined;
+
+  const item = await source.createIssue({
+    title,
+    body: typeof body.body === 'string' ? body.body : '',
+    ...(type != null ? { type } : {}),
+    ...(priority != null ? { priority } : {}),
+    ...(milestoneId != null ? { milestoneId } : {}),
+  });
+
+  return { ok: true, data: { item: workItemServerDto(item) } };
+}
+
 export async function getIssue(slug: string, id: string): Promise<Result<{ item: unknown }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
@@ -310,7 +377,7 @@ export async function getIssue(slug: string, id: string): Promise<Result<{ item:
   const { byParent, byChild } = buildPrdRelationships(slug);
   const externalId = (item as { externalId: string }).externalId;
   const enriched = {
-    ...(item as object),
+    ...workItemServerDto(item as { id: string; externalRefs?: unknown }),
     lastPersonaId: lastPersonaMap.get(workItemId) ?? null,
     ...resolvePipelineTimes(slug, workItemId),
     prdChildren: byParent.get(externalId),
@@ -459,6 +526,7 @@ export async function getIssueArtifact(
   slug: string,
   id: string,
   artifactKey: string,
+  slice?: { offset?: number; limit?: number },
 ): Promise<
   Result<{
     artifact: {
@@ -471,13 +539,52 @@ export async function getIssueArtifact(
       bytes: number;
       createdAt: string;
       expiresAt: string | null;
-      payload: unknown;
+      payload?: unknown;
+      offset?: number;
+      limit?: number;
+      returnedBytes?: number;
+      hasMore?: boolean;
+      payloadSlice?: string;
+      encoding?: 'json';
     };
   }>
 > {
   const resolved = await resolveCanonicalWorkItemForRoute(slug, id);
   if (!resolved.ok) return resolved;
   const expectedWorkItemId = resolved.data.canonicalWorkItemId;
+
+  if (slice?.offset != null || slice?.limit != null) {
+    const artifact = getArtifactSlice(artifactKey, slice);
+    if (artifact == null) return { ok: false, error: 'artifact not found', status: 404 };
+    if (artifact.projectId !== slug) return { ok: false, error: 'artifact not found', status: 404 };
+    if (artifact.workItemId !== expectedWorkItemId) {
+      return { ok: false, error: 'artifact not found', status: 404 };
+    }
+
+    return {
+      ok: true,
+      data: {
+        artifact: {
+          artifactKey: artifact.artifactKey,
+          projectId: artifact.projectId,
+          workItemId: artifact.workItemId,
+          runId: artifact.runId,
+          kind: artifact.kind,
+          summary: artifact.summary,
+          bytes: artifact.bytes,
+          createdAt: artifact.createdAt,
+          expiresAt: artifact.expiresAt,
+          offset: artifact.offset,
+          limit: artifact.limit,
+          returnedBytes: artifact.returnedBytes,
+          hasMore: artifact.hasMore,
+          payloadSlice: artifact.payloadSlice,
+          encoding: artifact.encoding,
+        },
+      },
+    };
+  }
+
   const artifact = getArtifact(artifactKey);
   if (artifact == null) return { ok: false, error: 'artifact not found', status: 404 };
   if (artifact.projectId !== slug) return { ok: false, error: 'artifact not found', status: 404 };

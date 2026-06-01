@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockListIssues,
+  mockCreateIssue,
   mockGetIssue,
   mockGetIssueLegalTargets,
   mockGetIssueEvents,
@@ -30,6 +31,7 @@ const {
   mockGetIssueSpec,
 } = vi.hoisted(() => ({
   mockListIssues: vi.fn(),
+  mockCreateIssue: vi.fn(),
   mockGetIssue: vi.fn(),
   mockGetIssueLegalTargets: vi.fn(),
   mockGetIssueEvents: vi.fn(),
@@ -57,6 +59,7 @@ const {
 
 vi.mock('./service.js', () => ({
   listIssues: mockListIssues,
+  createIssue: mockCreateIssue,
   getIssue: mockGetIssue,
   getIssueLegalTargets: mockGetIssueLegalTargets,
   getIssueEvents: mockGetIssueEvents,
@@ -132,6 +135,46 @@ describe('GET /projects/:slug/issues', () => {
     expect(res.status).toBe(404);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('project not found');
+  });
+});
+
+describe('POST /projects/:slug/issues', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('creates a local Work Item', async () => {
+    const item = { id: 'local:proj#1', externalId: '1', externalRefs: [] };
+    mockCreateIssue.mockResolvedValue({ ok: true, data: { item } });
+
+    const app = makeApp();
+    const res = await postJson(app, '/projects/my-project/issues', {
+      title: 'Local-only task',
+      body: 'Details',
+      type: 'chore',
+      priority: 'high',
+      milestoneNumber: 3,
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ item });
+    expect(mockCreateIssue).toHaveBeenCalledWith('my-project', {
+      title: 'Local-only task',
+      body: 'Details',
+      type: 'chore',
+      priority: 'high',
+      milestoneNumber: 3,
+    });
+  });
+
+  it('returns service validation failures', async () => {
+    mockCreateIssue.mockResolvedValue({ ok: false, error: 'title is required', status: 400 });
+
+    const app = makeApp();
+    const res = await postJson(app, '/projects/my-project/issues', { title: '' });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'title is required' });
   });
 });
 
@@ -310,6 +353,40 @@ describe('GET /projects/:slug/issues/:id/artifacts/:artifactKey', () => {
     const body = (await res.json()) as { artifact: unknown };
     expect(body.artifact).toEqual(artifact);
     expect(mockGetIssueArtifact).toHaveBeenCalledWith('my-project', '42', 'pr-diff:abc');
+  });
+
+  it('passes bounded slice params to artifact retrieval', async () => {
+    const artifact = {
+      artifactKey: 'provider-evidence:abc',
+      projectId: 'my-project',
+      workItemId: 'local:my-project#42',
+      runId: 'run-abc',
+      kind: 'provider-evidence',
+      summary: 'Provider evidence',
+      bytes: 100,
+      createdAt: '2026-05-14T00:00:00Z',
+      expiresAt: null,
+      offset: 10,
+      limit: 20,
+      returnedBytes: 20,
+      hasMore: true,
+      payloadSlice: '01234567890123456789',
+      encoding: 'json',
+    };
+    mockGetIssueArtifact.mockResolvedValue({ ok: true, data: { artifact } });
+
+    const app = makeApp();
+    const res = await app.request(
+      '/projects/my-project/issues/42/artifacts/provider-evidence:abc?offset=10&limit=20',
+      { method: 'GET' },
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ artifact });
+    expect(mockGetIssueArtifact).toHaveBeenCalledWith('my-project', '42', 'provider-evidence:abc', {
+      offset: 10,
+      limit: 20,
+    });
   });
 
   it('returns 404 for unknown or unauthorized artifacts', async () => {

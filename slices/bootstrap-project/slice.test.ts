@@ -404,9 +404,11 @@ describe('bootstrapProject — happy path', () => {
     expect(putBody.branch).toBe('bootstrap/widgets');
     const decoded = Buffer.from(putBody.content, 'base64').toString('utf-8');
     expect(decoded).toContain('slug: "widgets"');
-    expect(decoded).toContain("kind: 'github'");
-    expect(decoded).toContain('repo: "octo/widgets"');
-    expect(decoded).toContain("stateMachine: 'labels'");
+    expect(decoded).toContain("kind: 'local-db'");
+    expect(decoded).toContain("stateMachine: 'db'");
+    expect(decoded).toContain('repositories: [');
+    expect(decoded).toContain('repos: ["octo/widgets"]');
+    expect(decoded).toContain('integrations: {\n      github:');
     expect(decoded).toContain('"octo/widgets"');
 
     // repos.md was also pushed to the bootstrap branch.
@@ -625,7 +627,7 @@ describe("bootstrapProject — scaffolded config uses the target repo's default 
 });
 
 describe('bootstrapProject — generated config supports multiple repos safely', () => {
-  it('keeps a supported GitHub source and derives local paths from owner/repo', async () => {
+  it('keeps local-db as source and derives local paths from owner/repo', async () => {
     const out = renderProjectConfig({
       slug: 'platform',
       repoRef: 'org-a/api',
@@ -639,9 +641,10 @@ describe('bootstrapProject — generated config supports multiple repos safely',
       detectedAt: '2026-05-07T00:00:00.000Z',
     });
 
-    expect(out).toContain("kind: 'github'");
-    expect(out).toContain('repo: "org-a/api"');
-    expect(out).toContain("stateMachine: 'labels'");
+    expect(out).toContain("kind: 'local-db'");
+    expect(out).toContain("stateMachine: 'db'");
+    expect(out).toContain('repos: ["org-a/api","org-b/api"]');
+    expect(out).toContain('repositories: [');
     expect(out).toContain('localPath: "/tmp/repos/org-a/api"');
     expect(out).toContain('localPath: "/tmp/repos/org-b/api"');
   });

@@ -5,6 +5,7 @@ import { agentArtifacts } from '../db/schema.js';
 import {
   deterministicArtifactKey,
   getArtifact,
+  getArtifactSlice,
   listArtifactsForRun,
   listArtifactsForWorkItem,
   maybeStoreLargePayload,
@@ -168,6 +169,34 @@ describe('agent artifact repository', () => {
       summary: 'Large payload',
     });
     expect(getArtifact('large:test')?.payload).toEqual({ body: 'x'.repeat(64) });
+  });
+
+  it('returns bounded serialized payload slices without parsing the full artifact payload', () => {
+    storeArtifact({
+      projectId: PROJECT,
+      workItemId: WORK_ITEM,
+      runId: RUN_ID,
+      kind: 'provider-evidence',
+      summary: 'Provider evidence',
+      payload: { body: 'abcdefghijklmnopqrstuvwxyz' },
+      artifactKey: 'provider-evidence:test',
+    });
+
+    const slice = getArtifactSlice('provider-evidence:test', { offset: 9, limit: 10 });
+
+    expect(slice).toMatchObject({
+      artifactKey: 'provider-evidence:test',
+      projectId: PROJECT,
+      workItemId: WORK_ITEM,
+      kind: 'provider-evidence',
+      offset: 9,
+      limit: 10,
+      returnedBytes: 10,
+      hasMore: true,
+      payloadSlice: 'abcdefghij',
+      encoding: 'json',
+    });
+    expect(slice).not.toHaveProperty('payload');
   });
 
   it('measures UTF-8 bytes rather than string length', () => {

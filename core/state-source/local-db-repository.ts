@@ -18,6 +18,7 @@ import type {
   Mode,
   Priority,
   Schedule,
+  WorkItemExternalRef,
   WorkItemType,
 } from './interface.js';
 
@@ -27,6 +28,7 @@ export type LocalDbMilestoneRow = typeof workItemMilestones.$inferSelect;
 export type LocalDbRepoLinkRow = typeof workItemRepoLinks.$inferSelect;
 export type LocalDbExternalRefRow = typeof workItemExternalRefs.$inferSelect;
 export type LocalDbStateEventRow = typeof workItemStateEvents.$inferSelect;
+export type LocalDbExternalRefReadModel = WorkItemExternalRef;
 
 export interface LocalDbCreateWorkItemInput {
   projectId: string;
@@ -61,6 +63,28 @@ function externalIdFromItemId(projectId: string, itemId: string): string {
   const localPrefix = `local:${projectId}#`;
   if (itemId.startsWith(localPrefix)) return itemId.slice(localPrefix.length);
   return itemId.match(/#([^#]+)$/)?.[1] ?? itemId;
+}
+
+export function parseExternalRefMetadata(row: LocalDbExternalRefRow): unknown | null {
+  if (row.metadataJson == null) return null;
+  try {
+    return JSON.parse(row.metadataJson) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+export function toExternalRefReadModel(row: LocalDbExternalRefRow): LocalDbExternalRefReadModel {
+  return {
+    id: row.id,
+    provider: row.provider,
+    kind: row.kind,
+    repoRef: row.repoRef,
+    externalId: row.externalId,
+    url: row.url,
+    metadata: parseExternalRefMetadata(row),
+    createdAt: row.createdAt,
+  };
 }
 
 export class LocalDbWorkItemRepository {
@@ -508,6 +532,14 @@ export class LocalDbWorkItemRepository {
       .all();
   }
 
+  listExternalRefReadModelsByKind(input: {
+    projectId: string;
+    provider?: string;
+    kind?: string;
+  }): LocalDbExternalRefReadModel[] {
+    return this.listExternalRefsByKind(input).map(toExternalRefReadModel);
+  }
+
   listExternalRefs(projectId: string, itemId: string): LocalDbExternalRefRow[] {
     const item = this.requireWorkItem(projectId, itemId);
     return this.db
@@ -516,6 +548,10 @@ export class LocalDbWorkItemRepository {
       .where(eq(workItemExternalRefs.workItemId, item.id))
       .orderBy(asc(workItemExternalRefs.id))
       .all();
+  }
+
+  listExternalRefReadModels(projectId: string, itemId: string): LocalDbExternalRefReadModel[] {
+    return this.listExternalRefs(projectId, itemId).map(toExternalRefReadModel);
   }
 
   listStateEvents(projectId: string, itemId: string): LocalDbStateEventRow[] {
