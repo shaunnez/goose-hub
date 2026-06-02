@@ -42,7 +42,7 @@ export const WAVE_2_RISK_SPEC = {
 };
 
 export interface SelectWave2ScoutsOptions {
-  workItem: { number: number; title: string; body: string };
+  workItem: { number: number; title: string };
   reports: ScoutReportLike[];
   contradictions: unknown[];
   scoutDigestContext: unknown;
@@ -78,7 +78,6 @@ export function selectWave2Scouts(opts: SelectWave2ScoutsOptions) {
 export function collectWave2SignalText(opts: SelectWave2ScoutsOptions): string {
   return [
     opts.workItem.title,
-    opts.workItem.body,
     ...opts.reports.flatMap((report) => [
       report.scoutName,
       ...report.findings.flatMap((finding) => [finding.file, finding.fact]),

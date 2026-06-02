@@ -110,6 +110,21 @@ describe('investigation planner', () => {
     ]);
   });
 
+  it('caps Wave 1 scout selection from route budgets', () => {
+    const plan = planInvestigation({
+      swarmEnabled: true,
+      routeCaps: { maxScouts: 1, allowWave2: false },
+      workItem: {
+        type: 'bug',
+        title: 'Runtime behavior is flaky across server and web',
+        body: 'Unknown high-risk issue crossing apps/server, apps/web, and runtime settings.',
+      },
+    });
+
+    expect(plan.selectedWave1Scouts.map((scout) => scout.scoutName)).toEqual(['scout-code-path']);
+    expect(plan.minSuccessfulScouts).toBe(1);
+  });
+
   it('preserves the legacy single investigator path when swarm is disabled', () => {
     const plan = planInvestigation({
       swarmEnabled: false,
@@ -170,6 +185,27 @@ describe('investigation planner', () => {
     ]);
     expect(plan.scoutEffortHints['wave2-interface-designer']).toBe('medium');
     expect(plan.scoutEffortHints['wave2-risk-analyst']).toBe('medium');
+  });
+
+  it('suppresses Wave 2 when route budgets disallow it', () => {
+    const plan = planInvestigation({
+      swarmEnabled: true,
+      routeCaps: { maxScouts: 3, allowWave2: false },
+      workItem: {
+        type: 'feature',
+        title: 'Change auth session API contract',
+        body: 'The endpoint response schema changes and auth state migration is high risk.',
+      },
+      wave1Reports: [
+        report('scout-code-path', 'apps/server/src/auth.ts'),
+        report('scout-schema', 'apps/server/src/auth/schema.ts'),
+      ],
+      contradictions: [{ file: 'apps/server/src/auth.ts', facts: ['conflict'] }],
+      scoutDigestContext: { reports: [] },
+    });
+
+    expect(plan.wave2Needed).toBe(false);
+    expect(plan.selectedWave2Scouts).toEqual([]);
   });
 
   it('detects Wave 2 signals from mixed-case scout findings', () => {

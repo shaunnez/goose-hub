@@ -4,6 +4,9 @@ import { groundedHintsToSeed } from '@goose-hub/core/agent-runtime/scout-prefetc
 import { db } from '@goose-hub/core/db/db.js';
 import { projectState } from '@goose-hub/core/db/schema.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { emitRouteSelected } from '@goose-hub/core/workflow-routing/events.js';
+import { selectWorkflowRoute } from '@goose-hub/core/workflow-routing/select-route.js';
+import { buildRouteSignals } from '@goose-hub/core/workflow-routing/signals.js';
 import type { GroundedHints } from '@goose-hub/skills/bug-enhance/schema.js';
 import { eq } from 'drizzle-orm';
 import { dispatchTriageBatch } from '#shared/dispatch.js';
@@ -85,6 +88,15 @@ export async function promoteInboxItem(
   });
   if (groundedHints != null && workItem != null) {
     persistGroundedSeed(source.projectId, workItem.id, item.id, groundedHints);
+  }
+  if (workItem != null) {
+    const signals = buildRouteSignals({
+      workItemId: workItem.id,
+      workItem: { title: item.title, body, type: item.type },
+      seedFilePaths: groundedHints?.candidateFiles.map((f) => f.path) ?? [],
+    });
+    const route = selectWorkflowRoute(signals, 'promotion');
+    emitRouteSelected({ projectId: source.projectId, workItemId: workItem.id, route });
   }
   void dispatchTriageBatch(projectSlug);
 

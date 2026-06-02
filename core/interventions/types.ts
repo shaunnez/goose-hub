@@ -38,6 +38,7 @@ export const InterventionTypeSchema = z.enum([
   'merge_conflict',
   'qa_disagreement',
   'manual_override',
+  'workflow_route_escalation',
 ]);
 
 export type InterventionType = z.infer<typeof InterventionTypeSchema>;
