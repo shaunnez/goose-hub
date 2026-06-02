@@ -8,6 +8,7 @@ import * as nodePath from 'node:path';
 import type { AuditResult } from '../bootstrap/claude-md-auditor.js';
 import type { InstallResult } from '../bootstrap/label-installer.js';
 import type { StackInfo } from '../bootstrap/stack-detector.js';
+import type { LocalDbSourceConfig, ProjectRepositoryConfig, TargetRepoConfig } from '../types.js';
 
 // ---------------------------------------------------------------------------
 // PrBodyInput
@@ -28,6 +29,30 @@ export interface BootstrapRepoRenderInput {
   defaultBranch: string;
   description: string;
   cloneUrl?: string;
+  localPath?: string;
+  role?: ProjectRepositoryConfig['role'];
+}
+
+export interface ProviderNeutralProjectConfigInput {
+  slug: string;
+  name?: string;
+  source: LocalDbSourceConfig;
+  repositories?: ProjectRepositoryConfig[];
+  targetRepo: TargetRepoConfig;
+  stack: StackInfo;
+  detectedAt: string;
+  activeMilestone?: undefined;
+}
+
+export interface GithubBootstrapProjectConfigInput {
+  slug: string;
+  name?: string;
+  repoRef: string;
+  repos?: BootstrapRepoRenderInput[];
+  defaultBranch: string;
+  cloneRoot: string;
+  stack: StackInfo;
+  detectedAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,16 +91,11 @@ export function summariseStack(stack: StackInfo): string {
  * detected stack baked in. Budgets/personas are intentionally minimal — the
  * human is expected to edit before merging the bootstrap PR.
  */
-export function renderProjectConfig(input: {
-  slug: string;
-  name?: string;
-  repoRef: string;
-  repos?: BootstrapRepoRenderInput[];
-  defaultBranch: string;
-  cloneRoot: string;
-  stack: StackInfo;
-  detectedAt: string;
-}): string {
+export function renderProjectConfig(
+  input: GithubBootstrapProjectConfigInput | ProviderNeutralProjectConfigInput,
+): string {
+  if ('source' in input) return renderProviderNeutralProjectConfig(input);
+
   const { slug, repoRef, defaultBranch, cloneRoot, stack, detectedAt } = input;
   const name = input.name ?? slug;
   const repos = input.repos ?? [{ repoRef, defaultBranch, description: '' }];
@@ -98,8 +118,8 @@ const config: ProjectConfig = {
     integrations: {
       github: {
         repos: ${JSON.stringify(repoRefs)},
-        mirrorLabels: true,
-        importIssues: true,
+        mirrorLabels: false,
+        importIssues: false,
       },
     },
   },
@@ -174,14 +194,161 @@ export default config;
 `;
 }
 
+function renderProviderNeutralProjectConfig(input: ProviderNeutralProjectConfigInput): string {
+  const { slug, source, stack, detectedAt } = input;
+  const name = input.name ?? slug;
+  const repositories = input.repositories ?? [];
+  const repoRefs = repositories.map((repo) => repo.repoRef);
+  const stackBlock = renderStackBlock(stack, detectedAt);
+  const sourceBlock = renderLocalDbSourceBlock(source);
+  const targetRepoBlock = renderTargetRepoBlock(input.targetRepo);
+  const repositoriesBlock = renderProjectRepositoriesBlock(repositories);
+
+  return `import type { ProjectConfig } from '../../core/types.js';
+
+const config: ProjectConfig = {
+  id: ${JSON.stringify(slug)},
+  name: ${JSON.stringify(name)},
+  slug: ${JSON.stringify(slug)},
+  source: ${sourceBlock},
+  targetRepo: ${targetRepoBlock},
+  repositories: ${repositoriesBlock},
+  stack: ${stackBlock},
+  mode: 'supervised',
+  storage: { kind: 'local', path: ${JSON.stringify(`~/.factory/data/${slug}`)} },
+  repos: ${JSON.stringify(repoRefs)},
+  agentConfig: {
+    runtime: 'claude-cli',
+    rolesModels: {
+      triager: { primary: 'haiku', fallback: 'haiku', advisor: null },
+      griller: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      'prd-writer': { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      decomposer: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      investigator: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      developer: { primary: 'haiku', fallback: 'sonnet', advisor: null },
+      qa: { primary: 'sonnet', fallback: null, advisor: null },
+      reviewer: { primary: 'sonnet', fallback: null, advisor: null },
+      retrospector: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      researcher: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+    },
+    fallbackPolicy: {
+      critical: 'same-tier-only',
+      high: 'same-tier-only',
+      medium: 'allow-down-tier',
+      low: 'allow-down-tier',
+    },
+    advisorMode: {
+      enabled: false,
+      triggerOn: { priorities: [] },
+      maxAdvisorBudgetUsd: 0,
+      disableInAutonomous: true,
+    },
+    retrospectivePolicy: {
+      defaultTier: 'light',
+      deepTriggers: [],
+    },
+  },
+  budgets: {
+    dailyTokens: 0,
+    maxParallelAgents: 0,
+    maxRetries: 0,
+    perBashCommandMaxSeconds: 0,
+    perWorkflowMaxUsd: 0,
+    perAgentMaxUsd: 0,
+    perAdvisorMaxUsd: 0,
+  },
+  governance: {
+    immutablePaths: [
+      'MISSION.md',
+      'FACTORY_RULES.md',
+      'CLAUDE.md',
+      'target-projects/**/MISSION.md',
+      'target-projects/**/FACTORY_RULES.md',
+      'target-projects/**/project.config.ts',
+      'target-projects/**/personas/**',
+    ],
+  },
+  isolation: { mode: 'native' },
+  archiveAfterDays: 7,
+  visibility: 'always_visible',
+  colorStripe: '#6366f1',
+};
+
+export default config;
+`;
+}
+
+function renderTargetRepoBlock(targetRepo: TargetRepoConfig): string {
+  return `{
+    cloneUrl: ${JSON.stringify(targetRepo.cloneUrl)},
+    defaultBranch: ${JSON.stringify(targetRepo.defaultBranch)},
+    localPath: ${JSON.stringify(targetRepo.localPath)},
+  }`;
+}
+
+function renderProjectRepositoriesBlock(repositories: ProjectRepositoryConfig[]): string {
+  if (repositories.length === 0) return '[]';
+  return JSON.stringify(repositories, null, 4)
+    .replace(/"([^"]+)":/g, '$1:')
+    .replace(/"unknown"/g, "'unknown'")
+    .replace(/"code"/g, "'code'")
+    .replace(/"docs"/g, "'docs'")
+    .replace(/"infra"/g, "'infra'");
+}
+
+function renderLocalDbSourceBlock(source: LocalDbSourceConfig): string {
+  const integrations = source.integrations;
+  const lines = [`    kind: 'local-db',`, `    stateMachine: 'db',`];
+  const integrationLines: string[] = [];
+
+  if (integrations?.github != null) {
+    integrationLines.push(
+      '      github: {',
+      `        repos: ${JSON.stringify(integrations.github.repos)},`,
+      `        mirrorLabels: ${integrations.github.mirrorLabels === true ? 'true' : 'false'},`,
+      `        importIssues: ${integrations.github.importIssues === true ? 'true' : 'false'},`,
+      '      },',
+    );
+  }
+
+  if (integrations?.jira != null) {
+    integrationLines.push(
+      '      jira: {',
+      `        enabled: ${integrations.jira.enabled ? 'true' : 'false'},`,
+      `        baseUrl: ${JSON.stringify(integrations.jira.baseUrl)},`,
+      `        projectKeys: ${JSON.stringify(integrations.jira.projectKeys)},`,
+      `        importMode: ${JSON.stringify(integrations.jira.importMode)},`,
+      `        postBack: { comments: ${integrations.jira.postBack?.comments === true ? 'true' : 'false'}, transitions: false },`,
+      '      },',
+    );
+  }
+
+  if (integrations?.bitbucket != null) {
+    integrationLines.push(
+      '      bitbucket: {',
+      `        enabled: ${integrations.bitbucket.enabled ? 'true' : 'false'},`,
+      `        workspace: ${JSON.stringify(integrations.bitbucket.workspace)},`,
+      `        repos: ${JSON.stringify(integrations.bitbucket.repos)},`,
+      `        postBack: { pullRequests: ${integrations.bitbucket.postBack?.pullRequests === true ? 'true' : 'false'}, comments: ${integrations.bitbucket.postBack?.comments === true ? 'true' : 'false'} },`,
+      '      },',
+    );
+  }
+
+  if (integrationLines.length > 0) {
+    lines.push('    integrations: {', ...integrationLines, '    },');
+  }
+
+  return `{\n${lines.join('\n')}\n  }`;
+}
+
 function renderRepositoriesBlock(repos: BootstrapRepoRenderInput[], cloneRoot: string): string {
   const entries = repos.map((repo) => ({
     id: repoId(repo.repoRef),
     repoRef: repo.repoRef,
     cloneUrl: repo.cloneUrl ?? `git@github.com:${repo.repoRef}.git`,
     defaultBranch: repo.defaultBranch,
-    localPath: localRepoPath(cloneRoot, repo.repoRef),
-    role: 'unknown',
+    localPath: repo.localPath ?? localRepoPath(cloneRoot, repo.repoRef),
+    role: repo.role ?? 'unknown',
   }));
   return JSON.stringify(entries, null, 4)
     .replace(/"([^"]+)":/g, '$1:')

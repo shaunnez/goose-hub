@@ -1,3 +1,6 @@
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockBootstrapProject, mockGetProject, mockImportIssues, mockInspectGithubRepo } =
@@ -30,10 +33,17 @@ vi.mock('#shared/projects.js', () => ({
   getProject: mockGetProject,
 }));
 
-import { activateLocalDbProject, previewBootstrapService, runBootstrapService } from './service.js';
+import {
+  activateLocalDbProject,
+  createLocalProjectService,
+  previewBootstrapService,
+  previewLocalProjectCreationService,
+  runBootstrapService,
+} from './service.js';
 
 const ORIGINAL_TOKEN = process.env.GITHUB_TOKEN;
 const ORIGINAL_MOCK = process.env.MOCK_BOOTSTRAP;
+const ORIGINAL_TARGET_PROJECTS_ROOT = process.env.BOOTSTRAP_TARGET_PROJECTS_ROOT;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -48,6 +58,11 @@ afterEach(() => {
   else process.env.GITHUB_TOKEN = ORIGINAL_TOKEN;
   if (ORIGINAL_MOCK === undefined) Reflect.deleteProperty(process.env, 'MOCK_BOOTSTRAP');
   else process.env.MOCK_BOOTSTRAP = ORIGINAL_MOCK;
+  if (ORIGINAL_TARGET_PROJECTS_ROOT === undefined) {
+    Reflect.deleteProperty(process.env, 'BOOTSTRAP_TARGET_PROJECTS_ROOT');
+  } else {
+    process.env.BOOTSTRAP_TARGET_PROJECTS_ROOT = ORIGINAL_TARGET_PROJECTS_ROOT;
+  }
   vi.unstubAllGlobals();
 });
 
@@ -296,6 +311,92 @@ describe('runBootstrapService', () => {
       expect(result.data.registrationPrUrl).toContain('pull/');
       expect(result.data.slug).toBe('widgets');
     }
+    expect(mockBootstrapProject).not.toHaveBeenCalled();
+  });
+});
+
+describe('local project creation', () => {
+  it('previews local-only config without GitHub inspection or imports', async () => {
+    const result = await previewLocalProjectCreationService({
+      slug: 'local-ops',
+      name: 'Local Ops',
+      source: { kind: 'local-only' },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.configPath).toBe('target-projects/local-ops/project.config.ts');
+      expect(result.data.config).toContain("kind: 'local-db'");
+      expect(result.data.config).not.toContain('integrations:');
+      expect(result.data.repositories).toEqual([]);
+    }
+    expect(mockInspectGithubRepo).not.toHaveBeenCalled();
+    expect(mockBootstrapProject).not.toHaveBeenCalled();
+    expect(mockImportIssues).not.toHaveBeenCalled();
+  });
+
+  it('previews GitHub code repos with imports off', async () => {
+    const result = await previewLocalProjectCreationService({
+      source: { kind: 'github-code', repoRefs: ['octo/widgets'] },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.slug).toBe('widgets');
+      expect(result.data.integrations).toEqual(['github']);
+      expect(result.data.config).toContain('mirrorLabels: false');
+      expect(result.data.config).toContain('importIssues: false');
+    }
+    expect(mockInspectGithubRepo).not.toHaveBeenCalled();
+  });
+
+  it('previews Jira assigned-to-me config with credential env names', async () => {
+    const result = await previewLocalProjectCreationService({
+      source: {
+        kind: 'jira',
+        baseUrl: 'https://example.atlassian.net',
+        projectKeys: ['ENG'],
+        importMode: 'assigned-to-me',
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.slug).toBe('eng');
+      expect(result.data.requiredEnvVars).toContain('JIRA_EMAIL or ATLASSIAN_EMAIL');
+      expect(result.data.config).toContain('importMode: "assigned-to-me"');
+    }
+  });
+
+  it('previews Bitbucket PR integration as metadata/post-back only', async () => {
+    const result = await previewLocalProjectCreationService({
+      source: { kind: 'bitbucket', workspace: 'acme', repos: ['api'] },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.integrations).toEqual(['bitbucket']);
+      expect(result.data.config).toContain('bitbucket: {');
+      expect(result.data.config).not.toContain('kind: "bitbucket"');
+    }
+  });
+
+  it('writes project.config.ts locally without activating imports', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goose-hub-target-projects-'));
+    process.env.BOOTSTRAP_TARGET_PROJECTS_ROOT = root;
+
+    const result = await createLocalProjectService({
+      slug: 'widgets',
+      source: { kind: 'github-code', repoRefs: ['octo/widgets'] },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const written = await readFile(result.data.writtenPath, 'utf-8');
+      expect(written).toBe(result.data.config);
+      expect(written).toContain('importIssues: false');
+    }
+    expect(mockImportIssues).not.toHaveBeenCalled();
     expect(mockBootstrapProject).not.toHaveBeenCalled();
   });
 });
