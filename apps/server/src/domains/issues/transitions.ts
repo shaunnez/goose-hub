@@ -32,6 +32,7 @@ import { dispatchRetro } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { sliceUrl } from '#shared/slice-url.js';
 import { resolveWorkItemForRoute } from '#shared/work-item-resolution.js';
+import { maybeFireSprintReview } from '../workflows/sprint-review-trigger.js';
 
 // Slice imports cross the package boundary (FACTORY_RULES rule 28a — slices/
 // is not a workspace package). Use dynamic import via import.meta.url so the
@@ -90,6 +91,17 @@ function supersedeOtherActiveInterventions(input: {
       });
     }
   }
+}
+
+function maybeFireSprintReviewForTerminalTransition(input: {
+  slug: string;
+  item: { milestoneId?: string; milestoneTitle?: string };
+  source: Parameters<typeof maybeFireSprintReview>[3];
+}): void {
+  const milestoneNumber = input.item.milestoneId != null ? Number(input.item.milestoneId) : null;
+  const milestoneTitle = input.item.milestoneTitle ?? null;
+  if (milestoneNumber == null || Number.isNaN(milestoneNumber) || milestoneTitle == null) return;
+  void maybeFireSprintReview(input.slug, milestoneNumber, milestoneTitle, input.source);
 }
 
 async function loadMergeDecision(): Promise<RunMergeDecisionFn> {
@@ -418,7 +430,7 @@ export async function transitionIssue(
 
   const resolved = await resolveWorkItemForRoute(slug, id);
   if (!resolved.ok) return resolved;
-  const { source, canonicalWorkItemId: workItemId } = resolved.data;
+  const { source, item, canonicalWorkItemId: workItemId } = resolved.data;
   const discoverSessionId =
     fromState === 'factory:gate-pending' && toState === 'factory:grilling'
       ? activeDiscoverSessionId(slug, workItemId)
@@ -524,6 +536,9 @@ export async function transitionIssue(
       supersededBy: manual.intervention.id,
       actor: 'ui',
     });
+  }
+  if (TERMINAL_STATES.has(toState)) {
+    maybeFireSprintReviewForTerminalTransition({ slug, item, source });
   }
 
   bustCache(CACHE_KEY.issues(slug));

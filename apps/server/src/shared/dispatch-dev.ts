@@ -17,7 +17,6 @@ import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js'
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
 import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.js';
 import { withParallelLock } from './dispatch-lock.js';
-import { dispatchRetro } from './dispatch-qa-review.js';
 import { getProject } from './projects.js';
 import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
@@ -258,12 +257,6 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
             }
           : undefined;
       await runInvestigateWorkflow(item, source, slug, REPO_ROOT, mockInvestigateDeps);
-
-      // Production normally advances via the GitHub label-change webhook, but
-      // that webhook can arrive before this lock is released and be dropped as
-      // a duplicate. The post-lock fallback is harmless when the webhook wins:
-      // dispatchInvestigationComplete re-reads current state and no-ops.
-      return () => dispatchInvestigationComplete(slug, issueNumber);
     },
   );
 }
@@ -408,21 +401,6 @@ export async function dispatchInvestigationComplete(
         issueNumber,
         targetState,
       });
-
-      if (targetState === 'factory:dev-ready' && usesLegacyImplementation) {
-        return async () => {
-          const current = await source.getItem(issueNumber.toString());
-          if (current.state !== 'factory:dev-ready') {
-            logger.info('dispatchInvestigationComplete: post-lock implement fallback no-op', {
-              slug,
-              issueNumber,
-              state: current.state,
-            });
-            return;
-          }
-          await dispatchFixIssue(slug, issueNumber);
-        };
-      }
     },
   );
 }
@@ -823,16 +801,10 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
           : undefined;
       await runResolveConflictWorkflow(item, source, slug, REPO_ROOT, mockConflictDeps);
 
-      // Fire-and-forget retro after conflict resolution + merge. Post-lock so
-      // dispatchRetro can also acquire the parallel lock for this issue.
-      return () =>
-        dispatchRetro(slug, issueNumber).catch((err: unknown) => {
-          logger.error('dispatchRetro after resolve-conflict failed', {
-            slug,
-            issueNumber,
-            error: String(err),
-          });
-        });
+      logger.info('dispatchResolveConflict: completed; retrospection will run on a future tick', {
+        slug,
+        issueNumber,
+      });
     },
   );
 }

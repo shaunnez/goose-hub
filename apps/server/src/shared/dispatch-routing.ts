@@ -27,6 +27,7 @@ import {
   dispatchReview,
 } from './dispatch-qa-review.js';
 import { dispatchTriageBatch } from './dispatch-triage.js';
+import { resolveActiveMilestone } from './resolve-milestone.js';
 import { getSourceForSlug } from './source.js';
 
 export const DISPATCHABLE_WORK_ITEM_STATES = new Set<StateName>([
@@ -190,6 +191,20 @@ export async function dispatchForIssue(slug: string, issueNumber: number): Promi
   await dispatchCurrentWorkItemState(slug, item);
 }
 
+function itemMatchesActiveMilestone(item: WorkItem, milestoneNumber: number | null): boolean {
+  if (milestoneNumber == null) return true;
+  if (item.milestoneId == null) return true;
+  return Number(item.milestoneId) === milestoneNumber;
+}
+
+function isEligibleForProjectTick(item: WorkItem, milestoneNumber: number | null): boolean {
+  return (
+    item.schedule === 'current' &&
+    itemMatchesActiveMilestone(item, milestoneNumber) &&
+    DISPATCHABLE_WORK_ITEM_STATES.has(item.state)
+  );
+}
+
 async function updateProjectLastTickAt(slug: string, now = new Date()): Promise<void> {
   const [{ db }, { projectState }, { eq }] = await Promise.all([
     import('@goose-hub/core/db/db.js'),
@@ -215,10 +230,13 @@ export async function dispatchProjectTick(slug: string): Promise<void> {
     return;
   }
 
+  const { milestoneNumber } = await resolveActiveMilestone(slug);
   const work = await source.listOpenWork();
-  const dispatchable = work.filter((item) => DISPATCHABLE_WORK_ITEM_STATES.has(item.state));
+  const dispatchable = work.filter((item) => isEligibleForProjectTick(item, milestoneNumber));
+  const hasTriaging = dispatchable.some((item) => item.state === 'factory:triaging');
+  const itemDispatches = dispatchable.filter((item) => item.state !== 'factory:triaging');
   await Promise.all(
-    dispatchable.map(async (item) => {
+    itemDispatches.map(async (item) => {
       try {
         await dispatchCurrentWorkItemState(slug, item);
       } catch (err) {
@@ -232,6 +250,9 @@ export async function dispatchProjectTick(slug: string): Promise<void> {
       }
     }),
   );
+  if (hasTriaging) {
+    await dispatchTriageBatch(slug);
+  }
   await updateProjectLastTickAt(slug);
 }
 
