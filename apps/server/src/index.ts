@@ -20,7 +20,7 @@ import { logger } from '@goose-hub/core/logger.js';
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { startPerProjectScheduler } from '@goose-hub/core/projects/scheduler.js';
 import { serve } from '@hono/node-server';
-import { dispatchTriageBatch } from '#shared/dispatch.js';
+import { dispatchProjectTick } from '#shared/dispatch.js';
 import { startServerInterventionApplierWorker } from './domains/interventions/applier-worker.js';
 import { app } from './server.js';
 
@@ -63,7 +63,7 @@ if (process.env.VITEST == null) {
           projects: proposerProjects.map((project) => project.slug),
         });
       }
-      startPerProjectScheduler(projects, (slug) => dispatchTriageBatch(slug));
+      startPerProjectScheduler(projects, (slug) => dispatchProjectTick(slug));
       logger.info('per-project tick scheduler started', { projects: projects.map((p) => p.slug) });
       // Nightly code-quality-audit (#698). Delays first fire by 60s so a
       // server restart doesn't hammer every project at boot time.

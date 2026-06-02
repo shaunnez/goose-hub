@@ -34,6 +34,17 @@ const mockGetEngineeringSpec = vi.fn();
 const mockRunParallelImplementWorkflow = vi.fn();
 const mockEventStoreReplay = vi.fn();
 const mockEventStoreAppendEvent = vi.fn();
+const mockDbSelectAll = vi.fn();
+const mockDbSelectWhere = vi.fn(() => ({ all: mockDbSelectAll }));
+const mockDbSelectFrom = vi.fn(() => ({ where: mockDbSelectWhere }));
+const mockDbSelect = vi.fn(() => ({ from: mockDbSelectFrom }));
+const mockDbInsertRun = vi.fn();
+const mockDbInsertValues = vi.fn(() => ({ run: mockDbInsertRun }));
+const mockDbInsert = vi.fn(() => ({ values: mockDbInsertValues }));
+const mockDbUpdateRun = vi.fn();
+const mockDbUpdateWhere = vi.fn(() => ({ run: mockDbUpdateRun }));
+const mockDbUpdateSet = vi.fn(() => ({ where: mockDbUpdateWhere }));
+const mockDbUpdate = vi.fn(() => ({ set: mockDbUpdateSet }));
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
@@ -131,6 +142,22 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   },
 }));
 
+vi.mock('@goose-hub/core/db/db.js', () => ({
+  db: {
+    select: mockDbSelect,
+    insert: mockDbInsert,
+    update: mockDbUpdate,
+  },
+}));
+
+vi.mock('@goose-hub/core/db/schema.js', () => ({
+  projectState: { projectId: 'project_id', lastTickAt: 'last_tick_at' },
+}));
+
+vi.mock('drizzle-orm', () => ({
+  eq: vi.fn((field: unknown, value: unknown) => ({ field, value })),
+}));
+
 // ─── helpers ──────────────────────────────────────────────────────────────
 
 const originalMockSource = process.env.MOCK_SOURCE;
@@ -170,6 +197,9 @@ beforeEach(() => {
     payload: {},
     createdAt: '',
   });
+  mockDbSelectAll.mockReturnValue([]);
+  mockDbInsertRun.mockReturnValue(undefined);
+  mockDbUpdateRun.mockReturnValue(undefined);
   mockCreateProjectAwareTargetSource.mockResolvedValue(vi.fn());
   mockFilterEligibleByDependencies.mockResolvedValue({
     eligible: [],
@@ -298,6 +328,163 @@ describe('dispatchTriageBatch', () => {
     expect(mockRunTriageBatch).toHaveBeenCalledTimes(2);
     expect(mockRunTriageBatch).toHaveBeenNthCalledWith(1, 'slug-a');
     expect(mockRunTriageBatch).toHaveBeenNthCalledWith(2, 'slug-b');
+  });
+});
+
+// ─── dispatchProjectTick ─────────────────────────────────────────────────
+
+function workItem(state: string, externalId = '5') {
+  return {
+    id: `local:my-project#${externalId}`,
+    externalId,
+    repoRef: 'shaunnez/goose-hub',
+    title: 'Local work',
+    body: '',
+    type: 'bug',
+    priority: 'medium',
+    mode: 'supervised',
+    state,
+    authorIsOwner: true,
+    schedule: 'current',
+    exec: 'serial',
+    dependsOn: [],
+    blocks: [],
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  };
+}
+
+describe('dispatchProjectTick', () => {
+  it('dispatches an existing local item in factory:investigating to investigate', async () => {
+    const item = workItem('factory:investigating');
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      listOpenWork: vi.fn().mockResolvedValue([item]),
+      getItem: vi.fn().mockResolvedValue(item),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchProjectTick } = await import('./dispatch.js');
+    await dispatchProjectTick('my-project');
+
+    expect(mockRunInvestigateWorkflow).toHaveBeenCalledOnce();
+    expect(mockRunInvestigateWorkflow).toHaveBeenCalledWith(
+      item,
+      source,
+      'my-project',
+      expect.any(String),
+      undefined,
+    );
+  });
+
+  it('dispatches an existing local item in factory:dev-ready to fix', async () => {
+    const item = workItem('factory:dev-ready', '7');
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      listOpenWork: vi.fn().mockResolvedValue([item]),
+      getItem: vi.fn().mockResolvedValue(item),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchProjectTick } = await import('./dispatch.js');
+    await dispatchProjectTick('my-project');
+
+    expect(mockRunFixIssueWorkflow).toHaveBeenCalledOnce();
+    expect(mockRunFixIssueWorkflow).toHaveBeenCalledWith(
+      item,
+      source,
+      'my-project',
+      expect.any(String),
+      undefined,
+    );
+  });
+
+  it('skips held and terminal states', async () => {
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      listOpenWork: vi
+        .fn()
+        .mockResolvedValue([
+          workItem('factory:needs-human', '1'),
+          workItem('factory:gate-pending', '2'),
+          workItem('factory:approved', '3'),
+          workItem('factory:done', '4'),
+          workItem('factory:archived', '5'),
+          workItem('factory:rejected', '6'),
+        ]),
+      getItem: vi.fn(),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchProjectTick } = await import('./dispatch.js');
+    await dispatchProjectTick('my-project');
+
+    expect(source.getItem).not.toHaveBeenCalled();
+    expect(mockRunInvestigateWorkflow).not.toHaveBeenCalled();
+    expect(mockRunFixIssueWorkflow).not.toHaveBeenCalled();
+    expect(mockRunTriageBatch).not.toHaveBeenCalled();
+  });
+
+  it('uses existing per-item locks so duplicate in-flight work does not double-run', async () => {
+    let releaseInvestigate!: () => void;
+    const item = workItem('factory:investigating', '9');
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      listOpenWork: vi.fn().mockResolvedValue([item, item]),
+      getItem: vi.fn().mockResolvedValue(item),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockRunInvestigateWorkflow.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseInvestigate = resolve;
+        }),
+    );
+
+    const { dispatchProjectTick } = await import('./dispatch.js');
+    const tick = dispatchProjectTick('my-project');
+    await vi.waitFor(() => expect(mockRunInvestigateWorkflow).toHaveBeenCalledOnce());
+    releaseInvestigate();
+    await tick;
+
+    expect(mockRunInvestigateWorkflow).toHaveBeenCalledOnce();
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'dispatchInvestigate: duplicate in-flight, dropping',
+      expect.objectContaining({ slug: 'my-project', issueNumber: 9 }),
+    );
+  });
+
+  it('updates project_state.last_tick_at when the project already has state', async () => {
+    mockDbSelectAll.mockReturnValueOnce([{ projectId: 'my-project' }]);
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      listOpenWork: vi.fn().mockResolvedValue([]),
+      getItem: vi.fn(),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchProjectTick } = await import('./dispatch.js');
+    await dispatchProjectTick('my-project');
+
+    expect(mockDbUpdate).toHaveBeenCalled();
+    expect(mockDbUpdateSet).toHaveBeenCalledWith({
+      lastTickAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    });
+  });
+
+  it('regresses local triage-to-investigation continuation without webhooks', async () => {
+    const item = workItem('factory:investigating', '11');
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      listOpenWork: vi.fn().mockResolvedValue([item]),
+      getItem: vi.fn().mockResolvedValue(item),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchProjectTick } = await import('./dispatch.js');
+    await dispatchProjectTick('my-project');
+
+    expect(source.listOpenWork).toHaveBeenCalledOnce();
+    expect(mockRunInvestigateWorkflow).toHaveBeenCalledOnce();
   });
 });
 
@@ -1439,8 +1626,8 @@ describe('dispatchForLabel', () => {
     ).resolves.toBeUndefined();
 
     expect(mockLoggerInfo).toHaveBeenCalledWith(
-      'dispatchForLabel: no workflow for label',
-      expect.objectContaining({ labelName: 'factory:unknown-label' }),
+      'dispatchCurrentWorkItemState: no workflow for state',
+      expect.objectContaining({ state: 'factory:unknown-label' }),
     );
   });
 

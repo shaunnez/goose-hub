@@ -471,7 +471,7 @@ async function tickProject(input: {
   assertValidSlug(input.projectSlug);
   // case 2: runtime-resolved cross-package path.
   const dispatch = await import('#shared/dispatch.js');
-  await dispatch.dispatchTriageBatch(input.projectSlug);
+  await dispatch.dispatchProjectTick(input.projectSlug);
   return { ok: true };
 }
 

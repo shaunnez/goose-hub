@@ -115,7 +115,7 @@ describe('POST /webhooks/github', () => {
 
   // ─── issues.opened ──────────────────────────────────────────────────────────
 
-  it('dispatches runTriageBatch for issues.opened on allowlisted repo', async () => {
+  it('records issues.opened on allowlisted repo without lifecycle dispatch', async () => {
     const body = JSON.stringify({
       action: 'opened',
       repository: { full_name: 'shaunnez/goose-hub' },
@@ -124,7 +124,9 @@ describe('POST /webhooks/github', () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { ok: boolean; action: string };
     expect(json.ok).toBe(true);
-    expect(json.action).toBe('dispatched');
+    expect(json.action).toBe('recorded');
+    expect(mockDispatchTriageBatch).not.toHaveBeenCalled();
+    expect(mockDispatchForLabel).not.toHaveBeenCalled();
   });
 
   it('ignores issues.opened for non-allowlisted repo', async () => {
@@ -140,7 +142,7 @@ describe('POST /webhooks/github', () => {
 
   // ─── issues.labeled — factory:investigating ─────────────────────────────────
 
-  it('dispatches runInvestigateWorkflow for issues.labeled factory:investigating', async () => {
+  it('records issues.labeled factory:investigating without lifecycle dispatch', async () => {
     const body = JSON.stringify({
       action: 'labeled',
       label: { name: 'factory:investigating' },
@@ -151,11 +153,12 @@ describe('POST /webhooks/github', () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { ok: boolean; action: string; label: string };
     expect(json.ok).toBe(true);
-    expect(json.action).toBe('dispatched');
+    expect(json.action).toBe('recorded');
     expect(json.label).toBe('factory:investigating');
+    expect(mockDispatchForLabel).not.toHaveBeenCalled();
   });
 
-  it('calls dispatchForLabel with the slug, issue number, and label (#207)', async () => {
+  it('does not call dispatchForLabel for provider labels', async () => {
     const body = JSON.stringify({
       action: 'labeled',
       label: { name: 'factory:investigating' },
@@ -163,15 +166,7 @@ describe('POST /webhooks/github', () => {
       repository: { full_name: 'shaunnez/goose-hub' },
     });
     await postWebhook(body, { event: 'issues' });
-    // The webhook handler delegates to the shared dispatcher rather than
-    // importing the workflow directly (#207).
-    await vi.waitFor(() =>
-      expect(mockDispatchForLabel).toHaveBeenCalledWith(
-        'goose-hub-self',
-        42,
-        'factory:investigating',
-      ),
-    );
+    expect(mockDispatchForLabel).not.toHaveBeenCalled();
   });
 
   it('records local-db label changes without dispatching GitHub label workflows', async () => {
@@ -206,7 +201,7 @@ describe('POST /webhooks/github', () => {
 
   // ─── issues.labeled — factory:triaging ──────────────────────────────────────
 
-  it('dispatches runTriageBatch for issues.labeled factory:triaging', async () => {
+  it('records issues.labeled factory:triaging without lifecycle dispatch', async () => {
     const body = JSON.stringify({
       action: 'labeled',
       label: { name: 'factory:triaging' },
@@ -216,8 +211,9 @@ describe('POST /webhooks/github', () => {
     const res = await postWebhook(body, { event: 'issues' });
     expect(res.status).toBe(200);
     const json = (await res.json()) as { action: string; label: string };
-    expect(json.action).toBe('dispatched');
+    expect(json.action).toBe('recorded');
     expect(json.label).toBe('factory:triaging');
+    expect(mockDispatchTriageBatch).not.toHaveBeenCalled();
   });
 
   // ─── issues.labeled — non-factory label ─────────────────────────────────────
@@ -300,7 +296,7 @@ describe('handleGitHubWebhook — additional branch coverage', () => {
     expect(json.status).toBe('no-issue-number');
   });
 
-  it('dispatchForLabel rejection is caught and response still succeeds', async () => {
+  it('does not invoke dispatchForLabel even when the old dispatch mock would reject', async () => {
     mockDispatchForLabel.mockRejectedValueOnce(new Error('dispatch error'));
     const body = JSON.stringify({
       action: 'labeled',
@@ -310,6 +306,7 @@ describe('handleGitHubWebhook — additional branch coverage', () => {
     });
     const res = await postWebhook(body, { event: 'issues' });
     expect(res.status).toBe(200);
+    expect(mockDispatchForLabel).not.toHaveBeenCalled();
   });
 
   it('issues event with no repository in payload returns ignored (line 57: repo ?? fallback)', async () => {
