@@ -5,6 +5,7 @@ import {
   hasSchemaSignal,
   hasVagueOrHighRiskSignal,
 } from '@goose-hub/core/workflow-routing/signals.js';
+import type { BudgetCaps } from '@goose-hub/core/workflow-routing/types.js';
 import {
   WAVE_1_SCOUTS,
   WAVE_2_INTERFACE_SPEC,
@@ -21,6 +22,7 @@ export interface InvestigationPlannerInput {
   wave1Reports?: ScoutReport[];
   contradictions?: unknown[];
   scoutDigestContext?: unknown;
+  routeCaps?: Pick<BudgetCaps, 'maxScouts' | 'allowWave2'>;
 }
 
 export interface InvestigationPlan {
@@ -146,8 +148,11 @@ export function planInvestigation(input: InvestigationPlannerInput): Investigati
     };
   }
 
-  const selectedWave1Scouts = selectedWave1ScoutsFor(textFor(input), rawTextFor(input));
-  const selectedWave2Scouts = selectWave2(input);
+  const selectedWave1Scouts = selectedWave1ScoutsFor(textFor(input), rawTextFor(input)).slice(
+    0,
+    input.routeCaps?.maxScouts,
+  );
+  const selectedWave2Scouts = input.routeCaps?.allowWave2 === false ? [] : selectWave2(input);
   const scoutEffortHints: Record<string, RuntimeEffort> = {
     ...Object.fromEntries(
       selectedWave1Scouts.map((scout) => [
@@ -168,7 +173,8 @@ export function planInvestigation(input: InvestigationPlannerInput): Investigati
     selectedWave1Scouts,
     wave2Needed: selectedWave2Scouts.length > 0,
     selectedWave2Scouts,
-    minSuccessfulScouts: Math.max(1, Math.min(3, selectedWave1Scouts.length)),
+    minSuccessfulScouts:
+      selectedWave1Scouts.length === 0 ? 0 : Math.max(1, Math.min(3, selectedWave1Scouts.length)),
     scoutEffortHints,
   };
 }

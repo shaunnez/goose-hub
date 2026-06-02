@@ -708,6 +708,77 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
         return;
       }
 
+      if (specRoute != null && !specRoute.selectedStages.includes('parallel-implement')) {
+        logger.info('dispatchParallelImplement: route excludes parallel implementation', {
+          slug,
+          issueNumber,
+          tier: specRoute.tier,
+          selectedStages: specRoute.selectedStages,
+        });
+        await source.forceState(item.id, 'factory:dev-ready');
+        emitStateTransitionEvent({
+          projectId: slug,
+          workItemId: item.id,
+          from: 'factory:spec-ready',
+          to: 'factory:dev-ready',
+          by: 'parallel-implement',
+          runId: specRecord.pipelineRunId,
+          extraPayload: {
+            reason: 'route-excludes-parallel-implement',
+            tier: specRoute.tier,
+          },
+        });
+
+        const { runFixIssueWorkflow } = (await import(sliceUrl('fix-issue'))) as {
+          runFixIssueWorkflow: (
+            item: unknown,
+            source: unknown,
+            slug: string,
+            repoRoot: string,
+            deps?: Record<string, unknown>,
+          ) => Promise<unknown>;
+        };
+        const legacyMockDeps: Record<string, unknown> | undefined =
+          process.env.MOCK_OPEN_PR === 'true'
+            ? {
+                openPRImpl: () =>
+                  Promise.resolve({
+                    prNumber: 999,
+                    prUrl: 'https://github.com/shaunnez/goose-hub/pull/999',
+                    branch: 'factory/mock-run',
+                    base: 'main',
+                  }),
+                createWorktreeImpl: () => '/mock/worktree',
+                prewarmWorktreeImpl: () => undefined,
+                cleanupWorktreeImpl: () => undefined,
+                resolveWorktreeHeadShaImpl: () => 'mock-sha-abc123',
+                orchestratorCommitAllImpl: () => ({
+                  status: 'committed',
+                  sha: 'mock-commit-sha',
+                }),
+              }
+            : undefined;
+        try {
+          await runFixIssueWorkflow(
+            { ...item, state: 'factory:dev-ready' },
+            source,
+            slug,
+            REPO_ROOT,
+            legacyMockDeps,
+          );
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          await recordLegacyFixIssueStartupFailure({
+            source,
+            item: { ...item, state: 'factory:dev-ready' },
+            slug,
+            issueNumber,
+            error,
+          });
+        }
+        return;
+      }
+
       // Inject mock deps when running under the e2e harness so filesystem/git
       // operations don't fail against non-existent worktrees.
       const parallelMockDeps: Record<string, unknown> =

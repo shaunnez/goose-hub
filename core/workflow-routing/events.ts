@@ -1,5 +1,13 @@
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import type { CapConflict, WorkflowRouteDecision } from './types.js';
+import type { CapConflict, RouteTier, WorkflowRouteDecision } from './types.js';
+
+const TIER_RANK: Record<RouteTier, number> = {
+  T0: 0,
+  T1: 1,
+  T2: 2,
+  T3: 3,
+  T4: 4,
+};
 
 export function emitRouteSelected(input: {
   projectId: string;
@@ -103,10 +111,6 @@ export function loadLatestRoute(input: {
     order: 'desc',
     limit: 1,
   });
-  if (confirmed.length > 0) {
-    return confirmed[0].payload as WorkflowRouteDecision;
-  }
-
   const selected = eventStore.replay({
     projectId: input.projectId,
     workItemId: input.workItemId,
@@ -114,9 +118,15 @@ export function loadLatestRoute(input: {
     order: 'desc',
     limit: 1,
   });
-  if (selected.length > 0) {
-    return selected[0].payload as WorkflowRouteDecision;
-  }
 
-  return null;
+  const confirmedRoute =
+    confirmed.length > 0 ? (confirmed[0].payload as WorkflowRouteDecision) : null;
+  const selectedRoute = selected.length > 0 ? (selected[0].payload as WorkflowRouteDecision) : null;
+
+  if (confirmedRoute == null) return selectedRoute;
+  if (selectedRoute == null) return confirmedRoute;
+
+  return TIER_RANK[selectedRoute.tier] > TIER_RANK[confirmedRoute.tier]
+    ? selectedRoute
+    : confirmedRoute;
 }

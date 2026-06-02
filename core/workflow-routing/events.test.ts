@@ -48,7 +48,7 @@ describe('route events round-trip', () => {
     expect(loaded?.budgetCaps.maxUsd).toBe(route.budgetCaps.maxUsd);
   });
 
-  it('route-confirmed supersedes route-selected when both exist', () => {
+  it('route-confirmed supersedes route-selected when both exist at the same tier', () => {
     const preliminary = selectWorkflowRoute(
       {
         workItemId: WORK_ITEM_ID,
@@ -84,6 +84,44 @@ describe('route events round-trip', () => {
     const loaded = loadLatestRoute({ projectId: PROJECT, workItemId: WORK_ITEM_ID });
     expect(loaded?.source).toBe('investigation');
     expect(loaded?.tier).toBe('T1');
+  });
+
+  it('loadLatestRoute preserves a higher selected route after lower confirmation', () => {
+    const preliminary = selectWorkflowRoute(
+      {
+        workItemId: WORK_ITEM_ID,
+        workItemType: 'bug',
+        seedFileCount: 1,
+        hasVagueOrHighRisk: false,
+        hasSensitivePath: true,
+        hasSchemaSignal: false,
+        hasDependencySignal: false,
+      },
+      'lazy-enhance',
+    );
+    emitRouteSelected({ projectId: PROJECT, workItemId: WORK_ITEM_ID, route: preliminary });
+
+    const confirmed = selectWorkflowRoute(
+      {
+        workItemId: WORK_ITEM_ID,
+        workItemType: 'bug',
+        seedFileCount: null,
+        hasVagueOrHighRisk: false,
+        hasSensitivePath: false,
+        hasSchemaSignal: false,
+        hasDependencySignal: false,
+        investigationConfidence: 'high',
+        nonTestFileCount: 1,
+        hasContradictions: false,
+        wave2Triggered: false,
+      },
+      'investigation',
+    );
+    emitRouteConfirmed({ projectId: PROJECT, workItemId: WORK_ITEM_ID, route: confirmed });
+
+    const loaded = loadLatestRoute({ projectId: PROJECT, workItemId: WORK_ITEM_ID });
+    expect(loaded?.source).toBe('lazy-enhance');
+    expect(loaded?.tier).toBe('T3');
   });
 
   it('loadLatestRoute returns null when no events exist', () => {

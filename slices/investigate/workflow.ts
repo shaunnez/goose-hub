@@ -56,6 +56,7 @@ import {
   shapeSymbolIndexHintsForScout,
 } from '@goose-hub/core/symbol-index/lookup.js';
 import type { RuntimeEffort } from '@goose-hub/core/types.js';
+import { proposeRouteEscalation } from '@goose-hub/core/workflow-routing/escalation.js';
 import {
   emitRouteConfirmed,
   emitRouteSelected,
@@ -389,13 +390,6 @@ export async function runInvestigateWorkflow(
     let synthesisScoutDigest: ScoutReportDigestBundle | undefined;
 
     if (investigationSwarmEnabled) {
-      const initialPlan = planInvestigation({
-        workItem: { ...workItemCtx, type: workItem.type },
-        swarmEnabled: true,
-      });
-      finalInvestigationPlan = initialPlan;
-      scoutEffortHints = initialPlan.scoutEffortHints;
-
       // Pre-fetch symbol index hints for scout-code-path. Freshness and lookup are best-effort:
       // a missing, stale, or corrupt index must never block investigation.
       const symbolIndexFreshness = ensureSymbolIndexFresh({ repoRoot: worktreePath });
@@ -498,13 +492,16 @@ export async function runInvestigateWorkflow(
       }
 
       // Emit a preliminary route if one was not already established at inbox promotion time.
-      if (loadLatestRoute({ projectId, workItemId: workItem.id }) == null) {
+      let routeDecision = loadLatestRoute({ projectId, workItemId: workItem.id });
+      if (routeDecision == null) {
         const existingSeed = getArtifact(`investigation-seed:promotion:${workItem.id}`);
         const seedPaths: string[] = [];
         if (existingSeed != null) {
-          const payload = existingSeed.payload as { files?: Array<{ path: string }> } | null;
-          if (Array.isArray(payload?.files)) {
-            for (const f of payload.files) {
+          const payload = existingSeed.payload as {
+            candidateFiles?: Array<{ path: string }>;
+          } | null;
+          if (Array.isArray(payload?.candidateFiles)) {
+            for (const f of payload.candidateFiles) {
               if (typeof f.path === 'string') seedPaths.push(f.path);
             }
           }
@@ -516,7 +513,16 @@ export async function runInvestigateWorkflow(
         });
         const prelimRoute = selectWorkflowRoute(prelimSignals, 'lazy-enhance');
         emitRouteSelected({ projectId, workItemId: workItem.id, route: prelimRoute, runId });
+        routeDecision = prelimRoute;
       }
+
+      const initialPlan = planInvestigation({
+        workItem: { ...workItemCtx, type: workItem.type },
+        swarmEnabled: true,
+        routeCaps: routeDecision?.budgetCaps,
+      });
+      finalInvestigationPlan = initialPlan;
+      scoutEffortHints = initialPlan.scoutEffortHints;
 
       const seedStartedAt = Date.now();
       const investigationSeed = await buildInvestigationSeed(workItem, {
@@ -717,6 +723,7 @@ export async function runInvestigateWorkflow(
         wave1Reports: wave1Result.reports,
         contradictions: cvResult.contradictions,
         scoutDigestContext: wave1Digest,
+        routeCaps: loadLatestRoute({ projectId, workItemId: workItem.id })?.budgetCaps,
       });
       finalInvestigationPlan = wave2Plan;
       scoutEffortHints = wave2Plan.scoutEffortHints;
@@ -1027,6 +1034,9 @@ export async function runInvestigateWorkflow(
     });
     const confirmedRoute = selectWorkflowRoute(confirmedSignals, 'investigation');
     emitRouteConfirmed({ projectId, workItemId: workItem.id, route: confirmedRoute, runId });
+    if (confirmedRoute.escalationTriggers.length > 0) {
+      proposeRouteEscalation({ projectId, workItemId: workItem.id, route: confirmedRoute, runId });
+    }
 
     eventStore.appendEvent({
       projectId,
