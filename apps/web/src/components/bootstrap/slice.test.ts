@@ -18,8 +18,8 @@ import {
 // ---------------------------------------------------------------------------
 
 describe('wizard-state — WIZARD_STEPS', () => {
-  it('lists all 6 steps in order', () => {
-    expect(WIZARD_STEPS).toEqual(['repo', 'stack', 'claudeMd', 'labels', 'webhook', 'submit']);
+  it('lists all 3 steps in order', () => {
+    expect(WIZARD_STEPS).toEqual(['source', 'preview', 'submit']);
   });
 
   it('has a label for every step', () => {
@@ -29,34 +29,28 @@ describe('wizard-state — WIZARD_STEPS', () => {
   });
 
   it('returns a stable index per step', () => {
-    expect(stepIndex('repo')).toBe(0);
+    expect(stepIndex('source')).toBe(0);
     expect(stepIndex('submit')).toBe(WIZARD_STEPS.length - 1);
   });
 });
 
 describe('wizard-state — nextStep / prevStep', () => {
-  it('advances repo → stack → claudeMd → labels → webhook → submit', () => {
-    expect(nextStep('repo')).toBe('stack');
-    expect(nextStep('stack')).toBe('claudeMd');
-    expect(nextStep('claudeMd')).toBe('labels');
-    expect(nextStep('labels')).toBe('webhook');
-    expect(nextStep('webhook')).toBe('submit');
+  it('advances source → preview → submit', () => {
+    expect(nextStep('source')).toBe('preview');
+    expect(nextStep('preview')).toBe('submit');
   });
 
   it('clamps at the final step', () => {
     expect(nextStep('submit')).toBe('submit');
   });
 
-  it('walks back submit → webhook → … → repo', () => {
-    expect(prevStep('submit')).toBe('webhook');
-    expect(prevStep('webhook')).toBe('labels');
-    expect(prevStep('labels')).toBe('claudeMd');
-    expect(prevStep('claudeMd')).toBe('stack');
-    expect(prevStep('stack')).toBe('repo');
+  it('walks back submit → preview → source', () => {
+    expect(prevStep('submit')).toBe('preview');
+    expect(prevStep('preview')).toBe('source');
   });
 
   it('clamps at the first step', () => {
-    expect(prevStep('repo')).toBe('repo');
+    expect(prevStep('source')).toBe('source');
   });
 });
 

@@ -1,15 +1,21 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockActivate, mockPreview, mockRun } = vi.hoisted(() => ({
-  mockActivate: vi.fn(),
-  mockPreview: vi.fn(),
-  mockRun: vi.fn(),
-}));
+const { mockActivate, mockCreateLocal, mockPreview, mockPreviewLocal, mockRun } = vi.hoisted(
+  () => ({
+    mockActivate: vi.fn(),
+    mockCreateLocal: vi.fn(),
+    mockPreview: vi.fn(),
+    mockPreviewLocal: vi.fn(),
+    mockRun: vi.fn(),
+  }),
+);
 
 vi.mock('./service.js', () => ({
   activateLocalDbProject: mockActivate,
+  createLocalProjectService: mockCreateLocal,
   previewBootstrapService: mockPreview,
+  previewLocalProjectCreationService: mockPreviewLocal,
   runBootstrapService: mockRun,
 }));
 
@@ -144,6 +150,94 @@ describe('POST /projects/bootstrap/run', () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('workflow exploded');
+  });
+});
+
+describe('POST /projects/bootstrap/local-project/preview', () => {
+  it('returns 200 with the generated config preview', async () => {
+    mockPreviewLocal.mockResolvedValue({
+      ok: true,
+      data: {
+        slug: 'widgets',
+        name: 'widgets',
+        configPath: 'target-projects/widgets/project.config.ts',
+        config: 'const config = {}',
+        requiredEnvVars: [],
+        repositories: [],
+        integrations: ['github'],
+      },
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/bootstrap/local-project/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: { kind: 'github-code', repoRefs: ['octo/widgets'] } }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ slug: 'widgets' });
+    expect(mockPreviewLocal).toHaveBeenCalledWith({
+      source: { kind: 'github-code', repoRefs: ['octo/widgets'] },
+    });
+  });
+
+  it('returns the service status code on failure', async () => {
+    mockPreviewLocal.mockResolvedValue({ ok: false, error: 'bad source', status: 400 });
+    const app = makeApp();
+    const res = await app.request('/projects/bootstrap/local-project/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: { kind: 'advanced' } }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'bad source' });
+  });
+});
+
+describe('POST /projects/bootstrap/local-project/create', () => {
+  it('returns 200 with the local write result', async () => {
+    mockCreateLocal.mockResolvedValue({
+      ok: true,
+      data: {
+        status: 'created',
+        slug: 'widgets',
+        name: 'widgets',
+        configPath: 'target-projects/widgets/project.config.ts',
+        writtenPath: '/repo/target-projects/widgets/project.config.ts',
+        config: 'const config = {}',
+        requiredEnvVars: [],
+        repositories: [],
+        integrations: [],
+      },
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/bootstrap/local-project/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'widgets', source: { kind: 'local-only' } }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: 'created', slug: 'widgets' });
+    expect(mockCreateLocal).toHaveBeenCalledWith({
+      slug: 'widgets',
+      source: { kind: 'local-only' },
+    });
+  });
+
+  it('supports conflict responses', async () => {
+    mockCreateLocal.mockResolvedValue({ ok: false, error: 'exists', status: 409 });
+    const app = makeApp();
+    const res = await app.request('/projects/bootstrap/local-project/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'widgets', source: { kind: 'local-only' } }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'exists' });
   });
 });
 

@@ -1,18 +1,18 @@
-/**
- * BootstrapWizard — multi-step modal that walks the human through registering
- * a new project under Factory's roster (M12.07, issue #308).
- *
- * The wizard hits two server endpoints:
- *   - POST /projects/bootstrap/preview { repoRef }  → BootstrapPreviewDto
- *   - POST /projects/bootstrap/run     { repoRef, slug? } → BootstrapRunDto
- *
- * Tokens are server-held (env GITHUB_TOKEN); the browser never collects
- * tokens. The "Open Registration PR" button on the final step calls /run.
- */
-
-import { previewBootstrap, runBootstrap } from '@/lib/api';
-import type { BootstrapPreviewDto, BootstrapRunDto } from '@/lib/types';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { createLocalProject, previewLocalProjectCreation } from '@/lib/api';
+import type {
+  LocalProjectCreationPreviewDto,
+  LocalProjectCreationRequestDto,
+  LocalProjectCreationRunDto,
+  ProjectCreationSourceDto,
+} from '@/lib/types';
+import {
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   WIZARD_STEPS,
   type WizardStep,
@@ -24,6 +24,8 @@ import {
   stepLabel,
 } from '../lib/wizard-state';
 
+type CreationMode = ProjectCreationSourceDto['kind'];
+
 interface BootstrapWizardProps {
   open: boolean;
   onClose: () => void;
@@ -31,41 +33,55 @@ interface BootstrapWizardProps {
 
 interface WizardState {
   step: WizardStep;
-  repoRef: string;
-  repoRefsText: string;
+  mode: CreationMode;
   projectName: string;
   slug: string;
-  preview: BootstrapPreviewDto | null;
-  result: BootstrapRunDto | null;
+  githubReposText: string;
+  jiraBaseUrl: string;
+  jiraKeysText: string;
+  jiraImportMode: 'manual' | 'assigned-to-me';
+  bitbucketWorkspace: string;
+  bitbucketReposText: string;
+  preview: LocalProjectCreationPreviewDto | null;
+  lastRequest: LocalProjectCreationRequestDto | null;
+  result: LocalProjectCreationRunDto | null;
   loading: boolean;
   error: string | null;
 }
 
 const INITIAL_STATE: WizardState = {
-  step: 'repo',
-  repoRef: '',
-  repoRefsText: '',
+  step: 'source',
+  mode: 'local-only',
   projectName: '',
   slug: '',
+  githubReposText: '',
+  jiraBaseUrl: '',
+  jiraKeysText: '',
+  jiraImportMode: 'manual',
+  bitbucketWorkspace: '',
+  bitbucketReposText: '',
   preview: null,
+  lastRequest: null,
   result: null,
   loading: false,
   error: null,
 };
 
+const MODE_LABELS: Record<CreationMode, string> = {
+  'local-only': 'Local only',
+  'github-code': 'Local + GitHub code repo',
+  jira: 'Local + Jira import',
+  bitbucket: 'Local + Bitbucket PR integration',
+  advanced: 'Advanced: multiple repos/integrations',
+};
+
 export function BootstrapWizard({ open, onClose }: BootstrapWizardProps) {
   const [state, setState] = useState<WizardState>(INITIAL_STATE);
-  // Tracks whether the modal is still mounted/open by the time an in-flight
-  // preview/run request resolves. Without this guard, a late response can
-  // re-populate state after the user has closed the wizard, leaving stale
-  // step/preview data visible on the next open.
   const openRef = useRef(open);
-
   const reset = useCallback(() => setState(INITIAL_STATE), []);
 
   useEffect(() => {
     openRef.current = open;
-    // Reset whenever the modal closes so the next open starts fresh.
     if (!open) reset();
   }, [open, reset]);
 
@@ -75,136 +91,90 @@ export function BootstrapWizard({ open, onClose }: BootstrapWizardProps) {
     setState((s) => ({ ...s, error, loading: false }));
   }
 
-  async function handleValidateRepo() {
-    if (!isValidRepoRefs(state.repoRefsText || state.repoRef)) {
-      setError('Each repository ref must look like "owner/repo"');
+  async function handlePreview() {
+    let request: LocalProjectCreationRequestDto;
+    try {
+      request = buildRequest(state);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid project source');
       return;
     }
-    const repoRefs = parseRepoRefs(state.repoRefsText || state.repoRef);
+
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const preview = await previewBootstrap({
-        repoRefs,
-        name: state.projectName.trim() || undefined,
-        slug: state.slug.trim() || undefined,
-      });
+      const preview = await previewLocalProjectCreation(request);
       if (!openRef.current) return;
       setState((s) => ({
         ...s,
-        repoRef: repoRefs[0] ?? '',
         preview,
+        lastRequest: request,
         loading: false,
         step: nextStep(s.step),
       }));
     } catch (err) {
       if (!openRef.current) return;
-      setError(err instanceof Error ? err.message : 'Failed to validate repo');
+      setError(err instanceof Error ? err.message : 'Failed to preview project config');
     }
   }
 
-  async function handleOpenPr() {
+  async function handleCreate() {
+    const request = state.lastRequest ?? buildRequest(state);
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const result = await runBootstrap({
-        repoRefs: parseRepoRefs(state.repoRefsText || state.repoRef),
-        name: state.projectName.trim() || undefined,
-        slug: state.slug.trim() || state.preview?.slug,
-      });
+      const result = await createLocalProject(request);
       if (!openRef.current) return;
       setState((s) => ({ ...s, result, loading: false }));
     } catch (err) {
       if (!openRef.current) return;
-      setError(err instanceof Error ? err.message : 'Failed to open registration PR');
+      setError(err instanceof Error ? err.message : 'Failed to create project config');
     }
   }
 
   function handleNext() {
     setState((s) => ({ ...s, step: nextStep(s.step), error: null }));
   }
+
   function handlePrev() {
     setState((s) => ({ ...s, step: prevStep(s.step), error: null }));
-  }
-
-  function handleClose() {
-    onClose();
   }
 
   return (
     <div
       data-testid="bootstrap-wizard"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 50,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(0,0,0,0.45)',
-      }}
-      onClick={handleClose}
-      onKeyDown={(e) => e.key === 'Escape' && handleClose()}
+      style={overlayStyle}
+      onClick={onClose}
+      onKeyDown={(e) => e.key === 'Escape' && onClose()}
     >
       <div
-        // biome-ignore lint/a11y/useSemanticElements: native <dialog> requires open/showModal lifecycle that conflicts with the existing CSS-overlay pattern used elsewhere in the app; aria-label + role="dialog" is the documented React-modal fallback.
+        // biome-ignore lint/a11y/useSemanticElements: this follows the existing modal overlay pattern; native dialog lifecycle would be a broader component rewrite.
         role="dialog"
-        aria-label="Add Project bootstrap wizard"
-        style={{
-          background: 'var(--bg-elev)',
-          border: '1px solid var(--line)',
-          borderRadius: 8,
-          padding: '24px',
-          width: '100%',
-          maxWidth: 720,
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          color: 'var(--fg)',
-        }}
+        aria-label="Add project wizard"
+        style={dialogStyle}
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.key === 'Escape' && handleClose()}
+        onKeyDown={(e) => e.key === 'Escape' && onClose()}
       >
-        <h2
-          style={{
-            margin: '0 0 12px',
-            fontSize: 15,
-            fontWeight: 600,
-          }}
-        >
-          Add project
-        </h2>
-
+        <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 600 }}>Add project</h2>
         <StepIndicator current={state.step} />
 
         <div style={{ marginTop: 16 }}>
-          {state.step === 'repo' && (
-            <StepRepo
-              repoRefsText={state.repoRefsText}
-              projectName={state.projectName}
-              slug={state.slug}
-              onRepoRefsChange={(repoRefsText) =>
-                setState((s) => ({ ...s, repoRefsText, repoRef: repoRefsText, error: null }))
+          {state.step === 'source' && (
+            <StepSource
+              state={state}
+              onChange={(patch) =>
+                setState((s) => ({
+                  ...s,
+                  ...patch,
+                  preview: null,
+                  result: null,
+                  lastRequest: null,
+                  error: null,
+                }))
               }
-              onProjectNameChange={(projectName) =>
-                setState((s) => ({ ...s, projectName, error: null }))
-              }
-              onSlugChange={(slug) => setState((s) => ({ ...s, slug, error: null }))}
-              loading={state.loading}
-              onSubmit={handleValidateRepo}
             />
           )}
-          {state.step === 'stack' && state.preview && <StepStack preview={state.preview} />}
-          {state.step === 'claudeMd' && state.preview && <StepClaudeMd preview={state.preview} />}
-          {state.step === 'labels' && state.preview && <StepLabels preview={state.preview} />}
-          {state.step === 'webhook' && state.preview && (
-            <StepWebhook preview={state.preview} repoRef={state.repoRef} />
-          )}
+          {state.step === 'preview' && state.preview && <StepPreview preview={state.preview} />}
           {state.step === 'submit' && (
-            <StepSubmit
-              repoRef={state.repoRef}
-              preview={state.preview}
-              result={state.result}
-              loading={state.loading}
-              onOpenPr={handleOpenPr}
-            />
+            <StepSubmit result={state.result} loading={state.loading} onCreate={handleCreate} />
           )}
         </div>
 
@@ -223,41 +193,104 @@ export function BootstrapWizard({ open, onClose }: BootstrapWizardProps) {
           hasResult={state.result != null}
           canAdvance={canAdvance(state)}
           onPrev={handlePrev}
-          onNext={state.step === 'repo' ? handleValidateRepo : handleNext}
-          onClose={handleClose}
+          onNext={state.step === 'source' ? handlePreview : handleNext}
+          onClose={onClose}
         />
       </div>
     </div>
   );
 }
 
+function buildRequest(state: WizardState): LocalProjectCreationRequestDto {
+  const base = {
+    name: state.projectName.trim() || undefined,
+    slug: state.slug.trim() || undefined,
+  };
+  return {
+    ...base,
+    source: buildSource(state),
+  };
+}
+
+function buildSource(state: WizardState): ProjectCreationSourceDto {
+  switch (state.mode) {
+    case 'local-only':
+      return { kind: 'local-only' };
+    case 'github-code':
+      return { kind: 'github-code', repoRefs: parseRepoRefs(state.githubReposText) };
+    case 'jira':
+      return {
+        kind: 'jira',
+        baseUrl: state.jiraBaseUrl.trim(),
+        projectKeys: parseList(state.jiraKeysText),
+        importMode: state.jiraImportMode,
+      };
+    case 'bitbucket':
+      return {
+        kind: 'bitbucket',
+        workspace: state.bitbucketWorkspace.trim(),
+        repos: parseList(state.bitbucketReposText),
+      };
+    case 'advanced': {
+      const source: Extract<ProjectCreationSourceDto, { kind: 'advanced' }> = { kind: 'advanced' };
+      if (state.githubReposText.trim().length > 0 && !isValidRepoRefs(state.githubReposText)) {
+        throw new Error('GitHub repositories must look like "owner/repo"');
+      }
+      if (state.githubReposText.trim().length > 0) {
+        source.github = { repoRefs: parseRepoRefs(state.githubReposText) };
+      }
+      if (state.jiraBaseUrl.trim() && parseList(state.jiraKeysText).length > 0) {
+        source.jira = {
+          baseUrl: state.jiraBaseUrl.trim(),
+          projectKeys: parseList(state.jiraKeysText),
+          importMode: state.jiraImportMode,
+        };
+      }
+      if (state.bitbucketWorkspace.trim() && parseList(state.bitbucketReposText).length > 0) {
+        source.bitbucket = {
+          workspace: state.bitbucketWorkspace.trim(),
+          repos: parseList(state.bitbucketReposText),
+        };
+      }
+      return source;
+    }
+  }
+}
+
 function canAdvance(state: WizardState): boolean {
   if (state.loading) return false;
-  if (state.step === 'repo') {
-    return isValidRepoRefs(state.repoRefsText || state.repoRef);
+  if (state.step === 'source') {
+    if (state.mode === 'local-only') return state.slug.trim().length > 0;
+    if (state.mode === 'github-code') return isValidRepoRefs(state.githubReposText);
+    if (state.mode === 'jira') {
+      return state.jiraBaseUrl.trim().length > 0 && parseList(state.jiraKeysText).length > 0;
+    }
+    if (state.mode === 'bitbucket') {
+      return (
+        state.bitbucketWorkspace.trim().length > 0 && parseList(state.bitbucketReposText).length > 0
+      );
+    }
+    return (
+      isValidRepoRefs(state.githubReposText) ||
+      (state.jiraBaseUrl.trim().length > 0 && parseList(state.jiraKeysText).length > 0) ||
+      (state.bitbucketWorkspace.trim().length > 0 && parseList(state.bitbucketReposText).length > 0)
+    );
   }
-  if (state.step === 'submit') {
-    return state.result != null;
-  }
+  if (state.step === 'submit') return state.result != null;
   return state.preview != null;
+}
+
+function parseList(raw: string): string[] {
+  return raw
+    .split(/[\n,]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
 function StepIndicator({ current }: { current: WizardStep }) {
   const currentIdx = stepIndex(current);
   return (
-    <ol
-      data-testid="wizard-steps"
-      style={{
-        display: 'flex',
-        gap: 4,
-        listStyle: 'none',
-        padding: 0,
-        margin: 0,
-        fontSize: 11,
-        color: 'var(--fg-2)',
-        flexWrap: 'wrap',
-      }}
-    >
+    <ol data-testid="wizard-steps" style={stepListStyle}>
       {WIZARD_STEPS.map((step, idx) => {
         const isActive = step === current;
         const isComplete = idx < currentIdx;
@@ -286,41 +319,23 @@ function StepIndicator({ current }: { current: WizardStep }) {
   );
 }
 
-function StepRepo({
-  repoRefsText,
-  projectName,
-  slug,
-  onRepoRefsChange,
-  onProjectNameChange,
-  onSlugChange,
-  loading,
-  onSubmit,
+function StepSource({
+  state,
+  onChange,
 }: {
-  repoRefsText: string;
-  projectName: string;
-  slug: string;
-  onRepoRefsChange: (v: string) => void;
-  onProjectNameChange: (v: string) => void;
-  onSlugChange: (v: string) => void;
-  loading: boolean;
-  onSubmit: () => void;
+  state: WizardState;
+  onChange: (patch: Partial<WizardState>) => void;
 }) {
   return (
-    <form
-      data-testid="step-repo"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!loading) onSubmit();
-      }}
-    >
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: 10, marginBottom: 10 }}>
+    <div data-testid="step-source">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: 10, marginBottom: 12 }}>
         <Field label="Project alias" htmlFor="bootstrap-project-name">
           <input
             id="bootstrap-project-name"
             data-testid="bootstrap-project-name-input"
             type="text"
-            value={projectName}
-            onChange={(e) => onProjectNameChange(e.target.value)}
+            value={state.projectName}
+            onChange={(e) => onChange({ projectName: e.target.value })}
             placeholder="Goose Hub"
             autoComplete="off"
             style={textInputStyle}
@@ -331,56 +346,190 @@ function StepRepo({
             id="bootstrap-project-slug"
             data-testid="bootstrap-slug-input"
             type="text"
-            value={slug}
-            onChange={(e) => onSlugChange(e.target.value)}
+            value={state.slug}
+            onChange={(e) => onChange({ slug: e.target.value })}
             placeholder="goose-hub"
             autoComplete="off"
             style={textInputStyle}
           />
         </Field>
       </div>
-      <label
-        htmlFor="bootstrap-repo-ref"
-        style={{ display: 'block', fontSize: 12, color: 'var(--fg-2)', marginBottom: 4 }}
-      >
-        GitHub repositories (owner/repo, one per line)
-      </label>
-      <textarea
-        id="bootstrap-repo-ref"
-        data-testid="bootstrap-repo-input"
-        value={repoRefsText}
-        onChange={(e) => onRepoRefsChange(e.target.value)}
-        placeholder={'octo/widgets\nocto/docs'}
-        autoComplete="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        style={{
-          ...textInputStyle,
-          minHeight: 72,
-          resize: 'vertical',
-        }}
-      />
-      <p style={{ marginTop: 6, fontSize: 11, color: 'var(--fg-3)' }}>
-        The server checks accessibility with its configured GITHUB_TOKEN. The browser never sees a
-        token.
-      </p>
-    </form>
+
+      <fieldset style={fieldsetStyle}>
+        <legend style={legendStyle}>Mode</legend>
+        {Object.entries(MODE_LABELS).map(([mode, label]) => (
+          <label key={mode} style={radioLabelStyle}>
+            <input
+              data-testid={`bootstrap-mode-${mode}`}
+              type="radio"
+              checked={state.mode === mode}
+              onChange={() => onChange({ mode: mode as CreationMode })}
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </fieldset>
+
+      {(state.mode === 'github-code' || state.mode === 'advanced') && (
+        <Field label="GitHub repositories" htmlFor="bootstrap-github-repos">
+          <textarea
+            id="bootstrap-github-repos"
+            data-testid="bootstrap-github-repos-input"
+            value={state.githubReposText}
+            onChange={(e) => onChange({ githubReposText: e.target.value })}
+            placeholder={'octo/widgets\nocto/docs'}
+            style={textareaStyle}
+          />
+        </Field>
+      )}
+
+      {(state.mode === 'jira' || state.mode === 'advanced') && (
+        <div style={sectionGridStyle}>
+          <Field label="Jira base URL" htmlFor="bootstrap-jira-base-url">
+            <input
+              id="bootstrap-jira-base-url"
+              data-testid="bootstrap-jira-base-url-input"
+              value={state.jiraBaseUrl}
+              onChange={(e) => onChange({ jiraBaseUrl: e.target.value })}
+              placeholder="https://example.atlassian.net"
+              style={textInputStyle}
+            />
+          </Field>
+          <Field label="Jira project keys" htmlFor="bootstrap-jira-keys">
+            <input
+              id="bootstrap-jira-keys"
+              data-testid="bootstrap-jira-keys-input"
+              value={state.jiraKeysText}
+              onChange={(e) => onChange({ jiraKeysText: e.target.value })}
+              placeholder="ENG,OPS"
+              style={textInputStyle}
+            />
+          </Field>
+          <Field label="Jira import mode" htmlFor="bootstrap-jira-import-mode">
+            <select
+              id="bootstrap-jira-import-mode"
+              data-testid="bootstrap-jira-import-mode-select"
+              value={state.jiraImportMode}
+              onChange={(e) =>
+                onChange({ jiraImportMode: e.target.value as 'manual' | 'assigned-to-me' })
+              }
+              style={textInputStyle}
+            >
+              <option value="manual">Manual</option>
+              <option value="assigned-to-me">Assigned to me</option>
+            </select>
+          </Field>
+        </div>
+      )}
+
+      {(state.mode === 'bitbucket' || state.mode === 'advanced') && (
+        <div style={sectionGridStyle}>
+          <Field label="Bitbucket workspace" htmlFor="bootstrap-bitbucket-workspace">
+            <input
+              id="bootstrap-bitbucket-workspace"
+              data-testid="bootstrap-bitbucket-workspace-input"
+              value={state.bitbucketWorkspace}
+              onChange={(e) => onChange({ bitbucketWorkspace: e.target.value })}
+              placeholder="workspace"
+              style={textInputStyle}
+            />
+          </Field>
+          <Field label="Bitbucket repositories" htmlFor="bootstrap-bitbucket-repos">
+            <input
+              id="bootstrap-bitbucket-repos"
+              data-testid="bootstrap-bitbucket-repos-input"
+              value={state.bitbucketReposText}
+              onChange={(e) => onChange({ bitbucketReposText: e.target.value })}
+              placeholder="api,web"
+              style={textInputStyle}
+            />
+          </Field>
+        </div>
+      )}
+    </div>
   );
 }
 
-const textInputStyle: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  boxSizing: 'border-box',
-  padding: '6px 10px',
-  borderRadius: 6,
-  border: '1px solid var(--line)',
-  background: 'var(--bg)',
-  color: 'var(--fg)',
-  fontSize: 13,
-  fontFamily: 'monospace',
-  outline: 'none',
-};
+function StepPreview({ preview }: { preview: LocalProjectCreationPreviewDto }) {
+  return (
+    <div data-testid="step-preview">
+      <h3 style={headingStyle}>Generated config</h3>
+      <p style={metaTextStyle}>
+        <code>{preview.configPath}</code>
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '8px 0' }}>
+        <Badge>local-db</Badge>
+        {preview.integrations.map((integration) => (
+          <Badge key={integration}>{integration}</Badge>
+        ))}
+      </div>
+      {preview.requiredEnvVars.length > 0 && (
+        <div data-testid="required-env-vars" style={{ margin: '8px 0 12px', fontSize: 12 }}>
+          <strong>Env:</strong>{' '}
+          {preview.requiredEnvVars.map((envVar) => (
+            <code key={envVar} style={{ marginRight: 8 }}>
+              {envVar}
+            </code>
+          ))}
+        </div>
+      )}
+      <textarea
+        data-testid="project-config-preview"
+        readOnly
+        value={preview.config}
+        rows={18}
+        style={{ ...textareaStyle, minHeight: 320 }}
+      />
+    </div>
+  );
+}
+
+function StepSubmit({
+  result,
+  loading,
+  onCreate,
+}: {
+  result: LocalProjectCreationRunDto | null;
+  loading: boolean;
+  onCreate: () => void;
+}) {
+  return (
+    <div data-testid="step-submit">
+      <h3 style={headingStyle}>Create project config</h3>
+      {result == null && (
+        <button
+          type="button"
+          data-testid="bootstrap-submit"
+          disabled={loading}
+          onClick={onCreate}
+          style={primaryButtonStyle}
+        >
+          {loading ? 'Creating...' : 'Create Project'}
+        </button>
+      )}
+      {result != null && (
+        <div data-testid="bootstrap-result">
+          <p style={{ margin: '0 0 8px', fontSize: 12 }}>
+            <strong>Status:</strong> {result.status}
+          </p>
+          <p style={{ margin: 0, fontSize: 12 }}>
+            <strong>Path:</strong> <code>{result.configPath}</code>
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Badge({ children }: { children: string }) {
+  return (
+    <span
+      style={{ border: '1px solid var(--line)', borderRadius: 4, padding: '2px 6px', fontSize: 11 }}
+    >
+      {children}
+    </span>
+  );
+}
 
 function Field({
   label,
@@ -389,274 +538,13 @@ function Field({
 }: {
   label: string;
   htmlFor: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <label htmlFor={htmlFor} style={{ display: 'block', fontSize: 12, color: 'var(--fg-2)' }}>
       <span style={{ display: 'block', marginBottom: 4 }}>{label}</span>
       {children}
     </label>
-  );
-}
-
-function StepStack({ preview }: { preview: BootstrapPreviewDto }) {
-  return (
-    <div data-testid="step-stack">
-      <h3 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Detected stack</h3>
-      <p style={{ margin: '0 0 4px', fontSize: 12 }}>
-        <strong>Type:</strong> {preview.stack.type}
-      </p>
-      <p style={{ margin: '0 0 4px', fontSize: 12 }}>
-        <strong>Default branch:</strong>{' '}
-        <code style={{ fontFamily: 'monospace' }}>{preview.defaultBranch}</code>
-      </p>
-      <p style={{ margin: '0 0 4px', fontSize: 12 }}>
-        <strong>Slug:</strong> <code style={{ fontFamily: 'monospace' }}>{preview.slug}</code>
-      </p>
-      <p style={{ margin: '0 0 4px', fontSize: 12 }}>
-        <strong>Repos:</strong> {preview.repos.length}
-      </p>
-      <ul style={{ margin: '8px 0 0 18px', padding: 0, fontSize: 12, color: 'var(--fg-2)' }}>
-        {preview.repos.map((repo) => (
-          <li key={repo.repoRef}>
-            <code style={{ fontFamily: 'monospace' }}>{repo.repoRef}</code> — {repo.stackSummary}
-          </li>
-        ))}
-      </ul>
-      <pre
-        data-testid="stack-summary"
-        style={{
-          marginTop: 12,
-          background: 'var(--bg)',
-          border: '1px solid var(--line)',
-          borderRadius: 6,
-          padding: 12,
-          fontSize: 11,
-          fontFamily: 'monospace',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-all',
-        }}
-      >
-        {preview.stack.summary}
-      </pre>
-    </div>
-  );
-}
-
-function StepClaudeMd({ preview }: { preview: BootstrapPreviewDto }) {
-  const isCreate = preview.audit.action === 'create';
-  const isUpdate = preview.audit.action === 'update';
-  const isOk = preview.audit.action === 'ok';
-  return (
-    <div data-testid="step-claudemd">
-      <h3 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>
-        CLAUDE.md {isCreate ? 'preview (create)' : isUpdate ? 'diff (update)' : 'audit'}
-      </h3>
-      <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--fg-2)' }}>
-        {preview.audit.rationale}
-      </p>
-      {!isOk && (
-        <textarea
-          data-testid="claudemd-preview"
-          readOnly
-          value={preview.audit.content}
-          rows={12}
-          style={{
-            display: 'block',
-            width: '100%',
-            boxSizing: 'border-box',
-            background: 'var(--bg)',
-            border: '1px solid var(--line)',
-            borderRadius: 6,
-            color: 'var(--fg)',
-            fontFamily: 'monospace',
-            fontSize: 11,
-            padding: 8,
-            resize: 'vertical',
-          }}
-        />
-      )}
-      {isOk && (
-        <p data-testid="claudemd-ok" style={{ margin: 0, fontSize: 12, color: 'var(--fg-2)' }}>
-          The target repo's CLAUDE.md already contains every required section. No changes proposed.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function StepLabels({ preview }: { preview: BootstrapPreviewDto }) {
-  return (
-    <div data-testid="step-labels">
-      <h3 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>
-        Labels to install ({preview.labelsToInstall.length})
-      </h3>
-      <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--fg-2)' }}>
-        These are the canonical Factory labels that will be created or updated on{' '}
-        <code style={{ fontFamily: 'monospace' }}>{preview.slug}</code>'s GitHub repo.
-      </p>
-      <ul
-        data-testid="labels-list"
-        style={{
-          listStyle: 'none',
-          padding: 0,
-          margin: 0,
-          maxHeight: 240,
-          overflowY: 'auto',
-          border: '1px solid var(--line)',
-          borderRadius: 6,
-        }}
-      >
-        {preview.labelsToInstall.map((label) => (
-          <li
-            key={label.name}
-            data-testid="labels-list-item"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '5px 10px',
-              borderBottom: '1px solid var(--line)',
-              fontSize: 12,
-            }}
-          >
-            <span
-              style={{
-                display: 'inline-block',
-                width: 12,
-                height: 12,
-                borderRadius: 3,
-                background: `#${label.color}`,
-                flexShrink: 0,
-              }}
-            />
-            <code style={{ fontFamily: 'monospace', flexShrink: 0 }}>{label.name}</code>
-            <span style={{ color: 'var(--fg-3)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {label.description}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function StepWebhook({ preview, repoRef }: { preview: BootstrapPreviewDto; repoRef: string }) {
-  const payloadUrl = '<your-goose-hub-host>/webhooks/github';
-  return (
-    <div data-testid="step-webhook">
-      <h3 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Webhook setup</h3>
-      <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--fg-2)' }}>
-        After this PR merges, configure a GitHub webhook on{' '}
-        <code style={{ fontFamily: 'monospace' }}>{repoRef || preview.slug}</code> so factory ticks
-        react to label changes.
-      </p>
-      <ol style={{ margin: '0 0 8px 18px', padding: 0, fontSize: 12, lineHeight: 1.7 }}>
-        <li>
-          Go to{' '}
-          <code style={{ fontFamily: 'monospace' }}>
-            https://github.com/{repoRef || preview.slug}/settings/hooks/new
-          </code>
-          .
-        </li>
-        <li>
-          Payload URL:{' '}
-          <code data-testid="webhook-payload-url" style={{ fontFamily: 'monospace' }}>
-            {payloadUrl}
-          </code>
-        </li>
-        <li>
-          Content type: <code style={{ fontFamily: 'monospace' }}>application/json</code>
-        </li>
-        <li>
-          Secret: the value of{' '}
-          <code style={{ fontFamily: 'monospace' }}>GITHUB_WEBHOOK_SECRET</code> from your goose-hub
-          server env.
-        </li>
-        <li>Events: select Issues, Pull requests, and Issue comments.</li>
-        <li>Active: yes.</li>
-      </ol>
-      <p style={{ margin: 0, fontSize: 11, color: 'var(--fg-3)' }}>
-        Local development: tunnel <code style={{ fontFamily: 'monospace' }}>localhost:3001</code>{' '}
-        with <code style={{ fontFamily: 'monospace' }}>ngrok http 3001</code> and use the ngrok URL
-        above instead.
-      </p>
-    </div>
-  );
-}
-
-function StepSubmit({
-  repoRef,
-  preview,
-  result,
-  loading,
-  onOpenPr,
-}: {
-  repoRef: string;
-  preview: BootstrapPreviewDto | null;
-  result: BootstrapRunDto | null;
-  loading: boolean;
-  onOpenPr: () => void;
-}) {
-  return (
-    <div data-testid="step-submit">
-      <h3 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Open registration PR</h3>
-      {result == null && (
-        <>
-          <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--fg-2)' }}>
-            Clicking the button below will install the canonical labels on{' '}
-            <code style={{ fontFamily: 'monospace' }}>{repoRef}</code> and open a registration PR on{' '}
-            <code style={{ fontFamily: 'monospace' }}>shaunnez/goose-hub</code> with slug{' '}
-            <code style={{ fontFamily: 'monospace' }}>{preview?.slug}</code>.
-          </p>
-          <button
-            type="button"
-            data-testid="bootstrap-submit"
-            disabled={loading}
-            onClick={onOpenPr}
-            style={{
-              padding: '6px 16px',
-              borderRadius: 6,
-              border: 'none',
-              background: 'var(--accent, #6366f1)',
-              color: '#fff',
-              fontSize: 13,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.7 : 1,
-            }}
-          >
-            {loading ? 'Opening PR…' : 'Open Registration PR'}
-          </button>
-        </>
-      )}
-      {result != null && (
-        <div data-testid="bootstrap-result">
-          <p style={{ margin: '0 0 8px', fontSize: 12 }}>
-            <strong>Status:</strong> {result.status}
-          </p>
-          {result.registrationPrUrl && (
-            <p style={{ margin: '0 0 8px', fontSize: 12 }}>
-              <strong>PR:</strong>{' '}
-              <a
-                data-testid="bootstrap-pr-link"
-                href={result.registrationPrUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: 'var(--accent, #6366f1)' }}
-              >
-                {result.registrationPrUrl}
-              </a>
-            </p>
-          )}
-          {result.labelCounts && (
-            <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--fg-2)' }}>
-              Labels — created {result.labelCounts.created}, updated {result.labelCounts.updated},
-              skipped {result.labelCounts.skipped}.
-            </p>
-          )}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -677,31 +565,11 @@ function WizardFooter({
   onNext: () => void;
   onClose: () => void;
 }) {
-  const isFirst = step === 'repo';
+  const isFirst = step === 'source';
   const isFinal = step === 'submit';
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        marginTop: 24,
-        paddingTop: 12,
-        borderTop: '1px solid var(--line)',
-      }}
-    >
-      <button
-        type="button"
-        onClick={onClose}
-        style={{
-          padding: '5px 14px',
-          borderRadius: 6,
-          border: '1px solid var(--line)',
-          background: 'var(--bg)',
-          color: 'var(--fg-2)',
-          fontSize: 13,
-          cursor: 'pointer',
-        }}
-      >
+    <div style={footerStyle}>
+      <button type="button" onClick={onClose} style={secondaryButtonStyle}>
         {hasResult ? 'Close' : 'Cancel'}
       </button>
       <div style={{ display: 'flex', gap: 8 }}>
@@ -711,15 +579,7 @@ function WizardFooter({
             data-testid="wizard-prev"
             onClick={onPrev}
             disabled={loading}
-            style={{
-              padding: '5px 14px',
-              borderRadius: 6,
-              border: '1px solid var(--line)',
-              background: 'var(--bg)',
-              color: 'var(--fg-2)',
-              fontSize: 13,
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
+            style={secondaryButtonStyle}
           >
             Back
           </button>
@@ -730,21 +590,133 @@ function WizardFooter({
             data-testid="wizard-next"
             onClick={onNext}
             disabled={!canAdvance || loading}
-            style={{
-              padding: '5px 14px',
-              borderRadius: 6,
-              border: 'none',
-              background: 'var(--accent, #6366f1)',
-              color: '#fff',
-              fontSize: 13,
-              cursor: !canAdvance || loading ? 'not-allowed' : 'pointer',
-              opacity: !canAdvance || loading ? 0.7 : 1,
-            }}
+            style={primaryButtonStyle}
           >
-            {loading ? 'Loading…' : 'Next'}
+            {loading ? 'Loading...' : 'Next'}
           </button>
         )}
       </div>
     </div>
   );
 }
+
+const overlayStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 50,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'rgba(0,0,0,0.45)',
+};
+
+const dialogStyle: CSSProperties = {
+  background: 'var(--bg-elev)',
+  border: '1px solid var(--line)',
+  borderRadius: 8,
+  padding: 24,
+  width: '100%',
+  maxWidth: 760,
+  maxHeight: '90vh',
+  overflowY: 'auto',
+  color: 'var(--fg)',
+};
+
+const stepListStyle: CSSProperties = {
+  display: 'flex',
+  gap: 4,
+  listStyle: 'none',
+  padding: 0,
+  margin: 0,
+  fontSize: 11,
+  color: 'var(--fg-2)',
+  flexWrap: 'wrap',
+};
+
+const textInputStyle: CSSProperties = {
+  display: 'block',
+  width: '100%',
+  boxSizing: 'border-box',
+  padding: '6px 10px',
+  borderRadius: 6,
+  border: '1px solid var(--line)',
+  background: 'var(--bg)',
+  color: 'var(--fg)',
+  fontSize: 13,
+  fontFamily: 'monospace',
+  outline: 'none',
+};
+
+const textareaStyle: CSSProperties = {
+  ...textInputStyle,
+  minHeight: 72,
+  resize: 'vertical',
+};
+
+const fieldsetStyle: CSSProperties = {
+  border: '1px solid var(--line)',
+  borderRadius: 6,
+  padding: 10,
+  margin: '0 0 12px',
+};
+
+const legendStyle: CSSProperties = {
+  padding: '0 4px',
+  fontSize: 12,
+  color: 'var(--fg-2)',
+};
+
+const radioLabelStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  margin: '6px 0',
+  fontSize: 13,
+};
+
+const sectionGridStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: 10,
+  marginTop: 12,
+};
+
+const headingStyle: CSSProperties = {
+  margin: '0 0 8px',
+  fontSize: 13,
+  fontWeight: 600,
+};
+
+const metaTextStyle: CSSProperties = {
+  margin: '0 0 4px',
+  fontSize: 12,
+  color: 'var(--fg-2)',
+};
+
+const footerStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  marginTop: 24,
+  paddingTop: 12,
+  borderTop: '1px solid var(--line)',
+};
+
+const primaryButtonStyle: CSSProperties = {
+  padding: '5px 14px',
+  borderRadius: 6,
+  border: 'none',
+  background: 'var(--accent, #6366f1)',
+  color: '#fff',
+  fontSize: 13,
+  cursor: 'pointer',
+};
+
+const secondaryButtonStyle: CSSProperties = {
+  padding: '5px 14px',
+  borderRadius: 6,
+  border: '1px solid var(--line)',
+  background: 'var(--bg)',
+  color: 'var(--fg-2)',
+  fontSize: 13,
+  cursor: 'pointer',
+};

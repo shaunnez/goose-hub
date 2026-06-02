@@ -32,7 +32,7 @@ export function IssueCard({
   const initials = getPersonaInitials(personaMap, item.lastPersonaId);
   const isBlocked = item.schedule === 'blocked-by';
   const isLocalOnly =
-    item?.canonicalWorkItemId?.startsWith('local:') && item.externalRefs.length === 0;
+    item.canonicalWorkItemId?.startsWith('local:') === true && item.externalRefs.length === 0;
 
   // Per-card fetch; TanStack Query dedupes by key so the issue detail page
   // shares the same cache. Boards with many cards trigger N requests on mount —
