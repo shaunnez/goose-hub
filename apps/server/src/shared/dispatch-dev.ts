@@ -13,6 +13,8 @@ import { firstProjectRepository } from '@goose-hub/core/projects/repositories.js
 import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { ProjectConfig } from '@goose-hub/core/types.js';
+import { loadLatestRoute } from '@goose-hub/core/workflow-routing/events.js';
+import { selectFixIssuePipeline } from '@goose-hub/core/workflow-routing/pipeline-selector.js';
 import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js';
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
 import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.js';
@@ -498,18 +500,28 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
         slug,
         issueNumber,
       });
-    } else if (
-      routingItem.type === 'bug' &&
-      resolveFixIssuePipelineForBug(slug, routingItem.id) === 'legacy'
-    ) {
-      logger.info('dispatchFixIssue: simple bug → legacy single-agent path', {
+    } else {
+      const routeDecision = loadLatestRoute({ projectId: slug, workItemId: routingItem.id });
+      const pipeline =
+        routeDecision != null
+          ? selectFixIssuePipeline(routeDecision)
+          : routingItem.type === 'bug' &&
+              resolveFixIssuePipelineForBug(slug, routingItem.id) === 'legacy'
+            ? 'fix-issue'
+            : 'spec-author-full';
+
+      logger.info('dispatchFixIssue: pipeline resolved', {
         slug,
         issueNumber,
+        pipeline,
+        routeTier: routeDecision?.tier ?? 'none',
       });
-      // fall through to legacy path
-    } else {
-      await dispatchSpecAuthor(slug, issueNumber);
-      return;
+
+      if (pipeline !== 'fix-issue') {
+        await dispatchSpecAuthor(slug, issueNumber);
+        return;
+      }
+      // fall through to legacy fix-issue path
     }
   }
 
@@ -669,9 +681,13 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
         return;
       }
 
+      const specRoute = loadLatestRoute({ projectId: slug, workItemId: item.id });
+      const specPipeline =
+        specRoute != null ? selectFixIssuePipeline(specRoute) : 'spec-author-full';
       const structuralValidation = validateEngineeringSpec(parsedSpec.data, {
         issueType: item.type === 'bug' ? 'bug' : 'feature',
         repoRoot: REPO_ROOT,
+        specMode: specPipeline === 'spec-author-lite' ? 'lite' : 'full',
       });
       if (!structuralValidation.ok) {
         const errors = structuralValidation.errors

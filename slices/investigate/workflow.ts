@@ -56,6 +56,13 @@ import {
   shapeSymbolIndexHintsForScout,
 } from '@goose-hub/core/symbol-index/lookup.js';
 import type { RuntimeEffort } from '@goose-hub/core/types.js';
+import {
+  emitRouteConfirmed,
+  emitRouteSelected,
+  loadLatestRoute,
+} from '@goose-hub/core/workflow-routing/events.js';
+import { selectWorkflowRoute } from '@goose-hub/core/workflow-routing/select-route.js';
+import { buildRouteSignals } from '@goose-hub/core/workflow-routing/signals.js';
 import { resolveWorkflowBaseForWorkItem } from '@goose-hub/core/workspaces/workflow-base.js';
 import {
   cleanupWorktree,
@@ -331,6 +338,7 @@ export async function runInvestigateWorkflow(
   const scoutJsonSchema = toJsonSchema(ScoutOutputSchema);
   let scoutEffortHints: Record<string, RuntimeEffort> = {};
   let finalInvestigationPlan: InvestigationPlan | undefined;
+  let investigationContradictions: unknown[] = [];
 
   function loadSkillAssets(scoutName: string) {
     return {
@@ -487,6 +495,27 @@ export async function runInvestigateWorkflow(
             },
           });
         }
+      }
+
+      // Emit a preliminary route if one was not already established at inbox promotion time.
+      if (loadLatestRoute({ projectId, workItemId: workItem.id }) == null) {
+        const existingSeed = getArtifact(`investigation-seed:promotion:${workItem.id}`);
+        const seedPaths: string[] = [];
+        if (existingSeed != null) {
+          const payload = existingSeed.payload as { files?: Array<{ path: string }> } | null;
+          if (Array.isArray(payload?.files)) {
+            for (const f of payload.files) {
+              if (typeof f.path === 'string') seedPaths.push(f.path);
+            }
+          }
+        }
+        const prelimSignals = buildRouteSignals({
+          workItemId: workItem.id,
+          workItem: { title: workItem.title, body: workItem.body, type: workItem.type },
+          seedFilePaths: seedPaths,
+        });
+        const prelimRoute = selectWorkflowRoute(prelimSignals, 'lazy-enhance');
+        emitRouteSelected({ projectId, workItemId: workItem.id, route: prelimRoute, runId });
       }
 
       const seedStartedAt = Date.now();
@@ -669,6 +698,7 @@ export async function runInvestigateWorkflow(
 
       // Cross-validate Wave 1 before dispatching Wave 2
       const cvResult = crossValidate(wave1Result.reports);
+      investigationContradictions = cvResult.contradictions;
       const wave1Digest = buildScoutReportDigestBundle(
         toStoredScoutReports(projectId, workItem.id, runId, wave1HandoffReports),
       );
@@ -984,6 +1014,19 @@ export async function runInvestigateWorkflow(
         }
       }
     }
+
+    const confirmedSignals = buildRouteSignals({
+      workItemId: workItem.id,
+      workItem: { title: workItem.title, body: workItem.body, type: workItem.type },
+      investigation: {
+        confidence: findings.confidence as 'low' | 'medium' | 'high',
+        keyFiles: findings.keyFiles as Array<{ path: string }>,
+        wave2Triggered: finalInvestigationPlan?.wave2Needed ?? false,
+        contradictions: investigationContradictions,
+      },
+    });
+    const confirmedRoute = selectWorkflowRoute(confirmedSignals, 'investigation');
+    emitRouteConfirmed({ projectId, workItemId: workItem.id, route: confirmedRoute, runId });
 
     eventStore.appendEvent({
       projectId,

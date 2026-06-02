@@ -1,6 +1,11 @@
 import type { ScoutReport, ScoutSpec } from '@goose-hub/core/agent-runtime/swarm.js';
 import type { RuntimeEffort } from '@goose-hub/core/types.js';
 import {
+  hasDependencySignal,
+  hasSchemaSignal,
+  hasVagueOrHighRiskSignal,
+} from '@goose-hub/core/workflow-routing/signals.js';
+import {
   WAVE_1_SCOUTS,
   WAVE_2_INTERFACE_SPEC,
   WAVE_2_RISK_SPEC,
@@ -66,24 +71,6 @@ function hasUiSignal(text: string): boolean {
   );
 }
 
-function hasSchemaSignal(text: string): boolean {
-  return /\b(api|endpoint|payload|request|response|contract|dto|zod|schema|json schema|graphql|openapi|drizzle|migration|ddl|boundary type|type contract|interface contract|repo[-\s]?match|repo run|run-failed|event payload|state label|human intervention)\b/.test(
-    text,
-  );
-}
-
-function hasDependencySignal(text: string): boolean {
-  return /\b(cross[-\s]?package|server\s*(?:and|\+|\/)\s*web|web\s*(?:and|\+|\/)\s*server|runtime|provider|dependency|dependencies|package boundary|workspace package|workspace dependency|monorepo boundary|import boundary)\b/.test(
-    text,
-  );
-}
-
-function hasVagueOrHighRiskSignal(text: string): boolean {
-  return /\b(vague|unknown|unclear|high[-\s]?risk|critical|security|auth|authentication|authorization|session|migration|concurrency|race|state machine|data loss|permission|secret|token|credential)\b/.test(
-    text,
-  );
-}
-
 function selectedWave1ScoutsFor(text: string, rawText: string): ScoutSpec[] {
   if (hasVagueOrHighRiskSignal(text)) return [...WAVE_1_SCOUTS];
 
@@ -116,8 +103,10 @@ function wave1IsLocalizedHighConfidence(input: InvestigationPlannerInput): boole
 }
 
 function selectWave2(input: InvestigationPlannerInput): ScoutSpec[] {
+  // Wave-2 signal text reads only scout findings + contradictions — body keywords
+  // are deliberately excluded so that low-signal body text cannot inflate wave-2 scope.
   const text = [
-    textFor(input),
+    input.workItem.title,
     JSON.stringify(input.contradictions ?? []),
     ...(input.wave1Reports ?? []).flatMap((report) => [
       report.scoutName,

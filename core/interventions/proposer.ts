@@ -69,6 +69,7 @@ function expectedStatesForType(type: InterventionType): readonly StateName[] | n
       return ['factory:merge-conflict'];
     case 'qa_disagreement':
     case 'manual_override':
+    case 'workflow_route_escalation':
       return null;
   }
 }

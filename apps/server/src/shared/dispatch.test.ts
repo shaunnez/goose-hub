@@ -130,6 +130,16 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
     subscribe: vi.fn().mockReturnValue(() => {}),
   },
 }));
+vi.mock('@goose-hub/core/workflow-routing/events.js', () => ({
+  loadLatestRoute: vi.fn().mockReturnValue(null),
+  emitRouteSelected: vi.fn(),
+  emitRouteConfirmed: vi.fn(),
+  emitCapApplied: vi.fn(),
+  emitEscalationProposed: vi.fn(),
+}));
+vi.mock('@goose-hub/core/workflow-routing/pipeline-selector.js', () => ({
+  selectFixIssuePipeline: vi.fn().mockReturnValue('fix-issue'),
+}));
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -915,7 +925,7 @@ describe('dispatchFixIssue: bug routing', () => {
     });
 
     expect(mockLoggerInfo).toHaveBeenCalledWith(
-      'dispatchFixIssue: simple bug → legacy single-agent path',
+      'dispatchFixIssue: pipeline resolved',
       expect.objectContaining({ slug: 'slug', issueNumber: 99 }),
     );
   });
@@ -957,7 +967,7 @@ describe('dispatchFixIssue: bug routing', () => {
     });
 
     expect(mockLoggerInfo).toHaveBeenCalledWith(
-      'dispatchFixIssue: simple bug → legacy single-agent path',
+      'dispatchFixIssue: pipeline resolved',
       expect.objectContaining({ slug: 'slug', issueNumber: 99 }),
     );
   });
@@ -989,9 +999,9 @@ describe('dispatchFixIssue: bug routing', () => {
     const { dispatchFixIssue } = await import('./dispatch.js');
     await dispatchFixIssue('slug', 100);
 
-    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
-      'dispatchFixIssue: simple bug → legacy single-agent path',
-      expect.anything(),
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: pipeline resolved',
+      expect.objectContaining({ pipeline: 'spec-author-full' }),
     );
     expect(mockLoggerInfo).toHaveBeenCalledWith(
       'dispatchFixIssue: pipeline flag',
@@ -1020,7 +1030,7 @@ describe('dispatchFixIssue: bug routing', () => {
     });
 
     expect(mockLoggerInfo).toHaveBeenCalledWith(
-      'dispatchFixIssue: simple bug → legacy single-agent path',
+      'dispatchFixIssue: pipeline resolved',
       expect.objectContaining({ slug: 'slug', issueNumber: 101 }),
     );
   });
@@ -1052,9 +1062,9 @@ describe('dispatchFixIssue: bug routing', () => {
     const { dispatchFixIssue } = await import('./dispatch.js');
     await dispatchFixIssue('slug', 102);
 
-    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
-      'dispatchFixIssue: simple bug → legacy single-agent path',
-      expect.anything(),
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: pipeline resolved',
+      expect.objectContaining({ pipeline: 'spec-author-full' }),
     );
   });
 

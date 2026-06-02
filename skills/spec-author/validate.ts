@@ -71,6 +71,11 @@ export interface ValidationOptions {
   issueType?: 'feature' | 'bug';
   /** Override sensitive-path regex; default matches `auth|session|crypto|secret`. */
   sensitivePathPattern?: RegExp;
+  /**
+   * Spec mode — `'lite'` relaxes interfaceContracts and riskRegister requirements
+   * for T1/T2 single-WP specs; both arrays may be empty. Default `'full'`.
+   */
+  specMode?: 'lite' | 'full';
 }
 
 const DEFAULT_SENSITIVE_PATTERN = /(auth|session|crypto|secret)/i;
@@ -104,6 +109,8 @@ export function validateEngineeringSpec(
   const errors: ValidationError[] = [];
   const issueType = options.issueType ?? 'feature';
   const sensitivePattern = options.sensitivePathPattern ?? DEFAULT_SENSITIVE_PATTERN;
+  const specMode = options.specMode ?? 'full';
+  const isLiteSingleWp = specMode === 'lite' && spec.workPackages.length <= 1;
 
   // ── File ownership: same path may not appear in two WPs (full-stop). ──
   const ownerByPath = new Map<string, string>();
@@ -156,7 +163,7 @@ export function validateEngineeringSpec(
   // ── Sensitive-path risk-register requirement. ──
   const allFilesOwned = spec.workPackages.flatMap((wp) => wp.filesOwned.map(fileOwnedPath));
   const sensitiveTouches = allFilesOwned.filter((p) => sensitivePattern.test(p));
-  if (sensitiveTouches.length > 0 && spec.riskRegister.length === 0) {
+  if (sensitiveTouches.length > 0 && spec.riskRegister.length === 0 && !isLiteSingleWp) {
     errors.push({
       rule: 'risk-required-on-sensitive-path',
       message: `spec touches sensitive path(s) ${sensitiveTouches.join(', ')} but riskRegister is empty (≥1 risk required)`,
@@ -396,8 +403,8 @@ export function validateEngineeringSpec(
 
   // 3. Complete interfaces — every cross-WP boundary has a typed contract.
   // Heuristic: if ≥2 WPs exist, at least one InterfaceContract must be
-  // declared.
-  if (spec.workPackages.length >= 2 && spec.interfaceContracts.length === 0) {
+  // declared. In lite mode (T1/T2 single-WP), empty interfaceContracts are permitted.
+  if (spec.workPackages.length >= 2 && spec.interfaceContracts.length === 0 && !isLiteSingleWp) {
     errors.push({
       rule: 'self-check-complete-interfaces',
       message: `${spec.workPackages.length} WPs in spec but interfaceContracts is empty — cross-WP boundaries need typed contracts`,
