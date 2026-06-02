@@ -20,4 +20,11 @@ export {
   dispatchRevisePrd,
   dispatchDecomposePrd,
 } from './dispatch-discover.js';
-export { dispatchForLabel, dispatchForIssue, dispatchResumeIssue } from './dispatch-routing.js';
+export {
+  DISPATCHABLE_WORK_ITEM_STATES,
+  dispatchCurrentWorkItemState,
+  dispatchForLabel,
+  dispatchForIssue,
+  dispatchProjectTick,
+  dispatchResumeIssue,
+} from './dispatch-routing.js';

@@ -211,6 +211,7 @@ describe('LocalDbStateSource', () => {
     expect(await source.listWorkByMilestone(1)).toHaveLength(1);
     expect(await source.listClosedWorkByMilestone(1)).toHaveLength(0);
     expect(await source.getActiveMilestone()).toMatchObject({ number: 1 });
+    expect(await source.listMilestones()).toMatchObject([{ number: 1, isActive: true }]);
     expect(await source.listLabels(created.id)).toContain('type:research');
     expect(await source.listLabels(created.id)).not.toContain('custom:manual');
   });

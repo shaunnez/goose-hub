@@ -52,15 +52,30 @@ const mockCodexCliRun = vi.fn();
 vi.mock('@goose-hub/core/agent-runtime/codex-cli.js', () => ({
   CodexCliRuntime: vi.fn().mockImplementation(() => ({ run: mockCodexCliRun })),
 }));
-let mockProjectConfig: Record<string, unknown> | null = {
-  agentConfig: { runtime: 'auto' },
-  budgets: undefined,
-  stack: {
-    testCommand: 'pnpm test',
-    lintCommand: 'pnpm lint',
-    typecheckCommand: 'pnpm typecheck',
-  },
-};
+function makeProjectConfig(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'proj',
+    name: 'Test Project',
+    slug: 'proj',
+    source: { kind: 'github', repo: 'owner/repo', stateMachine: 'labels' },
+    targetRepo: {
+      cloneUrl: '',
+      defaultBranch: 'main',
+      localPath: '',
+    },
+    repos: ['owner/repo'],
+    agentConfig: { runtime: 'auto' },
+    budgets: undefined,
+    stack: {
+      testCommand: 'pnpm test',
+      lintCommand: 'pnpm lint',
+      typecheckCommand: 'pnpm typecheck',
+    },
+    ...overrides,
+  };
+}
+
+let mockProjectConfig: Record<string, unknown> | null = makeProjectConfig();
 vi.mock('@goose-hub/core/projects/loader.js', () => ({
   getProjectBySlug: vi.fn(() => mockProjectConfig),
 }));
@@ -232,15 +247,7 @@ function makeGitWorktree(paths: string[] = []): string {
 
 function resetRuntimeRoutingMocks(): void {
   mockProjectSkillSettings = new Map();
-  mockProjectConfig = {
-    agentConfig: { runtime: 'auto' },
-    budgets: undefined,
-    stack: {
-      testCommand: 'pnpm test',
-      lintCommand: 'pnpm lint',
-      typecheckCommand: 'pnpm typecheck',
-    },
-  };
+  mockProjectConfig = makeProjectConfig();
 }
 
 describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () => {
@@ -365,11 +372,11 @@ describe('runFixIssueWorkflow — provider-aware runtime dispatch', () => {
   });
 
   it("agentConfig.runtime: 'codex-cli' coerces tier defaults to Codex models", async () => {
-    mockProjectConfig = {
+    mockProjectConfig = makeProjectConfig({
       agentConfig: { runtime: 'codex-cli' },
       budgets: undefined,
       stack: { testCommand: 'pnpm test' },
-    };
+    });
     const item = makeWorkItem({ priority: 'medium', type: 'feature', body: 'Small feature' });
     const source = makeStateSource();
 

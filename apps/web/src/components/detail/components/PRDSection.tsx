@@ -62,7 +62,9 @@ export interface ParsedPRDView {
   };
 }
 
-function moduleRefToString(ref: string | { path: string; status?: string } | undefined): string | undefined {
+function moduleRefToString(
+  ref: string | { path: string; status?: string } | undefined,
+): string | undefined {
   if (ref == null) return undefined;
   if (typeof ref === 'string') return ref;
   return ref.status != null ? `${ref.path} (${ref.status})` : ref.path;
@@ -655,7 +657,9 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
                 <p className="text-fg font-medium">{d.decision}</p>
                 {d.rationale != null && <p className="text-fg-2 mt-0.5">{d.rationale}</p>}
                 {moduleRefToString(d.moduleRef) != null && (
-                  <p className="font-mono text-[11px] text-fg-3 mt-0.5">{moduleRefToString(d.moduleRef)}</p>
+                  <p className="font-mono text-[11px] text-fg-3 mt-0.5">
+                    {moduleRefToString(d.moduleRef)}
+                  </p>
                 )}
               </div>
             ))}

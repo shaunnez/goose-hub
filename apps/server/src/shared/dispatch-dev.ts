@@ -13,11 +13,12 @@ import { firstProjectRepository } from '@goose-hub/core/projects/repositories.js
 import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { ProjectConfig } from '@goose-hub/core/types.js';
+import { loadLatestRoute } from '@goose-hub/core/workflow-routing/events.js';
+import { selectFixIssuePipeline } from '@goose-hub/core/workflow-routing/pipeline-selector.js';
 import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js';
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
 import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.js';
 import { withParallelLock } from './dispatch-lock.js';
-import { dispatchRetro } from './dispatch-qa-review.js';
 import { getProject } from './projects.js';
 import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
@@ -258,12 +259,6 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
             }
           : undefined;
       await runInvestigateWorkflow(item, source, slug, REPO_ROOT, mockInvestigateDeps);
-
-      // Production normally advances via the GitHub label-change webhook, but
-      // that webhook can arrive before this lock is released and be dropped as
-      // a duplicate. The post-lock fallback is harmless when the webhook wins:
-      // dispatchInvestigationComplete re-reads current state and no-ops.
-      return () => dispatchInvestigationComplete(slug, issueNumber);
     },
   );
 }
@@ -408,21 +403,6 @@ export async function dispatchInvestigationComplete(
         issueNumber,
         targetState,
       });
-
-      if (targetState === 'factory:dev-ready' && usesLegacyImplementation) {
-        return async () => {
-          const current = await source.getItem(issueNumber.toString());
-          if (current.state !== 'factory:dev-ready') {
-            logger.info('dispatchInvestigationComplete: post-lock implement fallback no-op', {
-              slug,
-              issueNumber,
-              state: current.state,
-            });
-            return;
-          }
-          await dispatchFixIssue(slug, issueNumber);
-        };
-      }
     },
   );
 }
@@ -498,18 +478,28 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
         slug,
         issueNumber,
       });
-    } else if (
-      routingItem.type === 'bug' &&
-      resolveFixIssuePipelineForBug(slug, routingItem.id) === 'legacy'
-    ) {
-      logger.info('dispatchFixIssue: simple bug → legacy single-agent path', {
+    } else {
+      const routeDecision = loadLatestRoute({ projectId: slug, workItemId: routingItem.id });
+      const pipeline =
+        routeDecision != null
+          ? selectFixIssuePipeline(routeDecision)
+          : routingItem.type === 'bug' &&
+              resolveFixIssuePipelineForBug(slug, routingItem.id) === 'legacy'
+            ? 'fix-issue'
+            : 'spec-author-full';
+
+      logger.info('dispatchFixIssue: pipeline resolved', {
         slug,
         issueNumber,
+        pipeline,
+        routeTier: routeDecision?.tier ?? 'none',
       });
-      // fall through to legacy path
-    } else {
-      await dispatchSpecAuthor(slug, issueNumber);
-      return;
+
+      if (pipeline !== 'fix-issue') {
+        await dispatchSpecAuthor(slug, issueNumber);
+        return;
+      }
+      // fall through to legacy fix-issue path
     }
   }
 
@@ -669,9 +659,13 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
         return;
       }
 
+      const specRoute = loadLatestRoute({ projectId: slug, workItemId: item.id });
+      const specPipeline =
+        specRoute != null ? selectFixIssuePipeline(specRoute) : 'spec-author-full';
       const structuralValidation = validateEngineeringSpec(parsedSpec.data, {
         issueType: item.type === 'bug' ? 'bug' : 'feature',
         repoRoot: REPO_ROOT,
+        specMode: specPipeline === 'spec-author-lite' ? 'lite' : 'full',
       });
       if (!structuralValidation.ok) {
         const errors = structuralValidation.errors
@@ -689,6 +683,77 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
           to: 'factory:needs-human',
           by: 'parallel-implement',
         });
+        return;
+      }
+
+      if (specRoute != null && !specRoute.selectedStages.includes('parallel-implement')) {
+        logger.info('dispatchParallelImplement: route excludes parallel implementation', {
+          slug,
+          issueNumber,
+          tier: specRoute.tier,
+          selectedStages: specRoute.selectedStages,
+        });
+        await source.forceState(item.id, 'factory:dev-ready');
+        emitStateTransitionEvent({
+          projectId: slug,
+          workItemId: item.id,
+          from: 'factory:spec-ready',
+          to: 'factory:dev-ready',
+          by: 'parallel-implement',
+          runId: specRecord.pipelineRunId,
+          extraPayload: {
+            reason: 'route-excludes-parallel-implement',
+            tier: specRoute.tier,
+          },
+        });
+
+        const { runFixIssueWorkflow } = (await import(sliceUrl('fix-issue'))) as {
+          runFixIssueWorkflow: (
+            item: unknown,
+            source: unknown,
+            slug: string,
+            repoRoot: string,
+            deps?: Record<string, unknown>,
+          ) => Promise<unknown>;
+        };
+        const legacyMockDeps: Record<string, unknown> | undefined =
+          process.env.MOCK_OPEN_PR === 'true'
+            ? {
+                openPRImpl: () =>
+                  Promise.resolve({
+                    prNumber: 999,
+                    prUrl: 'https://github.com/shaunnez/goose-hub/pull/999',
+                    branch: 'factory/mock-run',
+                    base: 'main',
+                  }),
+                createWorktreeImpl: () => '/mock/worktree',
+                prewarmWorktreeImpl: () => undefined,
+                cleanupWorktreeImpl: () => undefined,
+                resolveWorktreeHeadShaImpl: () => 'mock-sha-abc123',
+                orchestratorCommitAllImpl: () => ({
+                  status: 'committed',
+                  sha: 'mock-commit-sha',
+                }),
+              }
+            : undefined;
+        try {
+          await runFixIssueWorkflow(
+            { ...item, state: 'factory:dev-ready' },
+            source,
+            slug,
+            REPO_ROOT,
+            legacyMockDeps,
+          );
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          await recordLegacyFixIssueStartupFailure({
+            source,
+            item: { ...item, state: 'factory:dev-ready' },
+            slug,
+            issueNumber,
+            error,
+          });
+        }
         return;
       }
 
@@ -823,16 +888,10 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
           : undefined;
       await runResolveConflictWorkflow(item, source, slug, REPO_ROOT, mockConflictDeps);
 
-      // Fire-and-forget retro after conflict resolution + merge. Post-lock so
-      // dispatchRetro can also acquire the parallel lock for this issue.
-      return () =>
-        dispatchRetro(slug, issueNumber).catch((err: unknown) => {
-          logger.error('dispatchRetro after resolve-conflict failed', {
-            slug,
-            issueNumber,
-            error: String(err),
-          });
-        });
+      logger.info('dispatchResolveConflict: completed; retrospection will run on a future tick', {
+        slug,
+        issueNumber,
+      });
     },
   );
 }

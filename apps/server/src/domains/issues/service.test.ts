@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockGetProject } = vi.hoisted(() => ({
+const { mockGetProject, mockMaybeFireSprintReview } = vi.hoisted(() => ({
   mockGetProject: vi.fn(),
+  mockMaybeFireSprintReview: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('node:fs', async (importOriginal) => {
@@ -39,6 +40,7 @@ vi.mock('@goose-hub/core/state-machine/states.js', () => ({
   STATES: [
     'factory:triaging',
     'factory:accepted',
+    'factory:rejected',
     'factory:gate-pending',
     'factory:grilling',
     'factory:in-progress',
@@ -46,7 +48,7 @@ vi.mock('@goose-hub/core/state-machine/states.js', () => ({
     'factory:done',
     'factory:archived',
   ],
-  TERMINAL_STATES: new Set(['factory:done', 'factory:archived']),
+  TERMINAL_STATES: new Set(['factory:done', 'factory:archived', 'factory:rejected']),
 }));
 vi.mock('@goose-hub/core/state-machine/transitions.js', () => ({
   isLegalTransition: vi.fn().mockReturnValue(true),
@@ -74,6 +76,9 @@ vi.mock('../../shared/resolve-milestone.js', () => ({
   resolveActiveMilestone: vi
     .fn()
     .mockResolvedValue({ milestoneNumber: null, source: 'github-default' }),
+}));
+vi.mock('../workflows/sprint-review-trigger.js', () => ({
+  maybeFireSprintReview: mockMaybeFireSprintReview,
 }));
 
 import { execFileSync } from 'node:child_process';
@@ -609,6 +614,30 @@ describe('transitionIssue — validation', () => {
       'open',
       'supersede',
     ]);
+  });
+
+  it('requests sprint-review after a manual terminal transition with milestone metadata', async () => {
+    mockSource.getItem.mockResolvedValueOnce({
+      ...defaultMockItem('900'),
+      state: 'factory:done',
+      milestoneId: '12',
+      milestoneTitle: 'M12',
+    });
+
+    const result = await transitionIssue(
+      'proj-terminal-review',
+      '900',
+      'factory:done',
+      'factory:archived',
+    );
+
+    expect(result.ok).toBe(true);
+    expect(mockMaybeFireSprintReview).toHaveBeenCalledWith(
+      'proj-terminal-review',
+      12,
+      'M12',
+      mockSource,
+    );
   });
 });
 

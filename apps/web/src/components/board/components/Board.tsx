@@ -141,7 +141,7 @@ export function Board({ projectSlug }: BoardProps) {
               {milestones.map((m) => (
                 <option key={m.id} value={m.number}>
                   {m.title}
-                  {m.isActive ? '' : ' (closed)'}
+                  {m.state === 'closed' ? ' (closed)' : ''}
                 </option>
               ))}
             </select>

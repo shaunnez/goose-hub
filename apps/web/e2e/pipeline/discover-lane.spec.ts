@@ -26,7 +26,7 @@
  * the failure surfaces the regression.
  */
 
-import { expect, test } from '@playwright/test';
+import { type Locator, expect, test } from '@playwright/test';
 
 const SLUG = process.env.PROJECT_SLUG ?? 'goose-hub-self';
 const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:3001';
@@ -67,6 +67,35 @@ async function seedIssue(opts: {
       opts.body ?? (opts.type === 'feature' && opts.state == null ? CLEAN_FEATURE_BODY : undefined),
   });
   return res.json() as Promise<{ issueNumber: number; workItemId: string }>;
+}
+
+async function driveFeatureToGrilling(statePill: Locator): Promise<void> {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const currentState = ((await statePill.textContent()) ?? '').trim();
+    if (currentState === 'grilling') return;
+
+    await postServer(`/projects/${SLUG}/tick`);
+
+    if (currentState === 'triaging' || currentState === 'accepted') {
+      await expect
+        .poll(async () => ((await statePill.textContent()) ?? '').trim(), { timeout: 60_000 })
+        .toMatch(/^(grounding|grilling)$/);
+      continue;
+    }
+
+    if (currentState === 'grounding') {
+      await expect
+        .poll(async () => ((await statePill.textContent()) ?? '').trim(), { timeout: 60_000 })
+        .toBe('grilling');
+      continue;
+    }
+
+    await expect
+      .poll(async () => ((await statePill.textContent()) ?? '').trim(), { timeout: 60_000 })
+      .not.toBe(currentState);
+  }
+
+  await expect(statePill).toHaveText('grilling', { timeout: 60_000 });
 }
 
 async function seedPrd(issueNumber: number, prd = buildMockPrd()): Promise<void> {
@@ -157,9 +186,8 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
     const statePill = page.getByTestId('state-pill');
     await expect(statePill).toHaveText('triaging', { timeout: 15_000 });
 
-    // Tick the orchestrator: clean type:feature routes triaging → accepted → grilling.
-    await postServer(`/projects/${SLUG}/tick`);
-    await expect(statePill).toHaveText('grilling', { timeout: 60_000 });
+    // Drive one local tick boundary at a time: triaging → grounding → grilling.
+    await driveFeatureToGrilling(statePill);
 
     // Grill tab must be present in the left rail
     const grillLink = page.locator('[data-section-key="grill"]');
@@ -182,15 +210,12 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
       type: 'feature',
     });
 
-    // Drive triage → grilling first
-    await postServer(`/projects/${SLUG}/tick`);
-
     // Navigate to grill tab directly
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/grill`);
     const statePill = page.getByTestId('state-pill');
 
-    // Wait until grilling state is visible (triage may still be running)
-    await expect(statePill).toHaveText('grilling', { timeout: 60_000 });
+    // Drive triage → grounding → grilling first.
+    await driveFeatureToGrilling(statePill);
 
     // Dispatch the grill-and-prd workflow: grilling → gate-pending (question posted)
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);

@@ -13,6 +13,14 @@ vi.mock('#shared/budget.js', () => ({
   }),
 }));
 
+vi.mock('#shared/dispatch.js', () => ({
+  dispatchForIssue: vi.fn().mockResolvedValue(undefined),
+  dispatchProjectTick: vi.fn().mockResolvedValue(undefined),
+  dispatchQa: vi.fn().mockResolvedValue(undefined),
+  dispatchRetro: vi.fn().mockResolvedValue(undefined),
+  dispatchReview: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@goose-hub/core/agent-runtime/claude-cli.js', () => ({
   ClaudeCliRuntime: vi.fn().mockImplementation(() => ({
     run: vi.fn(),

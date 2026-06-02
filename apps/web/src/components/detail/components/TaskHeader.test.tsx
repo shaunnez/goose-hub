@@ -196,7 +196,9 @@ describe('TaskHeader', () => {
       />,
     );
 
-    expect(screen.getByTestId('task-header-fix-duration').textContent).toContain('fix duration 10m');
+    expect(screen.getByTestId('task-header-fix-duration').textContent).toContain(
+      'fix duration 10m',
+    );
   });
 
   it('shows an empty fix duration before the agent pipeline starts', async () => {

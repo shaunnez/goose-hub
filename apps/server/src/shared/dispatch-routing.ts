@@ -3,6 +3,8 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
+import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { loadLatestRoute } from '@goose-hub/core/workflow-routing/events.js';
 import { maybeFireSprintReview } from '../domains/workflows/sprint-review-trigger.js';
 import {
   dispatchFixIssue,
@@ -26,7 +28,27 @@ import {
   dispatchReview,
 } from './dispatch-qa-review.js';
 import { dispatchTriageBatch } from './dispatch-triage.js';
+import { resolveActiveMilestone } from './resolve-milestone.js';
 import { getSourceForSlug } from './source.js';
+
+export const DISPATCHABLE_WORK_ITEM_STATES = new Set<StateName>([
+  'factory:triaging',
+  'factory:investigating',
+  'factory:investigation-complete',
+  'factory:dev-ready',
+  'factory:spec-ready',
+  'factory:needs-qa',
+  'factory:needs-review',
+  'factory:qa-failed',
+  'factory:needs-fix',
+  'factory:merge-conflict',
+  'factory:retrospecting',
+  'factory:framing',
+  'factory:grounding',
+  'factory:grilling',
+  'factory:prd-drafting',
+  'factory:decomposing',
+]);
 
 /**
  * Handles terminal labels (factory:archived, factory:rejected) that bypass the
@@ -55,81 +77,104 @@ async function dispatchTerminalLabel(slug: string, issueNumber: number): Promise
 }
 
 /**
- * Webhook label-driven dispatcher. Routes the factory:* label to the right
- * workflow without requiring the webhook handler to know about the
- * `workflows` or `slices` directory layout.
+ * Dispatch the workflow that matches a work item's current local state.
+ */
+export async function dispatchCurrentWorkItemState(slug: string, item: WorkItem): Promise<void> {
+  const issueNumber = Number(item.externalId);
+  if (!Number.isFinite(issueNumber)) {
+    logger.warn('dispatchCurrentWorkItemState: invalid issue number', {
+      slug,
+      itemId: item.id,
+      externalId: item.externalId,
+    });
+    return;
+  }
+  if (item.state === 'factory:triaging') {
+    await dispatchTriageBatch(slug);
+    return;
+  }
+  if (item.state === 'factory:investigating') {
+    await dispatchInvestigate(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:investigation-complete') {
+    await dispatchInvestigationComplete(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:dev-ready') {
+    await dispatchFixIssue(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:spec-ready') {
+    await dispatchParallelImplement(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:needs-qa') {
+    await dispatchQa(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:needs-review') {
+    await dispatchReview(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:merge-conflict') {
+    await dispatchResolveConflict(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:retrospecting') {
+    await dispatchRetro(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:qa-failed') {
+    await dispatchQaFailed(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:needs-fix') {
+    await dispatchNeedsFix(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:grilling') {
+    await dispatchGrillAndPrd(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:grounding') {
+    await dispatchFeatureGrounding(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:framing') {
+    await dispatchFraming(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:prd-drafting') {
+    await dispatchRetryWritePrd(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:decomposing') {
+    await dispatchDecomposePrd(slug, issueNumber);
+    return;
+  }
+  // Terminal labels that bypass retro — check for sprint-review eligibility.
+  if (item.state === 'factory:archived' || item.state === 'factory:rejected') {
+    await dispatchTerminalLabel(slug, issueNumber);
+    return;
+  }
+  logger.info('dispatchCurrentWorkItemState: no workflow for state', { slug, state: item.state });
+}
+
+/**
+ * Temporary label compatibility wrapper. New lifecycle drivers should dispatch
+ * the current local work item state instead of provider labels.
  */
 export async function dispatchForLabel(
   slug: string,
   issueNumber: number,
   labelName: string,
 ): Promise<void> {
-  if (labelName === 'factory:triaging') {
-    await dispatchTriageBatch(slug);
-    return;
-  }
-  if (labelName === 'factory:investigating') {
-    await dispatchInvestigate(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:investigation-complete') {
-    await dispatchInvestigationComplete(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:dev-ready') {
-    await dispatchFixIssue(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:spec-ready') {
-    await dispatchParallelImplement(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:needs-qa') {
-    await dispatchQa(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:needs-review') {
-    await dispatchReview(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:merge-conflict') {
-    await dispatchResolveConflict(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:retrospecting') {
-    await dispatchRetro(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:qa-failed') {
-    await dispatchQaFailed(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:needs-fix') {
-    await dispatchNeedsFix(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:grilling') {
-    await dispatchGrillAndPrd(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:grounding') {
-    await dispatchFeatureGrounding(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:framing') {
-    await dispatchFraming(slug, issueNumber);
-    return;
-  }
-  if (labelName === 'factory:decomposing') {
-    await dispatchDecomposePrd(slug, issueNumber);
-    return;
-  }
-  // Terminal labels that bypass retro — check for sprint-review eligibility.
-  if (labelName === 'factory:archived' || labelName === 'factory:rejected') {
-    await dispatchTerminalLabel(slug, issueNumber);
-    return;
-  }
-  logger.info('dispatchForLabel: no workflow for label', { slug, labelName });
+  await dispatchCurrentWorkItemState(slug, {
+    id: String(issueNumber),
+    externalId: String(issueNumber),
+    state: labelName as StateName,
+  } as WorkItem);
 }
 
 /**
@@ -144,7 +189,72 @@ export async function dispatchForIssue(slug: string, issueNumber: number): Promi
     return;
   }
   const item = await source.getItem(issueNumber.toString());
-  await dispatchForLabel(slug, issueNumber, item.state);
+  await dispatchCurrentWorkItemState(slug, item);
+}
+
+function itemMatchesActiveMilestone(item: WorkItem, milestoneNumber: number | null): boolean {
+  if (milestoneNumber == null) return true;
+  if (item.milestoneId == null) return true;
+  return Number(item.milestoneId) === milestoneNumber;
+}
+
+function isEligibleForProjectTick(item: WorkItem, milestoneNumber: number | null): boolean {
+  return (
+    item.schedule === 'current' &&
+    itemMatchesActiveMilestone(item, milestoneNumber) &&
+    DISPATCHABLE_WORK_ITEM_STATES.has(item.state)
+  );
+}
+
+async function updateProjectLastTickAt(slug: string, now = new Date()): Promise<void> {
+  const [{ db }, { projectState }, { eq }] = await Promise.all([
+    import('@goose-hub/core/db/db.js'),
+    import('@goose-hub/core/db/schema.js'),
+    import('drizzle-orm'),
+  ]);
+  const timestamp = now.toISOString();
+  const existing = db.select().from(projectState).where(eq(projectState.projectId, slug)).all();
+  if (existing.length === 0) {
+    db.insert(projectState).values({ projectId: slug, lastTickAt: timestamp }).run();
+    return;
+  }
+  db.update(projectState)
+    .set({ lastTickAt: timestamp })
+    .where(eq(projectState.projectId, slug))
+    .run();
+}
+
+export async function dispatchProjectTick(slug: string): Promise<void> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) {
+    logger.error('dispatchProjectTick: no source for slug', { slug });
+    return;
+  }
+
+  const { milestoneNumber } = await resolveActiveMilestone(slug);
+  const work = await source.listOpenWork();
+  const dispatchable = work.filter((item) => isEligibleForProjectTick(item, milestoneNumber));
+  const hasTriaging = dispatchable.some((item) => item.state === 'factory:triaging');
+  const itemDispatches = dispatchable.filter((item) => item.state !== 'factory:triaging');
+  await Promise.all(
+    itemDispatches.map(async (item) => {
+      try {
+        await dispatchCurrentWorkItemState(slug, item);
+      } catch (err) {
+        logger.error('dispatchProjectTick: dispatch failed', {
+          slug,
+          itemId: item.id,
+          externalId: item.externalId,
+          state: item.state,
+          error: String(err),
+        });
+      }
+    }),
+  );
+  if (hasTriaging) {
+    await dispatchTriageBatch(slug);
+  }
+  await updateProjectLastTickAt(slug);
 }
 
 type ResumeEntry = {
@@ -288,6 +398,19 @@ export async function dispatchResumeIssue(
     return;
   }
   const workItemId = `github:${source.repoRef}#${issueNumber}`;
+
+  // Load the route established by investigation. Resume never downgrades it —
+  // the route tier is monotonic and must be preserved across restarts.
+  const existingRoute = loadLatestRoute({ projectId: slug, workItemId });
+  if (existingRoute != null) {
+    logger.info('dispatchResumeIssue: route durability check', {
+      slug,
+      issueNumber,
+      routeTier: existingRoute.tier,
+      routeSource: existingRoute.source,
+    });
+  }
+
   const item = await source.getItem(issueNumber.toString());
   const fromState = item.state;
 

@@ -20,6 +20,8 @@ import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '@goose-hub/core/retry/retry-counter.js';
 import { classifyTopic } from '@goose-hub/core/review/topic-classifier.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { emitCapApplied, loadLatestRoute } from '@goose-hub/core/workflow-routing/events.js';
+import { effectiveReviewerSlots } from '@goose-hub/core/workflow-routing/reviewer-cap.js';
 import { ReviewOutputSchema } from '@goose-hub/skills/review/schema.js';
 import type { ReviewOutput, ReviewVerdict } from '@goose-hub/skills/review/schema.js';
 
@@ -101,7 +103,31 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
   // verdictsDiverge escalation only applies when slots are explicitly configured (not defaults).
   const settingsRow = readProjectReviewSettings(projectConfig?.id ?? projectSlug);
   const configuredSlots = parseReviewerSlots(settingsRow);
-  const slots = configuredSlots ?? DEFAULT_REVIEWER_SLOTS;
+
+  // Intersect route cap with configured/default slots. Route cap is an upper bound only.
+  const route = loadLatestRoute({ projectId: projectSlug, workItemId: workItem.id });
+  const routeReviewerCap = route?.budgetCaps?.reviewerSlots ?? null;
+  const baseSlots = configuredSlots ?? DEFAULT_REVIEWER_SLOTS;
+  const effectiveSlotCount = effectiveReviewerSlots(
+    routeReviewerCap ?? baseSlots.length,
+    configuredSlots?.length ?? null,
+  );
+
+  if (routeReviewerCap != null && effectiveSlotCount < baseSlots.length) {
+    emitCapApplied({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      conflict: {
+        requiredTier: route?.tier ?? 'T1',
+        effectiveTier: route?.tier ?? 'T1',
+        cappedBy: 'reviewerSlots',
+        reason: `reviewer slots capped at ${effectiveSlotCount} by route tier ${route?.tier ?? 'T1'}`,
+        hasSensitivePath: route?.evidence.signals?.hasSensitivePath === true,
+      },
+    });
+  }
+
+  const slots = baseSlots.slice(0, effectiveSlotCount);
   const slotsAreConfigured = configuredSlots != null;
 
   const runIds = slots.map(() => crypto.randomUUID());

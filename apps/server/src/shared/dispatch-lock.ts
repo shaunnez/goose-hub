@@ -49,18 +49,13 @@ export async function getMaxParallelAgents(slug: string): Promise<number> {
 /**
  * Wraps a dispatch function body with the standard parallel-lock guard:
  * in-flight dedup, capacity check with queue, try/finally release+drain.
- *
- * The callback may return a post-lock thunk (runs after the lock is released)
- * or void/undefined (no post-lock work). This supports chaining to other
- * dispatchers that also need the same lock (e.g. dispatchInvestigationComplete
- * after dispatchInvestigate, dispatchRetro after dispatchResolveConflict).
  */
 export async function withParallelLock(
   slug: string,
   issueNumber: number,
   callerName: string,
   dispatchFn: (slug: string, issueNumber: number) => Promise<void>,
-  fn: () => Promise<(() => Promise<void>) | void>,
+  fn: () => Promise<void>,
 ): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
   if (parallelLock.isInFlight(slug, issueNumber)) {
@@ -77,14 +72,10 @@ export async function withParallelLock(
     enqueueWorkflow(slug, issueNumber, dispatchFn);
     return;
   }
-  let postLock: (() => Promise<void>) | void;
   try {
-    postLock = await fn();
+    await fn();
   } finally {
     parallelLock.release(slug, issueNumber);
     drainPending(slug);
-  }
-  if (postLock != null) {
-    await postLock();
   }
 }

@@ -5,15 +5,31 @@ const config: ProjectConfig = {
   name: 'Goose Hub (self)',
   slug: 'goose-hub-self',
   source: {
-    kind: 'github',
-    repo: 'shaunnez/goose-hub',
-    stateMachine: 'labels',
+    kind: 'local-db',
+    stateMachine: 'db',
+    integrations: {
+      github: {
+        repos: ['shaunnez/goose-hub'],
+        mirrorLabels: false,
+        importIssues: false,
+      },
+    },
   },
   targetRepo: {
     cloneUrl: 'git@github.com:shaunnez/goose-hub.git',
     defaultBranch: 'main',
-    localPath: '~/code/goose-hub',
+    localPath: '/Users/shaunnesbitt/projects/goose-hub',
   },
+  repositories: [
+    {
+      id: 'goose-hub',
+      repoRef: 'shaunnez/goose-hub',
+      cloneUrl: 'git@github.com:shaunnez/goose-hub.git',
+      defaultBranch: 'main',
+      localPath: '/Users/shaunnesbitt/projects/goose-hub',
+      role: 'code',
+    },
+  ],
   stack: {
     runtime: 'node',
     packageManager: 'pnpm',
@@ -106,7 +122,7 @@ const config: ProjectConfig = {
   visibility: 'always_visible',
   machineScope: undefined,
   colorStripe: '#7c3aed',
-  activeMilestone: 'M19: Multi-Agent Orchestration',
+  activeMilestone: undefined,
   qaE2eMode: 'ui-changed',
   playwrightReproEnabled: true,
   evidencePostEnabled: true,

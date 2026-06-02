@@ -67,16 +67,13 @@ export async function dispatchFraming(slug: string, issueNumber: number): Promis
             cleanupWorktreeImpl: (_runId: string) => undefined,
           }
         : undefined;
-    const result = await runFramingWorkflow({
+    await runFramingWorkflow({
       workItem: item,
       stateSource: source,
       projectId: slug,
       priorReplies,
       deps: { projectConfig, ...(mockGrillDeps ?? {}) },
     });
-    if (result?.phase !== 'needs-human') {
-      return () => dispatchFeatureGrounding(slug, issueNumber);
-    }
   });
 }
 
@@ -109,14 +106,7 @@ export async function dispatchFeatureGrounding(slug: string, issueNumber: number
               cleanupWorktreeImpl: (_runId: string) => undefined,
             }
           : undefined;
-      const result = await runFeatureGroundingWorkflow(item, source, slug, REPO_ROOT, mockDeps);
-
-      if (result.nextState === 'factory:prd-drafting') {
-        return () => dispatchRetryWritePrd(slug, issueNumber);
-      }
-      if (result.nextState === 'factory:grilling') {
-        return () => dispatchGrillAndPrd(slug, issueNumber);
-      }
+      await runFeatureGroundingWorkflow(item, source, slug, REPO_ROOT, mockDeps);
     },
   );
 }

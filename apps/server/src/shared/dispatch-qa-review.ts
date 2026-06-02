@@ -239,13 +239,12 @@ export async function dispatchQaFailed(slug: string, issueNumber: number): Promi
       by: 'orchestrator',
     });
 
-    logger.info('dispatchQaFailed: transitioned to needs-fix, dispatching fix-feedback', {
-      slug,
-      issueNumber,
-    });
-
-    // Fire fix-feedback outside the in-flight guard so needs-fix can also
-    // be triggered independently (e.g. review-failed path in the future).
-    return () => dispatchNeedsFix(slug, issueNumber);
+    logger.info(
+      'dispatchQaFailed: transitioned to needs-fix; fix-feedback will run on a future tick',
+      {
+        slug,
+        issueNumber,
+      },
+    );
   });
 }

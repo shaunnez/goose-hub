@@ -76,14 +76,31 @@ async function transition(issueNumber: number, from: string, to: string): Promis
 }
 
 async function ensureFeatureRoutedToGrilling(statePill: Locator): Promise<void> {
-  await expect
-    .poll(async () => ((await statePill.textContent()) ?? '').trim(), { timeout: 15_000 })
-    .toMatch(/^(triaging|accepted|grilling)$/);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const currentState = ((await statePill.textContent()) ?? '').trim();
+    if (currentState === 'grilling') return;
 
-  const currentState = ((await statePill.textContent()) ?? '').trim();
-  if (currentState !== 'grilling') {
     await postServer(`/projects/${SLUG}/tick`);
+
+    if (currentState === 'triaging' || currentState === 'accepted') {
+      await expect
+        .poll(async () => ((await statePill.textContent()) ?? '').trim(), { timeout: 60_000 })
+        .toMatch(/^(grounding|grilling)$/);
+      continue;
+    }
+
+    if (currentState === 'grounding') {
+      await expect
+        .poll(async () => ((await statePill.textContent()) ?? '').trim(), { timeout: 60_000 })
+        .toBe('grilling');
+      continue;
+    }
+
+    await expect
+      .poll(async () => ((await statePill.textContent()) ?? '').trim(), { timeout: 60_000 })
+      .not.toBe(currentState);
   }
+
   await expect(statePill).toHaveText('grilling', { timeout: 60_000 });
 }
 

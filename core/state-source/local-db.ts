@@ -146,9 +146,10 @@ export class LocalDbStateSource implements StateSource {
   async listMilestones(): Promise<Milestone[]> {
     const activeNumber = this.repository.getActiveMilestoneNumber(this.projectId);
     const items = this.repository.listWorkItems(this.projectId);
-    return this.repository
-      .listMilestones(this.projectId)
-      .map((row) => toMilestone(row, activeNumber === row.number, items));
+    const rows = this.repository.listMilestones(this.projectId);
+    const fallbackActiveNumber =
+      activeNumber ?? rows.find((row) => row.state === 'open')?.number ?? null;
+    return rows.map((row) => toMilestone(row, fallbackActiveNumber === row.number, items));
   }
 
   async getActiveMilestone(): Promise<Milestone | null> {

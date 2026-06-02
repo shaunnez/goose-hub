@@ -31,6 +31,25 @@ vi.mock('@goose-hub/core/agent-artifacts/repository.js', () => ({
 vi.mock('@goose-hub/core/agent-runtime/bug-enhance-runner.js', () => ({
   runBugEnhance: mockRunBugEnhance,
 }));
+vi.mock('@goose-hub/core/workflow-routing/events.js', () => ({
+  emitRouteSelected: vi.fn(),
+  loadLatestRoute: vi.fn().mockReturnValue(null),
+}));
+vi.mock('@goose-hub/core/workflow-routing/select-route.js', () => ({
+  selectWorkflowRoute: vi.fn().mockReturnValue({
+    tier: 'T1',
+    budgetCaps: {},
+    selectedStages: [],
+    evidence: { reasons: [], signals: {} },
+    escalationTriggers: [],
+    requiresHumanApproval: false,
+    source: 'promotion',
+    rootCauseSignature: '',
+  }),
+}));
+vi.mock('@goose-hub/core/workflow-routing/signals.js', () => ({
+  buildRouteSignals: vi.fn().mockReturnValue({}),
+}));
 
 import { dispatchTriageBatch } from '#shared/dispatch.js';
 import { getSourceForSlug } from '#shared/source.js';

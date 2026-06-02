@@ -54,6 +54,14 @@ const project = {
   ],
 } as ProjectConfig;
 
+function appRepository(): NonNullable<ProjectConfig['repositories']>[number] {
+  const repository = project.repositories?.[0];
+  if (!repository) {
+    throw new Error('expected project.repositories[0] test fixture');
+  }
+  return repository;
+}
+
 const workItem = {
   id: 'local:proj#1',
   externalId: '1',
@@ -134,8 +142,7 @@ describe('repo affinity', () => {
       targetRepo: { ...project.targetRepo, localPath: `~/missing-${Date.now()}` },
       repositories: [
         {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          ...project.repositories![0],
+          ...appRepository(),
           localPath: `~/missing-${Date.now()}`,
         },
       ],
@@ -158,8 +165,7 @@ describe('repo affinity', () => {
       targetRepo: { localPath: targetRepoPath, defaultBranch: 'develop', cloneUrl: '' },
       repositories: [
         {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          ...project.repositories![0],
+          ...appRepository(),
           localPath: missingPath('configured'),
           defaultBranch: 'feature-branch',
         },
@@ -184,8 +190,7 @@ describe('repo affinity', () => {
       targetRepo: { ...project.targetRepo, localPath: missingPath('target') },
       repositories: [
         {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          ...project.repositories![0],
+          ...appRepository(),
           localPath: missingPath('configured'),
         },
       ],
@@ -201,5 +206,4 @@ describe('repo affinity', () => {
       localPath: fallbackRepoPath,
     });
   });
-
 });
