@@ -34,7 +34,6 @@ export function IssueCard({
   const isLocalOnly =
     item?.canonicalWorkItemId?.startsWith('local:') && item.externalRefs.length === 0;
 
-  console.log(isLocalOnly, item)
   // Per-card fetch; TanStack Query dedupes by key so the issue detail page
   // shares the same cache. Boards with many cards trigger N requests on mount —
   // tracked as a follow-up to add a project-level summary endpoint.

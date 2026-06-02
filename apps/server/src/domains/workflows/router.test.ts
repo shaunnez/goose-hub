@@ -3,14 +3,27 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
-const { mockRunTriageBatch, mockRunQaBatch, mockRunReviewBatch, mockRunRetroBatch } = vi.hoisted(
-  () => ({
-    mockRunTriageBatch: vi.fn().mockResolvedValue(undefined),
-    mockRunQaBatch: vi.fn().mockResolvedValue(undefined),
-    mockRunReviewBatch: vi.fn().mockResolvedValue(undefined),
-    mockRunRetroBatch: vi.fn().mockResolvedValue(undefined),
-  }),
-);
+const {
+  mockDispatchForIssue,
+  mockDispatchProjectTick,
+  mockDispatchQa,
+  mockDispatchRetro,
+  mockDispatchReview,
+  mockRunTriageBatch,
+  mockRunQaBatch,
+  mockRunReviewBatch,
+  mockRunRetroBatch,
+} = vi.hoisted(() => ({
+  mockDispatchForIssue: vi.fn().mockResolvedValue(undefined),
+  mockDispatchProjectTick: vi.fn().mockResolvedValue(undefined),
+  mockDispatchQa: vi.fn().mockResolvedValue(undefined),
+  mockDispatchRetro: vi.fn().mockResolvedValue(undefined),
+  mockDispatchReview: vi.fn().mockResolvedValue(undefined),
+  mockRunTriageBatch: vi.fn().mockResolvedValue(undefined),
+  mockRunQaBatch: vi.fn().mockResolvedValue(undefined),
+  mockRunReviewBatch: vi.fn().mockResolvedValue(undefined),
+  mockRunRetroBatch: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('./triage-batch.js', () => ({ runTriageBatch: mockRunTriageBatch }));
 vi.mock('./qa-batch.js', () => ({ runQaBatch: mockRunQaBatch }));
@@ -18,6 +31,13 @@ vi.mock('./review-batch.js', () => ({ runReviewBatch: mockRunReviewBatch }));
 vi.mock('./retro-batch.js', () => ({
   runRetroBatch: mockRunRetroBatch,
   runRetroForItem: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('#shared/dispatch.js', () => ({
+  dispatchForIssue: mockDispatchForIssue,
+  dispatchProjectTick: mockDispatchProjectTick,
+  dispatchQa: mockDispatchQa,
+  dispatchRetro: mockDispatchRetro,
+  dispatchReview: mockDispatchReview,
 }));
 
 vi.mock('@goose-hub/core/logger.js', () => ({
@@ -48,19 +68,17 @@ describe('POST /projects/:slug/tick', () => {
     expect(body.slug).toBe('goose-hub-self');
   });
 
-  it('fires runTriageBatch asynchronously without blocking the response', async () => {
+  it('fires dispatchProjectTick asynchronously without blocking the response', async () => {
     const app = makeApp();
     const res = await app.request('/projects/my-project/tick', { method: 'POST' });
     expect(res.status).toBe(202);
-    // runTriageBatch is called fire-and-forget — wait for the microtask queue
-    await vi.waitFor(() => expect(mockRunTriageBatch).toHaveBeenCalledWith('my-project'));
+    await vi.waitFor(() => expect(mockDispatchProjectTick).toHaveBeenCalledWith('my-project'));
   });
 
-  it('still returns 202 even when runTriageBatch rejects', async () => {
-    mockRunTriageBatch.mockRejectedValueOnce(new Error('batch error'));
+  it('still returns 202 even when dispatchProjectTick rejects', async () => {
+    mockDispatchProjectTick.mockRejectedValueOnce(new Error('tick error'));
     const app = makeApp();
     const res = await app.request('/projects/my-project/tick', { method: 'POST' });
-    // Response is already sent before the batch runs, so should still be 202
     expect(res.status).toBe(202);
   });
 });

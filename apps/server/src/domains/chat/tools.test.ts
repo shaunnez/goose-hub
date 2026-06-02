@@ -121,6 +121,11 @@ vi.mock('#shared/milestone-bridge.js', () => ({
     mockSetActiveMilestoneViaBridge(slug, n),
 }));
 
+const mockDispatchProjectTick = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('#shared/dispatch.js', () => ({
+  dispatchProjectTick: (slug: string) => mockDispatchProjectTick(slug),
+}));
+
 const mockGetWorkItemSnapshot: ReturnType<typeof vi.fn> = vi.fn(async () => ({
   issueNumber: '42',
   workItemId: 'github:shaunnez/goose-hub#42',
@@ -285,6 +290,20 @@ describe('chat-tools — transition_issue', () => {
     )) as { ok: boolean; from: string; to: string };
     expect(mockTransitionState).toHaveBeenCalledWith('5', 'factory:in-progress', 'factory:done');
     expect(result).toEqual({ ok: true, from: 'factory:in-progress', to: 'factory:done' });
+  });
+});
+
+describe('chat-tools — tick_project', () => {
+  it('dispatches a project tick through the canonical tick dispatcher', async () => {
+    mockDispatchProjectTick.mockResolvedValueOnce(undefined);
+
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.tick_project(
+      { projectSlug: 'goose-hub-self', rationale: 'continue local lifecycle' },
+      ctx,
+    )) as { ok: boolean };
+
+    expect(result).toEqual({ ok: true });
+    expect(mockDispatchProjectTick).toHaveBeenCalledWith('goose-hub-self');
   });
 });
 

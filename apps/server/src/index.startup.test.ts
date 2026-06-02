@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   appFetch: vi.fn(),
   closeOrphanedRuns: vi.fn(),
-  dispatchTriageBatch: vi.fn(),
+  dispatchProjectTick: vi.fn(),
   loadProjects: vi.fn(),
   loggerError: vi.fn(),
   loggerInfo: vi.fn(),
@@ -74,7 +74,7 @@ vi.mock('./server.js', () => ({
 }));
 
 vi.mock('#shared/dispatch.js', () => ({
-  dispatchTriageBatch: mocks.dispatchTriageBatch,
+  dispatchProjectTick: mocks.dispatchProjectTick,
 }));
 
 function unsetEnv(name: string): void {
@@ -95,7 +95,7 @@ describe('server startup', () => {
     unsetEnv('PORT');
     unsetEnv('INTERVENTION_PROPOSER_ALL_PROJECTS');
     mocks.closeOrphanedRuns.mockReturnValue(0);
-    mocks.dispatchTriageBatch.mockResolvedValue(undefined);
+    mocks.dispatchProjectTick.mockResolvedValue(undefined);
     mocks.loadProjects.mockResolvedValue([{ slug: 'goose-hub-self' }]);
     mocks.replayEvents.mockReturnValue([]);
     mocks.recoverStaleApplying.mockReturnValue([]);
@@ -129,7 +129,7 @@ describe('server startup', () => {
     }
   });
 
-  it('routes scheduler ticks through dispatchTriageBatch so triage runs are coalesced', async () => {
+  it('routes scheduler ticks through dispatchProjectTick', async () => {
     await import('./index.js');
 
     await vi.waitFor(() => {
@@ -143,7 +143,7 @@ describe('server startup', () => {
 
     await tickFn('goose-hub-self');
 
-    expect(mocks.dispatchTriageBatch).toHaveBeenCalledWith('goose-hub-self');
+    expect(mocks.dispatchProjectTick).toHaveBeenCalledWith('goose-hub-self');
     expect(mocks.runTriageBatch).not.toHaveBeenCalled();
   });
 

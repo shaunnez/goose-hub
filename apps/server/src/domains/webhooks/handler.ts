@@ -6,7 +6,6 @@ import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { LocalDbWorkItemRepository } from '@goose-hub/core/state-source/local-db-repository.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
 import type { Context } from 'hono';
-import { dispatchForLabel, dispatchTriageBatch } from '#shared/dispatch.js';
 
 type RepoProjectEntry = { slug: string; sourceKind: string; projectId: string };
 
@@ -83,14 +82,12 @@ export async function handleGitHubWebhook(c: Context): Promise<Response> {
     });
   }
 
-  // issues.opened → run triage batch (via shared dispatcher per #207)
   if (payload.action === 'opened') {
-    if (project.sourceKind !== 'local-db') void dispatchTriageBatch(project.slug);
-    else appendLocalDbGithubEvent(project.projectId, repoName, payload, 'github.issue.opened');
-    return c.json({ ok: true, event: eventType, action: 'dispatched', slug: project.slug });
+    appendLocalDbGithubEvent(project.projectId, repoName, payload, 'github.issue.opened');
+    return c.json({ ok: true, event: eventType, action: 'recorded', slug: project.slug });
   }
 
-  // issues.labeled with a factory:* label → route to appropriate workflow
+  // Provider labels are projections only. Local Factory state drives lifecycle dispatch.
   if (payload.action === 'labeled') {
     const labelName = payload.label?.name ?? '';
     if (!labelName.startsWith('factory:')) {
@@ -107,30 +104,11 @@ export async function handleGitHubWebhook(c: Context): Promise<Response> {
       return c.json({ ok: true, event: eventType, action: 'labeled', status: 'no-issue-number' });
     }
 
-    if (project.sourceKind === 'local-db') {
-      appendLocalDbGithubEvent(project.projectId, repoName, payload, 'github.label.changed');
-      return c.json({
-        ok: true,
-        event: eventType,
-        action: 'recorded',
-        label: labelName,
-        slug: project.slug,
-      });
-    }
-
-    dispatchForLabel(project.slug, issueNumber, labelName).catch((err: unknown) => {
-      logger.error('webhook dispatch failed', {
-        slug: project.slug,
-        labelName,
-        issueNumber,
-        error: String(err),
-      });
-    });
-
+    appendLocalDbGithubEvent(project.projectId, repoName, payload, 'github.label.changed');
     return c.json({
       ok: true,
       event: eventType,
-      action: 'dispatched',
+      action: 'recorded',
       label: labelName,
       slug: project.slug,
     });

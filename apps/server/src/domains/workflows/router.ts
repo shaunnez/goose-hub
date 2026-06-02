@@ -13,10 +13,10 @@ import {
 import { Hono } from 'hono';
 import {
   dispatchForIssue,
+  dispatchProjectTick,
   dispatchQa,
   dispatchRetro,
   dispatchReview,
-  dispatchTriageBatch,
 } from '#shared/dispatch.js';
 import { parseBody } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
@@ -27,8 +27,8 @@ const router = new Hono();
 
 router.post('/:slug/tick', async (c) => {
   const slug = c.req.param('slug');
-  dispatchTriageBatch(slug).catch((err: unknown) => {
-    logger.error('triage-batch failed', { slug, error: String(err) });
+  dispatchProjectTick(slug).catch((err: unknown) => {
+    logger.error('project tick failed', { slug, error: String(err) });
   });
   return c.json({ ok: true, slug }, 202);
 });
