@@ -187,6 +187,24 @@ describe('BootstrapWizard', () => {
     });
   });
 
+  it('rejects invalid advanced GitHub refs instead of dropping them', async () => {
+    const { previewLocalProjectCreation } = await import('@/lib/api');
+    const user = userEvent.setup();
+    renderWizard();
+
+    await user.click(screen.getByTestId('bootstrap-mode-advanced'));
+    await user.type(screen.getByTestId('bootstrap-github-repos-input'), 'not-a-ref');
+    await user.type(screen.getByTestId('bootstrap-jira-base-url-input'), 'https://example.net');
+    await user.type(screen.getByTestId('bootstrap-jira-keys-input'), 'ENG');
+    await user.click(screen.getByTestId('wizard-next'));
+
+    await waitFor(() => expect(screen.getByTestId('wizard-error')).toBeTruthy());
+    expect(screen.getByTestId('wizard-error').textContent).toContain(
+      'GitHub repositories must look like "owner/repo"',
+    );
+    expect(previewLocalProjectCreation).not.toHaveBeenCalled();
+  });
+
   it('surfaces preview errors in a banner', async () => {
     const { previewLocalProjectCreation } = await import('@/lib/api');
     vi.mocked(previewLocalProjectCreation).mockRejectedValue(new Error('bad source'));

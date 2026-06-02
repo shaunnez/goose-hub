@@ -118,8 +118,8 @@ const config: ProjectConfig = {
     integrations: {
       github: {
         repos: ${JSON.stringify(repoRefs)},
-        mirrorLabels: false,
-        importIssues: false,
+        mirrorLabels: true,
+        importIssues: true,
       },
     },
   },

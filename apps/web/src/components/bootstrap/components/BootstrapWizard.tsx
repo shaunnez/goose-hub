@@ -233,7 +233,10 @@ function buildSource(state: WizardState): ProjectCreationSourceDto {
       };
     case 'advanced': {
       const source: Extract<ProjectCreationSourceDto, { kind: 'advanced' }> = { kind: 'advanced' };
-      if (isValidRepoRefs(state.githubReposText)) {
+      if (state.githubReposText.trim().length > 0 && !isValidRepoRefs(state.githubReposText)) {
+        throw new Error('GitHub repositories must look like "owner/repo"');
+      }
+      if (state.githubReposText.trim().length > 0) {
         source.github = { repoRefs: parseRepoRefs(state.githubReposText) };
       }
       if (state.jiraBaseUrl.trim() && parseList(state.jiraKeysText).length > 0) {

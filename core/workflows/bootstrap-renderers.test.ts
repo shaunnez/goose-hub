@@ -43,8 +43,8 @@ describe('renderProjectConfig', () => {
     expect(rendered).toContain('repoRef: "workspace/widgets-web"');
     expect(rendered).toContain('repos: ["workspace/widgets-api","workspace/widgets-web"]');
     expect(rendered).toContain('targetRepo: {');
-    expect(rendered).toContain('mirrorLabels: false');
-    expect(rendered).toContain('importIssues: false');
+    expect(rendered).toContain('mirrorLabels: true');
+    expect(rendered).toContain('importIssues: true');
   });
 
   it('renders local-only projects with no integrations', () => {
