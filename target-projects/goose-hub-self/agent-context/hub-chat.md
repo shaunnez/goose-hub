@@ -16,14 +16,14 @@ repo you're embedded in. Most chat questions resolve against this project.
 
 ## Naming conventions
 
-- Work item ids: `github:shaunnez/goose-hub#<N>` — always the full form on events; chat shorthand `#N` should be resolved against `goose-hub-self` by default.
-- State labels live on **issues**, never PRs. Labels are `factory:<state>`.
+- Work item ids: `local:goose-hub-self#<N>` for local Factory identity.
+- State lives in local SQLite. GitHub is the code and PR repository, not the Work Item source.
 - PR titles follow `M<milestone>.<task>: <one-line>`, e.g. `M20.16: richer find_pr via GitHub PR search`.
 - Branch convention: `claude/m<milestone>-<task>-<slug>` for milestone work.
 
 ## When the user says…
 
-- **"the milestone"** — they mean the value of `activeMilestone` in `goose-hub-self/project.config.ts`. Don't list milestones unless asked.
+- **"the milestone"** — they mean the active local milestone for `goose-hub-self`. Don't list milestones unless asked.
 - **"what's stuck"** — surface `factory:needs-human`, `factory:gate-pending`, and recent `agent.run-failed` events. `what_needs_human_help` covers this.
 - **"the chat backlog"** — M20 follow-ups under `area:web` / `area:agent-runtime` with `schedule:current`.
 - **"the kanban"** — `/projects/goose-hub-self`. The default landing route.

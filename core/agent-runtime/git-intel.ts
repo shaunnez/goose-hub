@@ -9,6 +9,15 @@ export interface RecentChangedFile {
   lastCommitSha: string;
 }
 
+function gitSinceDays(days: number): string {
+  return `${days} days ago`;
+}
+
+function normalizeGitSince(since: string): string {
+  const shorthand = since.match(/^(\d+)d$/);
+  return shorthand == null ? since : gitSinceDays(Number(shorthand[1]));
+}
+
 /**
  * Returns files touched anywhere in the repo within the last `sinceDays`
  * days, without requiring a candidate-file filter. Used as a grounding
@@ -22,7 +31,12 @@ export async function gitRecentlyTouched(input: {
 }): Promise<RecentChangedFile[]> {
   const result = await runCommand({
     command: 'git',
-    args: ['log', `--since=${input.sinceDays ?? 14}d`, '--name-only', '--pretty=format:%H%x09%cI'],
+    args: [
+      'log',
+      `--since=${gitSinceDays(input.sinceDays ?? 14)}`,
+      '--name-only',
+      '--pretty=format:%H%x09%cI',
+    ],
     cwd: input.worktreePath,
     timeoutMs: 10_000,
     env: minimalEnv(),
@@ -86,7 +100,12 @@ export async function gitRecentChanges(input: {
 
   const result = await runCommand({
     command: 'git',
-    args: ['log', `--since=${input.since ?? '14d'}`, '--name-only', '--pretty=format:%H%x09%cI'],
+    args: [
+      'log',
+      `--since=${normalizeGitSince(input.since ?? gitSinceDays(14))}`,
+      '--name-only',
+      '--pretty=format:%H%x09%cI',
+    ],
     cwd: input.worktreePath,
     timeoutMs: 10_000,
     env: minimalEnv(),

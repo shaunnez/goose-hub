@@ -328,7 +328,7 @@ async function dispatchRepoIntel(
       const results = await recentChanges({
         worktreePath: ctx.workspaceRoot,
         candidateFiles,
-        since: `${input.sinceDays ?? 14}d`,
+        since: `${input.sinceDays ?? 14} days ago`,
         limit: 15,
       });
       return found(input.intent, 'git', results, 'No recent changes found.');
