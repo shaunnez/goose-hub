@@ -192,12 +192,9 @@ export function Sidebar({ activeSlug }: SidebarProps) {
       <div
         className={cn(
           'border-t border-line',
-          collapsed ? 'flex justify-center py-2' : 'flex items-center px-3 py-2',
+          collapsed ? 'flex justify-center py-2' : 'flex justify-end px-3 py-2',
         )}
       >
-        {!collapsed && (
-          <span className="text-[11px] text-fg-2 flex-1 whitespace-nowrap">Local-first</span>
-        )}
         <button
           type="button"
           onClick={toggle}

@@ -25,6 +25,11 @@ describe('chrome slice — sidebar brand label', () => {
     const labelMatch = sidebarSource.match(/<span[^>]*text-\[14px\][^>]*>[\s\S]*?<\/span>/);
     expect(labelMatch?.[0]).not.toContain('Agentic OS');
   });
+
+  it('sidebar footer omits the removed Local-first copy and keeps toggle titles', () => {
+    expect(sidebarSource).not.toContain('Local-first');
+    expect(sidebarSource).toContain("collapsed ? 'Expand sidebar' : 'Collapse sidebar'");
+  });
 });
 
 describe('chrome slice — deferred surfaces config', () => {
