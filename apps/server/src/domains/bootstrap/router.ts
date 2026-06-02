@@ -13,7 +13,14 @@
 
 import { Hono } from 'hono';
 import { parseBody } from '#shared/middleware.js';
-import { activateLocalDbProject, previewBootstrapService, runBootstrapService } from './service.js';
+import {
+  type LocalProjectCreationRequestDto,
+  activateLocalDbProject,
+  createLocalProjectService,
+  previewBootstrapService,
+  previewLocalProjectCreationService,
+  runBootstrapService,
+} from './service.js';
 
 const router = new Hono();
 
@@ -43,6 +50,24 @@ router.post('/bootstrap/run', async (c) => {
   return result.ok
     ? c.json(result.data)
     : c.json({ error: result.error }, result.status as 400 | 404 | 500 | 502);
+});
+
+router.post('/bootstrap/local-project/preview', async (c) => {
+  const body = await parseBody<LocalProjectCreationRequestDto>(c);
+  if (!body.ok) return body.error;
+  const result = await previewLocalProjectCreationService(body.data);
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404 | 409 | 500 | 502);
+});
+
+router.post('/bootstrap/local-project/create', async (c) => {
+  const body = await parseBody<LocalProjectCreationRequestDto>(c);
+  if (!body.ok) return body.error;
+  const result = await createLocalProjectService(body.data);
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404 | 409 | 500 | 502);
 });
 
 router.post('/bootstrap/activate', async (c) => {

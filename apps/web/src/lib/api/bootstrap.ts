@@ -1,6 +1,9 @@
 import type {
   BootstrapPreviewDto,
   BootstrapRunDto,
+  LocalProjectCreationPreviewDto,
+  LocalProjectCreationRequestDto,
+  LocalProjectCreationRunDto,
   ProjectConfigDto,
   ProjectSummary,
 } from '../types.js';
@@ -54,4 +57,34 @@ export async function runBootstrap(
     throw new Error(`POST /projects/bootstrap/run failed: ${res.status} ${text}`);
   }
   return (await res.json()) as BootstrapRunDto;
+}
+
+export async function previewLocalProjectCreation(
+  input: LocalProjectCreationRequestDto,
+): Promise<LocalProjectCreationPreviewDto> {
+  const res = await fetch('/api/projects/bootstrap/local-project/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`POST /projects/bootstrap/local-project/preview failed: ${res.status} ${text}`);
+  }
+  return (await res.json()) as LocalProjectCreationPreviewDto;
+}
+
+export async function createLocalProject(
+  input: LocalProjectCreationRequestDto,
+): Promise<LocalProjectCreationRunDto> {
+  const res = await fetch('/api/projects/bootstrap/local-project/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`POST /projects/bootstrap/local-project/create failed: ${res.status} ${text}`);
+  }
+  return (await res.json()) as LocalProjectCreationRunDto;
 }

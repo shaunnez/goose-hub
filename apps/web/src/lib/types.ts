@@ -599,6 +599,55 @@ export interface BootstrapRunDto {
   labelCounts?: { created: number; updated: number; skipped: number };
 }
 
+export type ProjectCreationSourceDto =
+  | { kind: 'local-only' }
+  | { kind: 'github-code'; repoRefs: string[]; defaultBranch?: string; localPath?: string }
+  | {
+      kind: 'jira';
+      baseUrl: string;
+      projectKeys: string[];
+      importMode: 'manual' | 'assigned-to-me';
+    }
+  | { kind: 'bitbucket'; workspace: string; repos: string[]; defaultBranch?: string }
+  | {
+      kind: 'advanced';
+      github?: { repoRefs: string[]; defaultBranch?: string; localPath?: string };
+      jira?: {
+        baseUrl: string;
+        projectKeys: string[];
+        importMode: 'manual' | 'assigned-to-me';
+      };
+      bitbucket?: { workspace: string; repos: string[]; defaultBranch?: string };
+    };
+
+export interface LocalProjectCreationRequestDto {
+  slug?: string;
+  name?: string;
+  source: ProjectCreationSourceDto;
+}
+
+export interface LocalProjectCreationPreviewDto {
+  slug: string;
+  name: string;
+  configPath: string;
+  config: string;
+  requiredEnvVars: string[];
+  repositories: Array<{
+    id: string;
+    repoRef: string;
+    cloneUrl: string;
+    defaultBranch: string;
+    localPath: string;
+    role?: 'code' | 'docs' | 'infra' | 'unknown';
+  }>;
+  integrations: Array<'github' | 'jira' | 'bitbucket'>;
+}
+
+export interface LocalProjectCreationRunDto extends LocalProjectCreationPreviewDto {
+  status: 'created';
+  writtenPath: string;
+}
+
 export interface ProjectSettingsDto {
   projectId: string;
   configBudgets: Record<string, unknown>;

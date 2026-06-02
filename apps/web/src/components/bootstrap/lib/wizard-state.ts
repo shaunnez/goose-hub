@@ -2,35 +2,22 @@
  * Wizard step state machine for the bootstrap wizard (M12.07).
  *
  * Steps:
- *   1. repo        — enter `owner/repo`, server validates accessibility
- *   2. stack       — show detected stack summary, user reviews
- *   3. claudeMd    — show CLAUDE.md preview/diff (read-only), user confirms
- *   4. labels      — show labels-to-install list, user confirms
- *   5. webhook     — show webhook setup instructions, user confirms
- *   6. submit      — show "Open Registration PR" button + final result
+ *   1. source   — choose local project source and integrations
+ *   2. preview  — show exact generated project.config.ts
+ *   3. submit   — create target-projects/<slug>/project.config.ts locally
  *
  * The state machine is intentionally pure: the wizard component holds the
  * `WizardState` in `useState` and calls `next()` / `prev()` on each step.
  */
 
-export type WizardStep = 'repo' | 'stack' | 'claudeMd' | 'labels' | 'webhook' | 'submit';
+export type WizardStep = 'source' | 'preview' | 'submit';
 
-export const WIZARD_STEPS: ReadonlyArray<WizardStep> = [
-  'repo',
-  'stack',
-  'claudeMd',
-  'labels',
-  'webhook',
-  'submit',
-] as const;
+export const WIZARD_STEPS: ReadonlyArray<WizardStep> = ['source', 'preview', 'submit'] as const;
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  repo: 'Repository',
-  stack: 'Stack',
-  claudeMd: 'CLAUDE.md',
-  labels: 'Labels',
-  webhook: 'Webhook',
-  submit: 'Open PR',
+  source: 'Source',
+  preview: 'Config',
+  submit: 'Create',
 };
 
 export function stepLabel(step: WizardStep): string {
