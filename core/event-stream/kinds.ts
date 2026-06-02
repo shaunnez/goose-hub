@@ -150,6 +150,10 @@ export const EVENT_KINDS = [
   'agent.bug-enhance-hallucinated',
   'agent.bug-enhance-workspace-empty',
   'agent.run-aborted',
+  'workflow.route-selected',
+  'workflow.route-confirmed',
+  'workflow.route-escalation-proposed',
+  'workflow.route-cap-applied',
 ] as const;
 
 export type EventKind = (typeof EVENT_KINDS)[number];

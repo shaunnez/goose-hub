@@ -34,6 +34,8 @@ const mockGetEngineeringSpec = vi.fn();
 const mockRunParallelImplementWorkflow = vi.fn();
 const mockEventStoreReplay = vi.fn();
 const mockEventStoreAppendEvent = vi.fn();
+const mockLoadLatestRoute = vi.fn();
+const mockSelectFixIssuePipeline = vi.fn();
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
@@ -130,6 +132,16 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
     subscribe: vi.fn().mockReturnValue(() => {}),
   },
 }));
+vi.mock('@goose-hub/core/workflow-routing/events.js', () => ({
+  loadLatestRoute: mockLoadLatestRoute,
+  emitRouteSelected: vi.fn(),
+  emitRouteConfirmed: vi.fn(),
+  emitCapApplied: vi.fn(),
+  emitEscalationProposed: vi.fn(),
+}));
+vi.mock('@goose-hub/core/workflow-routing/pipeline-selector.js', () => ({
+  selectFixIssuePipeline: mockSelectFixIssuePipeline,
+}));
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -161,6 +173,8 @@ beforeEach(() => {
   mockGetProject.mockResolvedValue(null);
   mockGetUseMultiAgentPipeline.mockReturnValue(false);
   mockGetEngineeringSpec.mockReturnValue(null);
+  mockLoadLatestRoute.mockReturnValue(null);
+  mockSelectFixIssuePipeline.mockReturnValue('fix-issue');
   mockEventStoreReplay.mockReturnValue([]);
   mockEventStoreAppendEvent.mockReturnValue({
     id: 1,
@@ -915,7 +929,7 @@ describe('dispatchFixIssue: bug routing', () => {
     });
 
     expect(mockLoggerInfo).toHaveBeenCalledWith(
-      'dispatchFixIssue: simple bug → legacy single-agent path',
+      'dispatchFixIssue: pipeline resolved',
       expect.objectContaining({ slug: 'slug', issueNumber: 99 }),
     );
   });
@@ -957,7 +971,7 @@ describe('dispatchFixIssue: bug routing', () => {
     });
 
     expect(mockLoggerInfo).toHaveBeenCalledWith(
-      'dispatchFixIssue: simple bug → legacy single-agent path',
+      'dispatchFixIssue: pipeline resolved',
       expect.objectContaining({ slug: 'slug', issueNumber: 99 }),
     );
   });
@@ -989,9 +1003,9 @@ describe('dispatchFixIssue: bug routing', () => {
     const { dispatchFixIssue } = await import('./dispatch.js');
     await dispatchFixIssue('slug', 100);
 
-    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
-      'dispatchFixIssue: simple bug → legacy single-agent path',
-      expect.anything(),
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: pipeline resolved',
+      expect.objectContaining({ pipeline: 'spec-author-full' }),
     );
     expect(mockLoggerInfo).toHaveBeenCalledWith(
       'dispatchFixIssue: pipeline flag',
@@ -1020,7 +1034,7 @@ describe('dispatchFixIssue: bug routing', () => {
     });
 
     expect(mockLoggerInfo).toHaveBeenCalledWith(
-      'dispatchFixIssue: simple bug → legacy single-agent path',
+      'dispatchFixIssue: pipeline resolved',
       expect.objectContaining({ slug: 'slug', issueNumber: 101 }),
     );
   });
@@ -1052,9 +1066,9 @@ describe('dispatchFixIssue: bug routing', () => {
     const { dispatchFixIssue } = await import('./dispatch.js');
     await dispatchFixIssue('slug', 102);
 
-    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
-      'dispatchFixIssue: simple bug → legacy single-agent path',
-      expect.anything(),
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: pipeline resolved',
+      expect.objectContaining({ pipeline: 'spec-author-full' }),
     );
   });
 
@@ -1652,6 +1666,122 @@ describe('dispatchForLabel', () => {
     );
     expect(source.transitionState.mock.invocationCallOrder[0]).toBeLessThan(
       mockRunParallelImplementWorkflow.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('routes lite spec-ready work back through single implement when route excludes parallel-implement', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#695',
+      externalId: '695',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'lite implement',
+      body: 'body',
+      state: 'factory:spec-ready',
+      priority: 'medium',
+      type: 'bug',
+      schedule: 'current',
+      dependsOn: [],
+      blocks: [],
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      forceState: vi.fn().mockImplementation(async (_id: string, to: string) => {
+        item.state = to;
+      }),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    const spec = {
+      objective: 'Implement lite route',
+      userJourneys: [],
+      functionalRequirements: [],
+      architecture: { current: 'stub', new: 'wired', decisionRationale: 'test' },
+      schemaChanges: { ddl: [], migrations: [] },
+      interfaceContracts: [],
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: [
+            'apps/server/src/shared/dispatch.ts',
+            'apps/server/src/shared/dispatch.test.ts',
+          ],
+          changes: 'Apply the localized fix.',
+          dependsOn: [],
+          builderTier: 'sonnet',
+        },
+      ],
+      executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+      verificationTooling: [],
+      acceptanceCriteria: [
+        {
+          id: 'AC1',
+          statement: 'Dispatches',
+          crossCutting: true,
+          executableChecks: [{ id: 'AC1-check-1', command: 'pnpm test' }],
+        },
+      ],
+      constraints: [],
+      riskRegister: [],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Test spec' }],
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
+      budgets: { maxParallelAgents: 1 },
+    });
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [item],
+      blocked: [],
+      unregistered: [],
+    });
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockGetEngineeringSpec.mockReturnValue({
+      id: 1,
+      projectId: 'goose-hub-self',
+      workItemId: item.id,
+      pipelineRunId: 'pipeline-run-lite',
+      spec,
+      createdAt: '2026-05-10T00:00:00Z',
+      updatedAt: '2026-05-10T00:00:00Z',
+    });
+    mockLoadLatestRoute.mockReturnValue({
+      tier: 'T2',
+      selectedStages: [
+        'triage',
+        'investigate',
+        'spec-author',
+        'implement',
+        'qa',
+        'review',
+        'retro',
+      ],
+      budgetCaps: { maxUsd: 2, maxScouts: 3, allowWave2: false, reviewerSlots: 1 },
+      evidence: { reasons: [], signals: {} },
+      escalationTriggers: [],
+      requiresHumanApproval: false,
+      source: 'investigation',
+      rootCauseSignature: 'route|github:shaunnez/goose-hub#695|workflow-routing',
+    });
+    mockSelectFixIssuePipeline.mockReturnValue('spec-author-lite');
+
+    const { dispatchForLabel } = await import('./dispatch.js');
+    await dispatchForLabel('goose-hub-self', 695, 'factory:spec-ready');
+
+    expect(mockLoadLatestRoute).toHaveBeenCalledWith({
+      projectId: 'goose-hub-self',
+      workItemId: item.id,
+    });
+    expect(mockSelectFixIssuePipeline).toHaveBeenCalled();
+    expect(source.forceState).toHaveBeenCalledWith(item.id, 'factory:dev-ready');
+    expect(mockRunParallelImplementWorkflow).not.toHaveBeenCalled();
+    expect(mockRunFixIssueWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({ id: item.id, state: 'factory:dev-ready' }),
+      source,
+      'goose-hub-self',
+      expect.any(String),
+      undefined,
     );
   });
 

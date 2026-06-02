@@ -3,6 +3,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
+import { loadLatestRoute } from '@goose-hub/core/workflow-routing/events.js';
 import { maybeFireSprintReview } from '../domains/workflows/sprint-review-trigger.js';
 import {
   dispatchFixIssue,
@@ -288,6 +289,19 @@ export async function dispatchResumeIssue(
     return;
   }
   const workItemId = `github:${source.repoRef}#${issueNumber}`;
+
+  // Load the route established by investigation. Resume never downgrades it —
+  // the route tier is monotonic and must be preserved across restarts.
+  const existingRoute = loadLatestRoute({ projectId: slug, workItemId });
+  if (existingRoute != null) {
+    logger.info('dispatchResumeIssue: route durability check', {
+      slug,
+      issueNumber,
+      routeTier: existingRoute.tier,
+      routeSource: existingRoute.source,
+    });
+  }
+
   const item = await source.getItem(issueNumber.toString());
   const fromState = item.state;
 
