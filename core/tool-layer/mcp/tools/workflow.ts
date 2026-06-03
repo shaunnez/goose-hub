@@ -308,8 +308,8 @@ export async function postIssueCommentTool(
   input: z.infer<typeof PostIssueCommentInput>,
 ): Promise<PostIssueCommentResult> {
   const source = await getStateSourceForProject(ctx.projectId);
-  const itemId = `github:${source.repoRef}#${input.issueNumber}`;
-  await source.comment(itemId, input.body);
+  const item = await source.getItem(String(input.issueNumber));
+  await source.comment(item.id, input.body);
 
   emitToolCall(ctx, {
     tool: 'post_issue_comment',
@@ -335,13 +335,12 @@ export async function transitionStateTool(
   input: z.infer<typeof TransitionStateInput>,
 ): Promise<TransitionStateResult> {
   const source = await getStateSourceForProject(ctx.projectId);
-  const itemId = `github:${source.repoRef}#${input.issueNumber}`;
-  const current = await source.getItem(itemId);
+  const current = await source.getItem(String(input.issueNumber));
   const to = input.to as StateName;
   await transitionAndEmitState({
     mode: 'legal',
     source,
-    itemId,
+    itemId: current.id,
     projectId: ctx.projectId,
     workItemId: current.id,
     from: current.state,

@@ -397,7 +397,8 @@ export async function dispatchResumeIssue(
     logger.error('dispatchResumeIssue: no source for slug', { slug });
     return;
   }
-  const workItemId = `github:${source.repoRef}#${issueNumber}`;
+  const item = await source.getItem(issueNumber.toString());
+  const workItemId = item.id;
 
   // Load the route established by investigation. Resume never downgrades it —
   // the route tier is monotonic and must be preserved across restarts.
@@ -411,7 +412,6 @@ export async function dispatchResumeIssue(
     });
   }
 
-  const item = await source.getItem(issueNumber.toString());
   const fromState = item.state;
 
   // gate-pending is lane-agnostic. Inspect the last state.transitioned event

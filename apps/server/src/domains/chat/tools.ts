@@ -602,7 +602,8 @@ async function subscribeToIssue(
   assertValidSlug(input.projectSlug);
   const source = await getSourceForSlug(input.projectSlug);
   if (source == null) throw new ToolExecutionError(`project not found: ${input.projectSlug}`, 404);
-  const workItemId = `github:${source.repoRef}#${String(input.issueNumber)}`;
+  const item = await source.getItem(String(input.issueNumber));
+  const workItemId = item.id;
   const watch = getWatchRegistry().addIssueWatch(ctx.conversationId, source.projectId, workItemId);
   return {
     ok: true,

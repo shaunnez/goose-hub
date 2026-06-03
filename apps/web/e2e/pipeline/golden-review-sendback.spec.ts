@@ -86,7 +86,9 @@ test.describe('Golden Review Sendback flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPE
     await postServer(`/projects/${SLUG}/tick`);
     await expect(statePill).toHaveText('investigating', { timeout: 60_000 });
 
-    // Investigate (high-confidence): investigating → dev-ready (auto).
+    // Investigate (high-confidence): investigating → investigation-complete; next dispatch → dev-ready.
+    await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
+    await expect(statePill).toHaveText('investigation-complete', { timeout: 60_000 });
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
     await expect(statePill).toHaveText('dev-ready', { timeout: 60_000 });
 

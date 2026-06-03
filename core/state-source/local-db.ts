@@ -18,7 +18,7 @@ import type {
   WorkItem,
   WorkItemType,
 } from './interface.js';
-import { LocalDbWorkItemRepository } from './local-db-repository.js';
+import { LocalDbWorkItemRepository, parseExternalRefMetadata } from './local-db-repository.js';
 import type { LocalDbMilestoneRow, LocalDbWorkItemRow } from './local-db-repository.js';
 
 const PRIORITIES = new Set<Priority>(['critical', 'high', 'medium', 'low']);
@@ -310,6 +310,15 @@ export class LocalDbStateSource implements StateSource {
       .filter((ref) => ref.kind === 'pull_request');
     const ref = prRefs[prRefs.length - 1];
     if (ref == null || ref.repoRef == null) return '';
+    const metadata = parseExternalRefMetadata(ref);
+    if (
+      metadata != null &&
+      typeof metadata === 'object' &&
+      !Array.isArray(metadata) &&
+      typeof (metadata as { mockPrDiff?: unknown }).mockPrDiff === 'string'
+    ) {
+      return (metadata as { mockPrDiff: string }).mockPrDiff;
+    }
     if (ref.provider === 'github') {
       return (
         (await this.prDiffAdapters.github?.getPullRequestDiff({

@@ -399,4 +399,21 @@ describe('local project creation', () => {
     expect(mockImportIssues).not.toHaveBeenCalled();
     expect(mockBootstrapProject).not.toHaveBeenCalled();
   });
+
+  it('returns deterministic local create data without writing when MOCK_BOOTSTRAP=true', async () => {
+    process.env.MOCK_BOOTSTRAP = 'true';
+    const result = await createLocalProjectService({
+      slug: 'widgets',
+      source: { kind: 'github-code', repoRefs: ['octo/widgets'] },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.status).toBe('created');
+      expect(result.data.writtenPath).toBe('/mock/target-projects/widgets/project.config.ts');
+      expect(result.data.config).toContain("kind: 'local-db'");
+    }
+    expect(mockImportIssues).not.toHaveBeenCalled();
+    expect(mockBootstrapProject).not.toHaveBeenCalled();
+  });
 });
