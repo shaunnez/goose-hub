@@ -17,6 +17,7 @@
     "skill-contract:audit": "tsx scripts/audit-skill-contracts.ts --strict",
     "test:e2e:legacy-ui-smoke": "pnpm --filter @goose-hub/web test:e2e:legacy-ui-smoke",
     "test:e2e:pipeline": "pnpm --filter @goose-hub/web test:e2e:pipeline",
+    "test:e2e:pipeline:fast": "pnpm --filter @goose-hub/web test:e2e:pipeline:fast",
     "manifest": "tsx scripts/build-manifest.ts",
     "audit-docs": "tsx scripts/audit-docs.ts",
     "path-drift:report": "tsx scripts/report-path-drift.ts",

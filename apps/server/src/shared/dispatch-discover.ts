@@ -8,6 +8,7 @@ import type { PRDOutput } from '@goose-hub/skills/write-prd/schema.js';
 import { runFeatureGroundingWorkflow } from '../../../../slices/feature-grounding/workflow.js';
 import { runFramingWorkflow } from '../../../../slices/framing/workflow.js';
 import { getMaxParallelAgents, withParallelLock } from './dispatch-lock.js';
+import { createMockWorktree } from './mock-worktree.js';
 import { getProject } from './projects.js';
 import { REPO_ROOT } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
@@ -63,7 +64,8 @@ export async function dispatchFraming(slug: string, issueNumber: number): Promis
     const mockGrillDeps =
       process.env.MOCK_AGENTS === 'true'
         ? {
-            createWorktreeImpl: (_repo: string, _runId: string) => '/mock/worktree',
+            createWorktreeImpl: (_repo: string, runId: string) =>
+              createMockWorktree('framing', runId),
             cleanupWorktreeImpl: (_runId: string) => undefined,
           }
         : undefined;
@@ -102,7 +104,8 @@ export async function dispatchFeatureGrounding(slug: string, issueNumber: number
       const mockDeps =
         process.env.MOCK_AGENTS === 'true'
           ? {
-              createWorktreeImpl: (_repo: string, _runId: string) => '/mock/worktree',
+              createWorktreeImpl: (_repo: string, runId: string) =>
+                createMockWorktree('feature-grounding', runId),
               cleanupWorktreeImpl: (_runId: string) => undefined,
             }
           : undefined;
@@ -143,7 +146,8 @@ export async function dispatchGrillAndPrd(slug: string, issueNumber: number): Pr
       const mockGrillDeps =
         process.env.MOCK_AGENTS === 'true'
           ? {
-              createWorktreeImpl: (_repo: string, _runId: string) => '/mock/worktree',
+              createWorktreeImpl: (_repo: string, runId: string) =>
+                createMockWorktree('grill-prd', runId),
               cleanupWorktreeImpl: (_runId: string) => undefined,
             }
           : undefined;

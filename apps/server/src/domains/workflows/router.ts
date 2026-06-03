@@ -3,8 +3,14 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { minePatterns } from '@goose-hub/core/learning/mine.js';
 import { logger } from '@goose-hub/core/logger.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
-import { InMemoryLabelsSource } from '@goose-hub/core/state-source/in-memory-labels.js';
-import type { Priority, WorkItemType } from '@goose-hub/core/state-source/interface.js';
+import type { SeedIssueOptions } from '@goose-hub/core/state-source/in-memory-labels.js';
+import type {
+  Priority,
+  StateSource,
+  WorkItem,
+  WorkItemType,
+} from '@goose-hub/core/state-source/interface.js';
+import { LocalDbWorkItemRepository } from '@goose-hub/core/state-source/local-db-repository.js';
 import {
   SkillCoachForbiddenTargetError,
   SkillCoachMissingSourceError,
@@ -24,6 +30,74 @@ import { runQaBatch } from './qa-batch.js';
 import { runRetroBatch } from './retro-batch.js';
 import { runReviewBatch } from './review-batch.js';
 const router = new Hono();
+
+const localDbTestRefs = new LocalDbWorkItemRepository();
+
+function hasSeedIssue(source: StateSource): source is StateSource & {
+  seedIssue(opts: SeedIssueOptions): Promise<WorkItem>;
+} {
+  return typeof (source as { seedIssue?: unknown }).seedIssue === 'function';
+}
+
+function withDependsOn(body: string | undefined, dependsOn: string[] | undefined): string {
+  const base = body ?? '';
+  if (dependsOn == null || dependsOn.length === 0) return base;
+  const line = `Depends on: ${dependsOn.join(', ')}`;
+  return base.length === 0 ? line : `${base}\n\n${line}`;
+}
+
+async function seedFixtureIssue(
+  source: StateSource,
+  input: {
+    title: string;
+    body?: string;
+    type?: WorkItemType;
+    priority?: Priority;
+    state?: StateName;
+    milestoneTitle?: string;
+    dependsOn?: string[];
+    prDiff?: string;
+  },
+): Promise<WorkItem> {
+  if (hasSeedIssue(source)) {
+    return source.seedIssue(input);
+  }
+
+  const item = await source.createIssue({
+    title: input.title,
+    body: withDependsOn(input.body, input.dependsOn),
+    type: input.type,
+    priority: input.priority,
+    initialState: input.state,
+  });
+  if (item.id.startsWith(`local:${source.projectId}#`)) {
+    if (!source.repoRef.startsWith('local:')) {
+      localDbTestRefs.upsertExternalRef({
+        projectId: source.projectId,
+        itemId: item.id,
+        provider: 'github',
+        kind: 'issue',
+        repoRef: source.repoRef,
+        externalId: item.externalId,
+        url: `https://github.com/${source.repoRef}/issues/${item.externalId}`,
+        metadata: { source: 'mock-seed' },
+      });
+      if (input.prDiff != null) {
+        localDbTestRefs.upsertExternalRef({
+          projectId: source.projectId,
+          itemId: item.id,
+          provider: 'github',
+          kind: 'pull_request',
+          repoRef: source.repoRef,
+          externalId: item.externalId,
+          url: `https://github.com/${source.repoRef}/pull/${item.externalId}`,
+          metadata: { source: 'mock-seed', mockPrDiff: input.prDiff },
+        });
+      }
+    }
+  }
+  return source.getItem(item.id);
+}
 
 router.post('/:slug/tick', async (c) => {
   const slug = c.req.param('slug');
@@ -165,7 +239,7 @@ router.post('/:slug/coach', async (c) => {
 });
 
 // Seed endpoint: only active when MOCK_SOURCE=true. Creates fixture issues in
-// the InMemoryLabelsSource for deterministic E2E pipeline specs.
+// the configured source for deterministic E2E pipeline specs.
 if (process.env.MOCK_SOURCE === 'true') {
   router.post('/test/:slug/seed-issue', async (c) => {
     const slug = c.req.param('slug');
@@ -187,11 +261,7 @@ if (process.env.MOCK_SOURCE === 'true') {
 
     const source = await getSourceForSlug(slug);
     if (source == null) return c.json({ error: 'project not found' }, 404);
-    if (!(source instanceof InMemoryLabelsSource)) {
-      return c.json({ error: 'MOCK_SOURCE=true required for seed endpoint' }, 400);
-    }
-
-    const item = await source.seedIssue({
+    const item = await seedFixtureIssue(source, {
       title: body.data.title,
       body: body.data.body,
       type: body.data.type,
@@ -225,9 +295,6 @@ if (process.env.MOCK_SOURCE === 'true') {
 
     const source = await getSourceForSlug(slug);
     if (source == null) return c.json({ error: 'project not found' }, 404);
-    if (!(source instanceof InMemoryLabelsSource)) {
-      return c.json({ error: 'MOCK_SOURCE=true required for seed endpoint' }, 400);
-    }
 
     const item = await source.getItem(id);
     const runId = body.data.runId ?? `seed-prd:${id}:${Date.now()}`;

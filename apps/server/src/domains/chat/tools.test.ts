@@ -427,6 +427,9 @@ describe('chat-tools — subscribe_to_issue', () => {
   it('resolves project + workItemId then registers a watch', async () => {
     const { getWatchRegistry, __resetWatchRegistryForTests } = await import('./watch-singleton.js');
     __resetWatchRegistryForTests();
+    mockGetItem.mockResolvedValueOnce(
+      workItem({ id: 'local:goose-hub-self#42', externalId: '42' }),
+    );
     const result = (await CHAT_TOOL_IMPLEMENTATIONS.subscribe_to_issue(
       { projectSlug: 'goose-hub-self', issueNumber: 42, rationale: 'awaiting QA' },
       { ...ctx, conversationId: 'conv_subscribe_issue' },
@@ -437,7 +440,7 @@ describe('chat-tools — subscribe_to_issue', () => {
     };
 
     expect(result.ok).toBe(true);
-    expect(result.workItemId).toBe('github:shaunnez/goose-hub-self#42');
+    expect(result.workItemId).toBe('local:goose-hub-self#42');
     expect(result.projectId).toBe('goose-hub-self');
     expect(getWatchRegistry().listForConversation('conv_subscribe_issue')).toHaveLength(1);
     __resetWatchRegistryForTests();

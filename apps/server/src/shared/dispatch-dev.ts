@@ -22,6 +22,7 @@ import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js'
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
 import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.js';
 import { withParallelLock } from './dispatch-lock.js';
+import { createMockWorktree } from './mock-worktree.js';
 import { getProject } from './projects.js';
 import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
@@ -257,7 +258,8 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
       const mockInvestigateDeps: Record<string, unknown> | undefined =
         process.env.MOCK_AGENTS === 'true'
           ? {
-              createWorktreeImpl: () => '/mock/worktree',
+              createWorktreeImpl: (_repo: string, runId: string) =>
+                createMockWorktree('investigate', runId),
               prewarmWorktreeImpl: () => undefined,
             }
           : undefined;
@@ -297,7 +299,7 @@ export async function dispatchInvestigationComplete(
         return;
       }
 
-      const workItemId = `github:${source.repoRef}#${issueNumber}`;
+      const workItemId = item.id;
       const allEvents = eventStore.replay({ projectId: slug, workItemId });
       const investigationEvents = allEvents.filter(
         (e) => e.kind === 'agent.investigation-complete',
@@ -457,7 +459,10 @@ export async function dispatchSpecAuthor(slug: string, issueNumber: number): Pro
 
     const mockDeps: Record<string, unknown> | undefined =
       process.env.MOCK_AGENTS === 'true'
-        ? { createWorktreeImpl: () => '/mock/worktree' }
+        ? {
+            createWorktreeImpl: (_repo: string, runId: string) =>
+              createMockWorktree('spec-author', runId),
+          }
         : undefined;
 
     await runSpecAuthorWorkflow(item, source, slug, REPO_ROOT, { ...mockDeps, specMode });
@@ -575,7 +580,8 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
                 branch: 'factory/mock-run',
                 base: 'main',
               }),
-            createWorktreeImpl: () => '/mock/worktree',
+            createWorktreeImpl: (_repo: string, runId: string) =>
+              createMockWorktree('fix-issue', runId),
             prewarmWorktreeImpl: () => undefined,
             cleanupWorktreeImpl: () => undefined,
             resolveWorktreeHeadShaImpl: () => 'mock-sha-abc123',
@@ -750,7 +756,8 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
                     branch: 'factory/mock-run',
                     base: 'main',
                   }),
-                createWorktreeImpl: () => '/mock/worktree',
+                createWorktreeImpl: (_repo: string, runId: string) =>
+                  createMockWorktree('fix-issue', runId),
                 prewarmWorktreeImpl: () => undefined,
                 cleanupWorktreeImpl: () => undefined,
                 resolveWorktreeHeadShaImpl: () => 'mock-sha-abc123',

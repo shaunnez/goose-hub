@@ -228,7 +228,7 @@ export async function dispatchQaFailed(slug: string, issueNumber: number): Promi
       return;
     }
 
-    const workItemId = `github:${source.repoRef}#${issueNumber}`;
+    const workItemId = item.id;
     await source.transitionState(workItemId, 'factory:qa-failed', 'factory:needs-fix');
 
     emitStateTransitionEvent({

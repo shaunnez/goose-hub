@@ -404,6 +404,17 @@ export async function createLocalProjectService(
     };
   }
 
+  if (isMockMode()) {
+    return {
+      ok: true,
+      data: {
+        ...preview,
+        status: 'created',
+        writtenPath: nodePath.join('/mock/target-projects', preview.slug, 'project.config.ts'),
+      },
+    };
+  }
+
   const root = getTargetProjectsRoot();
   const dir = nodePath.join(root, preview.slug);
   const writtenPath = nodePath.join(dir, 'project.config.ts');

@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import { config } from 'dotenv';
@@ -6,6 +7,9 @@ config({ path: resolve(import.meta.dirname, '../../.env') });
 
 const PORT = Number(process.env.WEB_PORT ?? 5299);
 const MOCK_SERVER_PORT = Number(process.env.MOCK_SERVER_PORT ?? process.env.API_PORT ?? 3099);
+const PIPELINE_DB_PATH =
+  process.env.E2E_PIPELINE_DB_PATH ??
+  resolve(tmpdir(), `goose-hub-e2e-pipeline-${process.pid}-${Date.now()}.db`);
 
 // Tell test workers where to reach the mock server directly
 process.env.SERVER_URL = `http://localhost:${MOCK_SERVER_PORT}`;
@@ -40,7 +44,7 @@ export default defineConfig({
               MOCK_OPEN_PR: 'true',
               MOCK_SOURCE: 'true',
               MOCK_BOOTSTRAP: 'true',
-              DB_PATH: resolve(import.meta.dirname, '../../.e2e-pipeline.db'),
+              DB_PATH: PIPELINE_DB_PATH,
             },
           },
           {

@@ -1,53 +1,37 @@
 import { expect, test } from '@playwright/test';
 
-// E2E test for the bootstrap wizard. Lives in the pipeline lane so it runs as
-// a required CI check; the server is booted with MOCK_BOOTSTRAP=true (see
-// playwright-e2e-pipeline.config.ts) so /api/projects/bootstrap/{preview,run}
-// return deterministic fixtures instead of hitting GitHub.
+// E2E test for the local project creation wizard. Lives in the pipeline lane so
+// it runs as a required CI check; the server is booted with MOCK_BOOTSTRAP=true
+// so create returns deterministic data without writing target-project configs.
 
 test.describe('bootstrap wizard (MOCK_BOOTSTRAP)', () => {
-  test('walks all wizard steps and shows the PR URL on completion', async ({ page }) => {
+  test('walks all wizard steps and shows the config path on completion', async ({ page }) => {
     await page.goto('/settings');
     await expect(page.getByTestId('settings-page')).toBeVisible();
 
     // Open the wizard via the "Add Project" button.
     await page.getByTestId('add-project-button').click();
     await expect(page.getByTestId('bootstrap-wizard')).toBeVisible();
-    await expect(page.getByTestId('step-repo')).toBeVisible();
+    await expect(page.getByTestId('step-source')).toBeVisible();
 
-    // Step 1 — type a repo ref and advance.
-    await page.getByTestId('bootstrap-repo-input').fill('octo/widgets');
+    // Step 1 — choose a local-db project backed by a GitHub code repo.
+    await page.getByTestId('bootstrap-mode-github-code').check();
+    await page.getByTestId('bootstrap-slug-input').fill('e2e-widgets');
+    await page.getByTestId('bootstrap-github-repos-input').fill('octo/widgets');
     await page.getByTestId('wizard-next').click();
 
-    // Step 2 — stack summary.
-    await expect(page.getByTestId('step-stack')).toBeVisible();
-    await expect(page.getByTestId('stack-summary')).toContainText('node');
+    // Step 2 — generated local-db config preview.
+    await expect(page.getByTestId('step-preview')).toBeVisible();
+    await expect(page.getByTestId('project-config-preview')).toHaveValue(/kind: 'local-db'/);
+    await expect(page.getByTestId('project-config-preview')).toHaveValue(/octo\/widgets/);
     await page.getByTestId('wizard-next').click();
 
-    // Step 3 — CLAUDE.md preview (textarea, read-only).
-    await expect(page.getByTestId('step-claudemd')).toBeVisible();
-    await expect(page.getByTestId('claudemd-preview')).toBeVisible();
-    await page.getByTestId('wizard-next').click();
-
-    // Step 4 — labels list (canonical Factory labels).
-    await expect(page.getByTestId('step-labels')).toBeVisible();
-    const labels = page.getByTestId('labels-list-item');
-    await expect(labels.first()).toBeVisible();
-    expect(await labels.count()).toBeGreaterThan(0);
-    await page.getByTestId('wizard-next').click();
-
-    // Step 5 — webhook setup with payload URL.
-    await expect(page.getByTestId('step-webhook')).toBeVisible();
-    await expect(page.getByTestId('webhook-payload-url')).toContainText('webhooks/github');
-    await page.getByTestId('wizard-next').click();
-
-    // Final step — Open PR button + result.
+    // Final step — create config and show the deterministic mock path.
     await expect(page.getByTestId('step-submit')).toBeVisible();
     await page.getByTestId('bootstrap-submit').click();
     await expect(page.getByTestId('bootstrap-result')).toBeVisible();
-
-    const link = page.getByTestId('bootstrap-pr-link');
-    await expect(link).toBeVisible();
-    await expect(link).toHaveAttribute('href', /github\.com\/.+\/pull\//);
+    await expect(page.getByTestId('bootstrap-result')).toContainText(
+      'target-projects/e2e-widgets/project.config.ts',
+    );
   });
 });

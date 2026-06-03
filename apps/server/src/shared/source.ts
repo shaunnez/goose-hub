@@ -33,13 +33,6 @@ export async function getSourceForSlug(slug: string): Promise<StateSource | null
   if (cfg == null) return null;
   const sourceKind = (cfg.source as { kind: string }).kind;
 
-  if (process.env.MOCK_SOURCE === 'true') {
-    const repoRef = compatibilityRepoRef(cfg);
-    const source = new InMemoryLabelsSource(cfg.id, repoRef);
-    sourceCache.set(slug, source);
-    return source;
-  }
-
   if (cfg.source.kind === 'local-db') {
     const source = new LocalDbStateSource(
       cfg.id,
@@ -47,6 +40,13 @@ export async function getSourceForSlug(slug: string): Promise<StateSource | null
       undefined,
       cfg.source.integrations,
     );
+    sourceCache.set(slug, source);
+    return source;
+  }
+
+  if (process.env.MOCK_SOURCE === 'true') {
+    const repoRef = compatibilityRepoRef(cfg);
+    const source = new InMemoryLabelsSource(cfg.id, repoRef);
     sourceCache.set(slug, source);
     return source;
   }
