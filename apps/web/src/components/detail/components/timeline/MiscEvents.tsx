@@ -80,6 +80,13 @@ type RedundantReadPayload = {
 
 type CompactOperationalPayload = Record<string, unknown>;
 
+type RouteBudgetCaps = {
+  maxUsd?: number;
+  maxScouts?: number;
+  allowWave2?: boolean;
+  reviewerSlots?: number;
+};
+
 type InvestigationDigestAppliedPayload = {
   wave?: string;
   scoutCount?: number;
@@ -211,6 +218,40 @@ function payloadString(payload: CompactOperationalPayload | null, key: string): 
 function payloadNumber(payload: CompactOperationalPayload | null, key: string): number | null {
   const value = payload?.[key];
   return typeof value === 'number' ? value : null;
+}
+
+function payloadRecordValue(
+  payload: CompactOperationalPayload | null,
+  key: string,
+): CompactOperationalPayload | null {
+  const value = payload?.[key];
+  return value != null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as CompactOperationalPayload)
+    : null;
+}
+
+function payloadStringArray(payload: CompactOperationalPayload | null, key: string): string[] {
+  const value = payload?.[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+    : [];
+}
+
+function formatBudgetCaps(value: unknown): string | null {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const caps = value as RouteBudgetCaps;
+  const parts: string[] = [];
+  if (typeof caps.maxUsd === 'number') parts.push(`$${caps.maxUsd.toFixed(2)} cap`);
+  if (typeof caps.maxScouts === 'number') parts.push(`${caps.maxScouts} scouts`);
+  if (typeof caps.reviewerSlots === 'number') parts.push(`${caps.reviewerSlots} reviewer`);
+  if (typeof caps.allowWave2 === 'boolean')
+    parts.push(caps.allowWave2 ? 'wave 2 allowed' : 'no wave 2');
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+function formatRouteStages(stages: string[]): string | null {
+  if (stages.length === 0) return null;
+  return `stages ${stages.join(' → ')}`;
 }
 
 function formatTruthSignal(value: DogfoodSeedAppliedPayload['truthSignal']): string | null {
@@ -878,6 +919,38 @@ function compactOperationalEventDetails(event: AgentEventDto): {
       push(payloadString(p, 'reason'));
       pushNumber('redundantReads', 'redundant reads');
       pushNumber('totalReads', 'total reads');
+      break;
+    case 'workflow.route-selected':
+    case 'workflow.route-confirmed': {
+      tone = event.kind === 'workflow.route-confirmed' ? 'success' : 'default';
+      const tier = payloadString(p, 'tier');
+      const source = payloadString(p, 'source');
+      if (tier != null) facts.push(tier);
+      if (source != null) facts.push(source);
+      const budget = formatBudgetCaps(p?.budgetCaps);
+      if (budget != null) facts.push(budget);
+      const stages = formatRouteStages(payloadStringArray(p, 'selectedStages'));
+      if (stages != null) facts.push(stages);
+      const evidence = payloadRecordValue(p, 'evidence');
+      const reasons = payloadStringArray(evidence, 'reasons');
+      detail = reasons.length > 0 ? reasons.join(' · ') : null;
+      break;
+    }
+    case 'workflow.route-escalation-proposed':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'tier'));
+      push(payloadString(p, 'source'));
+      push(payloadString(p, 'interventionId'));
+      detail = payloadStringArray(p, 'escalationTriggers').join(' · ') || null;
+      break;
+    case 'workflow.route-cap-applied':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'requiredTier'));
+      push(payloadString(p, 'effectiveTier'));
+      push(payloadString(p, 'cappedBy'));
+      detail = payloadString(p, 'reason');
       break;
   }
 

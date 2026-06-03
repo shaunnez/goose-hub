@@ -1,5 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { costFromCliEnvelope } from '../cost/extract.js';
@@ -25,6 +26,7 @@ import type { JsonSchema } from './schema-bridge.js';
 const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
 const TIMEOUT_MS = 30_000; // 30 seconds — FACTORY_RULES rule 32
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
+const OUTPUT_SCHEMAS_DIR = join('.factory', 'output-schemas');
 
 /**
  * Resolves the absolute path to the `claude` binary.
@@ -40,6 +42,27 @@ function resolveBinary(name: string): string {
   } catch {
     throw new Error(`Binary '${name}' not found on PATH. Install the Claude CLI first.`);
   }
+}
+
+function outputSchemaPathForRun(workspaceDir: string, runId: string): string {
+  const digest = createHash('sha256').update(runId).digest('hex').slice(0, 16);
+  return join(workspaceDir, OUTPUT_SCHEMAS_DIR, `${digest}.schema.json`);
+}
+
+function stableJson(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  if (value == null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+    .join(',')}}`;
+}
+
+function outputSchemaHash(schema: JsonSchema | undefined): string | undefined {
+  if (schema == null || Object.keys(schema).length === 0) return undefined;
+  return createHash('sha256').update(stableJson(schema)).digest('hex').slice(0, 16);
 }
 
 /**
@@ -129,6 +152,15 @@ export class ClaudeCliRuntime implements AgentRuntime {
     if (recordDecisionTool) deployDecisionCaptureHook();
 
     const model = spec.modelOverride ?? defaultModelForTier('sonnet');
+    const outputSchemaPath =
+      jsonSchema != null && Object.keys(jsonSchema).length > 0
+        ? outputSchemaPathForRun(workspaceDir, runId)
+        : undefined;
+    if (outputSchemaPath != null) {
+      mkdirSync(dirname(outputSchemaPath), { recursive: true });
+      writeFileSync(outputSchemaPath, `${JSON.stringify(jsonSchema, null, 2)}\n`, { flag: 'w' });
+    }
+    const schemaHash = outputSchemaHash(jsonSchema);
 
     // Emit run-started
     if (spec.suppressRunStarted !== true) {
@@ -150,6 +182,8 @@ export class ClaudeCliRuntime implements AgentRuntime {
           mcpServerNames: toolBinding.mcpServerNames,
           toolBindingWarningCount: toolBinding.warnings.length,
           toolBindingWarnings: toolBinding.warnings,
+          ...(outputSchemaPath != null ? { outputSchemaPath } : {}),
+          ...(schemaHash != null ? { outputSchemaHash: schemaHash } : {}),
           ...spec.extraEventPayload,
         },
         runId,

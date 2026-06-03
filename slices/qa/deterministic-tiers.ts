@@ -6,7 +6,7 @@ import type {
 } from '@goose-hub/core/verify/tiers.js';
 import type { runTier as defaultRunTier } from '@goose-hub/core/verify/tiers.js';
 import type { QaOutput, TestRun } from '@goose-hub/skills/qa/schema.js';
-import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
+import { type EngineeringSpec, fileOwnedPath } from '@goose-hub/skills/spec-author/schema.js';
 
 export type { TestRun };
 
@@ -36,6 +36,77 @@ export interface DeterministicVerifyOutcome {
   shortCircuitTier?: 1 | 2 | 3;
 }
 
+function normalizePath(path: string): string {
+  return path.replace(/^\.?\//, '').replace(/\\/g, '/');
+}
+
+function pathWithoutTestSuffix(path: string): string {
+  return normalizePath(path)
+    .replace(/\.(test|spec)\.[cm]?[jt]sx?$/, '')
+    .replace(/\.[cm]?[jt]sx?$/, '');
+}
+
+function extractPathFromFinding(message: string): string | null {
+  const match = message.match(
+    /\b((?:apps|core|slices|skills|src|packages)\/[^\s:)'"]+\.(?:test|spec\.)?[cm]?[jt]sx?)\b/,
+  );
+  return match?.[1] != null ? normalizePath(match[1]) : null;
+}
+
+function ownedPathsForSpec(spec: EngineeringSpec): string[] {
+  return [
+    ...spec.workPackages.flatMap((wp) => wp.filesOwned.map((entry) => fileOwnedPath(entry))),
+    ...spec.interfaceContracts.map((contract) => contract.file),
+  ].map(normalizePath);
+}
+
+function isRelatedFailurePath(failedPath: string, relatedPaths: string[]): boolean {
+  const failed = normalizePath(failedPath);
+  const failedBase = pathWithoutTestSuffix(failed);
+  return relatedPaths.some((relatedPath) => {
+    const related = normalizePath(relatedPath);
+    const relatedBase = pathWithoutTestSuffix(related);
+    return (
+      failed === related ||
+      failedBase === relatedBase ||
+      failed.includes(relatedBase) ||
+      related.includes(failedBase)
+    );
+  });
+}
+
+function classifyUnrelatedRegressionFailure(input: {
+  result: VerifyTierResult;
+  spec: EngineeringSpec;
+  changedFiles: string[];
+}): VerifyTierResult | null {
+  if (input.result.tier !== 3 || input.result.passed) return null;
+  const relatedPaths = [...input.changedFiles.map(normalizePath), ...ownedPathsForSpec(input.spec)];
+  if (relatedPaths.length === 0) return null;
+  const failedPaths = input.result.findings
+    .map((finding) => finding.file ?? extractPathFromFinding(finding.message))
+    .filter((path): path is string => path != null)
+    .map(normalizePath);
+  if (failedPaths.length === 0) return null;
+  if (failedPaths.some((path) => isRelatedFailurePath(path, relatedPaths))) return null;
+
+  return {
+    ...input.result,
+    passed: true,
+    findings: input.result.findings.map((finding) => ({
+      ...finding,
+      severity: 'warning',
+      category: finding.category ?? 'product',
+      code: finding.code ?? 'regression-unrelated',
+      message: `Unrelated regression [advisory]: ${finding.message}`,
+    })),
+    evidence: [
+      ...input.result.evidence,
+      `regression-unrelated: failed tests outside changed/owned surface (${failedPaths.join(', ')})`,
+    ],
+  };
+}
+
 export async function defaultRunTests(cwd: string, command: string): Promise<TestRun | null> {
   try {
     return await runVitest({ command, cwd });
@@ -53,6 +124,7 @@ export async function runDeterministicTiers(opts: {
   runId: string;
   regressionPolicy: RegressionPolicy;
   runTier: typeof defaultRunTier;
+  changedFiles?: string[];
 }): Promise<DeterministicVerifyOutcome> {
   const tierResults: DeterministicTierResults = { 1: null, 2: null, 3: null };
   const runArtifacts = {
@@ -72,10 +144,36 @@ export async function runDeterministicTiers(opts: {
     eventStore.appendEvent({ ...input, runId: opts.runId });
 
   for (const tier of [1, 2, 3] as const) {
-    const result = await opts.runTier(tier, opts.spec, runArtifacts, {
+    const rawResult = await opts.runTier(tier, opts.spec, runArtifacts, {
       appendEvent: tierAppendEvent,
     });
+    const result =
+      opts.regressionPolicy === 'escalate'
+        ? (classifyUnrelatedRegressionFailure({
+            result: rawResult,
+            spec: opts.spec,
+            changedFiles: opts.changedFiles ?? [],
+          }) ?? rawResult)
+        : rawResult;
     tierResults[tier] = result;
+    if (rawResult !== result) {
+      tierAppendEvent({
+        projectId: opts.projectSlug,
+        workItemId: opts.workItemId,
+        kind: 'agent.log',
+        payload: {
+          runId: opts.implRunId,
+          skill: 'qa',
+          stream: 'telemetry',
+          metric: 'regression_unrelated',
+          failedTier: tier,
+          findingCount: rawResult.findings.length,
+          policy: opts.regressionPolicy,
+          advisory: true,
+        },
+        runId: opts.implRunId,
+      });
+    }
     if (!result.passed) {
       // Tier 1/2 always short-circuit. Tier 3 short-circuits only when policy
       // is 'escalate'; 'ignore' converts the failure to a warning and lets the

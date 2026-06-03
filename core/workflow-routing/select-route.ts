@@ -97,7 +97,7 @@ function confirmedTier(signals: RouteSignals): {
     return { tier: 'T3', reasons, escalationTriggers, requiresHumanApproval };
   }
 
-  if (signals.hasContradictions) {
+  if (signals.hasBlockingContradictions ?? signals.hasContradictions) {
     reasons.push('contradictions in investigation');
     escalationTriggers.push({ kind: 'contradictions-found', detail: 'contradictions > 0' });
     return { tier: 'T3', reasons, escalationTriggers, requiresHumanApproval };

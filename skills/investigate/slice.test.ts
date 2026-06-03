@@ -84,6 +84,27 @@ describe('investigate schema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('normalizes fixHint.approach to suggestedApproach', () => {
+    const result = InvestigateSchema.safeParse({
+      findings: 'Root cause is clear: divide-by-zero in calculateRatio().',
+      keyFiles: [{ path: 'core/math/ratio.ts', reason: 'Divide-by-zero bug' }],
+      fixHint: {
+        file: 'core/math/ratio.ts',
+        line: 42,
+        currentCode: 'return numerator / denominator;',
+        approach: 'Return null or throw before dividing when denominator is zero.',
+      },
+      confidence: 'high',
+      openQuestions: [],
+      requiresBrowserRepro: false,
+      decisionSummaries: [{ kind: 'INSIGHT', summary: 'Divide-by-zero in calculateRatio()' }],
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.fixHint?.suggestedApproach).toBe(
+      'Return null or throw before dividing when denominator is zero.',
+    );
+  });
+
   it('accepts evidence as optional on DecisionSummary', () => {
     const result = InvestigateSchema.safeParse({
       findings: 'Investigation complete.',

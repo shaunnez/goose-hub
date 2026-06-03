@@ -14,6 +14,28 @@ afterAll(() => {
 const mockDispatchWave = vi.fn();
 const mockCrossValidate = vi.fn();
 const mockInvokeSkill = vi.fn();
+class MockOutputValidationError extends Error {
+  issues: Array<{ path: Array<string | number>; message: string }>;
+  diagnostics: {
+    schemaName: string;
+    outputPreview?: string;
+    outputSchemaHash?: string;
+    runtime?: string;
+    modelId?: string;
+    provider?: string;
+  };
+
+  constructor(
+    issues: Array<{ path: Array<string | number>; message: string }>,
+    skillName: string,
+    diagnostics: MockOutputValidationError['diagnostics'],
+  ) {
+    super(`invokeSkill: output validation failed for '${skillName}'`);
+    this.name = 'OutputValidationError';
+    this.issues = issues;
+    this.diagnostics = diagnostics;
+  }
+}
 const mockPersistScoutReport = vi.fn();
 const mockLookupWorkItemSymbols = vi.fn();
 const mockExtractIdentifiers = vi.fn();
@@ -60,6 +82,7 @@ vi.mock('@goose-hub/core/agent-runtime/cross-validate.js', () => ({
 
 vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
   invokeSkill: (...args: unknown[]) => mockInvokeSkill(...args),
+  OutputValidationError: MockOutputValidationError,
 }));
 
 vi.mock('@goose-hub/core/agent-runtime/reconcile-decisions.js', () => ({
@@ -1206,6 +1229,48 @@ describe('runInvestigateWorkflow', () => {
 
       expect(mockAccumulatePersonaStats).toHaveBeenCalledWith(
         expect.objectContaining({ outcome: 'success' }),
+      );
+    });
+
+    it('persists structured output validation diagnostics on investigate failure', async () => {
+      mockInvokeSkill.mockRejectedValueOnce(
+        new MockOutputValidationError(
+          [{ path: ['keyFiles'], message: 'Required' }],
+          'investigate',
+          {
+            schemaName: 'investigate',
+            outputPreview: '{"findings":"ok"}',
+            outputSchemaHash: 'schema123',
+            runtime: 'claude-cli',
+            modelId: 'claude-sonnet-4-6',
+            provider: 'claude',
+          },
+        ),
+      );
+      const source = makeMockSource();
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+
+      await runInvestigateWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+
+      const failed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+      expect(failed?.[0].payload).toMatchObject({
+        skill: 'investigate',
+        error: "invokeSkill: output validation failed for 'investigate'",
+        issues: [{ path: ['keyFiles'], message: 'Required' }],
+        schemaName: 'investigate',
+        outputPreview: '{"findings":"ok"}',
+        outputSchemaHash: 'schema123',
+        runtime: 'claude-cli',
+        modelId: 'claude-sonnet-4-6',
+        provider: 'claude',
+      });
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:investigating',
+        'factory:needs-human',
       );
     });
 

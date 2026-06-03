@@ -1545,6 +1545,88 @@ describe('runQaWorkflow', () => {
       }
     });
 
+    it('uses workflow-owned executable AC results when the QA agent returns a malformed copy', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const worktree = mkdtempSync(join(tmpdir(), 'qa-executable-checks-agent-copy-'));
+      const qaResult = makePassResult();
+      qaResult.output = {
+        ...(qaResult.output as Record<string, unknown>),
+        criteriaResults: [
+          {
+            criterionId: 'AC-1',
+            checkId: 'AC-1-check-1',
+            ac: 'Command prints expected output',
+            command: 'printf expected',
+            expectedExitCodes: [0],
+            exitCode: 0,
+            passed: true,
+          },
+        ],
+      };
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: {
+            worktreePath: worktree,
+            pipelineRunId: 'pipeline-run-agent-copy',
+          },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(qaResult);
+
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          executableChecks: [
+            {
+              criterionId: 'AC-1',
+              checkId: 'AC-1-check-1',
+              ac: 'Command prints expected output',
+              command: 'printf expected',
+              expectedExitCodes: [0],
+            },
+          ],
+        });
+
+        const completed = vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.find(([event]) => event.kind === 'qa.completed');
+        expect(completed?.[0].payload).toMatchObject({
+          pipelineRunId: 'pipeline-run-agent-copy',
+          criteriaResults: [
+            {
+              criterionId: 'AC-1',
+              checkId: 'AC-1-check-1',
+              actual: 'expected',
+              passed: true,
+              exitCode: 0,
+            },
+          ],
+        });
+        expect(source.transitionState).toHaveBeenCalledWith(
+          '42',
+          'factory:needs-qa',
+          'factory:needs-review',
+        );
+        expect(
+          vi
+            .mocked(eventStore.appendEvent)
+            .mock.calls.some(
+              ([event]) =>
+                event.kind === 'agent.log' &&
+                (event.payload as { metric?: string }).metric ===
+                  'criteria_results_agent_copy_replaced',
+            ),
+        ).toBe(true);
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
+    });
+
     it('fails executable AC checks when the worktree is unavailable', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
@@ -2545,6 +2627,85 @@ describe('runQaWorkflow', () => {
 
       // Agent did run because tier 3 logically passed under 'ignore'
       expect(mockRun).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats unrelated full-suite regression failures as advisory when targeted tiers pass', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+      mockRun.mockResolvedValueOnce(makePassResult());
+      source.getPrDiff = vi
+        .fn()
+        .mockResolvedValue(
+          [
+            'diff --git a/src/x.ts b/src/x.ts',
+            '--- a/src/x.ts',
+            '+++ b/src/x.ts',
+            '@@ -1 +1 @@',
+            '-old',
+            '+new',
+          ].join('\n'),
+        );
+
+      const runTierImpl = vi.fn(
+        async (tier: 1 | 2 | 3, _spec: unknown, _artifacts: unknown, _deps?: unknown) =>
+          tier === 3
+            ? {
+                tier,
+                passed: false,
+                evidence: [],
+                findings: [
+                  {
+                    message: 'Regression [escalate]: FAIL apps/web/e2e/bootstrap-wizard.spec.ts',
+                    severity: 'error' as const,
+                  },
+                ],
+              }
+            : makePassingTier(tier),
+      );
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      expect(mockRun).toHaveBeenCalledTimes(1);
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:needs-review',
+      );
+      const completed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.completed');
+      const payload = completed?.[0].payload as {
+        tierResults?: {
+          regression?: { passed: boolean; findings: Array<{ description?: string }> };
+        };
+      };
+      expect(payload.tierResults?.regression?.passed).toBe(true);
+      expect(payload.tierResults?.regression?.findings[0]?.description).toContain(
+        'Unrelated regression [advisory]',
+      );
+      expect(
+        vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.some(
+            ([e]) =>
+              e.kind === 'agent.log' &&
+              (e.payload as { metric?: string }).metric === 'regression_unrelated',
+          ),
+      ).toBe(true);
     });
 
     it('rejects QA disagreement with deterministic tier verdict → factory:needs-human', async () => {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { skillsRoot } from '@goose-hub/skills';
@@ -5,6 +6,7 @@ import { getProjectBySlug } from '../projects/loader.js';
 import type { ProjectConfig } from '../types.js';
 import type { ResolvedBudget } from './budgets.js';
 import type { AgentResult, AgentRuntime, SkillConfig } from './interface.js';
+import { tryProviderOf } from './models.js';
 import { safeParseOutputForSchema } from './output-normalization.js';
 import { readPromptWithContext } from './read-prompt.js';
 import { toJsonSchema } from './schema-bridge.js';
@@ -25,17 +27,64 @@ export class ContextValidationError extends Error {
 export class OutputValidationError extends Error {
   issues: Array<{ path: Array<string | number>; message: string }>;
   runTelemetry: { runId: string; skill: string };
+  diagnostics: {
+    outputPreview?: string;
+    schemaName: string;
+    outputSchemaHash?: string;
+    runtime?: string;
+    modelId?: string;
+    provider?: string;
+  };
 
   constructor(
     issues: Array<{ path: Array<string | number>; message: string }>,
     skillName: string,
     runId: string,
+    diagnostics: {
+      outputPreview?: string;
+      schemaName?: string;
+      outputSchemaHash?: string;
+      runtime?: string;
+      modelId?: string;
+      provider?: string;
+    } = {},
   ) {
     super(`invokeSkill: output validation failed for '${skillName}'`);
     this.name = 'OutputValidationError';
     this.issues = issues;
     this.runTelemetry = { runId, skill: skillName };
+    this.diagnostics = {
+      schemaName: diagnostics.schemaName ?? skillName,
+      ...(diagnostics.outputPreview != null ? { outputPreview: diagnostics.outputPreview } : {}),
+      ...(diagnostics.outputSchemaHash != null
+        ? { outputSchemaHash: diagnostics.outputSchemaHash }
+        : {}),
+      ...(diagnostics.runtime != null ? { runtime: diagnostics.runtime } : {}),
+      ...(diagnostics.modelId != null ? { modelId: diagnostics.modelId } : {}),
+      ...(diagnostics.provider != null ? { provider: diagnostics.provider } : {}),
+    };
   }
+}
+
+function stableJson(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  if (value == null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+    .join(',')}}`;
+}
+
+function schemaHash(schema: Record<string, unknown> | undefined): string | undefined {
+  if (schema == null) return undefined;
+  return createHash('sha256').update(stableJson(schema)).digest('hex').slice(0, 16);
+}
+
+function outputPreview(output: unknown): string {
+  const serialized = typeof output === 'string' ? output : JSON.stringify(output);
+  return serialized.slice(0, 2_000);
 }
 
 export type InvokeSkillInput = {
@@ -192,6 +241,7 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<InvokeSkillR
   if (skillConfig.outputSchema != null) {
     const outResult = safeParseOutputForSchema(skillConfig.outputSchema, result.output);
     if (!outResult.success) {
+      const provider = tryProviderOf(modelOverride);
       throw new OutputValidationError(
         outResult.error.issues.map((i) => ({
           path: i.path as Array<string | number>,
@@ -199,6 +249,13 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<InvokeSkillR
         })),
         skillName,
         runId,
+        {
+          outputPreview: outputPreview(result.output),
+          outputSchemaHash: schemaHash(outputJsonSchema),
+          runtime: provider === 'codex' ? 'codex-cli' : 'claude-cli',
+          modelId: modelOverride,
+          provider,
+        },
       );
     }
     output = outResult.data;

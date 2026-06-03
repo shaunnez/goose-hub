@@ -14,6 +14,23 @@ export const KeyFileSchema = z.object({
   snippet: z.string().max(800).optional(),
 });
 
+const FixHintSchema = z.preprocess(
+  (value) => {
+    if (value == null || typeof value !== 'object' || Array.isArray(value)) return value;
+    const record = value as Record<string, unknown>;
+    if (record.suggestedApproach == null && typeof record.approach === 'string') {
+      return { ...record, suggestedApproach: record.approach };
+    }
+    return value;
+  },
+  z.object({
+    file: z.string().describe(RepoRelativePathDescription),
+    line: z.number().int().min(1),
+    currentCode: z.string().max(1200),
+    suggestedApproach: z.string(),
+  }),
+);
+
 export const InvestigateSchema = z.object({
   findings: z.string().describe('Root cause hypothesis and analysis'),
   keyFiles: z.array(KeyFileSchema).describe('Files most relevant to the bug'),
@@ -25,14 +42,7 @@ export const InvestigateSchema = z.object({
       'True if the bug manifests in the browser UI and can be reproduced via Playwright. False for pure server-side/API bugs where a browser repro is meaningless.',
     ),
   decisionSummaries: z.array(DecisionSummarySchema).min(1),
-  fixHint: z
-    .object({
-      file: z.string().describe(RepoRelativePathDescription),
-      line: z.number().int().min(1),
-      currentCode: z.string().max(1200),
-      suggestedApproach: z.string(),
-    })
-    .optional(),
+  fixHint: FixHintSchema.optional(),
 });
 
 export type KeyFile = z.infer<typeof KeyFileSchema>;

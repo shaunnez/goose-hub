@@ -39,6 +39,7 @@ export function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {
 
 function getRunId(item: RenderItem): string | null {
   if (item.kind === 'event') {
+    if (item.event.kind.startsWith('workflow.route-')) return null;
     const runId = (item.event as AgentEventDto & { runId?: string | null }).runId ?? null;
     return scoutBaseRunId(runId);
   }

@@ -292,6 +292,70 @@ describe('Misc timeline events', () => {
         title: 'Agent run aborted',
         payload: { reason: 'excessive-redundant-reads', redundantReads: 5, totalReads: 10 },
       },
+      {
+        kind: 'workflow.route-selected',
+        title: 'Workflow route selected',
+        payload: {
+          tier: 'T1',
+          source: 'lazy-enhance',
+          budgetCaps: {
+            maxUsd: 0.8,
+            maxScouts: 1,
+            allowWave2: false,
+            reviewerSlots: 1,
+          },
+          evidence: {
+            reasons: ['bug with <=3 seed files (1)', 'no investigation'],
+          },
+          selectedStages: ['triage', 'investigate', 'implement', 'qa', 'review', 'retro'],
+        },
+      },
+      {
+        kind: 'workflow.route-confirmed',
+        title: 'Workflow route confirmed',
+        payload: {
+          tier: 'T2',
+          source: 'investigation',
+          budgetCaps: {
+            maxUsd: 2,
+            maxScouts: 3,
+            allowWave2: false,
+            reviewerSlots: 1,
+          },
+          evidence: {
+            reasons: ['bug with no seed - fail-safe up to T2', '2 non-test files'],
+          },
+          selectedStages: [
+            'triage',
+            'investigate',
+            'spec-author',
+            'implement',
+            'qa',
+            'review',
+            'retro',
+          ],
+        },
+      },
+      {
+        kind: 'workflow.route-escalation-proposed',
+        title: 'Workflow route escalation proposed',
+        payload: {
+          tier: 'T3',
+          source: 'investigation',
+          interventionId: 'intervention-1',
+          escalationTriggers: ['schema signal'],
+        },
+      },
+      {
+        kind: 'workflow.route-cap-applied',
+        title: 'Workflow route cap applied',
+        payload: {
+          requiredTier: 'T3',
+          effectiveTier: 'T2',
+          cappedBy: 'budget',
+          reason: 'project cap',
+        },
+      },
     ];
 
     render(
@@ -313,8 +377,12 @@ describe('Misc timeline events', () => {
       expect(screen.getByText(item.title)).toBeTruthy();
       expect(document.querySelector(`[data-event-kind="${item.kind}"]`)).toBeTruthy();
     }
+    expect(rendered).toContain('$0.80 cap');
+    expect(rendered).toContain('stages triage → investigate → implement → qa → review → retro');
+    expect(rendered).toContain('bug with no seed - fail-safe up to T2');
     expect(rendered).not.toContain('"rawProbeKey"');
     expect(rendered).not.toContain('raw-value');
+    expect(rendered).not.toContain('"selectedStages"');
   });
 
   it('renders agent.runtime-advisory as a compact warning instead of raw JSON', () => {

@@ -125,9 +125,30 @@ describe('selectWorkflowRoute', () => {
         workItemId: 'test:1',
         investigationConfidence: 'high',
         hasContradictions: true,
+        hasBlockingContradictions: true,
         nonTestFileCount: 1,
       });
       expect(route.tier).toBe('T3');
+    });
+
+    it('high confidence one-file bug with wording-only contradictions stays T1', () => {
+      const route = selectWorkflowRoute({
+        workItemId: 'test:1',
+        workItemType: 'bug',
+        seedFileCount: 1,
+        hasVagueOrHighRisk: false,
+        hasSensitivePath: false,
+        hasSchemaSignal: false,
+        hasDependencySignal: false,
+        investigationConfidence: 'high',
+        hasContradictions: true,
+        hasBlockingContradictions: false,
+        nonTestFileCount: 1,
+        wave2Triggered: false,
+      });
+      expect(route.tier).toBe('T1');
+      expect(route.selectedStages).toContain('implement');
+      expect(route.selectedStages).not.toContain('parallel-implement');
     });
 
     it('sensitive path in investigation → T3', () => {

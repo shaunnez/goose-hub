@@ -780,7 +780,10 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     ]);
 
     const prd = section(items, 'prd');
-    const delivery = section(items, 'delivery-router');
+    const delivery = items.find(
+      (item): item is Extract<(typeof items)[number], { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'delivery-router',
+    );
     const implementation = section(items, 'implementation');
 
     expect(prd?.items.some((item) => item.kind === 'phase-group')).toBe(false);
@@ -1594,6 +1597,44 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     );
   });
 
+  it('combines proximate route decisions and acceptance contract runs into one delivery-router section', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'workflow.route-confirmed', null, {
+        createdAt: '2026-06-03T10:36:20Z',
+        payload: { tier: 'T2', source: 'investigation' },
+      }),
+      makeEvent(2, 'agent.run-started', 'acceptance-contract-run', {
+        createdAt: '2026-06-03T10:36:23Z',
+        payload: { skill: 'acceptance-contract' },
+      }),
+      makeEvent(3, 'acceptance.contract-authored', 'acceptance-contract-run', {
+        createdAt: '2026-06-03T10:36:29Z',
+        payload: { criteriaCount: 2 },
+      }),
+      makeEvent(4, 'agent.run-completed', 'acceptance-contract-run', {
+        createdAt: '2026-06-03T10:36:29Z',
+        payload: { skill: 'acceptance-contract' },
+      }),
+    ]);
+
+    const deliverySections = items.filter(
+      (item): item is Extract<(typeof items)[number], { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'delivery-router',
+    );
+
+    expect(deliverySections).toHaveLength(1);
+    expect(
+      deliverySections[0].items.some(
+        (item) => item.kind === 'event' && item.event.kind === 'workflow.route-confirmed',
+      ),
+    ).toBe(true);
+    expect(
+      deliverySections[0].items.some(
+        (item) => item.kind === 'run-group' && item.runId === 'acceptance-contract-run',
+      ),
+    ).toBe(true);
+  });
+
   it('uses run-started metadata before grouping sparse runtime events', () => {
     const items = groupTimelineEventsByCanonicalSection([
       makeEvent(1, 'agent.run-completed', 'run-prd-sparse'),
@@ -2313,5 +2354,60 @@ describe('EVENT_KIND_LABEL — QA and fix-feedback kinds', () => {
     expect(EVENT_KIND_LABEL[kind]).toBeDefined();
     expect(typeof EVENT_KIND_LABEL[kind]).toBe('string');
     expect(EVENT_KIND_LABEL[kind].length).toBeGreaterThan(0);
+  });
+});
+
+describe('EVENT_KIND_LABEL — workflow routing kinds', () => {
+  const KINDS = [
+    'workflow.route-selected',
+    'workflow.route-confirmed',
+    'workflow.route-escalation-proposed',
+    'workflow.route-cap-applied',
+  ] as const;
+
+  it.each(KINDS)('has a label for %s', (kind) => {
+    expect(EVENT_KIND_LABEL[kind]).toBeDefined();
+    expect(typeof EVENT_KIND_LABEL[kind]).toBe('string');
+    expect(EVENT_KIND_LABEL[kind].length).toBeGreaterThan(0);
+  });
+
+  it('does not create live workflow-routing run groups for route events with reused run ids', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'investigate-run', {
+        payload: { skill: 'investigate' },
+      }),
+      makeEvent(2, 'agent.run-completed', 'investigate-run', {
+        payload: { skill: 'investigate' },
+      }),
+      makeEvent(3, 'workflow.route-confirmed', 'investigate-run', {
+        payload: { tier: 'T2', source: 'investigation' },
+      }),
+      makeEvent(4, 'workflow.route-escalation-proposed', 'investigate-run', {
+        payload: { requiredTier: 'T3', effectiveTier: 'T1' },
+      }),
+    ]);
+
+    const delivery = items.find(
+      (item): item is Extract<(typeof items)[number], { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'delivery-router',
+    );
+    const routeRun = delivery?.items.find(
+      (item) => item.kind === 'run-group' && item.runId === 'investigate-run',
+    );
+    expect(routeRun).toBeUndefined();
+    expect(delivery?.items.filter((item) => item.kind === 'event')).toHaveLength(2);
+
+    const investigation = items.find(
+      (item): item is Extract<(typeof items)[number], { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'investigation',
+    );
+    const investigationRun = investigation?.items.find(
+      (item) => item.kind === 'run-group' && item.runId === 'investigate-run',
+    );
+    expect(investigationRun).toMatchObject({
+      kind: 'run-group',
+      skill: 'investigate',
+      endedAt: expect.any(String),
+    });
   });
 });

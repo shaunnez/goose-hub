@@ -51,6 +51,26 @@ describe('buildRelatedSurfaceManifest', () => {
       'apps/web/src/components/chrome/__tests__/Sidebar.test.tsx',
       'apps/web/src/components/chrome/__tests__/Sidebar.spec.tsx',
     ]);
+    expect(manifest?.evidenceSpecPath).toBeNull();
+  });
+
+  it('preserves the frontend evidence spec path only when that spec exists', () => {
+    const worktreePath = makeWorktree([
+      'apps/web/src/components/chrome/Sidebar.tsx',
+      'apps/web/src/components/chrome/Sidebar.test.tsx',
+      'apps/web/e2e/issue-876.spec.ts',
+    ]);
+
+    const manifest = buildRelatedSurfaceManifest({
+      worktreePath,
+      workItemNumber: 876,
+      evidencePostEnabled: true,
+      investigation: {
+        keyFiles: [{ path: 'apps/web/src/components/chrome/Sidebar.tsx' }],
+        openQuestions: [],
+      },
+    });
+
     expect(manifest?.evidenceSpecPath).toBe('apps/web/e2e/issue-876.spec.ts');
   });
 

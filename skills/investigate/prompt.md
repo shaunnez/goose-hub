@@ -126,6 +126,12 @@ Return a JSON object with this exact structure:
     "Should strict mode require examples for every runtime skill?"
   ],
   "requiresBrowserRepro": false,
+  "fixHint": {
+    "file": "core/agent-runtime/skill-contract-audit.ts",
+    "line": 42,
+    "currentCode": "const example = extractOutputExample(prompt);",
+    "suggestedApproach": "Validate only marked output examples against the configured runtime schema."
+  },
   "decisionSummaries": [
     { "kind": "READ", "summary": "Read the skill contract audit implementation.", "evidence": "core/agent-runtime/skill-contract-audit.ts" },
     { "kind": "INSIGHT", "summary": "The audit must validate marked examples with the configured output schema.", "evidence": "outputSchema.safeParse" }
@@ -138,6 +144,7 @@ Return a JSON object with this exact structure:
 `keyFiles` must list the files an implementer most likely needs to change or verify. Include materially relevant implementation files and existing test/spec files when you find them; exclude files you only skimmed or searched without finding actionable implementation signal.
 For medium or high confidence findings, add `line`, `symbol`, and a short `snippet` when the cited location is known. Keep `snippet` under 800 characters and copy only the smallest code fragment needed to anchor the fix.
 When the fix shape is clear, include `fixHint` with the most likely file, line, current code, and suggested approach. This is an implementation hint, not a substitute for tests.
+If you include `fixHint`, use the exact key `suggestedApproach`; do not use `approach`, `suggestion`, or any other alias.
 
 `confidence` reflects how certain you are about your root cause hypothesis:
 - `low` — symptom identified but root cause unclear; many unknowns remain

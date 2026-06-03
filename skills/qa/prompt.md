@@ -134,7 +134,7 @@ If `criteriaResults` is present in your context, it was produced by the QA workf
 Rules:
 1. Do not re-run executable AC checks just to recompute pass/fail.
 2. Any `passed: false` entry forces `verdict = 'fail'`, regardless of tier scores.
-3. Echo the provided `criteriaResults` in your output unchanged when present.
+3. Use the provided `criteriaResults` as workflow-owned command truth. Do not reconstruct or edit them; the workflow persists the authoritative copy.
 4. ACs without executable checks are still checked via code-reading and diff review.
 
 Executable check results are not Review coverage. They prove commands passed or failed; they do not replace your judgement on non-executable criteria.

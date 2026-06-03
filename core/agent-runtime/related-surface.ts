@@ -78,9 +78,12 @@ export function buildRelatedSurfaceManifest(input: {
   const checkedAbsent = testCandidatePaths.filter((path) => !pathExists(input.worktreePath, path));
   const testCandidates = testCandidatePaths.filter((path) => !existingTests.includes(path));
   const touchesWeb = keyFiles.some((file) => file.path.startsWith('apps/web/'));
+  const frontendEvidenceSpecPath = `apps/web/e2e/issue-${input.workItemNumber}.spec.ts`;
   const evidenceSpecPath =
-    touchesWeb && input.evidencePostEnabled
-      ? `apps/web/e2e/issue-${input.workItemNumber}.spec.ts`
+    touchesWeb &&
+    input.evidencePostEnabled &&
+    pathExists(input.worktreePath, frontendEvidenceSpecPath)
+      ? frontendEvidenceSpecPath
       : null;
   const targetedTestPaths = existingTests.length > 0 ? existingTests : testCandidates.slice(0, 1);
   const primaryTestPath = targetedTestPaths[0] ?? null;

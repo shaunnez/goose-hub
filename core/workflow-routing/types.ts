@@ -66,6 +66,7 @@ export interface RouteSignals {
   investigationConfidence?: 'low' | 'medium' | 'high' | null;
   nonTestFileCount?: number | null;
   hasContradictions?: boolean;
+  hasBlockingContradictions?: boolean;
   wave2Triggered?: boolean;
 }
 

@@ -263,6 +263,10 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     case 'agent.bug-enhance-hallucinated':
     case 'agent.bug-enhance-workspace-empty':
     case 'agent.run-aborted':
+    case 'workflow.route-selected':
+    case 'workflow.route-confirmed':
+    case 'workflow.route-escalation-proposed':
+    case 'workflow.route-cap-applied':
       return <CompactOperationalEvent key={event.id} event={event} />;
     case 'agent.investigation-context-injected':
       return <InvestigationContextInjectedEvent key={event.id} event={event} />;

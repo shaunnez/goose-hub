@@ -371,7 +371,7 @@ function timelineSegmentExplicitKey(
   discoverSessionByWorkflowOrRunId: DiscoverSessionRunIndex,
   fixFeedbackAttemptByRunId: ReadonlyMap<string, string>,
   prdWorkflowByRevisionEventId: ReadonlyMap<number, string>,
-  specAuthorRepairByRunId: ReadonlyMap<string, string>,
+  _specAuthorRepairByRunId: ReadonlyMap<string, string>,
 ): string | null {
   const payload = event.payload as Record<string, unknown> | null;
   const stringPayload = (key: string): string | null => {
@@ -379,7 +379,7 @@ function timelineSegmentExplicitKey(
     return typeof value === 'string' && value.trim() !== '' ? value : null;
   };
   const runId = event.runId ?? null;
-  const pipelineRunId = stringPayload('pipelineRunId');
+  const _pipelineRunId = stringPayload('pipelineRunId');
   const workflowRunId = stringPayload('workflowRunId');
   const discoverPhaseId = getDiscoverPhaseId(event, discoverSessionByWorkflowOrRunId);
   const discoverPhase = eventDiscoverPhase(event, discoverSessionByWorkflowOrRunId);
@@ -401,7 +401,7 @@ function timelineSegmentExplicitKey(
     case 'decompose':
       return workflowRunId ?? runId;
     case 'delivery-router':
-      return specAuthorRepairByRunId.get(runId ?? '') ?? pipelineRunId ?? workflowRunId ?? runId;
+      return null;
     case 'implementation':
       return (
         fixFeedbackSegmentIdForEvent(event, fixFeedbackAttemptByRunId) ??
@@ -425,6 +425,8 @@ function timelineSegmentExplicitKey(
     case 'system':
       return null;
     case 'transitions':
+      return null;
+    default:
       return null;
   }
 }
@@ -836,6 +838,19 @@ function flattenRedundantSectionPhase(
     if (matchingPhases.length === 1) {
       return [
         ...items.filter((item) => !(item.kind === 'phase-group' && item.phase === phase)),
+        ...matchingPhases[0].items,
+      ].sort(compareRenderItems);
+    }
+  }
+
+  if (section === 'delivery-router') {
+    const matchingPhases = items.filter(
+      (item): item is Extract<RenderItem, { kind: 'phase-group' }> =>
+        item.kind === 'phase-group' && item.phase === 'contract',
+    );
+    if (matchingPhases.length === 1) {
+      return [
+        ...items.filter((item) => !(item.kind === 'phase-group' && item.phase === 'contract')),
         ...matchingPhases[0].items,
       ].sort(compareRenderItems);
     }

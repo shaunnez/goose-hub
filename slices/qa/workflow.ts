@@ -30,6 +30,7 @@ import type { RegressionPolicy, TierResult } from '@goose-hub/core/verify/tiers.
 import { runTier as defaultRunTier } from '@goose-hub/core/verify/tiers.js';
 import {
   type CriteriaResult,
+  CriteriaResultSchema,
   type QaOutput,
   QaOutputSchema,
   type TestRun,
@@ -473,6 +474,50 @@ function compactCriteriaResultsForQaContext(results: CriteriaResult[]): Criteria
   }));
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function restoreWorkflowOwnedCriteriaResults(input: {
+  output: unknown;
+  criteriaResults: CriteriaResult[];
+  contextCriteriaResults: CriteriaResult[];
+}): {
+  output: unknown;
+  warning?: {
+    reason: 'invalid-agent-copy' | 'changed-agent-copy';
+    issues?: unknown;
+  };
+} {
+  if (input.criteriaResults.length === 0 || !isRecord(input.output)) {
+    return { output: input.output };
+  }
+
+  const suppliedCriteriaResults = input.output.criteriaResults;
+  const output = { ...input.output, criteriaResults: input.criteriaResults };
+  if (suppliedCriteriaResults == null) return { output };
+
+  const parsed = safeParseOutputForSchema(CriteriaResultSchema.array(), suppliedCriteriaResults);
+  if (!parsed.success) {
+    return {
+      output,
+      warning: {
+        reason: 'invalid-agent-copy',
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path,
+          message: issue.message,
+        })),
+      },
+    };
+  }
+
+  if (JSON.stringify(parsed.data) !== JSON.stringify(input.contextCriteriaResults)) {
+    return { output, warning: { reason: 'changed-agent-copy' } };
+  }
+
+  return { output };
+}
+
 /**
  * Runs the QA holdout workflow for a work item in `factory:needs-qa` state.
  * QA is a holdout: fresh context, no advisor, no fallback (FACTORY_RULES 1, 20, 23).
@@ -564,6 +609,7 @@ export async function runQaWorkflow(
         runId,
         regressionPolicy,
         runTier,
+        changedFiles: buildPrDiffWithContext(prDiff).changedFiles,
       });
     }
 
@@ -871,7 +917,32 @@ export async function runQaWorkflow(
       appendSystemPrompt: qaPrompt,
     });
 
-    const qaParsed = safeParseOutputForSchema(QaOutputSchema, qaResult.output);
+    const criteriaResultReconciliation = restoreWorkflowOwnedCriteriaResults({
+      output: qaResult.output,
+      criteriaResults,
+      contextCriteriaResults: criteriaResultsForContext,
+    });
+    if (criteriaResultReconciliation.warning != null) {
+      eventStore.appendEvent({
+        projectId: projectSlug,
+        workItemId: workItem.id,
+        kind: 'agent.log',
+        payload: {
+          runId,
+          skill: 'qa',
+          stream: 'telemetry',
+          metric: 'criteria_results_agent_copy_replaced',
+          reason: criteriaResultReconciliation.warning.reason,
+          ...(criteriaResultReconciliation.warning.issues != null
+            ? { issues: criteriaResultReconciliation.warning.issues }
+            : {}),
+        },
+        runId,
+        personaId,
+      });
+    }
+
+    const qaParsed = safeParseOutputForSchema(QaOutputSchema, criteriaResultReconciliation.output);
     if (!qaParsed.success) {
       throw new Error(`QA output validation failed: ${JSON.stringify(qaParsed.error.issues)}`);
     }

@@ -33,7 +33,7 @@ export function buildRouteSignals(input: {
     confidence: 'low' | 'medium' | 'high';
     keyFiles: Array<{ path: string }>;
     wave2Triggered?: boolean;
-    contradictions?: unknown[];
+    contradictions?: Array<{ isBlocking?: unknown; severity?: unknown }> | unknown[];
   } | null;
 }): RouteSignals {
   const text = `${input.workItem.title}\n${input.workItem.body}`.toLowerCase();
@@ -43,6 +43,14 @@ export function buildRouteSignals(input: {
   const nonTestFiles = input.investigation?.keyFiles.filter(
     (f) => !/\.(test|spec)\.[jt]sx?$/.test(f.path),
   );
+  const contradictions = input.investigation?.contradictions ?? [];
+  const blockingContradictions = contradictions.filter((contradiction) => {
+    if (contradiction == null || typeof contradiction !== 'object') return true;
+    const candidate = contradiction as { isBlocking?: unknown; severity?: unknown };
+    if (candidate.isBlocking === false) return false;
+    if (candidate.severity === 'wording') return false;
+    return true;
+  });
 
   return {
     workItemId: input.workItemId,
@@ -54,8 +62,8 @@ export function buildRouteSignals(input: {
     hasDependencySignal: hasDependencySignal(text),
     investigationConfidence: input.investigation?.confidence ?? null,
     nonTestFileCount: nonTestFiles != null ? nonTestFiles.length : null,
-    hasContradictions:
-      input.investigation?.contradictions != null && input.investigation.contradictions.length > 0,
+    hasContradictions: contradictions.length > 0,
+    hasBlockingContradictions: blockingContradictions.length > 0,
     wave2Triggered: input.investigation?.wave2Triggered ?? false,
   };
 }

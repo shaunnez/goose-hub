@@ -252,6 +252,22 @@ function outputSchemaPathForRun(workspaceDir: string, runId: string): string {
   return join(workspaceDir, OUTPUT_SCHEMAS_DIR, `${digest}.schema.json`);
 }
 
+function stableJson(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  if (value == null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+    .join(',')}}`;
+}
+
+function outputSchemaHash(schema: Record<string, unknown> | undefined): string | undefined {
+  if (schema == null || Object.keys(schema).length === 0) return undefined;
+  return createHash('sha256').update(stableJson(schema)).digest('hex').slice(0, 16);
+}
+
 export class CodexCliRuntime implements AgentRuntime {
   async run(spec: AgentSpec): Promise<AgentResult> {
     if (process.env.MOCK_AGENTS === 'true') {
@@ -323,6 +339,17 @@ export class CodexCliRuntime implements AgentRuntime {
     deployHooks();
     if (recordDecisionTool) deployDecisionCaptureHook();
     const model = spec.modelOverride ?? defaultModelForTierAndProvider('sonnet', 'codex');
+    const outputSchemaPath =
+      spec.outputJsonSchema != null && Object.keys(spec.outputJsonSchema).length > 0
+        ? outputSchemaPathForRun(workspaceDir, runId)
+        : undefined;
+    if (outputSchemaPath != null) {
+      mkdirSync(dirname(outputSchemaPath), { recursive: true });
+      writeFileSync(outputSchemaPath, `${JSON.stringify(spec.outputJsonSchema, null, 2)}\n`, {
+        flag: 'w',
+      });
+    }
+    const schemaHash = outputSchemaHash(spec.outputJsonSchema);
 
     if (spec.suppressRunStarted !== true) {
       eventStore.appendEvent({
@@ -343,6 +370,8 @@ export class CodexCliRuntime implements AgentRuntime {
           mcpServerNames: toolBinding.mcpServerNames,
           toolBindingWarningCount: toolBinding.warnings.length,
           toolBindingWarnings: toolBinding.warnings,
+          ...(outputSchemaPath != null ? { outputSchemaPath } : {}),
+          ...(schemaHash != null ? { outputSchemaHash: schemaHash } : {}),
           ...spec.extraEventPayload,
         },
         runId,
@@ -371,16 +400,6 @@ export class CodexCliRuntime implements AgentRuntime {
     const systemPrompt = withFactoryRuntimeInstructions(spec.appendSystemPrompt, {
       runtime: 'codex-cli',
     });
-    const outputSchemaPath =
-      spec.outputJsonSchema != null && Object.keys(spec.outputJsonSchema).length > 0
-        ? outputSchemaPathForRun(workspaceDir, runId)
-        : undefined;
-    if (outputSchemaPath != null) {
-      mkdirSync(dirname(outputSchemaPath), { recursive: true });
-      writeFileSync(outputSchemaPath, `${JSON.stringify(spec.outputJsonSchema, null, 2)}\n`, {
-        flag: 'w',
-      });
-    }
     eventStore.appendEvent({
       projectId,
       workItemId,

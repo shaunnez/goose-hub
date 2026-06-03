@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { getArtifact, storeArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { ResolvedBudget } from '@goose-hub/core/agent-runtime/budgets.js';
@@ -7,7 +10,7 @@ import {
 } from '@goose-hub/core/agent-runtime/bug-enhance-runner.js';
 import { crossValidate } from '@goose-hub/core/agent-runtime/cross-validate.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
-import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
+import { OutputValidationError, invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import {
   type ModelProvider,
   defaultModelForTierAndProvider,
@@ -70,7 +73,7 @@ import {
   createWorktree,
   prewarmWorktree,
 } from '@goose-hub/core/workspaces/worktree.js';
-import type { InvestigateSchema } from '@goose-hub/skills/investigate/schema.js';
+import { InvestigateSchema } from '@goose-hub/skills/investigate/schema.js';
 import {
   type InvestigationReproPacket,
   InvestigationReproPacketSchema,
@@ -83,6 +86,63 @@ import { type InvestigationPlan, planInvestigation } from './investigation-plann
 import { runPlaywrightReproPlan, shouldSkipBeforeEvidence } from './playwright-repro-evidence.js';
 
 type InvestigateOutput = z.infer<typeof InvestigateSchema>;
+const OUTPUT_SCHEMAS_DIR = join('.factory', 'output-schemas');
+
+function stableJson(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  if (value == null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+    .join(',')}}`;
+}
+
+function schemaHash(schema: Record<string, unknown>): string {
+  return createHash('sha256').update(stableJson(schema)).digest('hex').slice(0, 16);
+}
+
+function outputSchemaPathForRun(worktreePath: string, runId: string): string {
+  const digest = createHash('sha256').update(runId).digest('hex').slice(0, 16);
+  return join(worktreePath, OUTPUT_SCHEMAS_DIR, `${digest}.schema.json`);
+}
+
+function writeOutputSchemaArtifact(input: {
+  worktreePath: string;
+  runId: string;
+  schema: Record<string, unknown>;
+}): { outputSchemaPath: string; outputSchemaHash: string } {
+  const outputSchemaPath = outputSchemaPathForRun(input.worktreePath, input.runId);
+  mkdirSync(dirname(outputSchemaPath), { recursive: true });
+  writeFileSync(outputSchemaPath, `${JSON.stringify(input.schema, null, 2)}\n`, { flag: 'w' });
+  return { outputSchemaPath, outputSchemaHash: schemaHash(input.schema) };
+}
+
+function validationFailurePayload(
+  error: Error,
+  fallback: {
+    modelId: string;
+    runtime: string;
+    provider: string;
+    outputSchemaHash?: string;
+  },
+) {
+  if (!(error instanceof OutputValidationError)) {
+    return { skill: 'investigate', error: error.message };
+  }
+  return {
+    skill: 'investigate',
+    error: error.message,
+    issues: error.issues,
+    schemaName: error.diagnostics.schemaName,
+    outputPreview: error.diagnostics.outputPreview,
+    modelId: error.diagnostics.modelId ?? fallback.modelId,
+    runtime: error.diagnostics.runtime ?? fallback.runtime,
+    provider: error.diagnostics.provider ?? fallback.provider,
+    outputSchemaHash: error.diagnostics.outputSchemaHash ?? fallback.outputSchemaHash,
+  };
+}
 
 function emitScoutSymbolHintUsage(input: {
   parentRunId: string;
@@ -337,6 +397,12 @@ export async function runInvestigateWorkflow(
   };
 
   const scoutJsonSchema = toJsonSchema(ScoutOutputSchema);
+  const investigateJsonSchema = toJsonSchema(InvestigateSchema) as Record<string, unknown>;
+  const investigateSchemaDiagnostics = writeOutputSchemaArtifact({
+    worktreePath,
+    runId,
+    schema: investigateJsonSchema,
+  });
   let scoutEffortHints: Record<string, RuntimeEffort> = {};
   let finalInvestigationPlan: InvestigationPlan | undefined;
   let investigationContradictions: unknown[] = [];
@@ -381,6 +447,7 @@ export async function runInvestigateWorkflow(
       baseBranch: workflowBase.branch,
       modelId: investigatorModelOverride,
       runtime: runtimeNameForModel(investigatorModelOverride),
+      ...investigateSchemaDiagnostics,
     },
     runId,
     personaId,
@@ -1095,7 +1162,15 @@ export async function runInvestigateWorkflow(
         projectId,
         workItemId: workItem.id,
         kind: 'agent.run-failed',
-        payload: { skill: 'investigate', runId, error: error.message },
+        payload: {
+          runId,
+          ...validationFailurePayload(error, {
+            modelId: investigatorModelOverride,
+            runtime: runtimeNameForModel(investigatorModelOverride),
+            provider: tryProviderOf(investigatorModelOverride) ?? 'claude',
+            outputSchemaHash: investigateSchemaDiagnostics.outputSchemaHash,
+          }),
+        },
         runId,
       });
     }
