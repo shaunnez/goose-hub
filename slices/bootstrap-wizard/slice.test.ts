@@ -43,9 +43,9 @@ describe('bootstrap-wizard slice — web contract', () => {
     expect(typeof mod.BootstrapWizard).toBe('function');
   });
 
-  it('exports a 6-step wizard state machine in lib/wizard-state', async () => {
+  it('exports a 3-step wizard state machine in lib/wizard-state', async () => {
     const mod = await import('../../apps/web/src/components/bootstrap/lib/wizard-state.js');
-    expect(mod.WIZARD_STEPS).toEqual(['repo', 'stack', 'claudeMd', 'labels', 'webhook', 'submit']);
+    expect(mod.WIZARD_STEPS).toEqual(['source', 'preview', 'submit']);
     expect(typeof mod.nextStep).toBe('function');
     expect(typeof mod.prevStep).toBe('function');
     expect(typeof mod.isValidRepoRef).toBe('function');

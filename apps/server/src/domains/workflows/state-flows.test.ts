@@ -1,6 +1,7 @@
+import { rmSync } from 'node:fs';
 import type { AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runQaBatch } from './qa-batch.js';
 import { runReviewBatch } from './review-batch.js';
 import { runTriageBatch } from './triage-batch.js';
@@ -32,8 +33,31 @@ vi.mock('@goose-hub/core/agent-runtime/cross-validate.js', () => ({
 }));
 
 const mockInvokeSkillSF = vi.fn();
+class MockOutputValidationError extends Error {
+  issues: Array<{ path: Array<string | number>; message: string }>;
+  diagnostics: {
+    schemaName: string;
+    outputPreview?: string;
+    outputSchemaHash?: string;
+    runtime?: string;
+    modelId?: string;
+    provider?: string;
+  };
+
+  constructor(
+    issues: Array<{ path: Array<string | number>; message: string }>,
+    skillName: string,
+    diagnostics: MockOutputValidationError['diagnostics'],
+  ) {
+    super(`invokeSkill: output validation failed for '${skillName}'`);
+    this.name = 'OutputValidationError';
+    this.issues = issues;
+    this.diagnostics = diagnostics;
+  }
+}
 vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
   invokeSkill: (...args: unknown[]) => mockInvokeSkillSF(...args),
+  OutputValidationError: MockOutputValidationError,
 }));
 
 vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
@@ -82,7 +106,7 @@ vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
 }));
 
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
-  createWorktree: vi.fn().mockReturnValue('/mock/worktree'),
+  createWorktree: vi.fn().mockReturnValue('/private/tmp/goose-hub-state-flows-worktree'),
   cleanupWorktree: vi.fn(),
   prewarmWorktree: vi.fn(),
   resolveWorkflowBase: vi.fn().mockReturnValue({
@@ -103,6 +127,10 @@ vi.mock('../../shared/source.js', () => ({
   getSourceForSlug: mockGetSourceForSlug,
   isValidSlug: (s: string) => /^[a-zA-Z0-9_-]+$/.test(s),
 }));
+
+afterEach(() => {
+  rmSync('/private/tmp/goose-hub-state-flows-worktree', { recursive: true, force: true });
+});
 
 // ─── Factories ───────────────────────────────────────────────────────────────
 

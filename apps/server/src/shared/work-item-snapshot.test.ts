@@ -98,7 +98,7 @@ describe('work item snapshot', () => {
     await expect(canonicalizeWorkItemId('goose-hub-self', '827')).resolves.toBe(
       'github:shaunnez/goose-hub#827',
     );
-    expect(mockGetItem).not.toHaveBeenCalled();
+    expect(mockGetItem).toHaveBeenCalledWith('827');
   });
 
   it('uses the latest qa.completed testRun counts, matching the QA page source', async () => {

@@ -13,7 +13,7 @@ instead of the CLI.
   - `service.ts` — `previewBootstrapService`, `runBootstrapService` (DI-friendly)
   - `service.test.ts`, `router.test.ts`
 - **Web feature**: `apps/web/src/components/bootstrap/`
-  - `components/BootstrapWizard.tsx` — 6-step modal
+  - `components/BootstrapWizard.tsx` — 3-step modal
   - `components/BootstrapWizard.test.tsx` — DOM tests with mocked api
   - `lib/wizard-state.ts` — pure step machine + repoRef validation
   - `slice.test.ts`, `README.md`
