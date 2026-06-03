@@ -48,6 +48,7 @@ const mockDbUpdateSet = vi.fn(() => ({ where: mockDbUpdateWhere }));
 const mockDbUpdate = vi.fn(() => ({ set: mockDbUpdateSet }));
 const mockLoadLatestRoute = vi.fn();
 const mockSelectFixIssuePipeline = vi.fn();
+const mockRunSpecAuthorWorkflow = vi.fn();
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
@@ -159,6 +160,10 @@ vi.mock('@goose-hub/core/workflow-routing/pipeline-selector.js', () => ({
   selectFixIssuePipeline: mockSelectFixIssuePipeline,
 }));
 
+vi.mock('../../../../slices/spec-author/workflow.js', () => ({
+  runSpecAuthorWorkflow: mockRunSpecAuthorWorkflow,
+}));
+
 vi.mock('@goose-hub/core/db/db.js', () => ({
   db: {
     select: mockDbSelect,
@@ -200,6 +205,7 @@ beforeEach(() => {
   mockRunFramingWorkflow.mockResolvedValue(undefined);
   mockRunDecomposePrdWorkflow.mockResolvedValue(undefined);
   mockRunParallelImplementWorkflow.mockResolvedValue({ status: 'success' });
+  mockRunSpecAuthorWorkflow.mockResolvedValue(undefined);
   mockGetSourceForSlug.mockResolvedValue(null);
   // Default: single-workflow-per-project (backward-compat) for tests that don't override.
   mockGetProject.mockResolvedValue(null);
@@ -1421,6 +1427,259 @@ describe('dispatchFixIssue: bug routing', () => {
       'dispatchFixIssue: PRD child projection → legacy single-agent path',
       expect.anything(),
     );
+  });
+
+  it('passes specMode lite to runSpecAuthorWorkflow when pipeline is spec-author-lite', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#700',
+      externalId: '700',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'T2 feature needs spec',
+      body: 'body',
+      state: 'factory:dev-ready',
+      priority: 'medium',
+      type: 'feature',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
+      budgets: { maxParallelAgents: 1 },
+    });
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [item],
+      blocked: [],
+      unregistered: [],
+    });
+    mockLoadLatestRoute.mockReturnValue({
+      tier: 'T2',
+      selectedStages: [
+        'triage',
+        'investigate',
+        'spec-author',
+        'implement',
+        'qa',
+        'review',
+        'retro',
+      ],
+      budgetCaps: { maxUsd: 2, maxScouts: 3, allowWave2: false, reviewerSlots: 1 },
+      evidence: { reasons: [], signals: {} },
+      escalationTriggers: [],
+      requiresHumanApproval: false,
+      source: 'investigation',
+      rootCauseSignature: 'route|github:shaunnez/goose-hub#700|workflow-routing',
+    });
+    mockSelectFixIssuePipeline.mockReturnValue('spec-author-lite');
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('goose-hub-self', 700);
+
+    expect(mockRunSpecAuthorWorkflow).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'goose-hub-self',
+      expect.any(String),
+      expect.objectContaining({ specMode: 'lite' }),
+    );
+  });
+
+  it('downgrades T2 bug with high-confidence localized investigation to fix-issue', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#701',
+      externalId: '701',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'localized bug',
+      body: 'body',
+      state: 'factory:dev-ready',
+      priority: 'medium',
+      type: 'bug',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
+      budgets: { maxParallelAgents: 1 },
+    });
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [item],
+      blocked: [],
+      unregistered: [],
+    });
+    mockLoadLatestRoute.mockReturnValue({
+      tier: 'T2',
+      selectedStages: [
+        'triage',
+        'investigate',
+        'spec-author',
+        'implement',
+        'qa',
+        'review',
+        'retro',
+      ],
+      budgetCaps: { maxUsd: 2, maxScouts: 3, allowWave2: false, reviewerSlots: 1 },
+      evidence: { reasons: [], signals: {} },
+      escalationTriggers: [],
+      requiresHumanApproval: false,
+      source: 'investigation',
+      rootCauseSignature: 'route|github:shaunnez/goose-hub#701|workflow-routing',
+    });
+    mockSelectFixIssuePipeline.mockReturnValue('spec-author-lite');
+    mockEventStoreReplay.mockImplementation(({ kind }: { kind: string }) => {
+      if (kind === 'agent.investigation-complete') {
+        return [
+          {
+            payload: {
+              investigationRunId: 'inv-run-1',
+              investigate: {
+                confidence: 'high',
+                keyFiles: [
+                  { path: 'slices/qa/workflow.ts' },
+                  { path: 'apps/web/src/components/AppShell.tsx' },
+                ],
+              },
+              investigationPlan: { mode: 'single', wave2Needed: false },
+            },
+          },
+        ];
+      }
+      return [];
+    });
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('goose-hub-self', 701);
+
+    expect(mockRunFixIssueWorkflow).toHaveBeenCalled();
+    expect(mockRunSpecAuthorWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('does NOT downgrade T2 feature to fix-issue', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#702',
+      externalId: '702',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'T2 feature',
+      body: 'body',
+      state: 'factory:dev-ready',
+      priority: 'medium',
+      type: 'feature',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
+      budgets: { maxParallelAgents: 1 },
+    });
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [item],
+      blocked: [],
+      unregistered: [],
+    });
+    mockLoadLatestRoute.mockReturnValue({
+      tier: 'T2',
+      selectedStages: [
+        'triage',
+        'investigate',
+        'spec-author',
+        'implement',
+        'qa',
+        'review',
+        'retro',
+      ],
+      budgetCaps: { maxUsd: 2, maxScouts: 3, allowWave2: false, reviewerSlots: 1 },
+      evidence: { reasons: [], signals: {} },
+      escalationTriggers: [],
+      requiresHumanApproval: false,
+      source: 'investigation',
+      rootCauseSignature: 'route|github:shaunnez/goose-hub#702|workflow-routing',
+    });
+    mockSelectFixIssuePipeline.mockReturnValue('spec-author-lite');
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('goose-hub-self', 702);
+
+    expect(mockRunSpecAuthorWorkflow).toHaveBeenCalled();
+    expect(mockRunFixIssueWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('does NOT downgrade T3 bug to fix-issue', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#703',
+      externalId: '703',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'complex bug',
+      body: 'body',
+      state: 'factory:dev-ready',
+      priority: 'high',
+      type: 'bug',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
+      budgets: { maxParallelAgents: 1 },
+    });
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [item],
+      blocked: [],
+      unregistered: [],
+    });
+    mockLoadLatestRoute.mockReturnValue({
+      tier: 'T3',
+      selectedStages: [
+        'triage',
+        'investigate',
+        'spec-author',
+        'implement',
+        'qa',
+        'review',
+        'retro',
+      ],
+      budgetCaps: { maxUsd: 5, maxScouts: 6, allowWave2: true, reviewerSlots: 2 },
+      evidence: { reasons: [], signals: {} },
+      escalationTriggers: [],
+      requiresHumanApproval: false,
+      source: 'investigation',
+      rootCauseSignature: 'route|github:shaunnez/goose-hub#703|workflow-routing',
+    });
+    mockSelectFixIssuePipeline.mockReturnValue('spec-author-full');
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('goose-hub-self', 703);
+
+    expect(mockRunSpecAuthorWorkflow).toHaveBeenCalled();
+    expect(mockRunFixIssueWorkflow).not.toHaveBeenCalled();
   });
 });
 

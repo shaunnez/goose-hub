@@ -36,6 +36,7 @@ export interface SpecAuthorWorkflowDeps {
   resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
   prdArtifactThresholdBytes?: number;
   createWpIssueProjections?: boolean;
+  specMode?: 'lite' | 'full';
 }
 
 type OutputValidationIssue = {
@@ -756,6 +757,7 @@ export async function runSpecAuthorWorkflow(
         validation: validateEngineeringSpec(normalized.spec, {
           issueType: workItem.type === 'bug' ? 'bug' : 'feature',
           repoRoot: worktreePath,
+          specMode: deps.specMode ?? 'full',
         }),
       };
     };

@@ -14,7 +14,10 @@ import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dep
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { ProjectConfig } from '@goose-hub/core/types.js';
 import { loadLatestRoute } from '@goose-hub/core/workflow-routing/events.js';
-import { selectFixIssuePipeline } from '@goose-hub/core/workflow-routing/pipeline-selector.js';
+import {
+  type FixIssuePipeline,
+  selectFixIssuePipeline,
+} from '@goose-hub/core/workflow-routing/pipeline-selector.js';
 import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js';
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
 import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.js';
@@ -441,12 +444,23 @@ export async function dispatchSpecAuthor(slug: string, issueNumber: number): Pro
       }
     }
 
+    // Derive specMode from stored route — safe to re-read here because withParallelLock
+    // drops any extra args on the queued-drain path.
+    const routeForSpec = loadLatestRoute({
+      projectId: slug,
+      workItemId: (item as { id: string }).id,
+    });
+    const specMode: 'lite' | 'full' =
+      routeForSpec != null && selectFixIssuePipeline(routeForSpec) === 'spec-author-lite'
+        ? 'lite'
+        : 'full';
+
     const mockDeps: Record<string, unknown> | undefined =
       process.env.MOCK_AGENTS === 'true'
         ? { createWorktreeImpl: () => '/mock/worktree' }
         : undefined;
 
-    await runSpecAuthorWorkflow(item, source, slug, REPO_ROOT, mockDeps);
+    await runSpecAuthorWorkflow(item, source, slug, REPO_ROOT, { ...mockDeps, specMode });
   });
 }
 
@@ -480,13 +494,23 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
       });
     } else {
       const routeDecision = loadLatestRoute({ projectId: slug, workItemId: routingItem.id });
-      const pipeline =
+      let pipeline: FixIssuePipeline =
         routeDecision != null
           ? selectFixIssuePipeline(routeDecision)
           : routingItem.type === 'bug' &&
               resolveFixIssuePipelineForBug(slug, routingItem.id) === 'legacy'
             ? 'fix-issue'
             : 'spec-author-full';
+
+      // T2 routes bugs to spec-author-lite, but a high-confidence localized bug
+      // should go straight to fix-issue — same check the no-route fallback applies.
+      if (
+        pipeline === 'spec-author-lite' &&
+        routingItem.type === 'bug' &&
+        resolveFixIssuePipelineForBug(slug, routingItem.id) === 'legacy'
+      ) {
+        pipeline = 'fix-issue';
+      }
 
       logger.info('dispatchFixIssue: pipeline resolved', {
         slug,

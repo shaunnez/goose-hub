@@ -971,6 +971,32 @@ describe('runSpecAuthorWorkflow', () => {
 
       expect(cleanupWorktree).toHaveBeenCalledOnce();
     });
+
+    it('passes specMode from deps to validateEngineeringSpec', async () => {
+      mockValidateEngineeringSpec.mockReturnValue({ ok: true });
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo', {
+        specMode: 'lite',
+      });
+
+      expect(mockValidateEngineeringSpec).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ specMode: 'lite' }),
+      );
+    });
+
+    it('defaults specMode to full when not in deps', async () => {
+      mockValidateEngineeringSpec.mockReturnValue({ ok: true });
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockValidateEngineeringSpec).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ specMode: 'full' }),
+      );
+    });
   });
 
   describe('missing scout reports fallback — acceptance criterion 3', () => {
