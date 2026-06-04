@@ -57,6 +57,7 @@ export function TopBar({ breadcrumb }: TopBarProps) {
         <button
           type="button"
           data-testid="capture-button"
+          aria-keyshortcuts="Meta+J Control+J"
           onClick={() => setShowCapture(true)}
           title="Capture ideas or tasks (⌘J)"
           className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"
@@ -70,6 +71,7 @@ export function TopBar({ breadcrumb }: TopBarProps) {
         <button
           type="button"
           data-testid="search-button"
+          aria-keyshortcuts="Meta+K Control+K"
           onClick={() => setShowSearch(true)}
           title="Search work items (⌘K)"
           className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"

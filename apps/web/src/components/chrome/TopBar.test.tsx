@@ -30,6 +30,14 @@ describe('TopBar', () => {
     expect(within(captureButton).getByText('⌘J')).toBeTruthy();
   });
 
+  it('exposes capture keyboard shortcut metadata on the header button', () => {
+    render(<TopBar breadcrumb="Inbox" />);
+
+    expect(screen.getByTestId('capture-button').getAttribute('aria-keyshortcuts')).toBe(
+      'Meta+J Control+J',
+    );
+  });
+
   it('opens capture when the Meta+J shortcut is pressed', () => {
     render(<TopBar breadcrumb="Inbox" />);
 
