@@ -37,6 +37,16 @@ describe('search slice — TopBar integration', () => {
     expect(topBarSource).toContain('metaKey');
     expect(topBarSource).toContain('ctrlKey');
   });
+
+  it('TopBar binds the ⌘J / Ctrl+J keyboard shortcut for Capture', () => {
+    expect(topBarSource).toMatch(/\(e\.metaKey \|\| e\.ctrlKey\).*?'j'/s);
+    expect(topBarSource).toContain('setShowCapture');
+  });
+
+  it('TopBar Capture button shows ⌘J badge and descriptive title', () => {
+    expect(topBarSource).toContain('⌘J');
+    expect(topBarSource).toContain('Capture an idea or task (⌘J)');
+  });
 });
 
 describe('search slice — client wiring', () => {
