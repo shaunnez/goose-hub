@@ -82,7 +82,7 @@ vi.mock('../workflows/sprint-review-trigger.js', () => ({
 }));
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { getArtifact, getArtifactSlice } from '@goose-hub/core/agent-artifacts/repository.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -2123,7 +2123,7 @@ describe('approveIssue — edge cases', () => {
   });
 });
 
-describe('overrideIssueRepo — body (requires repos.md mock)', () => {
+describe('overrideIssueRepo — body', () => {
   it('returns 404 when source not found after valid slug', async () => {
     vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
     const result = await overrideIssueRepo('valid-slug', '1', 'owner/repo');
@@ -2132,7 +2132,11 @@ describe('overrideIssueRepo — body (requires repos.md mock)', () => {
   });
 
   it('returns 400 when repo is not in the allowlist', async () => {
-    vi.mocked(readFileSync).mockReturnValueOnce('### [owner/allowed-repo]\n' as never);
+    mockGetProject.mockResolvedValueOnce({
+      id: 'test-proj',
+      source: { kind: 'github', repo: 'owner/allowed-repo', stateMachine: 'labels' },
+      repos: ['owner/allowed-repo'],
+    } as never);
     const result = await overrideIssueRepo('proj', '1', 'owner/not-allowed');
     expect(result).toMatchObject({
       ok: false,
@@ -2142,14 +2146,12 @@ describe('overrideIssueRepo — body (requires repos.md mock)', () => {
   });
 
   it('returns triage null when repo is allowed but no triage event exists', async () => {
-    vi.mocked(readFileSync).mockReturnValueOnce('### [owner/repo]\n' as never);
     vi.mocked(eventStore.replay).mockReturnValueOnce([]);
     const result = await overrideIssueRepo('proj', '1', 'owner/repo');
     expect(result).toMatchObject({ ok: true, data: { triage: null } });
   });
 
   it('returns triage dto when repo is allowed and triage event exists', async () => {
-    vi.mocked(readFileSync).mockReturnValueOnce('### [owner/repo]\n' as never);
     vi.mocked(eventStore.replay).mockReturnValueOnce([
       {
         id: 1,
@@ -2169,6 +2171,7 @@ describe('overrideIssueRepo — body (requires repos.md mock)', () => {
       const triage = result.data.triage as Record<string, unknown>;
       expect(triage.type).toBe('bug');
       expect(triage.overrideRepo).toBe('owner/repo');
+      expect(triage.repositories).toEqual(['owner/repo']);
     }
   });
 });

@@ -201,6 +201,34 @@ describe('runTriageBatch', () => {
   });
 
   it('passes repos context to repo-match skill', async () => {
+    const { getProject } = await import('#shared/projects.js');
+    vi.mocked(getProject).mockResolvedValue({
+      id: 'goose-hub-self',
+      slug: 'goose-hub-self',
+      name: 'Goose Hub',
+      source: { kind: 'github', repo: 'shaunnez/goose-hub', stateMachine: 'labels' },
+      targetRepo: {
+        cloneUrl: 'https://github.com/shaunnez/goose-hub.git',
+        defaultBranch: 'main',
+        localPath: '../goose-hub',
+      },
+      repositories: [
+        {
+          id: 'goose-hub',
+          repoRef: 'shaunnez/goose-hub',
+          cloneUrl: 'https://github.com/shaunnez/goose-hub.git',
+          defaultBranch: 'main',
+          localPath: '../goose-hub',
+          role: 'code',
+        },
+      ],
+      activeMilestone: null,
+      colorStripe: '#000',
+      budgets: { perWorkflowMaxUsd: 1, dailyTokens: 500_000, perAdvisorMaxUsd: 0.5 },
+      agentConfig: { runtime: 'auto' },
+      mode: 'supervised',
+    } as never);
+
     const item = makeWorkItem();
     const source = makeMockSource([item]);
 
@@ -225,6 +253,12 @@ describe('runTriageBatch', () => {
     };
     expect(repoMatchCall.context).toHaveProperty('repos');
     expect(repoMatchCall.contextAllowlist).toContain('repos');
+    expect(repoMatchCall.context.repos).toContain(
+      '### [shaunnez/goose-hub](https://github.com/shaunnez/goose-hub)',
+    );
+    expect(repoMatchCall.context.repos).toContain(
+      '**Description:** shaunnez/goose-hub managed by Factory.',
+    );
   });
 
   it('applies type and priority labels', async () => {
