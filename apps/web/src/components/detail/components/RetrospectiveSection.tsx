@@ -82,6 +82,25 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
   const highCandidates = out.improvementCandidates.filter((c) => c.confidence === 'high').length;
   const totalCandidates = out.improvementCandidates.length;
 
+  const detailCards = [
+    { key: 'summary', node: <SummarySection summary={out.summary} /> },
+    ...(isDeep && personaScores.length > 0
+      ? [{ key: 'personas', node: <PersonaScoresSection scores={personaScores} /> }]
+      : []),
+    ...(out.improvementCandidates.length > 0
+      ? [{ key: 'candidates', node: <CandidateList candidates={out.improvementCandidates} /> }]
+      : []),
+    ...(isDeep && learningEntries.length > 0
+      ? [{ key: 'learnings', node: <LearningEntriesSection entries={learningEntries} /> }]
+      : []),
+    ...(isDeep && decisionPatterns.length > 0
+      ? [{ key: 'patterns', node: <DecisionPatternsSection patterns={decisionPatterns} /> }]
+      : []),
+    ...(out.decisionSummaries.length > 0
+      ? [{ key: 'decisions', node: <DecisionSummariesSection summaries={out.decisionSummaries} /> }]
+      : []),
+  ];
+
   return (
     <div data-testid="retro-section" className="px-8 py-6 flex flex-col gap-5">
       {/* Section header */}
@@ -182,21 +201,12 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
         )}
       </div>
 
-      {isDeep && personaScores.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <SummarySection summary={out.summary} />
-          <PersonaScoresSection scores={personaScores} />
-        </div>
-      ) : (
-        <SummarySection summary={out.summary} />
-      )}
-
-      {/* 2x2 grid for cards: candidates, learnings, patterns, summaries */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <CandidateList candidates={out.improvementCandidates} />
-        {isDeep && <LearningEntriesSection entries={learningEntries} />}
-        {isDeep && <DecisionPatternsSection patterns={decisionPatterns} />}
-        <DecisionSummariesSection summaries={out.decisionSummaries} />
+      <div className="columns-1 xl:columns-2 gap-5 [column-fill:balance]">
+        {detailCards.map((card) => (
+          <div key={card.key} className="mb-5 break-inside-avoid last:mb-0">
+            {card.node}
+          </div>
+        ))}
       </div>
     </div>
   );
