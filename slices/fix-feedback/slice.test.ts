@@ -391,6 +391,85 @@ describe('runFixFeedbackWorkflow', () => {
     );
   });
 
+  it('skips implement when a TopBar change only has an unrelated broad e2e timeout', async () => {
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makePrOpenedEvent(),
+      {
+        ...makeQaCompletedEvent(),
+        payload: {
+          verdict: 'fail',
+          overallScore: 45,
+          threshold: 70,
+          verificationSummary: {
+            changedFiles: { paths: ['apps/web/src/components/chrome/TopBar.tsx'] },
+            commands: {
+              lint: {
+                command: 'pnpm biome check apps/web/src/components/chrome',
+                status: 'passed',
+              },
+              typecheck: { command: 'pnpm typecheck', status: 'passed' },
+              test: { command: 'pnpm vitest run TopBar.test.tsx', status: 'passed' },
+              e2e: {
+                command: 'pnpm test:e2e:pipeline',
+                status: 'failed',
+                error: 'command timed out after 900000ms',
+                stderr: 'Timed out in apps/web/e2e/pipeline/office-capture.spec.ts',
+              },
+            },
+            e2e: {
+              command: 'pnpm test:e2e:pipeline',
+              status: 'failed',
+              reason: 'ui chrome changed',
+            },
+          },
+          findings: [
+            {
+              tier: 'regression',
+              severity: 'error',
+              description: 'Pipeline timed out in Office e2e specs',
+              disposition: 'needs-fix',
+              dispositionRef: 'current PR',
+            },
+          ],
+          tierResults: {
+            structural: { passed: true, findings: [] },
+            functional: { passed: true, findings: [] },
+            regression: {
+              passed: false,
+              command: 'pnpm test:e2e:pipeline',
+              findings: [
+                {
+                  tier: 'regression',
+                  severity: 'error',
+                  description: 'Regression [timeout]: apps/web/e2e/pipeline/office-capture.spec.ts',
+                },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+    const workItem = makeWorkItem({
+      title: 'Add Capture keyboard shortcut',
+      body: 'Change TopBar capture shortcut behavior.',
+    });
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo');
+
+    expect(mockClaudeCliRun).not.toHaveBeenCalled();
+    expect(stateSource.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-fix',
+      'factory:needs-human',
+    );
+    expect(vi.mocked(eventStore.appendEvent)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.fix-feedback-skipped',
+        payload: expect.objectContaining({ reason: 'infrastructure-timeout' }),
+      }),
+    );
+  });
+
   it('passes existing worktreePath as runtime workspaceDir', async () => {
     vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent('/work/existing-wt')]);
     mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });

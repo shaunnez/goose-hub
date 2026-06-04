@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EVENT_KIND_LABEL,
   type RenderItem,
+  collectBillableRunIdsForTimelineSection,
   collectRunIdsForTimelineSection,
   computeIsLive,
   computeIsWritePrdStuck,
@@ -804,6 +805,48 @@ describe('groupTimelineEventsByCanonicalSection', () => {
         .flatMap((item) => (item.kind === 'phase-group' ? item.items : [item]))
         .some((item) => item.kind === 'event' && item.event.kind === 'spec.completed'),
     ).toBe(false);
+  });
+
+  it('puts evidence skip events in Evidence and keeps implement cost ownership out of that section', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'implement-run', {
+        payload: { skill: 'implement' },
+      }),
+      makeEvent(2, 'agent.run-completed', 'implement-run', {
+        payload: { skill: 'implement' },
+      }),
+      makeEvent(3, 'evidence.no-spec-declared', 'implement-run', {
+        payload: {
+          runId: 'implement-run',
+          reason: 'UI change did not declare an evidence spec',
+          changedPaths: ['apps/web/src/components/chrome/TopBar.tsx'],
+        },
+      }),
+      makeEvent(4, 'dev-review.completed', 'dev-review-run', {
+        payload: { verdict: 'proceed' },
+      }),
+    ]);
+
+    const evidence = section(items, 'evidence');
+    const devReview = section(items, 'dev-review');
+    const implementation = section(items, 'implementation');
+
+    expect(
+      evidence?.items.some(
+        (item) => item.kind === 'event' && item.event.kind === 'evidence.no-spec-declared',
+      ),
+    ).toBe(true);
+    expect(
+      devReview?.items.some(
+        (item) => item.kind === 'event' && item.event.kind.startsWith('evidence.'),
+      ),
+    ).toBe(false);
+    expect(collectBillableRunIdsForTimelineSection('evidence', evidence?.items ?? [])).toEqual(
+      new Set(),
+    );
+    expect(
+      collectBillableRunIdsForTimelineSection('implementation', implementation?.items ?? []),
+    ).toEqual(new Set(['implement-run']));
   });
 
   it('orders top-level timeline items by latest start time with transitions standalone', () => {

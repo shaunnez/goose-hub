@@ -20,6 +20,7 @@ describe('timeline sections', () => {
       'decompose',
       'delivery-router',
       'implementation',
+      'evidence',
       'dev-review',
       'qa',
       'review',
@@ -141,6 +142,15 @@ describe('timeline sections', () => {
     expect(resolveTimelineSection({ kind: 'investigation.digest-applied' })).toBe('investigation');
   });
 
+  it('routes post-implementation evidence events to Evidence instead of Dev Review', () => {
+    expect(resolveTimelineSection({ kind: 'evidence.no-spec-declared' })).toBe('evidence');
+    expect(resolveTimelineSection({ kind: 'evidence.posted' })).toBe('evidence');
+    expect(
+      resolveTimelineSection({ kind: 'agent.run-started', payload: { skill: 'evidence-post' } }),
+    ).toBe('evidence');
+    expect(resolveTimelineSection({ kind: 'dev-review.completed' })).toBe('dev-review');
+  });
+
   it('routes WS3 and dogfood observability events explicitly', () => {
     expect(resolveTimelineSection({ kind: 'dogfood.seed-applied' })).toBe('system');
     expect(resolveTimelineSection({ kind: 'parallel-implement.wp-persisted' })).toBe(
@@ -185,6 +195,7 @@ describe('timeline sections', () => {
     expect(timelineSectionForSkill('advise-on-prd')).toBe('prd');
     expect(timelineSectionForSkill('bug-enhance')).toBe('investigation');
     expect(timelineSectionForSkill('parallel-implement')).toBe('implementation');
+    expect(timelineSectionForSkill('evidence-post')).toBe('evidence');
     expect(timelineSectionForSkill('prd')).toBeNull();
   });
 });

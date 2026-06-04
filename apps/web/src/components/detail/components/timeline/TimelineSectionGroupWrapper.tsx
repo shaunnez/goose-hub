@@ -2,7 +2,7 @@ import { TIMELINE_SECTION_DEFINITIONS } from '@goose-hub/core/workflows/timeline
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { RenderItem, TimelineContext } from '../../lib/timeline';
-import { collectRunIdsForTimelineSection, formatDuration } from '../../lib/timeline';
+import { collectBillableRunIdsForTimelineSection, formatDuration } from '../../lib/timeline';
 import { CostBadge } from '../CostBadge';
 
 const SECTION_TITLE = new Map(
@@ -31,7 +31,7 @@ export function TimelineSectionGroupWrapper({
   }, [expandTick, expandOpen]);
 
   const costs = useMemo(() => {
-    const runIds = collectRunIdsForTimelineSection(items);
+    const runIds = collectBillableRunIdsForTimelineSection(section, items);
     let tokens = 0;
     let inputTokens = 0;
     let cachedInputTokens = 0;
@@ -55,7 +55,7 @@ export function TimelineSectionGroupWrapper({
       reasoningOutputTokens,
       label: estimated ? ('estimated' as const) : ('exact' as const),
     };
-  }, [items, context?.runCosts]);
+  }, [section, items, context?.runCosts]);
 
   const title = SECTION_TITLE.get(section) ?? section;
   const startMs = startedAt != null ? new Date(startedAt).getTime() : null;

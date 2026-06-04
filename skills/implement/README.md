@@ -34,7 +34,7 @@ TDD-first developer skill. Reads the issue, writes a plan, writes failing tests,
 | `filesWritten` | `FileWritten[]` | Each entry: `{ path, reason }` |
 | `testsWritten` | `TestWritten[]` | Each entry: `{ path, cases: number ≥ 0 }`. Empty array allowed for chore PRs |
 | `prUrl` | `string` (URL) | Filled in by orchestrator post-spawn; skill returns the workItem URL as placeholder |
-| `evidenceSpecPath` | `string \| null` | Repo-root/worktree-root relative Playwright spec for `evidence-post` (#234). `null` if none — workflow logs `evidence.no-spec-declared` and skips |
+| `evidenceSpecPath` | `string \| null` | Repo-root/worktree-root relative Playwright spec for `evidence-post` (#234). `null` is valid only with a `SKIP_GATE`, `TOOL_FAILURE`, or blocker decision summary; evidence-post runs only when this is a concrete path |
 | `confidence` | `'low' \| 'medium' \| 'high'` | Self-reported confidence in the change |
 | `decisionSummaries` | `DecisionSummary[]` | Required, ≥ 1 entry. Plan / red / green / lint markers, one sentence each |
 
@@ -60,13 +60,14 @@ All four enforce the workspace boundary; lifecycle is governed by FACTORY_RULES 
 4. **Green** — write the implementation; confirm all tests pass.
 5. **Refactor** — only if needed to make the test pass cleanly. No drive-by refactors.
 6. **Lint + typecheck** — run both; fix any failures. Re-run tests to confirm no regression.
-7. **Evidence spec** — name `evidenceSpecPath` if you authored a Playwright spec, else `null`.
+7. **Evidence spec** — name `evidenceSpecPath` if a concrete Playwright spec exists. Return `null` only with a `SKIP_GATE`, `TOOL_FAILURE`, or blocker decision summary.
 8. **Return** — structured `ImplementSchema` output. Orchestrator opens PR.
 
 ## Critical rules
 
 - Single slice, single issue. No scope creep into related issues.
 - TDD-first. A test added after the implementation does not count.
+- Ordinary frontend product fixes should add nearby unit/component coverage; browser evidence is a separate post-implementation gate.
 - Repo-root/worktree-root paths only.
 - No shell. The `bash` tool spawns argv directly; no `&&` / `;` / pipes — invoke separate commands.
 - `decisionSummaries` is required. One sentence per entry. No chain-of-thought, no secrets, no PII.

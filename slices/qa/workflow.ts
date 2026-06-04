@@ -20,7 +20,10 @@ import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-tra
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
-import { collectActionableQaItems } from '@goose-hub/core/qa/actionability.js';
+import {
+  classifyQaFailureActionability,
+  collectActionableQaItems,
+} from '@goose-hub/core/qa/actionability.js';
 import { classifyQaFailure } from '@goose-hub/core/qa/failure-category.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateQa } from '@goose-hub/core/retry/retry-counter.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
@@ -1002,13 +1005,23 @@ export async function runQaWorkflow(
       criteriaResults.length === 0 || criteriaResults.every((result) => result.passed);
     const verdict = executableChecksPassed ? qaOutput.verdict : 'fail';
     const verifiedFollowUpRefs = await verifiedFollowUpRefsForQaOutput(qaOutput, stateSource);
+    const qaActionability = classifyQaFailureActionability(
+      {
+        findings: qaOutput.findings,
+        criteriaResults,
+        tierResults: groundTruthTierResults,
+        verificationSummary,
+      },
+      { verifiedFollowUpRefs },
+    );
     const actionableQaItems = collectActionableQaItems(
       {
         findings: qaOutput.findings,
         criteriaResults,
         tierResults: groundTruthTierResults,
+        verificationSummary,
       },
-      { verifiedFollowUpRefs },
+      { verifiedFollowUpRefs, verificationSummary },
     );
     const failedTier = (['structural', 'functional', 'regression'] as const).find(
       (tier) => !groundTruthTierResults[tier].passed,
@@ -1017,11 +1030,15 @@ export async function runQaWorkflow(
     const qaFailureCategory =
       verdict === 'pass' && actionableQaItems.length === 0 && !hasFailedExecutableCheck
         ? undefined
-        : classifyQaFailure({
-            failedTier,
-            hasActionableFinding: actionableQaItems.length > 0,
-            hasFailedExecutableCheck,
-          });
+        : qaActionability.classification === 'infrastructure-timeout'
+          ? classifyQaFailure({ verificationInfrastructure: true })
+          : qaActionability.classification === 'regression-unrelated'
+            ? classifyQaFailure({ failedTier: 'regression' })
+            : classifyQaFailure({
+                failedTier,
+                hasActionableFinding: actionableQaItems.length > 0,
+                hasFailedExecutableCheck,
+              });
 
     eventStore.appendEvent({
       projectId: projectSlug,
@@ -1034,6 +1051,8 @@ export async function runQaWorkflow(
         tierResults: groundTruthTierResults,
         qualityScores: qaOutput.qualityScores,
         findings: qaOutput.findings,
+        verificationSummary,
+        qaActionability,
         ...(qaFailureCategory != null ? { failureCategory: qaFailureCategory } : {}),
         ...(criteriaResults.length > 0 ? { criteriaResults } : {}),
         ...(testRun ? { testRun } : {}),
@@ -1076,6 +1095,8 @@ export async function runQaWorkflow(
     let nextState: StateName;
     if (passes) {
       nextState = 'factory:needs-review';
+    } else if (!qaActionability.actionable) {
+      nextState = 'factory:needs-human';
     } else {
       const needsEscalation = shouldEscalateQa(priorEvents);
       nextState = needsEscalation ? 'factory:needs-human' : 'factory:qa-failed';

@@ -65,8 +65,9 @@ export const ImplementSchema = z
       .describe('URL of the pull request opened by the workflow after this skill returns'),
     /**
      * Repo-root/worktree-root relative path to the Playwright spec for the evidence-post skill (#234).
-     * Required when any file in filesWritten is under apps/web/ — the superRefine below
-     * enforces this. Null only for backend-only or chore PRs with no web files.
+     * Ordinary frontend product fixes should add nearby unit/component coverage. `null` is valid
+     * only when a TOOL_FAILURE, UNCERTAINTY, or SKIP_GATE decision summary explains why browser
+     * evidence is blocked or intentionally disabled; evidence-post runs only for concrete paths.
      */
     evidenceSpecPath: z
       .string()

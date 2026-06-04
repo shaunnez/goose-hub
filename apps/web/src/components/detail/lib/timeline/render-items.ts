@@ -97,6 +97,55 @@ export function collectRunIdsForTimelineSection(items: RenderItem[]): Set<string
   return runIds;
 }
 
+const NON_BILLABLE_EVIDENCE_EVENT_KINDS = new Set([
+  'evidence.no-spec-declared',
+  'evidence.post-skipped',
+]);
+
+export function collectBillableRunIdsForTimelineSection(
+  section: string,
+  items: RenderItem[],
+): Set<string> {
+  const runIds = new Set<string>();
+  for (const item of items) {
+    if (item.kind === 'event') {
+      if (section === 'evidence' && NON_BILLABLE_EVIDENCE_EVENT_KINDS.has(item.event.kind)) {
+        continue;
+      }
+      if (item.event.runId != null) runIds.add(item.event.runId);
+      continue;
+    }
+
+    if (item.kind === 'run-group') {
+      const events = eventFromRenderItem(item);
+      const nonBillableEvidenceGroup =
+        section === 'evidence' &&
+        events.length > 0 &&
+        events.every((event) => NON_BILLABLE_EVIDENCE_EVENT_KINDS.has(event.kind));
+      if (!nonBillableEvidenceGroup) runIds.add(item.runId);
+    }
+
+    if (item.kind === 'log-group') {
+      for (const event of item.events) {
+        if (event.runId != null) runIds.add(event.runId);
+      }
+    }
+
+    if (
+      item.kind === 'timeline-section' ||
+      item.kind === 'run-group' ||
+      item.kind === 'investigation-phase' ||
+      item.kind === 'phase-group' ||
+      item.kind === 'review-group'
+    ) {
+      for (const runId of collectBillableRunIdsForTimelineSection(section, item.items)) {
+        runIds.add(runId);
+      }
+    }
+  }
+  return runIds;
+}
+
 export function eventFromRenderItem(item: RenderItem): AgentEventDto[] {
   if (item.kind === 'event') return [item.event];
   if (item.kind === 'timeline-section') return item.items.flatMap(eventFromRenderItem);

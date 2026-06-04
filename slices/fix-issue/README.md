@@ -43,7 +43,7 @@ On any failure other than `evidence-post`, the workflow posts a comment, emits `
 4. Run `implement` skill (#180) — TDD-first, sandboxed `dev-tools` bundle
 5. Emit `agent.decision-summary` events for each implement summary + `agent.implement-complete` event
 6. Open PR via `openPR` connector (#184). Body contains `Closes #N` and intentionally NO implementation reasoning (FACTORY_RULES rule 1)
-7. **(non-blocking)** `runEvidencePost` (#234) — runs `evidence-post` skill if `evidenceSpecPath` was declared. On failure emits `evidence.post-failed` and continues. If no spec was declared, emits `evidence.no-spec-declared`.
+7. **(non-blocking)** `runEvidencePost` (#234) — runs `evidence-post` skill only when `evidenceSpecPath` is a concrete repo-relative spec path. On failure emits `evidence.post-failed` and continues. If the path is `null`, the implement output must carry a `SKIP_GATE`, `TOOL_FAILURE`, or blocker rationale; the workflow emits `evidence.no-spec-declared` or `evidence.post-skipped`.
 8. `transitionState(externalId, factory:in-progress, factory:approved)` — M7 only; M8 will route to `factory:needs-qa` first.
 
 ## Dependency injection (for tests)

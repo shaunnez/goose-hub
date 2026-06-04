@@ -3,9 +3,12 @@ import {
   parseIssueBodyVerifyCommands,
 } from '@goose-hub/core/acceptance-contracts/issue-body.js';
 import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
+import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { classifyQaFailureActionability } from '@goose-hub/core/qa/actionability.js';
 import { runRetroForItem } from '../domains/workflows/retro-batch.js';
 import { withParallelLock } from './dispatch-lock.js';
 import { getProject } from './projects.js';
@@ -27,6 +30,50 @@ type VerifyCommand = {
     | { type: 'vitest-json'; suite?: string; testName?: string; expectedStatus: 'passed' };
   timeoutMs?: number;
 };
+
+function latestNonActionableQaFailure(
+  workItemId: string,
+): { reason: string; feedback: string } | null {
+  const event = eventStore
+    .replay({ workItemId })
+    .slice()
+    .reverse()
+    .find((entry) => {
+      if (entry.kind === 'qa.verification-blocked') return true;
+      if (entry.kind !== 'qa.completed') return false;
+      return (entry.payload as { verdict?: string } | null)?.verdict !== 'pass';
+    });
+  if (event == null) return null;
+  const payload = event.payload as Record<string, unknown>;
+  if (event.kind === 'qa.verification-blocked') {
+    const reason = typeof payload.reason === 'string' ? payload.reason : 'verification-blocked';
+    return { reason, feedback: reason };
+  }
+  if (payload.failureCategory === 'verification-infrastructure') {
+    return {
+      reason: 'verification-infrastructure',
+      feedback:
+        typeof payload.reason === 'string'
+          ? payload.reason
+          : 'QA failed in verification infrastructure before product assertions could run.',
+    };
+  }
+  const actionability =
+    typeof payload.qaActionability === 'object' && payload.qaActionability != null
+      ? (payload.qaActionability as {
+          actionable?: boolean;
+          reason?: string;
+          classification?: string;
+        })
+      : classifyQaFailureActionability(
+          payload as Parameters<typeof classifyQaFailureActionability>[0],
+        );
+  if (actionability.actionable !== false) return null;
+  return {
+    reason: actionability.classification ?? 'non-actionable-qa-failure',
+    feedback: actionability.reason ?? 'QA failure is not actionable for fix-feedback.',
+  };
+}
 
 function mergeVerifyCommands(...groups: VerifyCommand[][]): VerifyCommand[] {
   const merged = new Map<string, VerifyCommand>();
@@ -229,6 +276,44 @@ export async function dispatchQaFailed(slug: string, issueNumber: number): Promi
     }
 
     const workItemId = item.id;
+    const nonActionable = latestNonActionableQaFailure(workItemId);
+    if (nonActionable != null) {
+      await source.comment(
+        item.externalId,
+        buildAgentComment(
+          'QA',
+          'Verification Blocked',
+          'QA failed without issue-local repair evidence, so fix-feedback will not run.',
+          [nonActionable.feedback],
+        ),
+      );
+      await source.transitionState(workItemId, 'factory:qa-failed', 'factory:needs-human');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: 'factory:qa-failed',
+        to: 'factory:needs-human',
+        by: 'orchestrator',
+        extraPayload: { reason: nonActionable.reason },
+      });
+      eventStore.appendEvent({
+        projectId: slug,
+        workItemId,
+        kind: 'agent.fix-feedback-skipped',
+        payload: {
+          reason: nonActionable.reason,
+          sourceFeedback: nonActionable.feedback,
+          sourceFailureKind: 'qa',
+        },
+      });
+      logger.info('dispatchQaFailed: non-actionable QA failure routed to needs-human', {
+        slug,
+        issueNumber,
+        reason: nonActionable.reason,
+      });
+      return;
+    }
+
     await source.transitionState(workItemId, 'factory:qa-failed', 'factory:needs-fix');
 
     emitStateTransitionEvent({

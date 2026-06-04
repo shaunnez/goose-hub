@@ -2000,6 +2000,64 @@ describe('dispatchForLabel', () => {
     expect(mockRunTriageBatch).not.toHaveBeenCalled();
   });
 
+  it('routes timeout-only QA failures to needs-human instead of needs-fix', async () => {
+    const item = {
+      id: 'github:owner/repo#42',
+      externalId: '42',
+      repoRef: 'owner/repo',
+      title: 'Add Capture shortcut',
+      body: 'TopBar shortcut change',
+      state: 'factory:qa-failed',
+    };
+    const source = {
+      repoRef: 'owner/repo',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        id: 1,
+        kind: 'qa.completed',
+        projectId: 'proj',
+        workItemId: item.id,
+        createdAt: new Date().toISOString(),
+        runId: 'qa-run-1',
+        payload: {
+          verdict: 'fail',
+          failureCategory: 'verification-infrastructure',
+          qaActionability: {
+            classification: 'infrastructure-timeout',
+            actionable: false,
+            reason: 'broad e2e timed out without changed-surface evidence',
+          },
+        },
+      },
+    ]);
+
+    const { dispatchForLabel } = await import('./dispatch.js');
+    await dispatchForLabel('proj', 42, 'factory:qa-failed');
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      item.id,
+      'factory:qa-failed',
+      'factory:needs-human',
+    );
+    expect(source.transitionState).not.toHaveBeenCalledWith(
+      item.id,
+      'factory:qa-failed',
+      'factory:needs-fix',
+    );
+    expect(mockRunFixFeedbackWorkflow).not.toHaveBeenCalled();
+    expect(mockEventStoreAppendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.fix-feedback-skipped',
+        payload: expect.objectContaining({ reason: 'verification-infrastructure' }),
+      }),
+    );
+  });
+
   it('dispatches the review fix-feedback QA review loop from current issue state', async () => {
     let state = 'factory:needs-review';
     const baseItem = {

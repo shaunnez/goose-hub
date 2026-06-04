@@ -25,7 +25,9 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import {
+  type QaVerificationSummaryLike,
   actionableQaItemsToFeedback,
+  classifyQaFailureActionability,
   collectActionableQaItems,
 } from '@goose-hub/core/qa/actionability.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -268,6 +270,12 @@ type QaPayload = {
     actual?: string;
     error?: string;
   }>;
+  verificationSummary?: QaVerificationSummaryLike;
+  qaActionability?: {
+    classification?: 'issue-local' | 'regression-unrelated' | 'infrastructure-timeout';
+    actionable?: boolean;
+    reason?: string;
+  };
   tierResults?: {
     structural?: TierResult;
     functional?: TierResult;
@@ -689,6 +697,30 @@ async function findLatestSourceFailure(
     }
     const { verdict = 'fail', overallScore = 0, threshold = 70 } = payload;
     const verifiedFollowUpRefs = await verifiedFollowUpRefsForPayload(payload, stateSource);
+    const qaActionability =
+      payload.qaActionability ??
+      classifyQaFailureActionability(
+        { ...payload, findings: structuredQaFindings(payload) },
+        { verifiedFollowUpRefs },
+      );
+    if (qaActionability.actionable === false) {
+      const feedback = [
+        'QA failure is not actionable for fix-feedback.',
+        `Classification: ${qaActionability.classification ?? 'non-actionable'}`,
+        `Reason: ${qaActionability.reason ?? 'no issue-local repair evidence'}`,
+        'Focused implementation tests should stand; do not rerun broad e2e in fix-feedback.',
+      ].join('\n');
+      return {
+        kind: 'qa',
+        runId: sourceRunId(qaEvent),
+        feedback,
+        actionable: false,
+        verificationInfrastructure: qaActionability.classification === 'infrastructure-timeout',
+        baselineRedGlobal: qaActionability.classification === 'regression-unrelated',
+        skipReason: qaActionability.classification ?? 'non-actionable-qa-failure',
+        payload,
+      };
+    }
     const actionableItems = collectActionableQaItems(
       { ...payload, findings: structuredQaFindings(payload) },
       { verifiedFollowUpRefs },

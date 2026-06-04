@@ -10,6 +10,7 @@ export const TIMELINE_SECTION_DEFINITIONS = [
   { id: 'decompose', title: 'Decompose' },
   { id: 'delivery-router', title: 'Delivery Router' },
   { id: 'implementation', title: 'Implementation' },
+  { id: 'evidence', title: 'Evidence' },
   { id: 'dev-review', title: 'Dev Review' },
   { id: 'qa', title: 'QA' },
   { id: 'review', title: 'Review' },
@@ -89,10 +90,10 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'parallel-implement.wp-persisted': 'implementation',
   'pr.opened': 'implementation',
   'decompose.completed': 'decompose',
-  'evidence.no-spec-declared': 'dev-review',
-  'evidence.posted': 'dev-review',
-  'evidence.post-failed': 'dev-review',
-  'evidence.post-skipped': 'dev-review',
+  'evidence.no-spec-declared': 'evidence',
+  'evidence.posted': 'evidence',
+  'evidence.post-failed': 'evidence',
+  'evidence.post-skipped': 'evidence',
   'evidence.playwright-ran': 'investigation',
   'evidence.playwright-repro-skipped': 'investigation',
   'merge.conflict': 'conflict',
@@ -257,6 +258,7 @@ const skillToSection = buildSkillSectionMap();
 const stateToSection = buildStateSectionMap();
 const SKILL_SECTION_ALIASES = new Map<string, TimelineSectionId>([
   ['parallel-implement', 'implementation'],
+  ['evidence-post', 'evidence'],
 ]);
 
 export function isTimelineSectionId(value: unknown): value is TimelineSectionId {
@@ -267,7 +269,7 @@ export function timelineSectionForSkill(
   skill: string | null | undefined,
 ): TimelineSectionId | null {
   if (skill == null || skill.trim() === '') return null;
-  return skillToSection.get(skill) ?? SKILL_SECTION_ALIASES.get(skill) ?? null;
+  return SKILL_SECTION_ALIASES.get(skill) ?? skillToSection.get(skill) ?? null;
 }
 
 export function timelineSectionForState(
@@ -308,6 +310,7 @@ export function resolveTimelineSection(
   if (event.kind.startsWith('swarm.')) return 'investigation';
   if (event.kind.startsWith('qa.')) return 'qa';
   if (event.kind.startsWith('review.')) return 'review';
+  if (event.kind.startsWith('evidence.')) return 'evidence';
   if (event.kind.startsWith('dev-review.')) return 'dev-review';
   if (event.kind.startsWith('parallel-implement.')) return 'implementation';
   if (event.kind.startsWith('merge.')) return 'conflict';

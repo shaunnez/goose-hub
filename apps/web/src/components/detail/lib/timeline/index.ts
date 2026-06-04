@@ -42,7 +42,10 @@ export { VISIBLE_INTERVENTION_EVENT_TYPES } from './interventions';
 export { groupByContractPhase } from './phases/contract';
 export { groupByDiscoverPhase } from './phases/discover';
 export { groupByInvestigationPhase } from './phases/investigation';
-export { collectRunIdsForTimelineSection } from './render-items';
+export {
+  collectBillableRunIdsForTimelineSection,
+  collectRunIdsForTimelineSection,
+} from './render-items';
 export { computeIsLive, computeIsWritePrdStuck } from './state';
 export type { InterventionTimelineDetail, RenderItem, TimelineContext } from './types';
 
@@ -408,6 +411,8 @@ function timelineSegmentExplicitKey(
         implementationPipelineIdForEvent(event, implementationPipelineByRunId) ??
         runId
       );
+    case 'evidence':
+      return eventPayloadString(event, 'runId') ?? runId;
     case 'dev-review':
       return (
         implementationPipelineIdForEvent(event, implementationPipelineByRunId) ??
