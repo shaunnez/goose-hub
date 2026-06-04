@@ -25,6 +25,7 @@ const TRIAGE_DATA: TriageResultDto = {
     },
   ],
   overrideRepo: null,
+  repositories: ['shaunnez/goose-hub', 'shaunnez/target-projects'],
 };
 
 function renderSection(slug = 'proj', id = '42') {

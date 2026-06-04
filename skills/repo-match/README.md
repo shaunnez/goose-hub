@@ -34,7 +34,8 @@ Matches a work item to the most likely target repository using a three-tier thre
 
 ## Allowlist config
 
-Repo allowlist lives in `target-projects/<project-slug>/repos.md`. Format:
+Repo allowlist lives in `target-projects/<project-slug>/project.config.ts`.
+`repos.md` is optional human/LLM context and may provide descriptions using this format:
 
 ```markdown
 ### [owner/slug](url)

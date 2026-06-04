@@ -11,6 +11,7 @@ import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-tra
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
+import { buildRepoRegistryContext } from '@goose-hub/core/projects/repo-registry-context.js';
 import type { StateSource, WorkItemType } from '@goose-hub/core/state-source/interface.js';
 import { targetStateForTriage } from '@goose-hub/core/workflows/triage-routing.js';
 import { type VaguenessScore, scoreVagueness } from '@goose-hub/core/workflows/vagueness-gate.js';
@@ -46,7 +47,7 @@ function typeFromLabels(labels: readonly string[]): WorkItemType | null {
   return null;
 }
 
-function readReposContext(slug: string): string {
+function readReposMd(slug: string): string {
   if (!isValidSlug(slug)) {
     // Defence-in-depth (#201). Caller's getSourceForSlug already filtered
     // unknowns, but never touch the filesystem with a slug containing path
@@ -125,7 +126,8 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     }
   }
 
-  const reposContext = readReposContext(slug);
+  const reposContext =
+    projectConfig != null ? buildRepoRegistryContext(projectConfig, readReposMd(slug)) : '';
   const triagePrompt = readPromptWithContext('triage', slug);
   const repoMatchPrompt = readPromptWithContext('repo-match', slug);
   const triageJsonSchema = toJsonSchema(TriageOutputSchema);

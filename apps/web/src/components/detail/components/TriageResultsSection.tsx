@@ -10,9 +10,6 @@ interface TriageResultsSectionProps {
   id: string;
 }
 
-// Static allowlist — mirrors target-projects/goose-hub-self/repos.md
-const ALLOWLISTED_REPOS = ['shaunnez/goose-hub'];
-
 function ScoreBar({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(100, value));
   const color = pct >= 70 ? 'var(--accent)' : pct >= 40 ? 'oklch(0.74 0.15 200)' : 'var(--fg-4)';
@@ -86,6 +83,7 @@ export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionPr
 
   const triage: TriageResultDto = data;
   const pickedRepo = triage.overrideRepo ?? triage.candidates[0]?.repo;
+  const overrideRepos = triage.repositories ?? [];
 
   const priorityColor = PRIORITY_COLOR[triage.priority];
   const priorityBg = PRIORITY_BG[triage.priority];
@@ -199,7 +197,7 @@ export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionPr
               className="text-[12px] bg-bg-elev border border-line rounded-md px-2 py-1.5 text-fg-2 focus:outline-none focus:border-accent"
             >
               <option value="">Select repo to override…</option>
-              {ALLOWLISTED_REPOS.map((r) => (
+              {overrideRepos.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>

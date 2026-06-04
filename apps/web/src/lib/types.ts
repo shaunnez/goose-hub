@@ -301,6 +301,7 @@ export interface TriageResultDto {
   priority: string;
   candidates: TriageRepoCandidate[];
   overrideRepo: string | null;
+  repositories: string[];
 }
 
 export interface InboxItemDto {

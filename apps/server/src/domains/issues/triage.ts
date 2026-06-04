@@ -1,8 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { targetProjectsRoot } from '@goose-hub/target-projects';
+import { listProjectRepoRefs } from '@goose-hub/core/projects/repositories.js';
 import type { Result } from '#shared/middleware.js';
+import { getProject } from '#shared/projects.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
 import { resolveCanonicalWorkItemForRoute } from '#shared/work-item-resolution.js';
 
@@ -18,6 +17,7 @@ interface TriageDto {
   priority: string;
   candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
   overrideRepo: string | null;
+  repositories: string[];
 }
 
 /**
@@ -26,13 +26,18 @@ interface TriageDto {
  * payloads from the latest `agent.triage-complete` event; this helper keeps
  * them in sync as the triage schema evolves.
  */
-function buildTriageDto(payload: unknown, overrideRepo: string | null): TriageDto {
+function buildTriageDto(
+  payload: unknown,
+  overrideRepo: string | null,
+  repositories: string[],
+): TriageDto {
   const p = payload as TriageEventPayload;
   return {
     type: p.triage.type,
     priority: p.triage.priority,
     candidates: p.repoMatch.candidates ?? [],
     overrideRepo,
+    repositories,
   };
 }
 
@@ -51,11 +56,13 @@ export async function getIssueTriage(
 
   const overrideEvent = allEvents.filter((e) => e.kind === 'agent.repo-override').at(-1);
   const overridePayload = overrideEvent?.payload as { repo?: string } | undefined;
+  const project = await getProject(slug);
+  const repositories = project == null ? [] : listProjectRepoRefs(project);
 
   return {
     ok: true,
     data: {
-      triage: buildTriageDto(triageEvent.payload, overridePayload?.repo ?? null),
+      triage: buildTriageDto(triageEvent.payload, overridePayload?.repo ?? null, repositories),
     },
   };
 }
@@ -72,12 +79,9 @@ export async function overrideIssueRepo(
     return { ok: false, error: 'project not found', status: 404 };
   }
 
-  const reposMdPath = join(targetProjectsRoot, slug, 'repos.md');
-  const reposMd = readFileSync(reposMdPath, 'utf8');
-  const allowedRepos =
-    reposMd
-      .match(/^###\s+\[([^\]]+)\]/gm)
-      ?.map((m) => m.replace(/^###\s+\[/, '').replace(/\]$/, '')) ?? [];
+  const project = await getProject(slug);
+  if (project == null) return { ok: false, error: 'project not found', status: 404 };
+  const allowedRepos = listProjectRepoRefs(project);
 
   if (!allowedRepos.includes(repo)) {
     return { ok: false, error: `repo '${repo}' not in allowlist`, status: 400 };
@@ -97,7 +101,7 @@ export async function overrideIssueRepo(
   return {
     ok: true,
     data: {
-      triage: buildTriageDto(triageEvent.payload, repo),
+      triage: buildTriageDto(triageEvent.payload, repo, allowedRepos),
     },
   };
 }
