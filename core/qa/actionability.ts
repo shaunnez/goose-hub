@@ -36,6 +36,15 @@ export interface QaVerificationSummaryLike {
     status?: 'passed' | 'failed' | 'skipped' | string;
     reason?: string;
   };
+  testRun?: {
+    command?: string;
+    status?: 'passed' | 'failed' | 'skipped' | string;
+    failingSuites?: string[];
+  };
+  devTestsRun?: {
+    command?: string;
+    paths?: string[];
+  };
 }
 
 export interface QaFindingLike {
@@ -64,7 +73,8 @@ export interface QaPayloadLike {
 export type QaRepairClassification =
   | 'issue-local'
   | 'regression-unrelated'
-  | 'infrastructure-timeout';
+  | 'infrastructure-timeout'
+  | 'attribution-unknown';
 
 export interface QaFailureActionability {
   classification: QaRepairClassification;
@@ -89,6 +99,7 @@ export type ActionableQaItem =
 export interface CollectActionableQaItemsOptions {
   verifiedFollowUpRefs?: ReadonlySet<string>;
   verificationSummary?: QaVerificationSummaryLike;
+  issueSurfacePaths?: readonly string[];
 }
 
 function normalizedRef(ref: string | undefined): string | null {
@@ -183,11 +194,7 @@ export function classifyQaFailureActionability(
     return { classification: 'issue-local', actionable: true, reason: 'no verification summary' };
   }
 
-  const e2eCommand = verificationSummary.commands?.e2e?.command ?? verificationSummary.e2e?.command;
-  const e2eStatus = verificationSummary.commands?.e2e?.status ?? verificationSummary.e2e?.status;
-  if (e2eCommand == null || e2eStatus !== 'failed' || !isBroadE2eCommand(e2eCommand)) {
-    return { classification: 'issue-local', actionable: true, reason: 'no broad e2e failure' };
-  }
+  const issueSurfacePaths = collectIssueSurfacePaths(payload, verificationSummary, options);
   if ((payload.criteriaResults ?? []).some((result) => !result.passed)) {
     return {
       classification: 'issue-local',
@@ -197,18 +204,47 @@ export function classifyQaFailureActionability(
   }
   if (
     verificationSummary.commands?.lint?.status === 'failed' ||
-    verificationSummary.commands?.typecheck?.status === 'failed' ||
-    verificationSummary.commands?.test?.status === 'failed'
+    verificationSummary.commands?.typecheck?.status === 'failed'
   ) {
     return {
       classification: 'issue-local',
       actionable: true,
-      reason: 'focused verification command failed',
+      reason: 'structural verification command failed',
     };
   }
 
+  const testAttribution = classifyTestFailureAttribution(verificationSummary, issueSurfacePaths);
+  if (testAttribution === 'issue-local') {
+    return {
+      classification: 'issue-local',
+      actionable: true,
+      reason: 'test failure intersects changed, owned, developer-test, or acceptance surface',
+    };
+  }
+
+  const e2eCommand = verificationSummary.commands?.e2e?.command ?? verificationSummary.e2e?.command;
+  const e2eStatus = verificationSummary.commands?.e2e?.status ?? verificationSummary.e2e?.status;
+  if (e2eCommand == null || e2eStatus !== 'failed' || !isBroadE2eCommand(e2eCommand)) {
+    if (testAttribution === 'outside-surface') {
+      return {
+        classification: 'regression-unrelated',
+        actionable: false,
+        reason:
+          'broad test failure is outside changed, owned, developer-test, and acceptance surfaces',
+      };
+    }
+    if (testAttribution === 'unknown') {
+      return {
+        classification: 'attribution-unknown',
+        actionable: false,
+        reason: 'test command failed but no failing suite could be attributed to this issue',
+      };
+    }
+    return { classification: 'issue-local', actionable: true, reason: 'no broad e2e failure' };
+  }
+
   const failureText = qaFailureText(payload, verificationSummary);
-  if (mentionsChangedSurface(failureText, verificationSummary.changedFiles?.paths ?? [])) {
+  if (mentionsRelatedSurface(failureText, issueSurfacePaths)) {
     return {
       classification: 'issue-local',
       actionable: true,
@@ -224,7 +260,15 @@ export function classifyQaFailureActionability(
     };
   }
 
-  if (mentionsE2eSpec(failureText)) {
+  const e2eSpecPaths = extractE2eSpecPaths(failureText);
+  if (e2eSpecPaths.length > 0) {
+    if (e2eSpecPaths.some((path) => isRelatedPath(path, issueSurfacePaths))) {
+      return {
+        classification: 'issue-local',
+        actionable: true,
+        reason: 'broad e2e failure names issue-local e2e surface',
+      };
+    }
     return {
       classification: 'regression-unrelated',
       actionable: false,
@@ -232,7 +276,76 @@ export function classifyQaFailureActionability(
     };
   }
 
+  if (testAttribution === 'outside-surface') {
+    return {
+      classification: 'regression-unrelated',
+      actionable: false,
+      reason:
+        'broad test failure is outside changed, owned, developer-test, and acceptance surfaces',
+    };
+  }
+  if (testAttribution === 'unknown') {
+    return {
+      classification: 'attribution-unknown',
+      actionable: false,
+      reason: 'test and e2e failed but neither failure could be attributed to this issue',
+    };
+  }
+
   return { classification: 'issue-local', actionable: true, reason: 'broad e2e failed' };
+}
+
+function collectIssueSurfacePaths(
+  payload: QaPayloadLike,
+  summary: QaVerificationSummaryLike,
+  options: CollectActionableQaItemsOptions,
+): string[] {
+  return uniqueNormalizedPaths([
+    ...(summary.changedFiles?.paths ?? []),
+    ...(summary.devTestsRun?.paths ?? []),
+    ...(options.issueSurfacePaths ?? []),
+    ...(payload.criteriaResults ?? []).flatMap((result) =>
+      extractPathsFromText([result.ac, result.command, result.actual, result.error].join('\n')),
+    ),
+  ]);
+}
+
+type TestFailureAttribution = 'none' | 'issue-local' | 'outside-surface' | 'unknown';
+
+function classifyTestFailureAttribution(
+  summary: QaVerificationSummaryLike,
+  issueSurfacePaths: readonly string[],
+): TestFailureAttribution {
+  const test = summary.commands?.test;
+  if (test?.status !== 'failed') return 'none';
+  const command = test.command ?? summary.testRun?.command ?? '';
+  if (!isBroadTestCommand(command)) return 'issue-local';
+
+  const testText = [
+    test.command,
+    test.error,
+    test.stdout,
+    test.stderr,
+    summary.testRun?.command,
+    ...(summary.testRun?.failingSuites ?? []),
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .join('\n');
+  if (mentionsRelatedSurface(testText, issueSurfacePaths)) return 'issue-local';
+
+  const failedPaths = uniqueNormalizedPaths([
+    ...(summary.testRun?.failingSuites ?? []),
+    ...extractPathsFromText(testText),
+  ]);
+  if (failedPaths.length === 0) return 'unknown';
+  return failedPaths.some((path) => isRelatedPath(path, issueSurfacePaths))
+    ? 'issue-local'
+    : 'outside-surface';
+}
+
+function isBroadTestCommand(command: string): boolean {
+  if (command.trim().length === 0) return true;
+  return extractPathsFromText(command).length === 0;
 }
 
 function isBroadE2eCommand(command: string): boolean {
@@ -248,14 +361,10 @@ function isTimeoutFailureText(text: string): boolean {
   return /\b(timeout|timed out)\b/i.test(text);
 }
 
-function mentionsE2eSpec(text: string): boolean {
-  return /(?:^|\s)apps\/web\/e2e\/[^:\s]+\.spec\.ts/i.test(text);
-}
-
 function qaFailureText(payload: QaPayloadLike, summary: QaVerificationSummaryLike): string {
   const parts: string[] = [];
   const e2e = summary.commands?.e2e;
-  for (const value of [e2e?.command, e2e?.error, e2e?.stdout, e2e?.stderr, summary.e2e?.reason]) {
+  for (const value of [e2e?.command, e2e?.error, e2e?.stdout, e2e?.stderr]) {
     if (typeof value === 'string') parts.push(value);
   }
   for (const result of payload.criteriaResults ?? []) {
@@ -263,22 +372,12 @@ function qaFailureText(payload: QaPayloadLike, summary: QaVerificationSummaryLik
     if (result.actual != null) parts.push(result.actual);
     if (result.error != null) parts.push(result.error);
   }
-  for (const finding of payload.findings ?? []) {
-    parts.push(finding.description);
-    if (finding.suggestion != null) parts.push(finding.suggestion);
-  }
-  for (const result of Object.values(payload.tierResults ?? {})) {
-    for (const finding of result?.findings ?? []) {
-      parts.push(finding.description);
-      if (finding.suggestion != null) parts.push(finding.suggestion);
-    }
-  }
   return parts.join('\n');
 }
 
-function mentionsChangedSurface(text: string, changedPaths: readonly string[]): boolean {
+function mentionsRelatedSurface(text: string, relatedPaths: readonly string[]): boolean {
   const normalizedText = text.toLowerCase();
-  for (const path of changedPaths) {
+  for (const path of relatedPaths) {
     const normalizedPath = path.toLowerCase();
     if (normalizedPath.length > 0 && normalizedText.includes(normalizedPath)) return true;
     const fileName = normalizedPath.split('/').pop();
@@ -287,6 +386,50 @@ function mentionsChangedSurface(text: string, changedPaths: readonly string[]): 
     if (stem.length >= 4 && normalizedText.includes(stem)) return true;
   }
   return false;
+}
+
+function extractE2eSpecPaths(text: string): string[] {
+  return extractPathsFromText(text).filter((path) => path.startsWith('apps/web/e2e/'));
+}
+
+function extractPathsFromText(text: string): string[] {
+  const matches = text.matchAll(
+    /\b((?:apps|core|slices|skills|packages|src)\/[^\s:)'",]+?\.[cm]?[jt]sx?)\b/g,
+  );
+  return uniqueNormalizedPaths([...matches].map((match) => match[1] ?? ''));
+}
+
+function normalizePath(path: string): string {
+  return path
+    .replace(/^\.?\//, '')
+    .replace(/\\/g, '/')
+    .trim();
+}
+
+function uniqueNormalizedPaths(paths: readonly string[]): string[] {
+  return [...new Set(paths.map(normalizePath).filter((path) => path.length > 0))];
+}
+
+function pathWithoutTestSuffix(path: string): string {
+  return normalizePath(path)
+    .replace(/\.(test|spec)\.[cm]?[jt]sx?$/, '')
+    .replace(/\.[cm]?[jt]sx?$/, '');
+}
+
+function isRelatedPath(path: string, relatedPaths: readonly string[]): boolean {
+  const normalizedPath = normalizePath(path);
+  const pathBase = pathWithoutTestSuffix(normalizedPath);
+  if (pathBase.length === 0) return false;
+  return relatedPaths.some((relatedPath) => {
+    const related = normalizePath(relatedPath);
+    const relatedBase = pathWithoutTestSuffix(related);
+    return (
+      normalizedPath === related ||
+      pathBase === relatedBase ||
+      normalizedPath.includes(relatedBase) ||
+      related.includes(pathBase)
+    );
+  });
 }
 
 export function actionableQaItemsToFeedback(items: ActionableQaItem[]): string {

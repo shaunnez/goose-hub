@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { VerifyCommand } from './workflow.js';
 
 // ─── module mocks ─────────────────────────────────────────────────────────────
 
@@ -140,6 +141,45 @@ function makeSampleTestRun() {
   };
 }
 
+function makeFailingTestRun(failingSuites: string[]) {
+  return {
+    wallTimeMs: 7700,
+    total: 40,
+    passed: 39,
+    failed: 1,
+    skipped: 0,
+    success: false,
+    suites: failingSuites.map((filePath) => ({
+      name: filePath.split('/').pop() ?? filePath,
+      filePath,
+      total: 1,
+      passed: 0,
+      failed: 1,
+      skipped: 0,
+      durationMs: 412,
+      status: 'failed' as const,
+    })),
+  };
+}
+
+function makeGitWorktreeWithChange(changedPath: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'qa-actionability-'));
+  execFileSync('git', ['init', '-b', 'main'], { cwd: dir });
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+  execFileSync('git', ['config', 'user.name', 'Test User'], { cwd: dir });
+  const fullPath = join(dir, changedPath);
+  const changedPathParts = changedPath.split('/');
+  mkdirSync(join(dir, ...changedPathParts.slice(0, -1)), { recursive: true });
+  writeFileSync(fullPath, 'export const before = 1;\n');
+  execFileSync('git', ['add', '.'], { cwd: dir });
+  execFileSync('git', ['commit', '-m', 'base'], { cwd: dir });
+  execFileSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], { cwd: dir });
+  writeFileSync(fullPath, 'export const after = 2;\n');
+  execFileSync('git', ['add', changedPath], { cwd: dir });
+  execFileSync('git', ['commit', '-m', 'change'], { cwd: dir });
+  return dir;
+}
+
 function makeFailResult(): AgentResult {
   return {
     output: {
@@ -173,6 +213,51 @@ function makeFailResult(): AgentResult {
         cyclomaticComplexity: 4,
       },
       findings: [],
+      decisionSummaries: [],
+    },
+    decisionSummaries: [],
+    events: [],
+  };
+}
+
+function makeQaFailResultWithFinding(input: {
+  tier: 'functional' | 'regression';
+  description: string;
+}): AgentResult {
+  const finding = {
+    tier: input.tier,
+    severity: 'error' as const,
+    description: input.description,
+    disposition: 'needs-fix' as const,
+    dispositionRef: 'current PR',
+  };
+  return {
+    output: {
+      verdict: 'fail',
+      overallScore: 45,
+      threshold: 70,
+      tierResults: {
+        structural: { passed: true, findings: [] },
+        functional: {
+          passed: input.tier !== 'functional',
+          findings: input.tier === 'functional' ? [finding] : [],
+        },
+        regression: {
+          passed: input.tier !== 'regression',
+          findings: input.tier === 'regression' ? [finding] : [],
+        },
+      },
+      qualityScores: {
+        openClosed: 5,
+        conceptCount: 5,
+        timeToCapability: 5,
+        complecting: 5,
+        loc: 5,
+        coupling: 5,
+        gallsLaw: 5,
+        cyclomaticComplexity: 4,
+      },
+      findings: [finding],
       decisionSummaries: [],
     },
     decisionSummaries: [],
@@ -946,6 +1031,62 @@ describe('runQaWorkflow', () => {
   });
 
   describe('fail verdict', () => {
+    async function runActionabilityWorkflowCase(input: {
+      changedPath: string;
+      qaResult: AgentResult;
+      testRun?: ReturnType<typeof makeFailingTestRun> | ReturnType<typeof makeSampleTestRun>;
+      e2e?: {
+        status: 'passed' | 'failed';
+        error?: string;
+        stderr?: string;
+      };
+      executableChecks?: VerifyCommand[];
+    }) {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const worktree = makeGitWorktreeWithChange(input.changedPath);
+      mockGetProjectBySlug.mockReturnValue({
+        id: 'test-project',
+        stack: {
+          testCommand: 'pnpm test --reporter=json',
+          lintCommand: 'pnpm lint',
+          e2eCommand: 'pnpm test:e2e:pipeline',
+        },
+        qaE2eMode: 'always',
+      });
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: worktree, baseBranch: 'main' },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(input.qaResult);
+
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          runTests: vi.fn().mockResolvedValue(input.testRun ?? null),
+          runCommand: vi.fn(async (_cwd, command) => {
+            if (command === 'pnpm test:e2e:pipeline') {
+              return {
+                command,
+                status: input.e2e?.status ?? 'passed',
+                ...(input.e2e?.error != null ? { error: input.e2e.error } : {}),
+                ...(input.e2e?.stderr != null ? { stderr: input.e2e.stderr } : {}),
+              };
+            }
+            return { command, status: 'passed' as const };
+          }),
+          ...(input.executableChecks != null ? { executableChecks: input.executableChecks } : {}),
+        });
+        return source;
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
+    }
+
     it('transitions state to factory:qa-failed on fail', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
@@ -1018,6 +1159,114 @@ describe('runQaWorkflow', () => {
         '42',
         'factory:needs-qa',
         'factory:qa-failed',
+      );
+    });
+
+    it('routes unrelated broad unit failure plus broad e2e timeout to factory:needs-review', async () => {
+      const source = await runActionabilityWorkflowCase({
+        changedPath: 'core/qa/actionability.ts',
+        qaResult: makeQaFailResultWithFinding({
+          tier: 'regression',
+          description: 'Broad e2e timed out and unrelated full-suite test failed',
+        }),
+        testRun: makeFailingTestRun(['apps/web/src/components/unrelated/UnrelatedPanel.test.tsx']),
+        e2e: {
+          status: 'failed',
+          error: 'command timed out after 900000ms',
+          stderr: 'Timed out while running apps/web/e2e/pipeline/settings-panel.spec.ts',
+        },
+      });
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:needs-review',
+      );
+    });
+
+    it('routes changed-surface test failures to factory:qa-failed', async () => {
+      const source = await runActionabilityWorkflowCase({
+        changedPath: 'core/qa/actionability.ts',
+        qaResult: makeQaFailResultWithFinding({
+          tier: 'functional',
+          description: 'Actionability unit test failed',
+        }),
+        testRun: makeFailingTestRun(['core/qa/actionability.test.ts']),
+      });
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:qa-failed',
+      );
+    });
+
+    it('routes failed executable AC checks to factory:qa-failed', async () => {
+      const source = await runActionabilityWorkflowCase({
+        changedPath: 'core/qa/actionability.ts',
+        qaResult: makePassResult(),
+        testRun: {
+          ...makeSampleTestRun(),
+          failed: 0,
+          passed: 39,
+          success: true,
+          suites: [],
+        },
+        executableChecks: [
+          {
+            criterionId: 'AC-1',
+            checkId: 'AC-1-check-1',
+            ac: 'Actionability command passes',
+            command: 'false',
+            expectedExitCodes: [0],
+          },
+        ],
+      });
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:qa-failed',
+      );
+    });
+
+    it('routes broad e2e output naming a changed surface to factory:qa-failed', async () => {
+      const source = await runActionabilityWorkflowCase({
+        changedPath: 'apps/web/src/components/chrome/TopBar.tsx',
+        qaResult: makeQaFailResultWithFinding({
+          tier: 'regression',
+          description: 'TopBar e2e failed',
+        }),
+        e2e: {
+          status: 'failed',
+          stderr: 'FAIL apps/web/src/components/chrome/TopBar.tsx shortcut behavior',
+        },
+      });
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:qa-failed',
+      );
+    });
+
+    it('routes broad e2e output naming an unrelated spec to factory:needs-review', async () => {
+      const source = await runActionabilityWorkflowCase({
+        changedPath: 'core/qa/actionability.ts',
+        qaResult: makeQaFailResultWithFinding({
+          tier: 'regression',
+          description: 'Settings e2e failed',
+        }),
+        e2e: {
+          status: 'failed',
+          stderr: 'FAIL apps/web/e2e/pipeline/settings-panel.spec.ts',
+        },
+      });
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:needs-review',
       );
     });
   });

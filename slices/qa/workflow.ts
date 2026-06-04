@@ -39,7 +39,7 @@ import {
   type TestRun,
   type VerificationSummary,
 } from '@goose-hub/skills/qa/schema.js';
-import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
+import { type EngineeringSpec, fileOwnedPath } from '@goose-hub/skills/spec-author/schema.js';
 import {
   type DeterministicVerifyOutcome,
   type VerifyCommand,
@@ -227,6 +227,42 @@ function failVerdictHasOnlyNonBlockingFindings(
     qaOutput.findings.length > 0 &&
     qaOutput.findings.every((finding) => isNonBlockingQaFinding(finding, verifiedFollowUpRefs))
   );
+}
+
+function extractPathHints(text: string): string[] {
+  const matches = text.matchAll(
+    /\b((?:apps|core|slices|skills|packages|src)\/[^\s:)'",]+?\.[cm]?[jt]sx?)\b/g,
+  );
+  return [...matches].map((match) => match[1] ?? '').filter((path) => path.length > 0);
+}
+
+function actionabilitySurfacePaths(input: {
+  spec?: EngineeringSpec | null;
+  acceptanceContract?: AcceptanceContract;
+  executableChecks?: VerifyCommand[];
+}): string[] {
+  const spec = input.spec;
+  return [
+    ...(spec?.workPackages.flatMap((wp) => wp.filesOwned.map((entry) => fileOwnedPath(entry))) ??
+      []),
+    ...(spec?.interfaceContracts.flatMap((contract) => [
+      contract.file,
+      ...(contract.requiredExports?.flatMap((requiredExport) =>
+        requiredExport.file != null ? [requiredExport.file] : [],
+      ) ?? []),
+    ]) ?? []),
+    ...(spec?.schemaChanges.migrations ?? []),
+    ...(spec?.verificationTooling.flatMap((tool) => extractPathHints(tool.command)) ?? []),
+    ...(spec?.acceptanceCriteria.flatMap(
+      (criterion) =>
+        criterion.executableChecks?.flatMap((check) => extractPathHints(check.command)) ?? [],
+    ) ?? []),
+    ...(input.acceptanceContract?.criteria.flatMap(
+      (criterion) =>
+        criterion.executableChecks?.flatMap((check) => extractPathHints(check.command)) ?? [],
+    ) ?? []),
+    ...(input.executableChecks?.flatMap((check) => extractPathHints(check.command)) ?? []),
+  ];
 }
 
 function classifyVerificationInfrastructureFailure(
@@ -1012,7 +1048,14 @@ export async function runQaWorkflow(
         tierResults: groundTruthTierResults,
         verificationSummary,
       },
-      { verifiedFollowUpRefs },
+      {
+        verifiedFollowUpRefs,
+        issueSurfacePaths: actionabilitySurfacePaths({
+          spec: specRecord?.spec as EngineeringSpec | undefined,
+          acceptanceContract,
+          executableChecks,
+        }),
+      },
     );
     const actionableQaItems = collectActionableQaItems(
       {
@@ -1021,7 +1064,15 @@ export async function runQaWorkflow(
         tierResults: groundTruthTierResults,
         verificationSummary,
       },
-      { verifiedFollowUpRefs, verificationSummary },
+      {
+        verifiedFollowUpRefs,
+        verificationSummary,
+        issueSurfacePaths: actionabilitySurfacePaths({
+          spec: specRecord?.spec as EngineeringSpec | undefined,
+          acceptanceContract,
+          executableChecks,
+        }),
+      },
     );
     const failedTier = (['structural', 'functional', 'regression'] as const).find(
       (tier) => !groundTruthTierResults[tier].passed,
@@ -1034,11 +1085,13 @@ export async function runQaWorkflow(
           ? classifyQaFailure({ verificationInfrastructure: true })
           : qaActionability.classification === 'regression-unrelated'
             ? classifyQaFailure({ failedTier: 'regression' })
-            : classifyQaFailure({
-                failedTier,
-                hasActionableFinding: actionableQaItems.length > 0,
-                hasFailedExecutableCheck,
-              });
+            : qaActionability.classification === 'attribution-unknown'
+              ? classifyQaFailure({ orchestration: true })
+              : classifyQaFailure({
+                  failedTier,
+                  hasActionableFinding: actionableQaItems.length > 0,
+                  hasFailedExecutableCheck,
+                });
 
     eventStore.appendEvent({
       projectId: projectSlug,
@@ -1094,6 +1147,11 @@ export async function runQaWorkflow(
 
     let nextState: StateName;
     if (passes) {
+      nextState = 'factory:needs-review';
+    } else if (
+      !qaActionability.actionable &&
+      qaActionability.classification !== 'attribution-unknown'
+    ) {
       nextState = 'factory:needs-review';
     } else if (!qaActionability.actionable) {
       nextState = 'factory:needs-human';

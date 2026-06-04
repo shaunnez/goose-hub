@@ -110,6 +110,154 @@ describe('collectActionableQaItems', () => {
     expect(collectActionableQaItems(payload)).toEqual([]);
   });
 
+  it('treats broad unit failures outside issue surfaces plus broad e2e timeout as non-actionable', () => {
+    const payload = {
+      verificationSummary: {
+        changedFiles: { paths: ['core/qa/actionability.ts'] },
+        commands: {
+          test: {
+            command: 'pnpm test --reporter=json',
+            status: 'failed',
+          },
+          e2e: {
+            command: 'pnpm test:e2e:pipeline',
+            status: 'failed',
+            error: 'command timed out after 900000ms',
+          },
+        },
+        testRun: {
+          command: 'pnpm test --reporter=json',
+          status: 'failed',
+          total: 240,
+          passed: 239,
+          failed: 1,
+          skipped: 0,
+          failingSuites: ['apps/web/src/components/unrelated/UnrelatedPanel.test.tsx'],
+        },
+        e2e: {
+          command: 'pnpm test:e2e:pipeline',
+          status: 'failed',
+          reason: 'qa e2e mode is always',
+        },
+        devTestsRun: {
+          command: 'pnpm vitest run core/qa/actionability.test.ts',
+          paths: ['core/qa/actionability.test.ts'],
+        },
+      },
+      findings: [
+        {
+          tier: 'functional',
+          severity: 'error',
+          description:
+            'Full suite failed in apps/web/src/components/unrelated/UnrelatedPanel.test.tsx',
+          disposition: 'needs-fix' as const,
+        },
+        {
+          tier: 'regression',
+          severity: 'error',
+          description: 'Pipeline timed out before completing',
+          disposition: 'needs-fix' as const,
+        },
+      ],
+    };
+
+    expect(classifyQaFailureActionability(payload)).toMatchObject({
+      actionable: false,
+      classification: 'infrastructure-timeout',
+    });
+    expect(collectActionableQaItems(payload)).toEqual([]);
+  });
+
+  it('does not let model-authored timeout findings make broad e2e issue-local', () => {
+    const payload = {
+      verificationSummary: {
+        changedFiles: { paths: ['apps/web/src/components/chrome/TopBar.tsx'] },
+        commands: {
+          test: {
+            command: 'pnpm test --reporter=json',
+            status: 'failed',
+          },
+          e2e: {
+            command: 'pnpm test:e2e:pipeline',
+            status: 'failed',
+            error: 'command timed out after 600000ms',
+          },
+        },
+        testRun: {
+          command: 'pnpm test --reporter=json',
+          status: 'failed',
+          total: 5407,
+          passed: 5405,
+          failed: 1,
+          skipped: 1,
+          failingSuites: ['apps/server/src/shared/dispatch.test.ts'],
+        },
+        e2e: {
+          command: 'pnpm test:e2e:pipeline',
+          status: 'failed',
+          reason: 'significant UI/API paths changed: apps/web/src/components/chrome/TopBar.tsx',
+        },
+        devTestsRun: {
+          command: 'pnpm test --reporter=json apps/web/src/components/chrome/TopBar.test.tsx',
+          paths: ['apps/web/src/components/chrome/TopBar.test.tsx'],
+        },
+      },
+      findings: [
+        {
+          tier: 'regression',
+          severity: 'warning',
+          description:
+            'Workflow-owned pipeline e2e verification timed out after this UI change, so end-to-end regression coverage for the TopBar update was not completed successfully.',
+          suggestion: 'Get a green pnpm test:e2e:pipeline run before merge.',
+          disposition: 'needs-fix' as const,
+        },
+      ],
+    };
+
+    expect(classifyQaFailureActionability(payload)).toMatchObject({
+      actionable: false,
+      classification: 'infrastructure-timeout',
+    });
+    expect(collectActionableQaItems(payload)).toEqual([]);
+  });
+
+  it('keeps broad unit failures actionable when the failing suite intersects changed files', () => {
+    const payload = {
+      verificationSummary: {
+        changedFiles: { paths: ['core/qa/actionability.ts'] },
+        commands: {
+          test: {
+            command: 'pnpm test --reporter=json',
+            status: 'failed',
+          },
+        },
+        testRun: {
+          command: 'pnpm test --reporter=json',
+          status: 'failed',
+          total: 20,
+          passed: 19,
+          failed: 1,
+          skipped: 0,
+          failingSuites: ['core/qa/actionability.test.ts'],
+        },
+      },
+      findings: [
+        {
+          tier: 'functional',
+          severity: 'error',
+          description: 'Actionability regression test failed',
+          disposition: 'needs-fix' as const,
+        },
+      ],
+    };
+
+    expect(classifyQaFailureActionability(payload)).toMatchObject({
+      actionable: true,
+      classification: 'issue-local',
+    });
+    expect(collectActionableQaItems(payload)).toHaveLength(1);
+  });
+
   it('keeps broad e2e failures actionable when output names the changed surface', () => {
     const payload = {
       verificationSummary: {
@@ -137,6 +285,69 @@ describe('collectActionableQaItems', () => {
       classification: 'issue-local',
     });
     expect(collectActionableQaItems(payload)).toHaveLength(1);
+  });
+
+  it('keeps broad e2e failures actionable when output names a dev targeted surface', () => {
+    const payload = {
+      verificationSummary: {
+        changedFiles: { paths: ['core/qa/actionability.ts'] },
+        commands: {
+          e2e: {
+            command: 'pnpm test:e2e:pipeline',
+            status: 'failed',
+            stderr: 'FAIL apps/web/e2e/issue-5-actionability.spec.ts timeout',
+          },
+        },
+        devTestsRun: {
+          command:
+            'pnpm --filter @goose-hub/web exec playwright test apps/web/e2e/issue-5-actionability.spec.ts',
+          paths: ['apps/web/e2e/issue-5-actionability.spec.ts'],
+        },
+      },
+      findings: [
+        {
+          tier: 'regression',
+          severity: 'error',
+          description: 'Issue e2e spec failed',
+          disposition: 'needs-fix' as const,
+        },
+      ],
+    };
+
+    expect(classifyQaFailureActionability(payload)).toMatchObject({
+      actionable: true,
+      classification: 'issue-local',
+    });
+    expect(collectActionableQaItems(payload)).toHaveLength(1);
+  });
+
+  it('classifies broad e2e output naming an unrelated spec as regression-unrelated', () => {
+    const payload = {
+      verificationSummary: {
+        changedFiles: { paths: ['core/qa/actionability.ts'] },
+        commands: {
+          e2e: {
+            command: 'pnpm test:e2e:pipeline',
+            status: 'failed',
+            stderr: 'FAIL apps/web/e2e/pipeline/settings-panel.spec.ts',
+          },
+        },
+      },
+      findings: [
+        {
+          tier: 'regression',
+          severity: 'error',
+          description: 'Settings panel e2e failed',
+          disposition: 'needs-fix' as const,
+        },
+      ],
+    };
+
+    expect(classifyQaFailureActionability(payload)).toMatchObject({
+      actionable: false,
+      classification: 'regression-unrelated',
+    });
+    expect(collectActionableQaItems(payload)).toEqual([]);
   });
 
   it('keeps failed executable checks actionable even when broad e2e timed out', () => {
