@@ -16,6 +16,7 @@
     "coverage": "tsx scripts/run-vitest-with-db.ts --coverage",
     "skill-contract:audit": "tsx scripts/audit-skill-contracts.ts --strict",
     "test:e2e:legacy-ui-smoke": "pnpm --filter @goose-hub/web test:e2e:legacy-ui-smoke",
+    "test:e2e:inbox-capture": "API_PORT=3101 WEB_PORT=5174 SERVER_PORT=3101 GITHUB_WEBHOOK_SECRET=mock-webhook-secret-for-e2e GITHUB_TOKEN='' CI=1 pnpm --filter @goose-hub/web exec playwright test --config playwright.config.ts e2e/inbox-capture.spec.ts",
     "test:e2e:pipeline": "pnpm --filter @goose-hub/web test:e2e:pipeline",
     "test:e2e:pipeline:fast": "pnpm --filter @goose-hub/web test:e2e:pipeline:fast",
     "manifest": "tsx scripts/build-manifest.ts",

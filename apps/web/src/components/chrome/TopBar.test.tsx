@@ -27,6 +27,7 @@ describe('TopBar', () => {
     render(<TopBar breadcrumb="Inbox" />);
 
     const captureButton = screen.getByTestId('capture-button');
+    expect(screen.getByTestId('capture-shortcut-badge')).toBeTruthy();
     expect(within(captureButton).getByText('⌘J')).toBeTruthy();
   });
 

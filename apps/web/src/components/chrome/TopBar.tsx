@@ -64,7 +64,10 @@ export function TopBar({ breadcrumb }: TopBarProps) {
         >
           <Plus size={13} />
           <span>Capture</span>
-          <kbd className="ml-1 px-1 py-0.5 rounded border border-line text-[10px] text-fg-3 bg-bg">
+          <kbd
+            data-testid="capture-shortcut-badge"
+            className="ml-1 px-1 py-0.5 rounded border border-line text-[10px] text-fg-3 bg-bg"
+          >
             ⌘J
           </kbd>
         </button>
@@ -78,7 +81,10 @@ export function TopBar({ breadcrumb }: TopBarProps) {
         >
           <Search size={13} />
           <span>Search</span>
-          <kbd className="ml-1 px-1 py-0.5 rounded border border-line text-[10px] text-fg-3 bg-bg">
+          <kbd
+            data-testid="search-shortcut-badge"
+            className="ml-1 px-1 py-0.5 rounded border border-line text-[10px] text-fg-3 bg-bg"
+          >
             ⌘K
           </kbd>
         </button>

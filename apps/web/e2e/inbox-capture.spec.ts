@@ -6,6 +6,16 @@ import { expect, test } from '@playwright/test';
 // ---------------------------------------------------------------------------
 
 test.describe('inbox capture', () => {
+  test('shows the header capture shortcut and opens capture via keyboard', async ({ page }) => {
+    await page.goto('/projects/goose-hub-self/inbox');
+
+    await expect(page.locator('[data-testid="capture-shortcut-badge"]')).toHaveText('⌘J');
+
+    const isMac = process.platform === 'darwin';
+    await page.keyboard.press(isMac ? 'Meta+j' : 'Control+j');
+    await expect(page.locator('[data-testid="capture-title-input"]')).toBeVisible();
+  });
+
   test('capturing an idea refreshes the list and selects the new item', async ({ page }) => {
     await page.goto('/projects/goose-hub-self/inbox');
 
