@@ -42,8 +42,8 @@ const config: ProjectConfig = {
   },
   mode: 'supervised',
   storage: { kind: 'local', path: "~/.factory/data/goose-hub-self-claude" },
-  repos: [],
-agentConfig: {
+  repos: ['shaunnez/goose-hub'],
+  agentConfig: {
     runtime: 'auto',
     allowHoldoutOverride: true,
     rolesModels: {
