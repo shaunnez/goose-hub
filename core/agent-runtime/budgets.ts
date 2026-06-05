@@ -57,6 +57,13 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     timeoutMs: 180_000,
     modelTier: 'sonnet',
   },
+  'feature-enhance': {
+    maxTurns: 15,
+    maxBudgetUsd: 0.5,
+    timeoutMs: 120_000,
+    modelTier: 'haiku',
+    effort: 'low',
+  },
   'feature-grounding': {
     maxTurns: 20,
     maxBudgetUsd: 2.0,

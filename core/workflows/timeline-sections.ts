@@ -64,6 +64,7 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'agent.repo-override': 'triage',
   'agent.investigation-complete': 'investigation',
   'feature.framed': 'grounding',
+  'feature.grounding-enhanced': 'grounding',
   'feature.grounding-complete': 'grounding',
   'agent.investigation-context-injected': 'investigation',
   'agent.investigation-seed-built': 'investigation',

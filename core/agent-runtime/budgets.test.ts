@@ -8,6 +8,7 @@ describe('SKILL_BUDGETS', () => {
       'repo-match',
       'bug-enhance',
       'feature-frame',
+      'feature-enhance',
       'evidence-post',
       'implement',
       'qa',
@@ -103,6 +104,7 @@ describe('resolveBudgets', () => {
     for (const skill of [
       'triage',
       'repo-match',
+      'feature-enhance',
       'evidence-post',
       'implement',
       'retrospective-light',

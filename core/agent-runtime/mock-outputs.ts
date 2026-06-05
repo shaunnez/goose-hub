@@ -630,6 +630,29 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
         events: [],
       };
 
+    case 'feature-enhance':
+      return {
+        output: {
+          candidateFiles: [
+            {
+              path: 'apps/web/src/components/detail/IssueDetailPage.tsx',
+              confidence: 'medium',
+              source: 'inferred',
+              reason: 'Mock feature-enhance anchors detail-page feature work.',
+            },
+          ],
+          existingSurfaces: ['apps/web/src/components/detail/IssueDetailPage.tsx'],
+          similarPatterns: ['Mock detail-page feature pattern'],
+          testSurfaces: ['apps/web/src/components/detail/lib/timeline.test.ts'],
+          acceptanceHints: ['Mock acceptance hint'],
+          openQuestions: [],
+          confidence: 'medium',
+          escalationSignals: [],
+        },
+        decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock feature-enhance for e2e test' }],
+        events: [],
+      };
+
     // retrospective-cross-run — triggered by the nightly playbook service.
     case 'retrospective-cross-run': {
       const now = new Date().toISOString();
