@@ -1822,6 +1822,93 @@ describe('runQaWorkflow', () => {
       });
     });
 
+    it('uses the event row runId for legacy deterministic QA attempt identity', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          projectId: 'test-project',
+          workItemId: item.id,
+          kind: 'qa.structural-passed',
+          payload: { runId: 'implementation-run', tier: 'structural' },
+          runId: 'legacy-qa-run',
+          personaId: null,
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn(),
+        executableChecks: [],
+      });
+
+      const aborted = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.map(([event]) => event)
+        .find((event) => event.kind === 'qa.workflow-aborted');
+
+      expect(aborted).toMatchObject({
+        runId: 'legacy-qa-run',
+        payload: {
+          runId: 'legacy-qa-run',
+          qaAttemptId: 'legacy-qa-run',
+          reason: 'superseded',
+        },
+      });
+    });
+
+    it('aborts prior QA attempts that only reached runtime completion', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          projectId: 'test-project',
+          workItemId: item.id,
+          kind: 'agent.run-started',
+          payload: { skill: 'qa' },
+          runId: 'partial-qa-run',
+          personaId: null,
+          createdAt: '',
+        },
+        {
+          id: 2,
+          projectId: 'test-project',
+          workItemId: item.id,
+          kind: 'agent.run-completed',
+          payload: { skill: 'qa' },
+          runId: 'partial-qa-run',
+          personaId: null,
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn(),
+        executableChecks: [],
+      });
+
+      expect(
+        vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.map(([event]) => event)
+          .find((event) => event.kind === 'qa.workflow-aborted'),
+      ).toMatchObject({
+        runId: 'partial-qa-run',
+        payload: {
+          qaAttemptId: 'partial-qa-run',
+          reason: 'superseded',
+        },
+      });
+    });
+
     it('marks qa.preflight-completed failed when deterministic command steps fail', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();

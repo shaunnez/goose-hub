@@ -399,6 +399,11 @@ function getQaPreflightStatus(
 ): 'abandoned' | 'superseded' | null {
   const hasPreflight = events.some((event) => event.kind.startsWith('qa.preflight-'));
   if (!hasPreflight) return null;
+  const aborted = events.find((event) => event.kind === 'qa.workflow-aborted');
+  if ((aborted?.payload as { reason?: string } | null)?.reason === 'superseded') {
+    return 'superseded';
+  }
+  if (aborted != null) return 'abandoned';
   const hasAgentStarted = events.some(
     (event) =>
       event.kind === 'agent.run-started' &&
@@ -410,12 +415,9 @@ function getQaPreflightStatus(
       'qa.verification-blocked',
       'qa.workflow-completed',
       'qa.workflow-failed',
+      'qa.workflow-aborted',
     ].includes(event.kind),
   );
   if (hasTerminal || hasAgentStarted) return null;
-  const aborted = events.find((event) => event.kind === 'qa.workflow-aborted');
-  if ((aborted?.payload as { reason?: string } | null)?.reason === 'superseded') {
-    return 'superseded';
-  }
   return 'abandoned';
 }

@@ -1457,7 +1457,11 @@ describe('groupTimelineEventsByCanonicalSection', () => {
 
     expect(qaSections).toHaveLength(1);
     expect(qaSections[0].segmentId).toBe(`qa:${QA_RUN}`);
-    expect(qaSections[0].items[0]).toMatchObject({ kind: 'run-group', runId: QA_RUN });
+    expect(qaSections[0].items[0]).toMatchObject({
+      kind: 'run-group',
+      runId: QA_RUN,
+      endedAt: null,
+    });
     expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(new Set([QA_RUN]));
   });
 
@@ -1475,16 +1479,25 @@ describe('groupTimelineEventsByCanonicalSection', () => {
       makeEvent(3, 'qa.preflight-step-started', STALE_RUN, {
         payload: { runId: STALE_RUN, step: 'typecheck', status: 'running' },
       }),
-      makeEvent(4, 'qa.workflow-started', QA_AGENT_RUN, {
+      makeEvent(4, 'qa.workflow-aborted', STALE_RUN, {
+        payload: {
+          runId: STALE_RUN,
+          qaAttemptId: STALE_RUN,
+          status: 'aborted',
+          reason: 'superseded',
+          supersededByQaAttemptId: QA_ATTEMPT,
+        },
+      }),
+      makeEvent(5, 'qa.workflow-started', QA_AGENT_RUN, {
         payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, status: 'running' },
       }),
-      makeEvent(5, 'qa.preflight-started', QA_AGENT_RUN, {
+      makeEvent(6, 'qa.preflight-started', QA_AGENT_RUN, {
         payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, status: 'running' },
-      }),
-      makeEvent(6, 'qa.preflight-step-completed', QA_AGENT_RUN, {
-        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, step: 'lint', status: 'passed' },
       }),
       makeEvent(7, 'qa.preflight-step-completed', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, step: 'lint', status: 'passed' },
+      }),
+      makeEvent(8, 'qa.preflight-step-completed', QA_AGENT_RUN, {
         payload: {
           runId: QA_AGENT_RUN,
           qaAttemptId: QA_ATTEMPT,
@@ -1492,16 +1505,16 @@ describe('groupTimelineEventsByCanonicalSection', () => {
           status: 'passed',
         },
       }),
-      makeEvent(8, 'qa.preflight-completed', QA_AGENT_RUN, {
+      makeEvent(9, 'qa.preflight-completed', QA_AGENT_RUN, {
         payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, status: 'passed' },
       }),
-      makeEvent(9, 'agent.run-started', QA_AGENT_RUN, {
+      makeEvent(10, 'agent.run-started', QA_AGENT_RUN, {
         payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, skill: 'qa' },
       }),
-      makeEvent(10, 'agent.run-completed', QA_AGENT_RUN, {
+      makeEvent(11, 'agent.run-completed', QA_AGENT_RUN, {
         payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, skill: 'qa' },
       }),
-      makeEvent(11, 'qa.completed', QA_AGENT_RUN, {
+      makeEvent(12, 'qa.completed', QA_AGENT_RUN, {
         payload: {
           runId: QA_AGENT_RUN,
           qaAttemptId: QA_ATTEMPT,
@@ -1510,7 +1523,7 @@ describe('groupTimelineEventsByCanonicalSection', () => {
           threshold: 70,
         },
       }),
-      makeEvent(12, 'qa.workflow-completed', QA_AGENT_RUN, {
+      makeEvent(13, 'qa.workflow-completed', QA_AGENT_RUN, {
         payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, status: 'completed' },
       }),
     ]);

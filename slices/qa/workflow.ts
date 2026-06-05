@@ -139,9 +139,9 @@ function qaAttemptIdFromEvent(event: { runId?: string | null; payload: unknown }
   const payload = event.payload as Record<string, unknown> | null;
   const explicit = payload?.qaAttemptId;
   if (typeof explicit === 'string' && explicit.trim() !== '') return explicit;
+  if (event.runId != null && event.runId.trim() !== '') return event.runId;
   const payloadRunId = payload?.runId;
-  if (typeof payloadRunId === 'string' && payloadRunId.trim() !== '') return payloadRunId;
-  return event.runId != null && event.runId.trim() !== '' ? event.runId : null;
+  return typeof payloadRunId === 'string' && payloadRunId.trim() !== '' ? payloadRunId : null;
 }
 
 function abortUnterminatedQaAttempts(input: {
@@ -165,11 +165,7 @@ function abortUnterminatedQaAttempts(input: {
     const qaAttemptId = qaAttemptIdFromEvent(event);
     if (qaAttemptId == null || qaAttemptId === input.currentQaAttemptId) continue;
 
-    if (
-      QA_WORKFLOW_TERMINAL_EVENTS.has(event.kind) ||
-      event.kind === 'agent.run-completed' ||
-      event.kind === 'agent.run-failed'
-    ) {
+    if (QA_WORKFLOW_TERMINAL_EVENTS.has(event.kind)) {
       openAttempts.delete(qaAttemptId);
       continue;
     }

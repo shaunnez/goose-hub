@@ -89,9 +89,6 @@ export function extractRunMeta(items: RenderItem[]): {
   let personaId: string | null = null;
   let modelId: string | null = null;
   let runtime: string | null = null;
-  let hasQaPreflight = false;
-  let hasQaAgentStarted = false;
-  let hasQaTerminal = false;
   let earliestMs = Number.POSITIVE_INFINITY;
   let earliestIso: string | null = null;
   let latestMs = Number.NEGATIVE_INFINITY;
@@ -119,9 +116,6 @@ export function extractRunMeta(items: RenderItem[]): {
     }
 
     if (personaId == null && ev.personaId != null) personaId = ev.personaId;
-    if (ev.kind.startsWith('qa.preflight-')) hasQaPreflight = true;
-    if (ev.kind === 'agent.run-started' && p?.skill === 'qa') hasQaAgentStarted = true;
-    if (isQaTerminalEvent(ev.kind)) hasQaTerminal = true;
 
     if (displaySkill == null && p?.displaySkill != null) displaySkill = p.displaySkill;
     if (displaySkill == null && p?.workflowSkill != null) displaySkill = p.workflowSkill;
@@ -200,9 +194,6 @@ export function extractRunMeta(items: RenderItem[]): {
   }
 
   skill = displaySkill ?? lifecycleSkill ?? fallbackSkill;
-  if (endedAt == null && hasQaPreflight && !hasQaTerminal && !hasQaAgentStarted) {
-    endedAt = latestIso;
-  }
 
   return {
     skill,
