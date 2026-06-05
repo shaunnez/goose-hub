@@ -34,14 +34,20 @@ describe('TopBar', () => {
     expect(screen.getByTestId('capture-modal')).toBeTruthy();
   });
 
-  it('keeps Search on Meta+K and Ctrl+K', () => {
+  it('keeps Search open on repeated Meta+K and Ctrl+K presses', () => {
     render(<TopBar />);
+
+    fireEvent.keyDown(document, { key: 'k', metaKey: true });
+    expect(screen.getByTestId('search-modal')).toBeTruthy();
 
     fireEvent.keyDown(document, { key: 'k', metaKey: true });
     expect(screen.getByTestId('search-modal')).toBeTruthy();
 
     cleanup();
     render(<TopBar />);
+
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true });
+    expect(screen.getByTestId('search-modal')).toBeTruthy();
 
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true });
     expect(screen.getByTestId('search-modal')).toBeTruthy();

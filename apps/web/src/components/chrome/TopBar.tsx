@@ -24,7 +24,7 @@ export function TopBar({ breadcrumb }: TopBarProps) {
       }
       if (key === 'k') {
         e.preventDefault();
-        setShowSearch((prev) => !prev);
+        setShowSearch(true);
       }
     }
     document.addEventListener('keydown', onKey);
