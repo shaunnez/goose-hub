@@ -41,6 +41,18 @@ describe('prewarmWorktree package manager selection', () => {
     );
   });
 
+  it('runs npm install for npm repos without lockfiles', async () => {
+    const dir = repo({ 'package.json': packageJson() });
+
+    await prewarmWorktree(dir);
+
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'npm',
+      ['install'],
+      expect.objectContaining({ cwd: dir, stdio: 'pipe' }),
+    );
+  });
+
   it('runs pnpm install --frozen-lockfile for pnpm repos', async () => {
     const dir = repo({ 'package.json': packageJson(), 'pnpm-lock.yaml': 'lockfileVersion: 9\n' });
 

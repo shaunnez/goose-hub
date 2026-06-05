@@ -42,7 +42,12 @@ export async function installCommandForPackageManager(
       ? ['pnpm', 'install', '--frozen-lockfile', '--filter', filter]
       : ['pnpm', 'install', '--frozen-lockfile'];
   }
-  if (packageManager === 'npm') return ['npm', 'ci'];
+  if (packageManager === 'npm') {
+    return (await exists(join(repoPath, 'package-lock.json'))) ||
+      (await exists(join(repoPath, 'npm-shrinkwrap.json')))
+      ? ['npm', 'ci']
+      : ['npm', 'install'];
+  }
   return (await isYarnBerry(repoPath))
     ? ['yarn', 'install', '--immutable']
     : ['yarn', 'install', '--frozen-lockfile'];
@@ -80,7 +85,7 @@ export function stackCommandsFromDetectedStack(
 ): SelectedRepoStack {
   if (stack.type === 'node') {
     const pm = stack.packageManager;
-    return {
+    const detected: SelectedRepoStack = {
       runtime: 'node',
       packageManager: pm,
       detectedAt,
@@ -89,6 +94,24 @@ export function stackCommandsFromDetectedStack(
       ...(stack.scripts.lint ? { lintCommand: nodeScriptCommand(pm, 'lint') } : {}),
       ...(stack.scripts.typecheck ? { typecheckCommand: nodeScriptCommand(pm, 'typecheck') } : {}),
       ...(stack.scripts.e2e ? { e2eCommand: nodeScriptCommand(pm, 'e2e') } : {}),
+    };
+    return {
+      ...detected,
+      ...(detected.testCommand.length === 0 && fallback?.testCommand != null
+        ? { testCommand: fallback.testCommand }
+        : {}),
+      ...(detected.buildCommand == null && fallback?.buildCommand != null
+        ? { buildCommand: fallback.buildCommand }
+        : {}),
+      ...(detected.lintCommand == null && fallback?.lintCommand != null
+        ? { lintCommand: fallback.lintCommand }
+        : {}),
+      ...(detected.typecheckCommand == null && fallback?.typecheckCommand != null
+        ? { typecheckCommand: fallback.typecheckCommand }
+        : {}),
+      ...(detected.e2eCommand == null && fallback?.e2eCommand != null
+        ? { e2eCommand: fallback.e2eCommand }
+        : {}),
     };
   }
   if (stack.type === 'go') {

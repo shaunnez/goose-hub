@@ -72,6 +72,13 @@ async function seedFixtureIssue(
   });
   if (item.id.startsWith(`local:${source.projectId}#`)) {
     if (!source.repoRef.startsWith('local:')) {
+      await source.createRepoLink?.({
+        itemId: item.id,
+        repoRef: source.repoRef,
+        role: 'primary',
+        confidence: 1,
+        source: 'mock-seed',
+      });
       localDbTestRefs.upsertExternalRef({
         projectId: source.projectId,
         itemId: item.id,
