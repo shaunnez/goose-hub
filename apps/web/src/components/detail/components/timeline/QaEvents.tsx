@@ -1,6 +1,6 @@
 import { cn } from '@/lib/cn';
 import type { AgentEventDto } from '@/lib/types';
-import { AlertTriangle, CheckCircle, Circle, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Circle, LoaderCircle, XCircle } from 'lucide-react';
 
 type TierResult = {
   passed: boolean;
@@ -18,7 +18,14 @@ type TierPayload = {
   runId?: string;
 };
 
-type VerificationStatus = 'passed' | 'failed' | 'skipped' | 'unknown' | 'posted' | 'absent';
+type VerificationStatus =
+  | 'running'
+  | 'passed'
+  | 'failed'
+  | 'skipped'
+  | 'unknown'
+  | 'posted'
+  | 'absent';
 
 type VerificationSummaryPayload = {
   changedFileCount?: number;
@@ -30,6 +37,16 @@ type VerificationSummaryPayload = {
   e2eStatus?: VerificationStatus;
   evidenceStatus?: VerificationStatus;
   evidenceReason?: string;
+};
+
+type QaPreflightPayload = {
+  runId?: string;
+  step?: 'lint' | 'typecheck' | 'test' | 'e2e' | 'evidence' | 'executable-checks';
+  command?: string;
+  status?: 'running' | 'passed' | 'failed' | 'skipped';
+  durationMs?: number;
+  exitCode?: number;
+  reason?: string;
 };
 
 function tierKeyFromKind(kind: string): string {
@@ -86,12 +103,38 @@ function formatBytes(value: number | undefined): string {
 }
 
 function statusTone(status: VerificationStatus | undefined): string {
+  if (status === 'running') return 'border-blue-500/20 bg-blue-500/10 text-blue-300';
   if (status === 'passed' || status === 'posted') {
     return 'border-green-500/20 bg-green-500/10 text-green-400';
   }
   if (status === 'failed') return 'border-red-500/20 bg-red-500/10 text-[color:var(--danger)]';
   if (status === 'skipped' || status === 'absent') return 'border-fg-5/20 bg-fg-5/10 text-fg-3';
   return 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400';
+}
+
+function formatDurationMs(value: number | undefined): string | null {
+  if (value == null) return null;
+  if (value < 1000) return `${value}ms`;
+  return `${(value / 1000).toFixed(1)}s`;
+}
+
+function qaPreflightStepLabel(step: QaPreflightPayload['step']): string {
+  switch (step) {
+    case 'lint':
+      return 'Lint';
+    case 'typecheck':
+      return 'Typecheck';
+    case 'test':
+      return 'Tests';
+    case 'e2e':
+      return 'E2E';
+    case 'evidence':
+      return 'Evidence';
+    case 'executable-checks':
+      return 'Executable checks';
+    default:
+      return 'Preflight step';
+  }
 }
 
 function formatFailureCategory(category: string | undefined): string | null {
@@ -139,6 +182,79 @@ function StatusRow({
         {normalized}
       </span>
     </div>
+  );
+}
+
+export function QaPreflightEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as QaPreflightPayload | null;
+  const completed = event.kind === 'qa.preflight-completed';
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-fg-3">
+        {completed ? (
+          <CheckCircle size={13} className="shrink-0 text-green-400" />
+        ) : (
+          <LoaderCircle size={13} className="shrink-0 animate-spin text-blue-300" />
+        )}
+        <span className="font-mono uppercase tracking-wider">
+          {completed ? 'QA preflight completed' : 'QA preflight started'}
+        </span>
+        <span
+          className={cn(
+            'rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase',
+            statusTone(p?.status ?? (completed ? 'passed' : 'running')),
+          )}
+        >
+          {p?.status ?? (completed ? 'passed' : 'running')}
+        </span>
+        <span aria-hidden className="h-[3px] w-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+    </li>
+  );
+}
+
+export function QaPreflightStepEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as QaPreflightPayload | null;
+  const status = p?.status ?? (event.kind === 'qa.preflight-step-started' ? 'running' : 'unknown');
+  const duration = formatDurationMs(p?.durationMs);
+  const failed = status === 'failed';
+  const running = status === 'running';
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[11px] text-fg-3">
+        {running ? (
+          <LoaderCircle size={13} className="shrink-0 animate-spin text-blue-300" />
+        ) : failed ? (
+          <XCircle size={13} className="shrink-0 text-[color:var(--danger)]" />
+        ) : (
+          <CheckCircle size={13} className="shrink-0 text-green-400" />
+        )}
+        <span className="font-mono uppercase tracking-wider">{qaPreflightStepLabel(p?.step)}</span>
+        <span
+          className={cn(
+            'rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase',
+            statusTone(status),
+          )}
+        >
+          {status}
+        </span>
+        {duration != null && <span className="font-mono tnum text-fg-4">{duration}</span>}
+        {p?.exitCode != null && <span className="font-mono text-fg-4">exit {p.exitCode}</span>}
+      </div>
+      {p?.command != null && (
+        <div className="truncate font-mono text-[11px] text-fg-3">{p.command}</div>
+      )}
+      {p?.reason != null && (
+        <div className="mt-1 text-[11.5px] leading-snug text-fg-3">{p.reason}</div>
+      )}
+    </li>
   );
 }
 

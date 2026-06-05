@@ -25,6 +25,24 @@ export type RunQaCommand = (
   options?: RunQaCommandOptions,
 ) => Promise<VerificationCommandSummary>;
 
+export type QaPreflightStep =
+  | 'lint'
+  | 'typecheck'
+  | 'test'
+  | 'e2e'
+  | 'evidence'
+  | 'executable-checks';
+export type QaPreflightStepStatus = 'running' | 'passed' | 'failed' | 'skipped';
+
+export interface QaPreflightStepEvent {
+  step: QaPreflightStep;
+  command?: string;
+  status: QaPreflightStepStatus;
+  durationMs?: number;
+  exitCode?: number;
+  reason?: string;
+}
+
 export interface VerificationSummaryInput {
   workspaceDir?: string;
   prHints: PrOpenedHints;
@@ -43,6 +61,7 @@ export interface VerificationSummaryInput {
   commandTimeoutMs?: number;
   runTests: (cwd: string, command: string) => Promise<TestRun | null>;
   runCommand?: RunQaCommand;
+  onStep?: (event: QaPreflightStepEvent) => void;
 }
 
 export interface VerificationSummaryResult {
@@ -138,23 +157,32 @@ export async function buildVerificationSummary(
     changedFilePaths,
   });
 
-  const lint = await runOptionalCommand(
+  const lint = await runPreflightCommandStep(
+    'lint',
     input.workspaceDir,
     input.commands.lintCommand,
     runCommand,
     input.commandTimeoutMs,
     input.commandEnv,
+    input.onStep,
   );
-  const typecheck = await runOptionalCommand(
+  const typecheck = await runPreflightCommandStep(
+    'typecheck',
     input.workspaceDir,
     input.commands.typecheckCommand,
     runCommand,
     input.commandTimeoutMs,
     input.commandEnv,
+    input.onStep,
   );
 
   let testRun: TestRun | null = null;
   let testCaptureError: string | undefined;
+  input.onStep?.({
+    step: 'test',
+    command: input.commands.testCommand,
+    status: 'running',
+  });
   if (input.workspaceDir != null && input.testCapture?.enabled !== false) {
     try {
       testRun = await input.runTests(input.workspaceDir, input.commands.testCommand);
@@ -176,14 +204,31 @@ export async function buildVerificationSummary(
         : testRun == null
           ? (testCaptureError ?? 'test command did not produce structured output')
           : undefined;
+  input.onStep?.({
+    step: 'test',
+    command: input.commands.testCommand,
+    status: testStatus,
+    ...(testRun != null ? { durationMs: testRun.wallTimeMs } : {}),
+    ...(testError != null ? { reason: testError } : {}),
+  });
   const compactedTestRun = compactTestRun(input.commands.testCommand, testStatus, testRun);
-  const e2e = await runOptionalCommand(
+  const e2e = await runPreflightCommandStep(
+    'e2e',
     input.workspaceDir,
     e2eDecision.command,
     runCommand,
     input.commandTimeoutMs,
     input.commandEnv,
+    input.onStep,
+    e2eDecision.reason,
   );
+  const evidence = summarizeEvidence(input.priorEvents);
+  input.onStep?.({
+    step: 'evidence',
+    status: qaPreflightStatusFromEvidence(evidence.status),
+    ...('reason' in evidence && evidence.reason != null ? { reason: evidence.reason } : {}),
+    ...('error' in evidence && evidence.error != null ? { reason: evidence.error } : {}),
+  });
 
   const verificationSummary: VerificationSummary = {
     changedFiles: {
@@ -215,7 +260,7 @@ export async function buildVerificationSummary(
       status: e2e?.status ?? 'skipped',
       reason: e2eReason(e2eDecision.reason, e2e),
     },
-    evidence: summarizeEvidence(input.priorEvents),
+    evidence,
     ...(input.devTestsRun != null ? { devTestsRun: input.devTestsRun } : {}),
   };
 
@@ -275,6 +320,43 @@ function runOptionalCommand(
         }
       : undefined;
   return runCommand(workspaceDir, command, options);
+}
+
+async function runPreflightCommandStep(
+  step: Exclude<QaPreflightStep, 'test' | 'evidence'>,
+  workspaceDir: string | undefined,
+  command: string | undefined,
+  runCommand: RunQaCommand,
+  timeoutMs: number | undefined,
+  env: NodeJS.ProcessEnv | undefined,
+  onStep: ((event: QaPreflightStepEvent) => void) | undefined,
+  skipReason?: string,
+): Promise<VerificationCommandSummary | null> {
+  onStep?.({
+    step,
+    ...(command != null ? { command } : {}),
+    status: 'running',
+  });
+  const summary = await runOptionalCommand(workspaceDir, command, runCommand, timeoutMs, env);
+  const status = summary?.status ?? 'skipped';
+  onStep?.({
+    step,
+    ...(command != null ? { command } : {}),
+    status,
+    ...(summary?.durationMs != null ? { durationMs: summary.durationMs } : {}),
+    ...(summary?.exitCode != null ? { exitCode: summary.exitCode } : {}),
+    ...(summary?.error != null ? { reason: summary.error } : {}),
+    ...(summary == null && skipReason != null ? { reason: skipReason } : {}),
+  });
+  return summary;
+}
+
+function qaPreflightStatusFromEvidence(
+  status: VerificationSummary['evidence']['status'],
+): QaPreflightStepStatus {
+  if (status === 'posted') return 'passed';
+  if (status === 'failed') return 'failed';
+  return 'skipped';
 }
 
 function e2eReason(reason: string, e2e: VerificationCommandSummary | null): string {

@@ -555,6 +555,75 @@ describe('verification summary harness', () => {
     }
   });
 
+  it('emits bounded preflight step events for pass, fail, and skip decisions', async () => {
+    const dir = makeGitFixture();
+    try {
+      const { buildVerificationSummary } = await import('./verification-summary.js');
+      const onStep = vi.fn();
+      const runCommand = vi.fn(async (_cwd: string, command: string) => ({
+        command,
+        status: command === 'pnpm typecheck' ? ('failed' as const) : ('passed' as const),
+        ...(command === 'pnpm typecheck' ? { exitCode: 2, stderr: 'type error details' } : {}),
+        durationMs: 123,
+      }));
+
+      await buildVerificationSummary({
+        workspaceDir: dir,
+        prHints: { baseBranch: 'main' },
+        prDiff: '',
+        qaE2eMode: 'off',
+        commands: {
+          lintCommand: 'pnpm lint',
+          typecheckCommand: 'pnpm typecheck',
+          testCommand: 'pnpm test --reporter=json',
+        },
+        priorEvents: [],
+        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+        runCommand,
+        onStep,
+      });
+
+      expect(onStep).toHaveBeenCalledWith({
+        step: 'lint',
+        command: 'pnpm lint',
+        status: 'running',
+      });
+      expect(onStep).toHaveBeenCalledWith({
+        step: 'lint',
+        command: 'pnpm lint',
+        status: 'passed',
+        durationMs: 123,
+      });
+      expect(onStep).toHaveBeenCalledWith({
+        step: 'typecheck',
+        command: 'pnpm typecheck',
+        status: 'failed',
+        durationMs: 123,
+        exitCode: 2,
+      });
+      expect(onStep).toHaveBeenCalledWith({
+        step: 'test',
+        command: 'pnpm test --reporter=json',
+        status: 'failed',
+        durationMs: 7700,
+      });
+      expect(onStep).toHaveBeenCalledWith({
+        step: 'e2e',
+        status: 'skipped',
+        reason: 'qa e2e disabled by project setting',
+      });
+      expect(onStep).toHaveBeenCalledWith(
+        expect.objectContaining({
+          step: 'evidence',
+          status: 'skipped',
+        }),
+      );
+      expect(JSON.stringify(onStep.mock.calls)).not.toContain('type error details');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('reflects failed workflow-owned e2e in command and summary status', async () => {
     const dir = makeGitFixture();
     try {
@@ -1635,6 +1704,80 @@ describe('runQaWorkflow', () => {
       expect(
         (summaryEvent?.[0].payload as { contextByteSizeEstimate?: number }).contextByteSizeEstimate,
       ).toBeGreaterThan(0);
+    });
+
+    it('emits qa.preflight-started and step telemetry before verification summary', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn(),
+        executableChecks: [],
+      });
+
+      const calls = vi.mocked(eventStore.appendEvent).mock.calls.map(([event]) => event);
+      const preflightStartedIndex = calls.findIndex(
+        (event) => event.kind === 'qa.preflight-started',
+      );
+      const preflightCompletedIndex = calls.findIndex(
+        (event) => event.kind === 'qa.preflight-completed',
+      );
+      const summaryIndex = calls.findIndex(
+        (event) => event.kind === 'qa.verification-summary-built',
+      );
+      const executableCompleted = calls.find(
+        (event) =>
+          event.kind === 'qa.preflight-step-completed' &&
+          (event.payload as { step?: string }).step === 'executable-checks',
+      );
+
+      expect(preflightStartedIndex).toBeGreaterThanOrEqual(0);
+      expect(summaryIndex).toBeGreaterThan(preflightStartedIndex);
+      expect(executableCompleted?.payload).toMatchObject({
+        runId: expect.any(String),
+        step: 'executable-checks',
+        status: 'skipped',
+        reason: 'no executable acceptance checks configured',
+      });
+      expect(preflightCompletedIndex).toBeGreaterThan(preflightStartedIndex);
+      expect(preflightCompletedIndex).toBeLessThan(summaryIndex);
+    });
+
+    it('marks qa.preflight-completed failed when deterministic command steps fail', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const worktree = makeGitWorktreeWithChange('src/foo.ts');
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: worktree, baseBranch: 'main' },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+          executableChecks: [],
+        });
+
+        const preflightCompleted = vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.find(([event]) => event.kind === 'qa.preflight-completed');
+
+        expect(preflightCompleted?.[0].payload).toMatchObject({
+          status: 'failed',
+        });
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
     });
   });
 

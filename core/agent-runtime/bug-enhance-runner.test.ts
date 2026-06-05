@@ -1,6 +1,6 @@
 import type { GroundedHints } from '@goose-hub/skills/bug-enhance/schema.js';
-import type { ResolvedSkillRuntime } from './skill-runtime-resolver.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ResolvedSkillRuntime } from './skill-runtime-resolver.js';
 
 vi.mock('../event-stream/store.js', () => ({
   eventStore: { appendEvent: vi.fn() },

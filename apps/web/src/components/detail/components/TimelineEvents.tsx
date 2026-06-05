@@ -99,6 +99,8 @@ import {
   QaCompletedEvent,
   QaFailedEvent,
   QaPassedEvent,
+  QaPreflightEvent,
+  QaPreflightStepEvent,
   QaVerificationBlockedEvent,
   QaVerificationSummaryBuiltEvent,
 } from './timeline/QaEvents';
@@ -336,6 +338,13 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <QaVerificationBlockedEvent key={event.id} event={event} />;
     case 'qa.verification-summary-built':
       return <QaVerificationSummaryBuiltEvent key={event.id} event={event} />;
+    case 'qa.preflight-started':
+    case 'qa.preflight-completed':
+      return <QaPreflightEvent key={event.id} event={event} />;
+    case 'qa.preflight-step-started':
+    case 'qa.preflight-step-completed':
+    case 'qa.preflight-step-failed':
+      return <QaPreflightStepEvent key={event.id} event={event} />;
     case 'qa.structural-passed':
     case 'qa.functional-passed':
     case 'qa.regression-passed':
