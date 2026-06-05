@@ -29,6 +29,7 @@ export const EVENT_KINDS = [
   'feature.framed',
   'feature.grounding-enhanced',
   'feature.grounding-complete',
+  'agent.feature-enhance-empty',
   'agent.investigation-context-injected',
   'agent.investigation-seed-built',
   'investigation.digest-applied',

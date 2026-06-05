@@ -262,6 +262,7 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     case 'audit.failed':
     case 'audit.autonomy-gate-fired':
     case 'agent.investigation-seed-empty':
+    case 'agent.feature-enhance-empty':
     case 'state.transition-deferred':
     case 'agent.bug-enhance-empty':
     case 'agent.bug-enhance-hallucinated':

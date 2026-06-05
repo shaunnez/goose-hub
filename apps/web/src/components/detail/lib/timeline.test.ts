@@ -2559,6 +2559,7 @@ describe('EVENT_KIND_LABEL — QA and fix-feedback kinds', () => {
 
 describe('EVENT_KIND_LABEL — workflow routing kinds', () => {
   const KINDS = [
+    'agent.feature-enhance-empty',
     'workflow.route-selected',
     'workflow.route-confirmed',
     'workflow.route-escalation-proposed',

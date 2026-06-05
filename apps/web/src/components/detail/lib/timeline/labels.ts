@@ -37,6 +37,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'feature.framed': 'Feature framed',
   'feature.grounding-enhanced': 'Feature grounding enhanced',
   'feature.grounding-complete': 'Feature grounding complete',
+  'agent.feature-enhance-empty': 'Feature grounding empty',
   'agent.investigation-seed-built': 'Investigation seed built',
   'agent.investigation-seed-empty': 'Investigation seed empty',
   'agent.bug-enhance-lazy': 'Bug grounding seed',
