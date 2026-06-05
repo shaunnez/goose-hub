@@ -563,6 +563,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
             budget: {
               usd: spec.budgets.maxBudgetUsd,
             },
+            ...spec.extraEventPayload,
           },
           runId,
           personaId,

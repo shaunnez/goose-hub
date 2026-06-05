@@ -122,6 +122,7 @@ export async function runDeterministicTiers(opts: {
   projectSlug: string;
   workItemId: string;
   runId: string;
+  qaAttemptId?: string;
   regressionPolicy: RegressionPolicy;
   runTier: typeof defaultRunTier;
   changedFiles?: string[];
@@ -141,7 +142,17 @@ export async function runDeterministicTiers(opts: {
   // pass/fail belong to this QA run — rewrite the runId before persisting so
   // run-scoped queries don't conflate implement and QA stages.
   const tierAppendEvent = (input: Parameters<typeof eventStore.appendEvent>[0]) =>
-    eventStore.appendEvent({ ...input, runId: opts.runId });
+    eventStore.appendEvent({
+      ...input,
+      payload:
+        opts.qaAttemptId == null
+          ? input.payload
+          : {
+              ...(input.payload as Record<string, unknown>),
+              qaAttemptId: opts.qaAttemptId,
+            },
+      runId: opts.runId,
+    });
 
   for (const tier of [1, 2, 3] as const) {
     const rawResult = await opts.runTier(tier, opts.spec, runArtifacts, {
@@ -163,6 +174,7 @@ export async function runDeterministicTiers(opts: {
         kind: 'agent.log',
         payload: {
           runId: opts.implRunId,
+          ...(opts.qaAttemptId != null ? { qaAttemptId: opts.qaAttemptId } : {}),
           skill: 'qa',
           stream: 'telemetry',
           metric: 'regression_unrelated',

@@ -1433,7 +1433,7 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     );
 
     expect(qaSections).toHaveLength(1);
-    expect(qaSections[0].segmentId).toBe(`qa:${QA_RUN}`);
+    expect(qaSections[0].segmentId).toBe(`qa:${PIPELINE_RUN}`);
     expect(qaSections[0].items).toHaveLength(1);
     expect(qaSections[0].items[0]).toMatchObject({ kind: 'run-group', runId: QA_RUN });
     expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(new Set([QA_RUN]));
@@ -1461,22 +1461,57 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(new Set([QA_RUN]));
   });
 
-  it('splits repeated QA attempts on the same pipeline into separate QA sections', () => {
-    const PIPELINE_RUN = 'pipeline-qa-repeat';
-    const QA_RUN_1 = 'qa-run-first';
-    const QA_RUN_2 = 'qa-run-second';
+  it('renders abandoned preflight and replacement QA attempt as separate terminal QA groups', () => {
+    const STALE_RUN = 'qa-stale-preflight';
+    const QA_ATTEMPT = 'qa-attempt-full';
+    const QA_AGENT_RUN = 'qa-runtime-full';
     const items = groupTimelineEventsByCanonicalSection([
-      makeEvent(1, 'qa.structural-failed', QA_RUN_1, {
-        payload: { pipelineRunId: PIPELINE_RUN, tier: 'structural' },
+      makeEvent(1, 'qa.preflight-started', STALE_RUN, {
+        payload: { runId: STALE_RUN, status: 'running' },
       }),
-      makeEvent(2, 'qa.completed', QA_RUN_1, {
-        payload: { pipelineRunId: PIPELINE_RUN, verdict: 'fail' },
+      makeEvent(2, 'qa.preflight-step-completed', STALE_RUN, {
+        payload: { runId: STALE_RUN, step: 'lint', status: 'passed' },
       }),
-      makeEvent(3, 'qa.structural-passed', QA_RUN_2, {
-        payload: { pipelineRunId: PIPELINE_RUN, tier: 'structural' },
+      makeEvent(3, 'qa.preflight-step-started', STALE_RUN, {
+        payload: { runId: STALE_RUN, step: 'typecheck', status: 'running' },
       }),
-      makeEvent(4, 'qa.verification-blocked', QA_RUN_2, {
-        payload: { pipelineRunId: PIPELINE_RUN, reason: 'verification-infrastructure-failure' },
+      makeEvent(4, 'qa.workflow-started', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, status: 'running' },
+      }),
+      makeEvent(5, 'qa.preflight-started', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, status: 'running' },
+      }),
+      makeEvent(6, 'qa.preflight-step-completed', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, step: 'lint', status: 'passed' },
+      }),
+      makeEvent(7, 'qa.preflight-step-completed', QA_AGENT_RUN, {
+        payload: {
+          runId: QA_AGENT_RUN,
+          qaAttemptId: QA_ATTEMPT,
+          step: 'typecheck',
+          status: 'passed',
+        },
+      }),
+      makeEvent(8, 'qa.preflight-completed', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, status: 'passed' },
+      }),
+      makeEvent(9, 'agent.run-started', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, skill: 'qa' },
+      }),
+      makeEvent(10, 'agent.run-completed', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, skill: 'qa' },
+      }),
+      makeEvent(11, 'qa.completed', QA_AGENT_RUN, {
+        payload: {
+          runId: QA_AGENT_RUN,
+          qaAttemptId: QA_ATTEMPT,
+          verdict: 'pass',
+          overallScore: 95,
+          threshold: 70,
+        },
+      }),
+      makeEvent(12, 'qa.workflow-completed', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, status: 'completed' },
       }),
     ]);
 
@@ -1485,9 +1520,96 @@ describe('groupTimelineEventsByCanonicalSection', () => {
         item.kind === 'timeline-section' && item.section === 'qa',
     );
 
-    expect(qaSections.map((item) => item.segmentId)).toEqual([`qa:${QA_RUN_2}`, `qa:${QA_RUN_1}`]);
-    expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(new Set([QA_RUN_2]));
-    expect(collectRunIdsForTimelineSection(qaSections[1].items)).toEqual(new Set([QA_RUN_1]));
+    expect(qaSections.map((section) => section.segmentId)).toEqual([
+      `qa:${QA_ATTEMPT}`,
+      `qa:${STALE_RUN}`,
+    ]);
+    expect(qaSections[0].items).toHaveLength(1);
+    expect(qaSections[0].items[0]).toMatchObject({
+      kind: 'run-group',
+      runId: QA_ATTEMPT,
+      skill: 'qa',
+      endedAt: expect.any(String),
+    });
+    expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(
+      new Set([QA_ATTEMPT, QA_AGENT_RUN]),
+    );
+    expect(qaSections[1].items[0]).toMatchObject({
+      kind: 'run-group',
+      runId: STALE_RUN,
+      skill: 'qa',
+      endedAt: expect.any(String),
+    });
+  });
+
+  it('marks superseded legacy QA preflight groups terminal', () => {
+    const STALE_RUN = 'qa-stale-superseded';
+    const NEXT_ATTEMPT = 'qa-next-attempt';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'qa.preflight-started', STALE_RUN, {
+        payload: { runId: STALE_RUN, status: 'running' },
+      }),
+      makeEvent(2, 'qa.workflow-aborted', STALE_RUN, {
+        payload: {
+          runId: STALE_RUN,
+          qaAttemptId: STALE_RUN,
+          reason: 'superseded',
+          supersededByQaAttemptId: NEXT_ATTEMPT,
+        },
+      }),
+    ]);
+
+    const qa = items.find(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'qa',
+    );
+    expect(qa?.items[0]).toMatchObject({
+      kind: 'run-group',
+      runId: STALE_RUN,
+      endedAt: expect.any(String),
+    });
+  });
+
+  it('splits repeated QA attempts on the same pipeline into separate QA sections', () => {
+    const PIPELINE_RUN = 'pipeline-qa-repeat';
+    const QA_RUN_1 = 'qa-run-first';
+    const QA_RUN_2 = 'qa-run-second';
+    const QA_ATTEMPT_1 = 'qa-attempt-first';
+    const QA_ATTEMPT_2 = 'qa-attempt-second';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'qa.structural-failed', QA_RUN_1, {
+        payload: { qaAttemptId: QA_ATTEMPT_1, pipelineRunId: PIPELINE_RUN, tier: 'structural' },
+      }),
+      makeEvent(2, 'qa.completed', QA_RUN_1, {
+        payload: { qaAttemptId: QA_ATTEMPT_1, pipelineRunId: PIPELINE_RUN, verdict: 'fail' },
+      }),
+      makeEvent(3, 'qa.structural-passed', QA_RUN_2, {
+        payload: { qaAttemptId: QA_ATTEMPT_2, pipelineRunId: PIPELINE_RUN, tier: 'structural' },
+      }),
+      makeEvent(4, 'qa.verification-blocked', QA_RUN_2, {
+        payload: {
+          qaAttemptId: QA_ATTEMPT_2,
+          pipelineRunId: PIPELINE_RUN,
+          reason: 'verification-infrastructure-failure',
+        },
+      }),
+    ]);
+
+    const qaSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'qa',
+    );
+
+    expect(qaSections.map((item) => item.segmentId)).toEqual([
+      `qa:${QA_ATTEMPT_2}`,
+      `qa:${QA_ATTEMPT_1}`,
+    ]);
+    expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(
+      new Set([QA_ATTEMPT_2, QA_RUN_2]),
+    );
+    expect(collectRunIdsForTimelineSection(qaSections[1].items)).toEqual(
+      new Set([QA_ATTEMPT_1, QA_RUN_1]),
+    );
   });
 
   it('keeps dev-review lifecycle and runtime rows in the pipeline dev-review section', () => {

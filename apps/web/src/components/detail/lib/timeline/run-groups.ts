@@ -40,10 +40,30 @@ export function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {
 function getRunId(item: RenderItem): string | null {
   if (item.kind === 'event') {
     if (item.event.kind.startsWith('workflow.route-')) return null;
+    const qaAttemptId = qaAttemptIdForTimelineEvent(item.event);
+    if (qaAttemptId != null) return qaAttemptId;
     const runId = (item.event as AgentEventDto & { runId?: string | null }).runId ?? null;
     return scoutBaseRunId(runId);
   }
   return null;
+}
+
+function qaAttemptIdForTimelineEvent(event: AgentEventDto): string | null {
+  if (!isQaTimelineEvent(event)) return null;
+  const payload = event.payload as Record<string, unknown> | null;
+  const qaAttemptId = payload?.qaAttemptId;
+  return typeof qaAttemptId === 'string' && qaAttemptId.trim() !== '' ? qaAttemptId : null;
+}
+
+function isQaTimelineEvent(event: AgentEventDto): boolean {
+  if (event.kind.startsWith('qa.')) return true;
+  const payload = event.payload as Record<string, unknown> | null;
+  return (
+    (event.kind === 'agent.run-started' ||
+      event.kind === 'agent.run-completed' ||
+      event.kind === 'agent.run-failed') &&
+    payload?.skill === 'qa'
+  );
 }
 
 function scoutBaseRunId(runId: string | null): string | null {
@@ -69,6 +89,9 @@ export function extractRunMeta(items: RenderItem[]): {
   let personaId: string | null = null;
   let modelId: string | null = null;
   let runtime: string | null = null;
+  let hasQaPreflight = false;
+  let hasQaAgentStarted = false;
+  let hasQaTerminal = false;
   let earliestMs = Number.POSITIVE_INFINITY;
   let earliestIso: string | null = null;
   let latestMs = Number.NEGATIVE_INFINITY;
@@ -96,6 +119,9 @@ export function extractRunMeta(items: RenderItem[]): {
     }
 
     if (personaId == null && ev.personaId != null) personaId = ev.personaId;
+    if (ev.kind.startsWith('qa.preflight-')) hasQaPreflight = true;
+    if (ev.kind === 'agent.run-started' && p?.skill === 'qa') hasQaAgentStarted = true;
+    if (isQaTerminalEvent(ev.kind)) hasQaTerminal = true;
 
     if (displaySkill == null && p?.displaySkill != null) displaySkill = p.displaySkill;
     if (displaySkill == null && p?.workflowSkill != null) displaySkill = p.workflowSkill;
@@ -158,7 +184,7 @@ export function extractRunMeta(items: RenderItem[]): {
       }
     } else if (ev.kind.startsWith('qa.')) {
       if (displaySkill == null) displaySkill = 'qa';
-      if (ev.kind === 'qa.completed' || ev.kind === 'qa.verification-blocked') {
+      if (isQaTerminalEvent(ev.kind)) {
         if (endedAt == null || ms > new Date(endedAt).getTime()) endedAt = ev.createdAt;
       }
     } else if (ev.kind.startsWith('dev-review.')) {
@@ -174,6 +200,9 @@ export function extractRunMeta(items: RenderItem[]): {
   }
 
   skill = displaySkill ?? lifecycleSkill ?? fallbackSkill;
+  if (endedAt == null && hasQaPreflight && !hasQaTerminal && !hasQaAgentStarted) {
+    endedAt = latestIso;
+  }
 
   return {
     skill,
@@ -184,6 +213,16 @@ export function extractRunMeta(items: RenderItem[]): {
     modelId,
     runtime,
   };
+}
+
+function isQaTerminalEvent(kind: string): boolean {
+  return (
+    kind === 'qa.completed' ||
+    kind === 'qa.verification-blocked' ||
+    kind === 'qa.workflow-completed' ||
+    kind === 'qa.workflow-failed' ||
+    kind === 'qa.workflow-aborted'
+  );
 }
 
 export function groupByRunId(items: RenderItem[]): RenderItem[] {

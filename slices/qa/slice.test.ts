@@ -1746,6 +1746,82 @@ describe('runQaWorkflow', () => {
       expect(preflightCompletedIndex).toBeLessThan(summaryIndex);
     });
 
+    it('propagates qaAttemptId across QA lifecycle, preflight, agent, completion, and transition events', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn(),
+        executableChecks: [],
+      });
+
+      const calls = vi.mocked(eventStore.appendEvent).mock.calls.map(([event]) => event);
+      const started = calls.find((event) => event.kind === 'qa.workflow-started');
+      const qaAttemptId = (started?.payload as { qaAttemptId?: string } | undefined)?.qaAttemptId;
+
+      expect(qaAttemptId).toEqual(expect.any(String));
+      for (const kind of [
+        'qa.workflow-started',
+        'qa.preflight-started',
+        'qa.preflight-step-completed',
+        'qa.preflight-completed',
+        'qa.verification-summary-built',
+        'qa.completed',
+        'qa.workflow-completed',
+        'state.transitioned',
+      ]) {
+        const event = calls.find((candidate) => candidate.kind === kind);
+        expect(event?.payload).toMatchObject({ qaAttemptId });
+      }
+
+      const spec = mockRun.mock.calls[0][0] as { extraEventPayload?: { qaAttemptId?: string } };
+      expect(spec.extraEventPayload).toEqual({ qaAttemptId });
+    });
+
+    it('aborts unterminated prior QA attempts before starting a replacement attempt', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          projectId: 'test-project',
+          workItemId: item.id,
+          kind: 'qa.preflight-started',
+          payload: { runId: 'stale-qa-run', status: 'running' },
+          runId: 'stale-qa-run',
+          personaId: null,
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn(),
+        executableChecks: [],
+      });
+
+      const calls = vi.mocked(eventStore.appendEvent).mock.calls.map(([event]) => event);
+      const abortedIndex = calls.findIndex((event) => event.kind === 'qa.workflow-aborted');
+      const startedIndex = calls.findIndex((event) => event.kind === 'qa.workflow-started');
+      const startedPayload = calls[startedIndex]?.payload as { qaAttemptId?: string } | undefined;
+
+      expect(abortedIndex).toBeGreaterThanOrEqual(0);
+      expect(abortedIndex).toBeLessThan(startedIndex);
+      expect(calls[abortedIndex]).toMatchObject({
+        runId: 'stale-qa-run',
+        payload: {
+          qaAttemptId: 'stale-qa-run',
+          reason: 'superseded',
+          supersededByQaAttemptId: startedPayload?.qaAttemptId,
+        },
+      });
+    });
+
     it('marks qa.preflight-completed failed when deterministic command steps fail', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();

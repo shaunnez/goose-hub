@@ -1033,6 +1033,7 @@ export class CodexCliRuntime implements AgentRuntime {
             budget: {
               usd: spec.budgets.maxBudgetUsd,
             },
+            ...spec.extraEventPayload,
           },
           runId,
           personaId,

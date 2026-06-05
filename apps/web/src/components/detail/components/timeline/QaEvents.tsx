@@ -49,6 +49,14 @@ type QaPreflightPayload = {
   reason?: string;
 };
 
+type QaWorkflowPayload = {
+  status?: 'running' | 'completed' | 'failed' | 'aborted';
+  reason?: string;
+  nextState?: string;
+  verdict?: string;
+  error?: string;
+};
+
 function tierKeyFromKind(kind: string): string {
   return kind.replace('qa.', '').replace('-failed', '').replace('-passed', '');
 }
@@ -213,6 +221,62 @@ export function QaPreflightEvent({ event }: { event: AgentEventDto }) {
         <span aria-hidden className="h-[3px] w-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
+    </li>
+  );
+}
+
+export function QaWorkflowEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as QaWorkflowPayload | null;
+  const failed = event.kind === 'qa.workflow-failed';
+  const aborted = event.kind === 'qa.workflow-aborted';
+  const completed = event.kind === 'qa.workflow-completed';
+  const running = event.kind === 'qa.workflow-started';
+  const title = running
+    ? 'QA workflow started'
+    : completed
+      ? 'QA workflow completed'
+      : aborted
+        ? 'QA workflow aborted'
+        : 'QA workflow failed';
+  const status =
+    p?.status ?? (running ? 'running' : completed ? 'completed' : failed ? 'failed' : 'aborted');
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-fg-3">
+        {running ? (
+          <LoaderCircle size={13} className="shrink-0 animate-spin text-blue-300" />
+        ) : failed ? (
+          <XCircle size={13} className="shrink-0 text-[color:var(--danger)]" />
+        ) : aborted ? (
+          <AlertTriangle size={13} className="shrink-0 text-yellow-400" />
+        ) : (
+          <CheckCircle size={13} className="shrink-0 text-green-400" />
+        )}
+        <span className="font-mono uppercase tracking-wider">{title}</span>
+        <span
+          className={cn(
+            'rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase',
+            statusTone(
+              status === 'completed' ? 'passed' : status === 'aborted' ? 'skipped' : status,
+            ),
+          )}
+        >
+          {status}
+        </span>
+        <span aria-hidden className="h-[3px] w-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      {(p?.reason != null || p?.nextState != null || p?.verdict != null || p?.error != null) && (
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-fg-3">
+          {p.reason != null && <span>Reason: {p.reason}</span>}
+          {p.verdict != null && <span>Verdict: {p.verdict}</span>}
+          {p.nextState != null && <span>Next: {p.nextState}</span>}
+          {p.error != null && <span className="break-words">Error: {p.error}</span>}
+        </div>
+      )}
     </li>
   );
 }

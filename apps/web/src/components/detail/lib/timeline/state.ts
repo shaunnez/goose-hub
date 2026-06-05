@@ -13,6 +13,9 @@ const TERMINAL_EVENTS = new Set([
   'parallel-implement.wp-terminal-blocked',
   'qa.completed',
   'qa.verification-blocked',
+  'qa.workflow-completed',
+  'qa.workflow-failed',
+  'qa.workflow-aborted',
 ]);
 
 export function computeIsLive(events: AgentEventDto[]): boolean {
