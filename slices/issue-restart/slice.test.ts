@@ -1,6 +1,14 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { describe, expect, it } from 'vitest';
+import * as schema from '../../core/db/schema.js';
 import { filterRestartAuxiliaryLabels, restartIssue } from '../../core/projects/restart-issue.js';
 import { InMemoryLabelsSource } from '../../core/state-source/in-memory-labels.js';
+import { LocalDbWorkItemRepository } from '../../core/state-source/local-db-repository.js';
+import { LocalDbStateSource } from '../../core/state-source/local-db.js';
 
 describe('issue restart', () => {
   it('filters lifecycle-owned labels but preserves auxiliary labels', () => {
@@ -86,5 +94,63 @@ describe('issue restart', () => {
     const fresh = await source.getItem(result.newItem.id);
     expect(fresh.state).toBe('factory:triaging');
     expect(fresh.schedule).toBe('later');
+  });
+
+  it('copies local-db primary and related repo links with metadata', async () => {
+    const sqlite = new Database(':memory:');
+    const db = drizzle(sqlite, { schema });
+    const migrationsFolder = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      'core',
+      'db',
+      'migrations',
+    );
+    migrate(db, { migrationsFolder });
+    const repository = new LocalDbWorkItemRepository({
+      db,
+      now: () => new Date('2026-06-05T00:00:00.000Z'),
+    });
+    const source = new LocalDbStateSource('proj', 'owner/app', repository);
+    const oldItem = await source.createIssue({ title: 'Restart with repos', body: '' });
+    repository.createRepoLink({
+      projectId: 'proj',
+      itemId: oldItem.id,
+      repoRef: 'owner/app',
+      role: 'primary',
+      confidence: 0.95,
+      source: 'affinity',
+    });
+    repository.createRepoLink({
+      projectId: 'proj',
+      itemId: oldItem.id,
+      repoRef: 'owner/docs',
+      role: 'related',
+      confidence: 0.5,
+      source: 'manual',
+    });
+
+    const result = await restartIssue({
+      source,
+      projectId: 'proj',
+      itemId: oldItem.id,
+    });
+
+    expect(repository.listRepoLinks('proj', result.newItem.id)).toMatchObject([
+      {
+        repoRef: 'owner/app',
+        role: 'primary',
+        confidence: 0.95,
+        source: 'affinity',
+      },
+      {
+        repoRef: 'owner/docs',
+        role: 'related',
+        confidence: 0.5,
+        source: 'manual',
+      },
+    ]);
+    sqlite.close();
   });
 });

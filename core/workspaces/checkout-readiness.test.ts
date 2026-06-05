@@ -69,6 +69,8 @@ describe('checkout readiness', () => {
       clonePath: repositoryClonePath('proj', 'workspace/repo'),
       baseBranch: 'main',
       baseRef: 'origin/main',
+      checkoutSource: 'managed-clone',
+      configuredLocalPath: null,
     });
     expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
       'git',
@@ -124,12 +126,21 @@ describe('checkout readiness', () => {
           defaultBranch: 'develop',
           role: 'code',
           selectedBy: 'repo-link-primary',
+          checkoutSource: 'fallback-path',
+          configuredLocalPath: '/missing/configured/path',
         },
       ),
     ).toMatchObject({
       repoRef: 'workspace/repo',
       localPath: '/mock-home/.factory/repos/proj/workspace/repo',
       defaultBranch: 'main',
+      checkoutSource: 'managed-clone',
+      readiness: {
+        checkoutSource: 'managed-clone',
+        selectionSource: 'fallback-path',
+        checkoutPath: '/mock-home/.factory/repos/proj/workspace/repo',
+        managedClonePath: '/mock-home/.factory/repos/proj/workspace/repo',
+      },
       workflowBase: { branch: 'main', ref: 'origin/main' },
     });
   });

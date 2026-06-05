@@ -98,6 +98,32 @@ const mockResolveWorkflowBase = vi.fn().mockReturnValue({
   source: 'configured-default',
 });
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
+  WorktreeDependencyPreflightError: class WorktreeDependencyPreflightError extends Error {
+    readonly command: readonly string[];
+    readonly cwd: string;
+    readonly packageManager?: string;
+    readonly exitCode?: number | null;
+    readonly stderrTail?: string;
+
+    constructor(
+      message: string,
+      opts: {
+        command: readonly string[];
+        cwd: string;
+        packageManager?: string;
+        exitCode?: number | null;
+        stderrTail?: string;
+      },
+    ) {
+      super(message);
+      this.name = 'WorktreeDependencyPreflightError';
+      this.command = opts.command;
+      this.cwd = opts.cwd;
+      this.packageManager = opts.packageManager;
+      this.exitCode = opts.exitCode;
+      this.stderrTail = opts.stderrTail;
+    }
+  },
   createWorktree: (...args: unknown[]) => mockCreateWorktree(...args),
   cleanupWorktree: (...args: unknown[]) => mockCleanupWorktree(...args),
   prewarmWorktree: (...args: unknown[]) => mockPrewarmWorktree(...args),
@@ -112,6 +138,7 @@ vi.mock('@goose-hub/core/workspaces/orchestrator-git.js', () => ({
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { GIT_ENV } from '@goose-hub/core/workspaces/git-env.js';
+import { WorktreeDependencyPreflightError } from '@goose-hub/core/workspaces/worktree.js';
 
 function resetEventStoreMocks(): void {
   vi.mocked(eventStore.replay).mockReturnValue([]);
@@ -2051,6 +2078,45 @@ describe('runFixIssueWorkflow (#183)', () => {
       personaName: 'proj/developer/0',
       role: 'developer',
       outcome: 'failure',
+    });
+  });
+
+  it('on prewarm failure: emits package manager and command metadata', async () => {
+    const item = makeWorkItem({ priority: 'medium', repoRef: 'owner/repo' });
+    const source = makeStateSource();
+    const prewarmError = new WorktreeDependencyPreflightError(
+      'worktree dependency preflight failed: npm ci',
+      {
+        command: ['npm', 'ci'],
+        cwd: '/work/wt',
+        packageManager: 'npm',
+        exitCode: 1,
+        stderrTail: 'npm ERR! lockfile out of date',
+      },
+    );
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime: { run: vi.fn() },
+      openPRImpl: vi.fn(),
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      prewarmWorktreeImpl: vi.fn().mockRejectedValue(prewarmError),
+    });
+
+    const failed = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failed?.[0].payload).toMatchObject({
+      phase: 'prewarm',
+      repoRef: 'owner/repo',
+      checkoutPath: '/repo',
+      worktreePath: '/work/wt',
+      packageManager: 'npm',
+      command: 'npm ci',
+      exitCode: 1,
+      stderrTail: 'npm ERR! lockfile out of date',
     });
   });
 

@@ -53,7 +53,14 @@ export interface RunImplementInput {
   projectId: string;
   workItem: WorkItem;
   worktreePath: string;
-  stack: { testCommand: string; lintCommand?: string; typecheckCommand?: string };
+  stack: {
+    packageManager?: string;
+    installCommand?: string[];
+    testCommand: string;
+    lintCommand?: string;
+    typecheckCommand?: string;
+    e2eCommand?: string;
+  };
   appendSystemPrompt: string;
   outputJsonSchema: Record<string, unknown>;
   personaId: string;
@@ -636,9 +643,12 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         'workItem.body',
         'workItem.number',
         'workItem.priority',
+        'stack.packageManager',
+        'stack.installCommand',
         'stack.testCommand',
         'stack.lintCommand',
         'stack.typecheckCommand',
+        'stack.e2eCommand',
         'investigation',
         'codeContext',
         'relatedSurface',

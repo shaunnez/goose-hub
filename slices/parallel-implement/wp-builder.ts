@@ -82,7 +82,14 @@ export interface RunOneWpBuilderOptions {
   workItemId?: string;
   workItem: WorkItem;
   scratchWorktreePath: string;
-  stack: { testCommand: string; lintCommand?: string; typecheckCommand?: string };
+  stack: {
+    packageManager?: string;
+    installCommand?: string[];
+    testCommand: string;
+    lintCommand?: string;
+    typecheckCommand?: string;
+    e2eCommand?: string;
+  };
   runtime: AgentRuntime;
   budgets: AgentBudgets;
   modelOverride: string;
@@ -633,9 +640,12 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       'investigation',
       'acceptanceContract',
       'parentPrdContext',
+      'stack.packageManager',
+      'stack.installCommand',
       'stack.testCommand',
       'stack.lintCommand',
       'stack.typecheckCommand',
+      'stack.e2eCommand',
     ],
     freshContext: false,
     toolBundles: ['dev-tools'],
