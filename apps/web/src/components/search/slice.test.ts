@@ -63,3 +63,20 @@ describe('search slice — client wiring', () => {
     expect(source).toContain('highlight(hit.title, tokens)');
   });
 });
+
+describe('capture slice — TopBar integration', () => {
+  const topBarSource = readFileSync(join(import.meta.dirname, '../chrome/TopBar.tsx'), 'utf-8');
+
+  it('TopBar binds the ⌘J / Ctrl+J keyboard shortcut for Capture', () => {
+    expect(topBarSource).toContain("e.key.toLowerCase() === 'j'");
+    expect(topBarSource).toContain('setShowCapture');
+  });
+
+  it('Capture button renders ⌘J kbd badge', () => {
+    expect(topBarSource).toMatch(/<kbd[\s\S]*?>[\s\n]*⌘J[\s\n]*<\/kbd>/);
+  });
+
+  it('Capture button title includes keyboard shortcut hint', () => {
+    expect(topBarSource).toContain('Capture an idea or task (⌘J)');
+  });
+});
