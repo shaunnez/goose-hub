@@ -54,9 +54,9 @@ vi.mock('@goose-hub/core/workflow-routing/signals.js', () => ({
   buildRouteSignals: vi.fn().mockReturnValue({}),
 }));
 
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { dispatchTriageBatch } from '#shared/dispatch.js';
 import { getSourceForSlug } from '#shared/source.js';
-import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { deleteInboxItem, getInboxItem, insertInboxItem, listInboxItems } from './repository.js';
 import {
   createInboxItem,

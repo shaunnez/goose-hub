@@ -1,12 +1,12 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  BugEnhanceOutputSchema,
   type BugCategory,
+  BugEnhanceOutputSchema,
   type GroundedHints,
 } from '@goose-hub/skills/bug-enhance/schema.js';
-import type { AgentEvent } from '../event-stream/store.js';
 import { storeArtifact } from '../agent-artifacts/repository.js';
+import type { AgentEvent } from '../event-stream/store.js';
 import { eventStore } from '../event-stream/store.js';
 import { logger } from '../logger.js';
 import { getProjectBySlug } from '../projects/loader.js';
@@ -174,7 +174,9 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
       input,
       runId,
       reasons:
-        replayedToolAnalysis.blockedToolCallCount > 0 ? ['tool-call-blocked'] : ['no-tool-call-made'],
+        replayedToolAnalysis.blockedToolCallCount > 0
+          ? ['tool-call-blocked']
+          : ['no-tool-call-made'],
       analysis: replayedToolAnalysis,
       category: null,
       enhancedContentLength: 0,
