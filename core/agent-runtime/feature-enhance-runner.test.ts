@@ -329,4 +329,40 @@ describe('runFeatureEnhance', () => {
       }),
     );
   });
+
+  it('accepts mixed candidate sources when at least one candidate is tool-verified', async () => {
+    mockRunFn.mockResolvedValue({
+      output: makeOutput({
+        candidateFiles: [
+          {
+            path: 'slices/feature-grounding/workflow.ts',
+            confidence: 'high',
+            source: 'tool-verified',
+            reason: 'Existing feature grounding workflow.',
+          },
+          {
+            path: 'apps/web/src/components/detail/IssueDetailPage.tsx',
+            confidence: 'medium',
+            source: 'body-mention',
+            reason: 'Issue body mentions the detail page.',
+          },
+        ],
+      }),
+      decisionSummaries: [],
+      events: [makeToolEvent('repo_intel.query')],
+    });
+
+    const result = await runFeatureEnhance(makeInput());
+
+    expect(result).toMatchObject({
+      ok: true,
+      output: expect.objectContaining({
+        candidateFiles: expect.arrayContaining([
+          expect.objectContaining({ source: 'tool-verified' }),
+          expect.objectContaining({ source: 'body-mention' }),
+        ]),
+      }),
+    });
+    expect(mockAppendEvent).not.toHaveBeenCalled();
+  });
 });

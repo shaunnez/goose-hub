@@ -163,7 +163,8 @@ function buildEmptyReasons(input: {
   if (input.toolAnalysis.blockedToolCallCount > 0) reasons.add('tool-call-blocked');
   if (!isGrounded(input.output)) reasons.add('no-grounded-output');
   if (
-    input.output.candidateFiles.some((candidate) => candidate.source !== 'tool-verified')
+    input.output.candidateFiles.length > 0 &&
+    !input.output.candidateFiles.some((candidate) => candidate.source === 'tool-verified')
   ) {
     reasons.add('candidate-files-without-tool-verified-evidence');
   }
