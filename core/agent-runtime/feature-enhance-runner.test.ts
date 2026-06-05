@@ -1,6 +1,6 @@
-import type { AgentEvent } from '../event-stream/store.js';
 import type { FeatureEnhanceOutput } from '@goose-hub/skills/feature-enhance/schema.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AgentEvent } from '../event-stream/store.js';
 import type { ResolvedSkillRuntime } from './skill-runtime-resolver.js';
 
 const mockAppendEvent = vi.fn();

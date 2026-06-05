@@ -74,9 +74,7 @@ describe('resolveMockOutput — feature-enhance', () => {
       candidateFiles: Array<{ source?: string }>;
     };
 
-    expect(out.candidateFiles).toEqual([
-      expect.objectContaining({ source: 'tool-verified' }),
-    ]);
+    expect(out.candidateFiles).toEqual([expect.objectContaining({ source: 'tool-verified' })]);
     expect(r.events).toEqual([
       expect.objectContaining({
         kind: 'agent.tool-call',

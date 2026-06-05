@@ -1,17 +1,17 @@
 import { createHash } from 'node:crypto';
 import {
-  FeatureEnhanceOutputSchema,
   type FeatureEnhanceOutput,
+  FeatureEnhanceOutputSchema,
 } from '@goose-hub/skills/feature-enhance/schema.js';
 import featureEnhanceConfig, {
   FeatureEnhanceContextSchema,
 } from '@goose-hub/skills/feature-enhance/skill.config.js';
 import type { z } from 'zod';
-import type { ProjectConfig } from '../types.js';
 import type { AgentEvent } from '../event-stream/store.js';
 import { eventStore } from '../event-stream/store.js';
 import { logger } from '../logger.js';
 import { getProjectBySlug } from '../projects/loader.js';
+import type { ProjectConfig } from '../types.js';
 import type { AgentRuntime } from './interface.js';
 import { safeParseOutputForSchema } from './output-normalization.js';
 import { readPromptWithContext } from './read-prompt.js';
@@ -364,7 +364,10 @@ export async function runFeatureEnhance(
 
     return { ok: true, output: parsed.data, enhanceRunId: input.enhanceRunId, personaId };
   } catch (err) {
-    logger.error('feature-enhance: agent run failed', { runId: input.enhanceRunId, err: String(err) });
+    logger.error('feature-enhance: agent run failed', {
+      runId: input.enhanceRunId,
+      err: String(err),
+    });
     const analysis = analyzeToolEvents(eventStore.replay({ runId: input.enhanceRunId }));
     const telemetry = appendEmptyEvent({
       runInput: input,
