@@ -19,17 +19,39 @@ vi.mock('./ChangelogModal', () => ({
 
 import { TopBar } from './TopBar';
 
+const defaultNavigatorPlatform = window.navigator.platform;
+
+function setNavigatorPlatform(platform: string) {
+  Object.defineProperty(window.navigator, 'platform', {
+    configurable: true,
+    value: platform,
+  });
+}
+
 afterEach(() => {
+  setNavigatorPlatform(defaultNavigatorPlatform);
   cleanup();
 });
 
 describe('TopBar', () => {
-  it('shows the Capture shortcut hint beside the button label', () => {
+  it('shows the macOS Capture shortcut hint beside the button label', () => {
+    setNavigatorPlatform('MacIntel');
+
     render(<TopBar />);
 
     const captureButton = screen.getByTestId('capture-button');
     expect(captureButton.textContent).toContain('Capture');
     expect(screen.getByText('⌘J')).toBeTruthy();
+  });
+
+  it('shows the Ctrl-platform Capture shortcut hint beside the button label', () => {
+    setNavigatorPlatform('Win32');
+
+    render(<TopBar />);
+
+    const captureButton = screen.getByTestId('capture-button');
+    expect(captureButton.textContent).toContain('Capture');
+    expect(screen.getByText('Ctrl+J')).toBeTruthy();
   });
 
   it('opens Capture when Cmd+J is pressed', () => {

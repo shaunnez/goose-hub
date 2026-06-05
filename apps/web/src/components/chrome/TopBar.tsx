@@ -8,10 +8,19 @@ interface TopBarProps {
   breadcrumb?: React.ReactNode;
 }
 
+function getShortcutModifierLabel() {
+  if (typeof navigator === 'undefined') {
+    return '⌘';
+  }
+
+  return /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? '⌘' : 'Ctrl+';
+}
+
 export function TopBar({ breadcrumb }: TopBarProps) {
   const [showCapture, setShowCapture] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const shortcutModifierLabel = getShortcutModifierLabel();
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -56,26 +65,26 @@ export function TopBar({ breadcrumb }: TopBarProps) {
           type="button"
           data-testid="capture-button"
           onClick={() => setShowCapture(true)}
-          title="Capture an idea or task (⌘J)"
+          title={`Capture an idea or task (${shortcutModifierLabel}J)`}
           className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"
         >
           <Plus size={13} />
           <span>Capture</span>
           <kbd className="ml-1 px-1 py-0.5 rounded border border-line text-[10px] text-fg-3 bg-bg">
-            ⌘J
+            {shortcutModifierLabel}J
           </kbd>
         </button>
         <button
           type="button"
           data-testid="search-button"
           onClick={() => setShowSearch(true)}
-          title="Search work items (⌘K)"
+          title={`Search work items (${shortcutModifierLabel}K)`}
           className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"
         >
           <Search size={13} />
           <span>Search</span>
           <kbd className="ml-1 px-1 py-0.5 rounded border border-line text-[10px] text-fg-3 bg-bg">
-            ⌘K
+            {shortcutModifierLabel}K
           </kbd>
         </button>
       </header>
