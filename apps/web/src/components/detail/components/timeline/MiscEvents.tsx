@@ -237,6 +237,11 @@ function payloadStringArray(payload: CompactOperationalPayload | null, key: stri
     : [];
 }
 
+function payloadArrayLength(payload: CompactOperationalPayload | null, key: string): number | null {
+  const value = payload?.[key];
+  return Array.isArray(value) ? value.length : null;
+}
+
 function formatBudgetCaps(value: unknown): string | null {
   if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
   const caps = value as RouteBudgetCaps;
@@ -916,6 +921,21 @@ function compactOperationalEventDetails(event: AgentEventDto): {
       detail =
         payloadStringArray(p, 'reasons')?.join(', ') ??
         'Bug enhancement completed without useful content or grounding.';
+      break;
+    case 'agent.feature-enhance-empty':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'enhanceRunId') ?? formatShortId(event.runId ?? undefined));
+      pushNumber('repoIntelCallCount', 'repo-intel calls');
+      push(payloadStringArray(p, 'blockedToolNames').join(', '));
+      pushNumber('blockedToolCallCount', 'blocked tools');
+      facts.push(
+        `${payloadNumber(p, 'validationIssueCount') ?? payloadArrayLength(p, 'validationIssues') ?? 0} validation issues`,
+      );
+      detail =
+        payloadStringArray(p, 'reasons')?.join(', ') ??
+        payloadString(p, 'reason') ??
+        'Feature enhancement completed without valid grounded output.';
       break;
     case 'agent.bug-enhance-workspace-empty':
       tone = 'warning';
