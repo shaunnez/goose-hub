@@ -694,7 +694,12 @@ describe('runSpecAuthorWorkflow', () => {
       const { runSpecAuthorWorkflow } = await import('./workflow.js');
       await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
-      expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'origin/main');
+      expect(createWorktree).toHaveBeenCalledWith(
+        '/repo',
+        expect.any(String),
+        'origin/main',
+        'shaunnez/goose-hub',
+      );
       expect(cleanupWorktree).toHaveBeenCalledOnce();
     });
   });

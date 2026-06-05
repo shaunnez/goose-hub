@@ -17,6 +17,7 @@ import {
   lookupWorkItemSymbols,
   symbolHintsToKeyFiles,
 } from '@goose-hub/core/symbol-index/lookup.js';
+import { ensureSelectedRepositoryCheckout } from '@goose-hub/core/workspaces/checkout-readiness.js';
 import { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import { resolveRepositoryForWorkItem } from '@goose-hub/core/workspaces/repo-affinity.js';
 import { resolveWorkflowBaseForWorkItem } from '@goose-hub/core/workspaces/workflow-base.js';
@@ -117,23 +118,33 @@ export async function runFixIssueWorkflow(
     workItem,
     injectedRuntime: deps.runtime,
   });
-  const selectedRepository = resolveRepositoryForWorkItem({
-    project: implementExecution.projectConfig,
-    workItem,
-    fallbackLocalPath: targetRepo,
-  });
+  const selectedRepository = ensureSelectedRepositoryCheckout(
+    workItem.id.startsWith('local:') ? implementExecution.projectConfig : null,
+    resolveRepositoryForWorkItem({
+      project: implementExecution.projectConfig,
+      workItem,
+      fallbackLocalPath: targetRepo,
+    }),
+  );
   const workflowWorkItem =
     selectedRepository.repoRef === workItem.repoRef
       ? workItem
       : { ...workItem, repoRef: selectedRepository.repoRef };
-  const workflowBase = resolveWorkflowBaseFn(
-    projectId,
-    workItem.id,
-    selectedRepository.localPath,
-    selectedRepository.defaultBranch,
-  );
+  const workflowBase =
+    selectedRepository.workflowBase ??
+    resolveWorkflowBaseFn(
+      projectId,
+      workItem.id,
+      selectedRepository.localPath,
+      selectedRepository.defaultBranch,
+    );
   const baseBranch = workflowBase.branch;
-  const worktreePath = createWtFn(selectedRepository.localPath, runId, workflowBase.ref);
+  const worktreePath = createWtFn(
+    selectedRepository.localPath,
+    runId,
+    workflowBase.ref,
+    selectedRepository.repoRef,
+  );
   const investigation = latestInvestigationContext({
     projectId,
     workItemId: workItem.id,
@@ -406,7 +417,7 @@ export async function runFixIssueWorkflow(
       runId,
     });
     // Error path: no PR was opened, no merge is coming — clean up now.
-    cleanupWtFn(runId);
+    cleanupWtFn(worktreePath);
   }
   // Success path: worktree persists until PR merge so QA can run in the same environment.
   // Cleanup happens in approveIssue() when the PR is merged.

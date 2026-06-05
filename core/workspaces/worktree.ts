@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { GIT_ENV } from './git-env.js';
 
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
@@ -35,11 +35,21 @@ export class WorktreeDependencyPreflightError extends Error {
 }
 
 /**
- * Resolves the worktree path for a given runId.
- * Pattern: ~/.factory/workspaces/<runId>/
+ * Resolves the worktree path for a given runId and optional repoRef.
+ * Legacy pattern: ~/.factory/workspaces/<runId>/
+ * Repo-aware pattern: ~/.factory/workspaces/<runId>/<repoId>/
  */
-function worktreePath(runId: string): string {
-  return join(WORKSPACES_DIR, runId);
+function worktreePath(runId: string, repoRef?: string): string {
+  if (repoRef == null || repoRef.length === 0) return join(WORKSPACES_DIR, runId);
+  return join(WORKSPACES_DIR, runId, repoId(repoRef));
+}
+
+export function repoId(repoRef: string): string {
+  return repoRef
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 /**
@@ -47,9 +57,13 @@ function worktreePath(runId: string): string {
  * Used by tail workflows (audit, retro) that want to attach to the dev
  * worktree opportunistically without recreating it.
  */
-export function existingWorktreePath(runId: string): string | null {
-  const wtPath = worktreePath(runId);
-  return existsSync(wtPath) ? wtPath : null;
+export function existingWorktreePath(runId: string, repoRef?: string): string | null {
+  if (repoRef != null && repoRef.length > 0) {
+    const repoAwarePath = worktreePath(runId, repoRef);
+    if (existsSync(repoAwarePath)) return repoAwarePath;
+  }
+  const legacyPath = worktreePath(runId);
+  return existsSync(legacyPath) ? legacyPath : null;
 }
 
 function currentBranch(repo: string): string | null {
@@ -102,11 +116,16 @@ export function resolveWorkflowBase(repo: string, configuredDefaultBranch?: stri
  * @param runId - Canonical workflow isolation key (ULID/UUID).
  * @returns The absolute path to the created worktree.
  */
-export function createWorktree(repo: string, runId: string, baseRef?: string): string {
-  const wtPath = worktreePath(runId);
+export function createWorktree(
+  repo: string,
+  runId: string,
+  baseRef?: string,
+  repoRef?: string,
+): string {
+  const wtPath = worktreePath(runId, repoRef);
 
-  // Ensure the parent workspaces directory exists
-  mkdirSync(WORKSPACES_DIR, { recursive: true });
+  // Ensure the parent directory exists for both legacy and repo-aware paths.
+  mkdirSync(dirname(wtPath), { recursive: true });
 
   const args = ['worktree', 'add', '--detach', wtPath];
   if (baseRef != null && baseRef.length > 0) {
@@ -147,9 +166,10 @@ export function createIntegrationWorktree(
   pipelineRunId: string,
   branchName: string,
   baseRef?: string,
+  repoRef?: string,
 ): IntegrationWorktree {
-  const wtPath = worktreePath(pipelineRunId);
-  mkdirSync(WORKSPACES_DIR, { recursive: true });
+  const wtPath = worktreePath(pipelineRunId, repoRef);
+  mkdirSync(dirname(wtPath), { recursive: true });
 
   if (!existsSync(wtPath)) {
     const args = ['worktree', 'add', '--detach', wtPath];
@@ -293,16 +313,16 @@ export function assertGooseHubWebPlaywrightReady(worktreePath: string): void {
 }
 
 /**
- * Removes the git worktree for the given runId.
+ * Removes the git worktree for the given runId or explicit worktree path.
  *
  * Idempotent: if the worktree path does not exist, this is a no-op.
  * If `git worktree remove` fails (e.g. repo already gone), the directory
  * is still removed via rmSync with force.
  *
- * @param runId - Canonical workflow isolation key (ULID/UUID).
+ * @param runIdOrPath - Canonical workflow isolation key (ULID/UUID), or an absolute worktree path.
  */
-export function cleanupWorktree(runId: string): void {
-  const wtPath = worktreePath(runId);
+export function cleanupWorktree(runIdOrPath: string, repoRef?: string): void {
+  const wtPath = isAbsolute(runIdOrPath) ? runIdOrPath : worktreePath(runIdOrPath, repoRef);
 
   if (!existsSync(wtPath)) {
     return;

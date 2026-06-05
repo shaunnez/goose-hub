@@ -35,6 +35,7 @@ vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
 }));
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   cleanupWorktree: vi.fn(),
+  existingWorktreePath: vi.fn().mockReturnValue(null),
 }));
 vi.mock('@goose-hub/core/state-machine/states.js', () => ({
   STATES: [
@@ -1488,7 +1489,7 @@ describe('approveIssue / rejectIssue (#186)', () => {
     const result = await approveIssue('proj', '1', { mergePRImpl });
 
     expect(result).toMatchObject({ ok: true });
-    expect(cleanupWorktree).toHaveBeenCalledWith('dev-run-123');
+    expect(cleanupWorktree).toHaveBeenCalledWith('/wt/dev-run-123');
   });
 
   it('approveIssue runs merge-decision and emits its result for a legacy pipelineRunId', async () => {

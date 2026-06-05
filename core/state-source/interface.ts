@@ -32,7 +32,7 @@ export const DEFAULT_EXEC: ExecMode = 'parallel';
 export interface WorkItem {
   id: string; // global: "github:shaunnez/goose-hub#42"
   externalId: string; // "42" or "PROJ-123"
-  repoRef: string; // "shaunnez/goose-hub"
+  repoRef: string | null; // "shaunnez/goose-hub", or null until local-db repo assignment is explicit
   title: string;
   body: string;
   type: WorkItemType;

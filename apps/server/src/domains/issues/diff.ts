@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
+import { existingWorktreePath } from '@goose-hub/core/workspaces/worktree.js';
 import type { Result } from '#shared/middleware.js';
 import { isValidSlug } from '#shared/source.js';
 import { resolveCanonicalWorkItemForRoute } from '#shared/work-item-resolution.js';
@@ -78,9 +79,11 @@ export async function getIssueWorktreeDiff(
     };
   }
 
-  const worktreePath = join(homedir(), '.factory', 'workspaces', runId);
+  const worktreePath =
+    existingWorktreePath(runId, repoRef ?? undefined) ??
+    join(homedir(), '.factory', 'workspaces', runId);
   if (!existsSync(worktreePath)) {
-    const prResult = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
+    const prResult = repoRef == null ? null : await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
     if (prResult != null)
       return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
     return {
@@ -90,7 +93,7 @@ export async function getIssueWorktreeDiff(
   }
 
   if (!existsSync(join(worktreePath, '.git'))) {
-    const prResult = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
+    const prResult = repoRef == null ? null : await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
     if (prResult != null)
       return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
     return {
@@ -118,7 +121,7 @@ export async function getIssueWorktreeDiff(
     if (diff.length > 0) return { ok: true, data: { diff, runId } };
     // Worktree exists but all changes are committed (e.g. PR already opened).
     // Fall through to the GitHub PR diff.
-    const prResult = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
+    const prResult = repoRef == null ? null : await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
     if (prResult != null)
       return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
     return {

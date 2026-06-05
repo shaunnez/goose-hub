@@ -152,6 +152,13 @@ export async function approveIssue(
   if (typeof prNumber !== 'number') {
     return { ok: false, error: 'pr.opened event missing prNumber', status: 500 };
   }
+  if (repoRef == null) {
+    return {
+      ok: false,
+      error: 'Work Item has no repository assigned for PR approval',
+      status: 400,
+    };
+  }
   const pipelineRunId =
     typeof prPayload.pipelineRunId === 'string' ? prPayload.pipelineRunId : undefined;
 
@@ -312,8 +319,12 @@ export async function approveIssue(
     .reverse()
     .find((e) => e.kind === 'pr.opened');
   if (prOpenedEvent != null) {
-    const { devRunId } = prOpenedEvent.payload as { devRunId?: string };
-    if (typeof devRunId === 'string') cleanupWorktree(devRunId);
+    const { devRunId, worktreePath } = prOpenedEvent.payload as {
+      devRunId?: string;
+      worktreePath?: string;
+    };
+    if (typeof worktreePath === 'string' && worktreePath.length > 0) cleanupWorktree(worktreePath);
+    else if (typeof devRunId === 'string') cleanupWorktree(devRunId, repoRef);
   }
 
   await transitionAndEmitState({

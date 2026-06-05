@@ -650,7 +650,12 @@ describe('runInvestigateWorkflow', () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');
       await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
-      expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'origin/main');
+      expect(createWorktree).toHaveBeenCalledWith(
+        '/repo',
+        expect.any(String),
+        'origin/main',
+        'shaunnez/goose-hub',
+      );
       expect(cleanupWorktree).toHaveBeenCalledOnce();
     });
 
@@ -675,7 +680,12 @@ describe('runInvestigateWorkflow', () => {
         '/repo',
         expect.any(String),
       );
-      expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'seed-commit-sha');
+      expect(createWorktree).toHaveBeenCalledWith(
+        '/repo',
+        expect.any(String),
+        'seed-commit-sha',
+        'shaunnez/goose-hub',
+      );
     });
 
     it('emits only one parent run-started event and suppresses the synthesis duplicate', async () => {

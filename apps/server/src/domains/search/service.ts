@@ -16,7 +16,7 @@ export interface SearchHit {
   type: string;
   priority: string;
   milestoneTitle: string | null;
-  repoRef: string;
+  repoRef: string | null;
   confidence: number;
 }
 

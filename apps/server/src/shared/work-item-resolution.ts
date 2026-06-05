@@ -9,7 +9,7 @@ export interface ResolvedCanonicalWorkItemForRoute {
   routeId: string;
   canonicalWorkItemId: string;
   externalId: string;
-  repoRef: string;
+  repoRef: string | null;
   projectId: string;
   isLocalDb: boolean;
 }
@@ -20,7 +20,7 @@ export interface ResolvedWorkItemForRoute {
   routeId: string;
   canonicalWorkItemId: string;
   externalId: string;
-  repoRef: string;
+  repoRef: string | null;
   isLocalDb: boolean;
 }
 

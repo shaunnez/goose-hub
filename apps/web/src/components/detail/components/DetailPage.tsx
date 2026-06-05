@@ -261,7 +261,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
           <span className="font-mono text-[12px] text-fg-3 truncate">
             <span className="text-fg-3">{slug}</span>
             <span className="mx-1.5 text-fg-2">/</span>
-            <span className="text-fg-3">{item?.repoRef}</span>
+            <span className="text-fg-3">{item?.repoRef ?? 'unassigned'}</span>
             <span className="mx-1.5 text-fg-2">/</span>
             <span className="text-fg font-semibold">#{item?.externalId}</span>
           </span>

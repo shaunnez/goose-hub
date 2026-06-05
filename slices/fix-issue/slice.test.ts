@@ -280,7 +280,12 @@ describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () =
     // ClaudeCliRuntime was used (default runtime dep)
     expect(mockClaudeCliRun).toHaveBeenCalledTimes(1);
     // createWorktree was called (default worktree dep)
-    expect(mockCreateWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'origin/main');
+    expect(mockCreateWorktree).toHaveBeenCalledWith(
+      '/repo',
+      expect.any(String),
+      'origin/main',
+      'owner/repo',
+    );
     // openPR was called (default openPR dep)
     expect(mockOpenPR).toHaveBeenCalled();
     // worktree persists until merge — NOT cleaned up after PR open
@@ -309,7 +314,12 @@ describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () =
       '/repo',
       'main',
     );
-    expect(mockCreateWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'seed-commit-sha');
+    expect(mockCreateWorktree).toHaveBeenCalledWith(
+      '/repo',
+      expect.any(String),
+      'seed-commit-sha',
+      'owner/repo',
+    );
     expect(mockOpenPR).toHaveBeenCalledWith(
       expect.objectContaining({ baseBranch: 'dogfood/run/logger-001-drop-meta' }),
     );
@@ -526,7 +536,12 @@ describe('runFixIssueWorkflow (#183)', () => {
       resolveWorktreeHeadShaImpl,
     });
 
-    expect(createWorktreeImpl).toHaveBeenCalledWith('/repo', expect.any(String), 'origin/main');
+    expect(createWorktreeImpl).toHaveBeenCalledWith(
+      '/repo',
+      expect.any(String),
+      'origin/main',
+      'owner/repo',
+    );
     expect(source.transitionState).toHaveBeenNthCalledWith(
       1,
       '42',

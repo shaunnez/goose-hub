@@ -12,6 +12,8 @@ import {
   listScoutReportsForRun,
 } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { ensureSelectedRepositoryCheckout } from '@goose-hub/core/workspaces/checkout-readiness.js';
+import { resolveRepositoryForWorkItem } from '@goose-hub/core/workspaces/repo-affinity.js';
 import { collectScopeManifest } from '@goose-hub/core/workspaces/scope-manifest.js';
 import {
   cleanupWorktree,
@@ -531,8 +533,23 @@ export async function runSpecAuthorWorkflow(
 
   const pipelineRunId = crypto.randomUUID();
   const projectConfig = await getProjectBySlug(projectId);
-  const workflowBase = resolveWorkflowBaseFn(targetRepo, projectConfig?.targetRepo?.defaultBranch);
-  const worktreePath = createWtFn(targetRepo, pipelineRunId, workflowBase.ref);
+  const selectedRepository = ensureSelectedRepositoryCheckout(
+    workItem.id.startsWith('local:') ? projectConfig : null,
+    resolveRepositoryForWorkItem({
+      project: workItem.id.startsWith('local:') ? projectConfig : null,
+      workItem,
+      fallbackLocalPath: targetRepo,
+    }),
+  );
+  const workflowBase =
+    selectedRepository.workflowBase ??
+    resolveWorkflowBaseFn(selectedRepository.localPath, selectedRepository.defaultBranch);
+  const worktreePath = createWtFn(
+    selectedRepository.localPath,
+    pipelineRunId,
+    workflowBase.ref,
+    selectedRepository.repoRef,
+  );
 
   try {
     // Load scout reports from the most recent investigation for this work item.
@@ -938,6 +955,6 @@ export async function runSpecAuthorWorkflow(
       by: 'spec-author',
     });
   } finally {
-    cleanupWorktree(pipelineRunId);
+    cleanupWorktree(worktreePath);
   }
 }

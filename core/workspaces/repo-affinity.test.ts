@@ -1,14 +1,28 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkItem } from '../state-source/interface.js';
 import type {
   LocalDbRepoLinkRow,
   LocalDbWorkItemRepository,
 } from '../state-source/local-db-repository.js';
 import type { ProjectConfig } from '../types.js';
-import { resolveRepositoryForWorkItem, selectRepoLink } from './repo-affinity.js';
+import {
+  resolveRepositoryForWorkItem,
+  selectCheckoutRepoLink,
+  selectRepoLink,
+} from './repo-affinity.js';
+
+const { mockReplayEvents } = vi.hoisted(() => ({
+  mockReplayEvents: vi.fn(),
+}));
+
+vi.mock('../event-stream/store.js', () => ({
+  eventStore: {
+    replay: mockReplayEvents,
+  },
+}));
 
 function repoLink(repoRef: string, role: string): LocalDbRepoLinkRow {
   return {
@@ -74,16 +88,36 @@ const githubWorkItem = {
 } as WorkItem;
 
 describe('repo affinity', () => {
+  beforeEach(() => {
+    mockReplayEvents.mockReset().mockReturnValue([]);
+  });
+
   it('selects a primary repo link over other linked repos', () => {
     expect(
-      selectRepoLink([repoLink('owner/app', 'context'), repoLink('owner/docs', 'primary')]),
+      selectRepoLink([repoLink('owner/app', 'related'), repoLink('owner/docs', 'primary')]),
     ).toMatchObject({ repoRef: 'owner/docs' });
   });
 
-  it('rejects ambiguous local-db repo links with no primary', () => {
+  it('does not treat a lone related repo link as checkout-eligible', () => {
+    expect(selectCheckoutRepoLink([repoLink('owner/app', 'related')])).toEqual({
+      kind: 'repo-unassigned',
+      reason: 'no-primary',
+    });
+  });
+
+  it('returns typed unassigned for multiple related links with no primary', () => {
+    expect(
+      selectCheckoutRepoLink([repoLink('owner/app', 'related'), repoLink('owner/docs', 'related')]),
+    ).toEqual({
+      kind: 'repo-unassigned',
+      reason: 'no-primary',
+    });
+  });
+
+  it('keeps compatibility throws for no-primary repo links', () => {
     expect(() =>
-      selectRepoLink([repoLink('owner/app', 'context'), repoLink('owner/docs', 'context')]),
-    ).toThrow('multiple repo links and no primary');
+      selectRepoLink([repoLink('owner/app', 'related'), repoLink('owner/docs', 'related')]),
+    ).toThrow('no primary repo link');
   });
 
   it('resolves implementation localPath and defaultBranch from the selected repo link', () => {
@@ -118,7 +152,33 @@ describe('repo affinity', () => {
         fallbackLocalPath: '/repo',
         repository,
       }),
-    ).toThrow("repo link 'workspace/bitbucket-repo' is not registered");
+    ).toThrow("repo 'workspace/bitbucket-repo' is not registered");
+  });
+
+  it('uses the latest manual repo override when a local-db item has no primary link yet', () => {
+    mockReplayEvents.mockReturnValue([
+      {
+        kind: 'agent.repo-override',
+        payload: { repo: 'owner/docs' },
+      },
+    ]);
+    const repository = {
+      listRepoLinks: () => [repoLink('owner/app', 'related')],
+    } as unknown as LocalDbWorkItemRepository;
+
+    expect(
+      resolveRepositoryForWorkItem({
+        project,
+        workItem: { ...workItem, repoRef: null } as WorkItem,
+        fallbackLocalPath: fallbackRepoPath,
+        repository,
+      }),
+    ).toMatchObject({
+      repoRef: 'owner/docs',
+      localPath: docsRepoPath,
+      defaultBranch: 'trunk',
+      selectedBy: 'repo-override',
+    });
   });
 
   it('uses a valid configured repository path before project targetRepo and fallback', () => {

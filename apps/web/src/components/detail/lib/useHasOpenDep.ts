@@ -7,7 +7,7 @@ import { useMemo } from 'react';
 function resolveDepTarget(
   ref: DependencyRef,
   currentSlug: string,
-  currentRepoRef: string,
+  currentRepoRef: string | null,
   projects: ProjectSummary[],
 ): { slug: string; id: string } | 'unregistered' {
   if (ref.repoRef === null || ref.repoRef === currentRepoRef) {

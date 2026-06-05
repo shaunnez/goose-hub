@@ -25,7 +25,7 @@ import {
 function makeSource(item: WorkItem): StateSource {
   return {
     projectId: 'proj',
-    repoRef: item.repoRef,
+    repoRef: item.repoRef ?? 'local:proj',
     listOpenWork: vi.fn(),
     listClosedWorkByMilestone: vi.fn(),
     listWorkByMilestone: vi.fn(),

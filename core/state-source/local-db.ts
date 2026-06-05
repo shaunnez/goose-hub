@@ -43,7 +43,11 @@ function parseStateLabel(label: string): StateName | null {
   return STATE_LABELS.has(label) ? (label as StateName) : null;
 }
 
-function mapDependencyRefs(body: string, type: 'depends-on' | 'blocks', repoRef: string): string[] {
+function mapDependencyRefs(
+  body: string,
+  type: 'depends-on' | 'blocks',
+  repoRef: string | null,
+): string[] {
   return parseDependencies(body)
     .filter((ref) => ref.type === type)
     .map((ref) =>
@@ -94,8 +98,7 @@ export class LocalDbStateSource implements StateSource {
 
   private toWorkItem(row: LocalDbWorkItemRow): WorkItem {
     const repoLinks = this.repository.listRepoLinks(this.projectId, row.id);
-    const repoRef =
-      (repoLinks.find((link) => link.role === 'primary') ?? repoLinks[0])?.repoRef ?? this.repoRef;
+    const repoRef = repoLinks.find((link) => link.role === 'primary')?.repoRef ?? null;
     return {
       id: row.id,
       externalId: row.externalId,
@@ -268,15 +271,6 @@ export class LocalDbStateSource implements StateSource {
       priority: input.priority,
       milestoneId: input.milestoneId ?? null,
     });
-    if (!this.repoRef.startsWith('local:')) {
-      this.repository.createRepoLink({
-        projectId: this.projectId,
-        itemId: row.id,
-        repoRef: this.repoRef,
-        role: 'primary',
-        source: 'bootstrap',
-      });
-    }
     if (input.extraLabels != null) await this.addLabels(row.id, input.extraLabels);
     return this.toWorkItem(this.repository.requireWorkItem(this.projectId, row.id));
   }

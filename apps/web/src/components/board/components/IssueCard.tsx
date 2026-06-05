@@ -10,7 +10,8 @@ import { Ban, Database, GitFork } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 /** Shorten a repo-qualified dep ref to issue-number-only when it's in the same repo. */
-function shortRef(ref: string, repoRef: string): string {
+function shortRef(ref: string, repoRef: string | null): string {
+  if (repoRef == null) return ref;
   const prefix = `${repoRef}#`;
   if (ref.startsWith(prefix)) return `#${ref.split('#').pop()}`;
   // Already short (e.g. "#292" from same-repo shorthand in body)

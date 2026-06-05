@@ -137,7 +137,7 @@ export async function getStackCommands(
 export interface GetWorkItemResult {
   id: string;
   externalId: string;
-  repoRef: string;
+  repoRef: string | null;
   title: string;
   body: string;
   type: WorkItem['type'];
