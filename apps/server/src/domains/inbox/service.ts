@@ -3,6 +3,7 @@ import { runBugEnhance } from '@goose-hub/core/agent-runtime/bug-enhance-runner.
 import { groundedHintsToSeed } from '@goose-hub/core/agent-runtime/scout-prefetch.js';
 import { db } from '@goose-hub/core/db/db.js';
 import { projectState } from '@goose-hub/core/db/schema.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { emitRouteSelected } from '@goose-hub/core/workflow-routing/events.js';
 import { selectWorkflowRoute } from '@goose-hub/core/workflow-routing/select-route.js';
@@ -77,6 +78,14 @@ export async function promoteInboxItem(
     } else {
       logger.warn('bug-enhance: no enhancement produced, using original body', { id });
     }
+    if (isEmptyBugEnhancement(enhancement)) {
+      emitPromotionEnhancementEmpty({
+        projectId: source.projectId,
+        inboxItemId: item.id,
+        hasMarkdown: enhancement.markdown != null,
+        hasGroundedHints: enhancement.groundedHints != null,
+      });
+    }
     groundedHints = enhancement.groundedHints;
   }
 
@@ -110,6 +119,39 @@ export async function promoteInboxItem(
   }
 
   return { ok: true, data: { ok: true } };
+}
+
+function isEmptyBugEnhancement(enhancement: {
+  markdown: string | null;
+  groundedHints: GroundedHints | null;
+}): boolean {
+  return enhancement.markdown == null && enhancement.groundedHints == null;
+}
+
+function emitPromotionEnhancementEmpty(input: {
+  projectId: string;
+  inboxItemId: number;
+  hasMarkdown: boolean;
+  hasGroundedHints: boolean;
+}): void {
+  const runId = `bug-enhance:inbox:${input.inboxItemId}`;
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: `inbox:${input.inboxItemId}`,
+    runId,
+    kind: 'agent.bug-enhance-empty',
+    payload: {
+      source: 'promotion',
+      runId,
+      inboxItemId: input.inboxItemId,
+      reasons: ['empty-enhanced-content', 'no-grounded-hints'],
+      enhancedContentLength: input.hasMarkdown ? undefined : 0,
+      hasGroundedHints: input.hasGroundedHints,
+      toolCallCount: null,
+      repoIntelCallCount: null,
+      blockedToolCallCount: null,
+    },
+  });
 }
 
 /**

@@ -283,6 +283,17 @@ describe('Misc timeline events', () => {
         payload: { runId: 'bug-run', droppedCount: 3, originalCount: 3 },
       },
       {
+        kind: 'agent.bug-enhance-empty',
+        title: 'Bug grounding empty',
+        payload: {
+          source: 'promotion',
+          runId: 'bug-run',
+          reasons: ['no-tool-call-made', 'empty-enhanced-content', 'no-grounded-hints'],
+          repoIntelCallCount: 0,
+          blockedToolCallCount: 0,
+        },
+      },
+      {
         kind: 'agent.bug-enhance-workspace-empty',
         title: 'Bug grounding workspace missing',
         payload: { workspaceDir: '/tmp/missing', runId: 'bug-run' },

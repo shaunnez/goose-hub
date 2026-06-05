@@ -2,8 +2,10 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   BugEnhanceOutputSchema,
+  type BugCategory,
   type GroundedHints,
 } from '@goose-hub/skills/bug-enhance/schema.js';
+import type { AgentEvent } from '../event-stream/store.js';
 import { storeArtifact } from '../agent-artifacts/repository.js';
 import { eventStore } from '../event-stream/store.js';
 import { logger } from '../logger.js';
@@ -116,6 +118,21 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
         errors: parsed.error.issues,
         raw: JSON.stringify(result.output),
       });
+      emitBugEnhanceEmpty({
+        input,
+        runId,
+        reasons: ['output-validation-failed'],
+        analysis: analyzeToolEvents(result.events),
+        category: null,
+        enhancedContentLength: 0,
+        hasGroundedHints: false,
+        details: {
+          validationIssues: parsed.error.issues.map((issue) => ({
+            path: issue.path.join('.'),
+            message: issue.message,
+          })),
+        },
+      });
       return { markdown: null, groundedHints: null };
     }
 
@@ -126,16 +143,146 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
         decisions: parsed.data.decisionSummaries,
       });
     }
+    const toolAnalysis = analyzeToolEvents(result.events);
     const rawHints = hasUsableHints(parsed.data.groundedHints) ? parsed.data.groundedHints : null;
     const groundedHints = rawHints != null ? pruneNonExistentPaths(rawHints, input, runId) : null;
+    const emptyReasons = buildEmptyReasons({
+      category: parsed.data.category,
+      enhancedContentLength: content.length,
+      hasGroundedHints: groundedHints != null,
+      toolAnalysis,
+    });
+    if (emptyReasons.length > 0) {
+      emitBugEnhanceEmpty({
+        input,
+        runId,
+        reasons: emptyReasons,
+        analysis: toolAnalysis,
+        category: parsed.data.category ?? null,
+        enhancedContentLength: content.length,
+        hasGroundedHints: groundedHints != null,
+      });
+    }
     return {
       markdown: content.length > 0 ? content : null,
       groundedHints,
     };
   } catch (err) {
     logger.error('bug-enhance: agent run failed', { err: String(err) });
+    const replayedToolAnalysis = analyzeToolEvents(eventStore.replay({ runId }));
+    emitBugEnhanceEmpty({
+      input,
+      runId,
+      reasons:
+        replayedToolAnalysis.blockedToolCallCount > 0 ? ['tool-call-blocked'] : ['no-tool-call-made'],
+      analysis: replayedToolAnalysis,
+      category: null,
+      enhancedContentLength: 0,
+      hasGroundedHints: false,
+      details: { error: String(err) },
+    });
     return { markdown: null, groundedHints: null };
   }
+}
+
+type BugEnhanceEmptyReason =
+  | 'no-tool-call-made'
+  | 'tool-call-blocked'
+  | 'output-validation-failed'
+  | 'category-unknown'
+  | 'empty-enhanced-content'
+  | 'no-grounded-hints';
+
+interface ToolEventAnalysis {
+  toolCallCount: number;
+  repoIntelCallCount: number;
+  blockedToolCallCount: number;
+  blockedToolNames: string[];
+}
+
+function payloadRecord(value: unknown): Record<string, unknown> | null {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function normalizedToolName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  if (value.startsWith('mcp__factory-tools__')) {
+    return value.slice('mcp__factory-tools__'.length);
+  }
+  return value;
+}
+
+function analyzeToolEvents(events: readonly AgentEvent[]): ToolEventAnalysis {
+  let toolCallCount = 0;
+  let repoIntelCallCount = 0;
+  let blockedToolCallCount = 0;
+  const blockedToolNames = new Set<string>();
+
+  for (const event of events) {
+    if (event.kind !== 'agent.tool-call') continue;
+    toolCallCount++;
+    const payload = payloadRecord(event.payload);
+    const toolName = normalizedToolName(payload?.tool_name ?? payload?.toolName ?? payload?.tool);
+    if (toolName === 'repo_intel.query') repoIntelCallCount++;
+    if (payload?.blocked === true || payload?.status === 'failed') {
+      blockedToolCallCount++;
+      if (toolName != null) blockedToolNames.add(toolName);
+    }
+  }
+
+  return {
+    toolCallCount,
+    repoIntelCallCount,
+    blockedToolCallCount,
+    blockedToolNames: Array.from(blockedToolNames),
+  };
+}
+
+function buildEmptyReasons(input: {
+  category?: BugCategory;
+  enhancedContentLength: number;
+  hasGroundedHints: boolean;
+  toolAnalysis: ToolEventAnalysis;
+}): BugEnhanceEmptyReason[] {
+  const reasons = new Set<BugEnhanceEmptyReason>();
+  if (input.toolAnalysis.toolCallCount === 0) reasons.add('no-tool-call-made');
+  if (input.toolAnalysis.blockedToolCallCount > 0) reasons.add('tool-call-blocked');
+  if (input.category === 'unknown') reasons.add('category-unknown');
+  if (input.enhancedContentLength === 0) reasons.add('empty-enhanced-content');
+  if (!input.hasGroundedHints) reasons.add('no-grounded-hints');
+  return Array.from(reasons);
+}
+
+function emitBugEnhanceEmpty(input: {
+  input: RunBugEnhanceInput;
+  runId: string;
+  reasons: BugEnhanceEmptyReason[];
+  analysis: ToolEventAnalysis;
+  category: BugCategory | null;
+  enhancedContentLength: number;
+  hasGroundedHints: boolean;
+  details?: Record<string, unknown>;
+}): void {
+  eventStore.appendEvent({
+    projectId: input.input.projectId,
+    workItemId: input.input.workItemId,
+    kind: 'agent.bug-enhance-empty',
+    payload: {
+      source: input.input.parentRunId != null ? 'lazy' : 'promotion',
+      runId: input.runId,
+      reasons: input.reasons,
+      category: input.category,
+      enhancedContentLength: input.enhancedContentLength,
+      hasGroundedHints: input.hasGroundedHints,
+      toolCallCount: input.analysis.toolCallCount,
+      repoIntelCallCount: input.analysis.repoIntelCallCount,
+      blockedToolCallCount: input.analysis.blockedToolCallCount,
+      blockedToolNames: input.analysis.blockedToolNames,
+      ...(input.details != null ? input.details : {}),
+    },
+    runId: input.runId,
+  });
 }
 
 const BODY_PATH_RE = /(?:[\w.-]+\/)+(?:[\w.-]+\.[A-Za-z0-9]+)/g;

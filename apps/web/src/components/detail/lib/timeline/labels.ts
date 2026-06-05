@@ -39,6 +39,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.investigation-seed-built': 'Investigation seed built',
   'agent.investigation-seed-empty': 'Investigation seed empty',
   'agent.bug-enhance-lazy': 'Bug grounding seed',
+  'agent.bug-enhance-empty': 'Bug grounding empty',
   'agent.bug-enhance-hallucinated': 'Bug grounding pruned',
   'agent.bug-enhance-workspace-empty': 'Bug grounding workspace missing',
   'agent.redundant-read': 'Redundant file read',

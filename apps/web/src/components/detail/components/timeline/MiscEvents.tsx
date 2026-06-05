@@ -906,6 +906,17 @@ function compactOperationalEventDetails(event: AgentEventDto): {
       pushNumber('originalCount', 'original');
       detail = 'Candidate files were pruned because they did not exist in the workspace.';
       break;
+    case 'agent.bug-enhance-empty':
+      tone = 'warning';
+      icon = 'warning';
+      push(payloadString(p, 'source'));
+      push(payloadString(p, 'runId') ?? formatShortId(event.runId ?? undefined));
+      pushNumber('repoIntelCallCount', 'repo-intel calls');
+      pushNumber('blockedToolCallCount', 'blocked tools');
+      detail =
+        payloadStringArray(p, 'reasons')?.join(', ') ??
+        'Bug enhancement completed without useful content or grounding.';
+      break;
     case 'agent.bug-enhance-workspace-empty':
       tone = 'warning';
       icon = 'warning';

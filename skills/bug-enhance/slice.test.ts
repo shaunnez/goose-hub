@@ -152,8 +152,16 @@ describe('bug-enhance prompt', () => {
 
     expect(prompt).toContain('If a request path is mentioned');
     expect(prompt).toContain(
-      'call `repo_intel.query({intent:"find-route", pathPattern:"<path>"})` first',
+      'use the repo-intel query tool with `{intent:"find-route", pathPattern:"<path>"}` first',
     );
     expect(prompt).toContain('If the request path starts with `/api/`');
+  });
+
+  it('names the runtime-visible repo-intel query tool for Claude and Codex', () => {
+    const prompt = readPrompt();
+
+    expect(prompt).toContain('Claude CLI: `mcp__factory-tools__repo_intel.query`');
+    expect(prompt).toContain('Codex CLI: `repo_intel.query`');
+    expect(prompt).not.toContain('call `repo_intel.query');
   });
 });

@@ -56,6 +56,7 @@ describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS', () => {
       'mcp__factory-tools__run_tests',
       'mcp__factory-tools__get_diff',
       'mcp__factory-tools__get_project_context',
+      'mcp__factory-tools__repo_intel.query',
     ]) {
       expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain(name);
     }
@@ -103,6 +104,7 @@ describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX', () => {
       '`run_tests`',
       '`get_diff`',
       '`get_project_context`',
+      '`repo_intel.query`',
     ]) {
       expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain(name);
     }

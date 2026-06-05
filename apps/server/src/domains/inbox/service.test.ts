@@ -31,6 +31,9 @@ vi.mock('@goose-hub/core/agent-artifacts/repository.js', () => ({
 vi.mock('@goose-hub/core/agent-runtime/bug-enhance-runner.js', () => ({
   runBugEnhance: mockRunBugEnhance,
 }));
+vi.mock('@goose-hub/core/event-stream/store.js', () => ({
+  eventStore: { appendEvent: vi.fn() },
+}));
 vi.mock('@goose-hub/core/workflow-routing/events.js', () => ({
   emitRouteSelected: vi.fn(),
   loadLatestRoute: vi.fn().mockReturnValue(null),
@@ -53,6 +56,7 @@ vi.mock('@goose-hub/core/workflow-routing/signals.js', () => ({
 
 import { dispatchTriageBatch } from '#shared/dispatch.js';
 import { getSourceForSlug } from '#shared/source.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { deleteInboxItem, getInboxItem, insertInboxItem, listInboxItems } from './repository.js';
 import {
   createInboxItem,
@@ -203,6 +207,32 @@ describe('promoteInboxItem', () => {
     ]);
   });
 
+  it('appends enhancement markdown to the created issue body when bug-enhance produces it', async () => {
+    const bugItem = {
+      id: 11,
+      title: 'Header shortcut bug',
+      body: 'Capture key in the header should open with Apple J.',
+      type: 'bug',
+      createdAt: '2026-05',
+    };
+    vi.mocked(getInboxItem).mockResolvedValueOnce(bugItem);
+    mockRunBugEnhance.mockResolvedValueOnce({
+      markdown:
+        '**Repro steps**\n1. Open the header.\n\n**Location**\napps/web/src/components/header/CaptureHeader.tsx',
+      groundedHints: null,
+    });
+
+    await promoteInboxItem(11, 'my-proj', undefined, true);
+
+    expect(mockSource.createIssue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining(
+          'Capture key in the header should open with Apple J.\n\n---\n\n**Repro steps**',
+        ),
+      }),
+    );
+  });
+
   it('skips seed persistence when bug-enhance returns no grounded hints', async () => {
     const bugItem = { id: 8, title: 'Chat bug', body: 'desc', type: 'bug', createdAt: '2026-05' };
     vi.mocked(getInboxItem).mockResolvedValueOnce(bugItem);
@@ -216,6 +246,34 @@ describe('promoteInboxItem', () => {
     await promoteInboxItem(8, 'my-proj', undefined, true);
 
     expect(mockStoreArtifact).not.toHaveBeenCalled();
+  });
+
+  it('emits no-output telemetry and still creates the issue with original body when enhancement is empty', async () => {
+    const bugItem = {
+      id: 12,
+      title: 'Header shortcut bug',
+      body: 'Original body',
+      type: 'bug',
+      createdAt: '2026-05',
+    };
+    vi.mocked(getInboxItem).mockResolvedValueOnce(bugItem);
+    mockRunBugEnhance.mockResolvedValueOnce({ markdown: null, groundedHints: null });
+
+    await promoteInboxItem(12, 'my-proj', undefined, true);
+
+    expect(mockSource.createIssue).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Header shortcut bug', body: 'Original body' }),
+    );
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.bug-enhance-empty',
+        workItemId: 'inbox:12',
+        payload: expect.objectContaining({
+          source: 'promotion',
+          reasons: ['empty-enhanced-content', 'no-grounded-hints'],
+        }),
+      }),
+    );
   });
 
   it('defaults body to empty string when item body is falsy', async () => {

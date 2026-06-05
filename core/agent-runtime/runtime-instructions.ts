@@ -23,6 +23,7 @@ Prefer the \`mcp__factory-tools__*\` tools over native Read / Write / Edit / Glo
 - Verification: \`mcp__factory-tools__run_tests\`, \`mcp__factory-tools__run_lint\`, \`mcp__factory-tools__run_typecheck\`, \`mcp__factory-tools__run_isolated_test\` (not raw \`pnpm\` invocations)
 - Git read-only: \`mcp__factory-tools__get_status\`, \`mcp__factory-tools__get_diff\`, \`mcp__factory-tools__get_changed_files\`, \`mcp__factory-tools__get_head_sha\`, \`mcp__factory-tools__get_merge_base\`
 - Project context: \`mcp__factory-tools__get_project_context\`, \`mcp__factory-tools__get_stack_commands\`
+- Repository intelligence: \`mcp__factory-tools__repo_intel.query\`
 
 All paths are workspace-relative. Absolute paths and \`..\` traversal are rejected. Commands run with \`shell: false\`; no shell strings. Output is byte-capped and timeouts are per-tool. Every call emits a structured \`agent.tool-call\` audit event.
 
@@ -47,6 +48,7 @@ Use the Factory MCP tools exposed by the \`factory-tools\` MCP server. Do not us
 - Verification: \`run_tests\`, \`run_lint\`, \`run_typecheck\`, \`run_isolated_test\` (not raw \`pnpm\` invocations)
 - Git read-only: \`get_status\`, \`get_diff\`, \`get_changed_files\`, \`get_head_sha\`, \`get_merge_base\`
 - Project context: \`get_project_context\`, \`get_stack_commands\`
+- Repository intelligence: \`repo_intel.query\`
 
 All paths are workspace-relative. Absolute paths and \`..\` traversal are rejected. Commands run with \`shell: false\`; no shell strings. Output is byte-capped and timeouts are per-tool. Every call emits a structured \`agent.tool-call\` audit event.
 

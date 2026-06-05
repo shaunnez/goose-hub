@@ -1,4 +1,5 @@
 import type { GroundedHints } from '@goose-hub/skills/bug-enhance/schema.js';
+import type { ResolvedSkillRuntime } from './skill-runtime-resolver.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../event-stream/store.js', () => ({
@@ -54,6 +55,7 @@ vi.mock('node:fs', () => ({
 
 const { runBugEnhance } = await import('./bug-enhance-runner.js');
 const { eventStore } = await import('../event-stream/store.js');
+const { resolveSkillRuntimeForProject } = await import('./skill-runtime-resolver.js');
 
 function makeHints(paths: string[]): GroundedHints {
   return {
@@ -63,16 +65,41 @@ function makeHints(paths: string[]): GroundedHints {
   };
 }
 
-function makeAgentResult(hints: GroundedHints | undefined) {
+function makeToolEvent(toolName: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    projectId: 'goose-hub-self',
+    workItemId: 'github:owner/repo#42',
+    kind: 'agent.tool-call',
+    payload: {
+      tool_name: toolName,
+      status: 'ok',
+      blocked: false,
+      ...overrides,
+    },
+    runId: 'bug-enhance-run',
+    personaId: null,
+    createdAt: '2026-06-05T00:00:00.000Z',
+  };
+}
+
+function makeAgentResult(
+  hints: GroundedHints | undefined,
+  opts: {
+    enhancedContent?: string;
+    category?: string;
+    events?: ReturnType<typeof makeToolEvent>[];
+  } = {},
+) {
   return {
     output: {
-      enhancedContent: 'Enhanced bug content',
-      category: 'ui-web',
+      enhancedContent: opts.enhancedContent ?? 'Enhanced bug content',
+      category: opts.category ?? 'ui-web',
       groundedHints: hints,
       decisionSummaries: [{ kind: 'READ', summary: 'done' }],
     },
     decisionSummaries: [],
-    events: [],
+    events: opts.events ?? [makeToolEvent('mcp__factory-tools__repo_intel.query')],
   };
 }
 
@@ -92,9 +119,30 @@ const BASE_INPUT = {
   workspaceDir: '/repo',
 };
 
+function makeResolvedRuntime(provider: 'claude' | 'codex'): ResolvedSkillRuntime {
+  const tier = provider === 'codex' ? 'sonnet' : 'haiku';
+  const modelOverride = provider === 'codex' ? 'gpt-5-codex' : 'claude-sonnet-4-6';
+  return {
+    budgets: { maxTurns: 10, maxBudgetUsd: 0.5, timeoutMs: 30_000 },
+    modelOverride,
+    tier,
+    provider,
+    source: 'skill-default',
+    selectionReason: 'test runtime',
+    runtimeTrace: {
+      tier: { value: tier, source: 'skill-default', reason: 'test runtime' },
+      provider: { value: provider, source: 'skill-default', reason: 'test runtime' },
+    },
+    resolvedPrimary: { tier, provider, modelId: modelOverride },
+    resolvedFallback: null,
+    resolvedAdvisor: null,
+  };
+}
+
 describe('runBugEnhance — path-existence pruning', () => {
   beforeEach(() => {
     mockRunFn.mockClear();
+    vi.mocked(resolveSkillRuntimeForProject).mockReturnValue(makeResolvedRuntime('claude'));
     mockRunFn.mockResolvedValue(makeAgentResult(makeHints(['real.ts', 'fake.ts'])));
     vi.mocked(eventStore.appendEvent).mockClear();
     // Default: workspace exists; 'real.ts' exists; 'fake.ts' does not
@@ -217,6 +265,152 @@ describe('runBugEnhance — path-existence pruning', () => {
     );
     expect(spec.appendSystemPrompt).toContain(
       'Use existing nearby files as grounding targets; do not read missing paths.',
+    );
+  });
+});
+
+describe('runBugEnhance — repo-intel grounding contract', () => {
+  beforeEach(() => {
+    mockRunFn.mockClear();
+    vi.mocked(eventStore.appendEvent).mockClear();
+    existsSyncImpl = (p) => {
+      const s = String(p);
+      return s === '/repo' || s === '/repo/apps/web/src/components/header/CaptureHeader.tsx';
+    };
+    readdirSyncImpl = () => [];
+    statSyncImpl = () => ({ isDirectory: () => false });
+  });
+
+  it('accepts a Claude run that used the prefixed repo-intel tool and produced grounded content', async () => {
+    vi.mocked(resolveSkillRuntimeForProject).mockReturnValue(makeResolvedRuntime('claude'));
+    const hints = makeHints(['apps/web/src/components/header/CaptureHeader.tsx']);
+    mockRunFn.mockResolvedValue(
+      makeAgentResult(hints, {
+        enhancedContent:
+          '**Repro steps**\n1. Open the header.\n\n**Location**\napps/web/src/components/header/CaptureHeader.tsx',
+        events: [makeToolEvent('mcp__factory-tools__repo_intel.query')],
+      }),
+    );
+
+    const result = await runBugEnhance({
+      ...BASE_INPUT,
+      title: 'Capture key in the header should open with Apple J',
+    });
+
+    expect(result.markdown).toContain('CaptureHeader.tsx');
+    expect(result.groundedHints?.candidateFiles).toHaveLength(1);
+    expect(mockRunFn.mock.calls[0][0]).toMatchObject({ skill: 'bug-enhance' });
+    expect(vi.mocked(eventStore.appendEvent).mock.calls).not.toContainEqual([
+      expect.objectContaining({ kind: 'agent.bug-enhance-empty' }),
+    ]);
+  });
+
+  it('accepts a Codex run that used the bare repo-intel tool and produced grounded content', async () => {
+    vi.mocked(resolveSkillRuntimeForProject).mockReturnValue(makeResolvedRuntime('codex'));
+    const hints = makeHints(['apps/web/src/components/header/CaptureHeader.tsx']);
+    mockRunFn.mockResolvedValue(
+      makeAgentResult(hints, {
+        enhancedContent:
+          '**Repro steps**\n1. Open the header.\n\n**Location**\napps/web/src/components/header/CaptureHeader.tsx',
+        events: [makeToolEvent('repo_intel.query')],
+      }),
+    );
+
+    const result = await runBugEnhance({
+      ...BASE_INPUT,
+      title: 'Capture key in the header should open with Apple J',
+    });
+
+    expect(result.markdown).toContain('CaptureHeader.tsx');
+    expect(result.groundedHints?.candidateFiles).toEqual([
+      expect.objectContaining({ path: 'apps/web/src/components/header/CaptureHeader.tsx' }),
+    ]);
+    expect(mockRunFn.mock.calls[0][0]).toMatchObject({ skill: 'bug-enhance' });
+  });
+
+  it('emits structured empty telemetry when no tool call was made and no output was produced', async () => {
+    mockRunFn.mockResolvedValue(
+      makeAgentResult(undefined, {
+        enhancedContent: '',
+        category: 'unknown',
+        events: [],
+      }),
+    );
+
+    const result = await runBugEnhance(BASE_INPUT);
+
+    expect(result).toEqual({ markdown: null, groundedHints: null });
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.bug-enhance-empty',
+        payload: expect.objectContaining({
+          reasons: expect.arrayContaining([
+            'no-tool-call-made',
+            'category-unknown',
+            'empty-enhanced-content',
+            'no-grounded-hints',
+          ]),
+          toolCallCount: 0,
+          repoIntelCallCount: 0,
+        }),
+      }),
+    );
+  });
+
+  it('emits structured empty telemetry when the repo-intel tool call was blocked', async () => {
+    mockRunFn.mockResolvedValue(
+      makeAgentResult(undefined, {
+        enhancedContent: '',
+        events: [
+          makeToolEvent('repo_intel.query', {
+            blocked: true,
+            status: 'failed',
+            block_reason: 'tool not in allowlist: repo_intel.query',
+          }),
+        ],
+      }),
+    );
+
+    await runBugEnhance(BASE_INPUT);
+
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.bug-enhance-empty',
+        payload: expect.objectContaining({
+          reasons: expect.arrayContaining([
+            'tool-call-blocked',
+            'empty-enhanced-content',
+            'no-grounded-hints',
+          ]),
+          blockedToolCallCount: 1,
+          blockedToolNames: ['repo_intel.query'],
+        }),
+      }),
+    );
+  });
+
+  it('emits structured empty telemetry when output validation fails', async () => {
+    mockRunFn.mockResolvedValue({
+      output: {
+        enhancedContent: '',
+        category: 'ui-web',
+        decisionSummaries: [],
+      },
+      decisionSummaries: [],
+      events: [makeToolEvent('repo_intel.query')],
+    });
+
+    const result = await runBugEnhance(BASE_INPUT);
+
+    expect(result).toEqual({ markdown: null, groundedHints: null });
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.bug-enhance-empty',
+        payload: expect.objectContaining({
+          reasons: ['output-validation-failed'],
+          repoIntelCallCount: 1,
+        }),
+      }),
     );
   });
 });
