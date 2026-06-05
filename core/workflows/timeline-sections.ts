@@ -60,6 +60,7 @@ const WORKFLOW_GROUP_TO_TIMELINE_SECTION: Record<WorkflowGroup, TimelineSectionI
 
 const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'dogfood.seed-applied': 'system',
+  'agent.checkout-readiness': 'system',
   'agent.triage-complete': 'triage',
   'agent.repo-override': 'triage',
   'agent.investigation-complete': 'investigation',

@@ -22,6 +22,7 @@ import { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-g
 import { resolveRepositoryForWorkItem } from '@goose-hub/core/workspaces/repo-affinity.js';
 import { resolveWorkflowBaseForWorkItem } from '@goose-hub/core/workspaces/workflow-base.js';
 import {
+  WorktreeDependencyPreflightError,
   cleanupWorktree,
   createWorktree,
   prewarmWorktree,
@@ -57,8 +58,8 @@ export interface FixIssueDeps {
   createWorktreeImpl?: typeof createWorktree;
   /** Override cleanupWorktree (used by tests). */
   cleanupWorktreeImpl?: typeof cleanupWorktree;
-  /** Override prewarmWorktree (used by tests to skip pnpm install). */
-  prewarmWorktreeImpl?: typeof prewarmWorktree;
+  /** Override prewarmWorktree (used by tests to skip dependency install). */
+  prewarmWorktreeImpl?: (worktreePath: string, filter?: string) => void | Promise<void>;
   /** Override resolveWorktreeHeadSha (used by tests to avoid real git subprocess). */
   resolveWorktreeHeadShaImpl?: typeof resolveWorktreeHeadSha;
   /** Override resolveWorkflowBase (used by tests to avoid real git subprocess). */
@@ -126,6 +127,22 @@ export async function runFixIssueWorkflow(
       fallbackLocalPath: targetRepo,
     }),
   );
+  eventStore.appendEvent({
+    projectId,
+    workItemId: workItem.id,
+    kind: 'agent.checkout-readiness',
+    payload: {
+      runId,
+      repoRef: selectedRepository.repoRef,
+      checkoutPath: selectedRepository.localPath,
+      defaultBranch: selectedRepository.defaultBranch,
+      selectedBy: selectedRepository.selectedBy,
+      checkoutSource: selectedRepository.checkoutSource,
+      readiness: selectedRepository.readiness ?? null,
+    },
+    runId,
+    personaId: implementPersonaId,
+  });
   const workflowWorkItem =
     selectedRepository.repoRef === workItem.repoRef
       ? workItem
@@ -221,7 +238,7 @@ export async function runFixIssueWorkflow(
 
     // Pre-warm: install dependencies before spawning the agent so it doesn't
     // waste its first turn running pnpm install.
-    prewarmWtFn(worktreePath);
+    await prewarmWtFn(worktreePath);
 
     const codeContext = buildCodeContextBundle({
       worktreePath,
@@ -244,7 +261,7 @@ export async function runFixIssueWorkflow(
         projectId,
         workItem,
         worktreePath,
-        stack: await deriveStack(projectId),
+        stack: await deriveStack(projectId, worktreePath),
         appendSystemPrompt: implementPrompt,
         outputJsonSchema: implementJsonSchema,
         personaId: implementPersonaId,
@@ -339,7 +356,7 @@ export async function runFixIssueWorkflow(
       projectId,
       workItem: workflowWorkItem,
       worktreePath,
-      stack: await deriveStack(projectId),
+      stack: await deriveStack(projectId, worktreePath),
       appendSystemPrompt: implementPrompt,
       outputJsonSchema: implementJsonSchema,
       personaId: implementPersonaId,
@@ -394,7 +411,21 @@ export async function runFixIssueWorkflow(
       projectId,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
-      payload: { runId, error: error.message },
+      payload:
+        err instanceof WorktreeDependencyPreflightError
+          ? {
+              runId,
+              error: error.message,
+              phase: 'prewarm',
+              repoRef: selectedRepository.repoRef,
+              checkoutPath: selectedRepository.localPath,
+              worktreePath,
+              packageManager: err.packageManager,
+              command: err.command.join(' '),
+              exitCode: err.exitCode ?? null,
+              stderrTail: err.stderrTail ?? null,
+            }
+          : { runId, error: error.message },
       runId,
     });
     await stateSource.comment(

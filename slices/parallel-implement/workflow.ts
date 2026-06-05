@@ -43,7 +43,9 @@ import {
   resolveRemoteBranchHead,
   revertWpChanges,
 } from '@goose-hub/core/workspaces/orchestrator-git.js';
+import { stackCommandsForWorktree } from '@goose-hub/core/workspaces/stack-commands.js';
 import {
+  WorktreeDependencyPreflightError,
   assertGooseHubWebPlaywrightReady,
   type cleanupWorktree,
   createIntegrationWorktree,
@@ -94,7 +96,7 @@ export interface ParallelImplementDeps {
   createWpWorktreeImpl?: typeof createWpScratchWorktree;
   createIssueWorktreeImpl?: typeof createWorktree;
   /** Override dependency prewarm for tests or alternate package managers. */
-  prewarmWorktreeImpl?: typeof prewarmWorktree;
+  prewarmWorktreeImpl?: (worktreePath: string, filter?: string) => void | Promise<void>;
   /** Override post-prewarm dependency verification for tests or alternate package managers. */
   verifyWorktreeDependenciesImpl?: (worktreePath: string) => void;
   resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
@@ -692,13 +694,7 @@ export async function runParallelImplementWorkflow(
   }
   const specForRun = normalizedSpec.spec;
 
-  const stack = projectConfig?.stack
-    ? {
-        testCommand: projectConfig.stack.testCommand,
-        lintCommand: projectConfig.stack.lintCommand,
-        typecheckCommand: projectConfig.stack.typecheckCommand,
-      }
-    : { testCommand: 'pnpm test' };
+  const stack = await stackCommandsForWorktree(targetRepo, projectConfig?.stack);
 
   const allWpIds = specForRun.workPackages.map((wp) => wp.id);
   const scratchWorktrees = new Map<string, string>(); // wpId → path
@@ -803,7 +799,7 @@ export async function runParallelImplementWorkflow(
     }
     issueWorktreePath = integrationWorktree.worktreePath;
     integrationHeadSha = latestPersisted?.pushedSha ?? integrationWorktree.previousHeadSha;
-    prewarmWtFn(issueWorktreePath);
+    await prewarmWtFn(issueWorktreePath);
     try {
       verifyWorktreeDepsFn(issueWorktreePath);
     } catch (err) {
@@ -857,7 +853,7 @@ export async function runParallelImplementWorkflow(
         for (const wp of batchWps) {
           if (scratchWorktrees.has(wp.id)) continue;
           const wtPath = createWpFn(targetRepo, runId, wp.id, scratchBaseRef);
-          prewarmWtFn(wtPath);
+          await prewarmWtFn(wtPath);
           scratchWorktrees.set(wp.id, wtPath);
         }
 
@@ -1614,6 +1610,18 @@ export async function runParallelImplementWorkflow(
         runId,
         skill: 'parallel-implement',
         error: error.message,
+        ...(err instanceof WorktreeDependencyPreflightError
+          ? {
+              phase: 'prewarm',
+              repoRef: workItem.repoRef ?? null,
+              checkoutPath: targetRepo,
+              worktreePath: err.cwd,
+              packageManager: err.packageManager,
+              command: err.command.join(' '),
+              exitCode: err.exitCode ?? null,
+              stderrTail: err.stderrTail ?? null,
+            }
+          : {}),
         ...(persistenceFailure ?? {}),
         ...(blockedGate ?? {}),
       },

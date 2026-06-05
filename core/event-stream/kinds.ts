@@ -18,6 +18,7 @@ export const EVENT_KINDS = [
   'agent.run-started',
   'agent.run-completed',
   'agent.run-failed',
+  'agent.checkout-readiness',
   'agent.budget-exceeded',
   'agent.fallback-triggered',
   'agent.triage-complete',
