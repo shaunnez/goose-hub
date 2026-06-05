@@ -891,6 +891,7 @@ export class CodexCliRuntime implements AgentRuntime {
         const usageInputTokens = envelope?.usage.inputTokens ?? 0;
         const usageOutputTokens = envelope?.usage.outputTokens ?? 0;
         const usageCachedInputTokens = envelope?.usage.cachedInputTokens ?? 0;
+        const usageCacheCreationInputTokens = envelope?.usage.cacheCreationInputTokens ?? 0;
         const usageReasoningOutputTokens = envelope?.usage.reasoningOutputTokens ?? 0;
         const rawCostUsd = envelope?.usage.costUsd ?? null;
         const costUsd =
@@ -911,6 +912,7 @@ export class CodexCliRuntime implements AgentRuntime {
           inputTokens: usageInputTokens,
           outputTokens: usageOutputTokens,
           cachedInputTokens: usageCachedInputTokens,
+          cacheCreationInputTokens: usageCacheCreationInputTokens,
           reasoningOutputTokens: usageReasoningOutputTokens,
           costUsd,
           costLabel,
@@ -1020,6 +1022,7 @@ export class CodexCliRuntime implements AgentRuntime {
               inputTokens: usageInputTokens,
               outputTokens: usageOutputTokens,
               cachedInputTokens: usageCachedInputTokens,
+              cacheCreationInputTokens: usageCacheCreationInputTokens,
               reasoningOutputTokens: usageReasoningOutputTokens,
               label: costLabel,
             },

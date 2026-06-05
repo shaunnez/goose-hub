@@ -19,6 +19,7 @@ vi.mock('@/lib/api', () => ({
         provider: 'codex',
         inputTokens: 1000,
         cachedInputTokens: 300,
+        cacheCreationInputTokens: 40,
         outputTokens: 500,
         reasoningOutputTokens: 120,
         costUsd: 0.25,
@@ -65,6 +66,7 @@ describe('CostsSection', () => {
     expect(screen.getByText('Bytes')).toBeTruthy();
     expect(screen.getByText('Cache hit')).toBeTruthy();
     expect(screen.getAllByText('cache 30%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('cc 40').length).toBeGreaterThan(0);
     expect(screen.getByText('r 120')).toBeTruthy();
     expect(screen.getByText('7')).toBeTruthy();
     expect(screen.getByText('8.0 KB')).toBeTruthy();

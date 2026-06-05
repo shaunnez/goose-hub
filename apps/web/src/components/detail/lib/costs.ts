@@ -9,6 +9,7 @@ export type StageBreakdown = {
   tokens: number;
   inputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   reasoningOutputTokens: number;
   cacheHitRatio: number;
   label: 'estimated' | 'exact';
@@ -22,6 +23,7 @@ export interface IssueCostsBreakdown {
   totalTokens: number;
   totalInputTokens: number;
   totalCachedInputTokens: number;
+  totalCacheCreationInputTokens: number;
   totalReasoningOutputTokens: number;
   totalCacheHitRatio: number;
   hasEstimated: boolean;
@@ -37,6 +39,7 @@ const EMPTY: Omit<IssueCostsBreakdown, 'isLoading'> = {
   totalTokens: 0,
   totalInputTokens: 0,
   totalCachedInputTokens: 0,
+  totalCacheCreationInputTokens: 0,
   totalReasoningOutputTokens: 0,
   totalCacheHitRatio: 0,
   hasEstimated: false,
@@ -66,6 +69,7 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
     let totalTokens = 0;
     let totalInputTokens = 0;
     let totalCachedInputTokens = 0;
+    let totalCacheCreationInputTokens = 0;
     let totalReasoningOutputTokens = 0;
 
     for (const row of data.rows) {
@@ -74,6 +78,7 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
       totalTokens += tokens;
       totalInputTokens += row.inputTokens;
       totalCachedInputTokens += row.cachedInputTokens;
+      totalCacheCreationInputTokens += row.cacheCreationInputTokens;
       totalReasoningOutputTokens += row.reasoningOutputTokens;
 
       const existing = byStage.get(row.stage);
@@ -82,6 +87,7 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
         existing.tokens += tokens;
         existing.inputTokens += row.inputTokens;
         existing.cachedInputTokens += row.cachedInputTokens;
+        existing.cacheCreationInputTokens += row.cacheCreationInputTokens;
         existing.reasoningOutputTokens += row.reasoningOutputTokens;
         existing.cacheHitRatio = existing.cachedInputTokens / Math.max(existing.inputTokens, 1);
         existing.runCount += 1;
@@ -93,6 +99,7 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
           tokens,
           inputTokens: row.inputTokens,
           cachedInputTokens: row.cachedInputTokens,
+          cacheCreationInputTokens: row.cacheCreationInputTokens,
           reasoningOutputTokens: row.reasoningOutputTokens,
           cacheHitRatio: row.cacheHitRatio,
           label: row.costLabel,
@@ -108,6 +115,7 @@ export function useIssueCostsBreakdown(projectSlug: string, id: string): IssueCo
       totalTokens,
       totalInputTokens,
       totalCachedInputTokens,
+      totalCacheCreationInputTokens,
       totalReasoningOutputTokens,
       totalCacheHitRatio: totalCachedInputTokens / Math.max(totalInputTokens, 1),
       hasEstimated: data.hasEstimated,

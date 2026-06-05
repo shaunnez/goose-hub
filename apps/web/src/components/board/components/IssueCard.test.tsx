@@ -117,6 +117,7 @@ describe('IssueCard', () => {
             provider: 'claude' as const,
             inputTokens: 800,
             cachedInputTokens: 0,
+            cacheCreationInputTokens: 0,
             outputTokens: 400,
             reasoningOutputTokens: 0,
             costUsd: 0.42,

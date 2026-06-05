@@ -88,6 +88,7 @@ describe('TaskHeader', () => {
           provider: 'claude',
           inputTokens: 1200,
           cachedInputTokens: 600,
+          cacheCreationInputTokens: 0,
           outputTokens: 300,
           reasoningOutputTokens: 0,
           costUsd: 0.42,

@@ -28,21 +28,24 @@ describe('CostBadge', () => {
     expect(screen.getByTestId('cost-badge')).toBeTruthy();
   });
 
-  it('renders cache hit ratio and reasoning tokens when present', () => {
+  it('renders cache hit ratio, cache creation, and reasoning tokens when present', () => {
     render(
       <CostBadge
         tokens={1234}
         usd={0.12}
         label="estimated"
         cacheHitRatio={0.22}
+        cacheCreationInputTokens={456}
         reasoningOutputTokens={130}
       />,
     );
 
     const badge = screen.getByTestId('cost-badge');
     expect(badge.textContent).toContain('cache 22%');
+    expect(badge.textContent).toContain('cc 456');
     expect(badge.textContent).toContain('r 130');
     expect(badge.title).toContain('22% cache hit');
+    expect(badge.title).toContain('456 cache creation tokens');
     expect(badge.title).toContain('130 reasoning tokens');
   });
 });

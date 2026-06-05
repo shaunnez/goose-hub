@@ -195,6 +195,7 @@ describe('QASection', () => {
           provider: 'claude' as const,
           inputTokens: 600,
           cachedInputTokens: 0,
+          cacheCreationInputTokens: 0,
           outputTokens: 200,
           reasoningOutputTokens: 0,
           costUsd: 0.05,

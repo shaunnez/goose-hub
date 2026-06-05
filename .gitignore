@@ -21,3 +21,4 @@ coverage/
 investigations/
 investigate-failling-issues-prompt.md
 .pnpm-store/
+legacy/

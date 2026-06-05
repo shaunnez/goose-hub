@@ -194,4 +194,48 @@ describe('renderProjectConfig', () => {
     expect(rendered).toContain('repos: ["api"]');
     expect(rendered).toContain('postBack: { pullRequests: true, comments: true }');
   });
+
+  it('renders multi-workspace Bitbucket PR integration config', () => {
+    const rendered = renderProjectConfig({
+      slug: 'bb-prs',
+      source: {
+        kind: 'local-db',
+        stateMachine: 'db',
+        integrations: {
+          bitbucket: {
+            enabled: true,
+            workspaces: [
+              { workspace: 'acme', repos: ['api', 'web'] },
+              { workspace: 'client', repos: ['portal'] },
+            ],
+            postBack: { pullRequests: true, comments: true },
+          },
+        },
+      },
+      repositories: [
+        {
+          id: 'acme-api',
+          repoRef: 'acme/api',
+          cloneUrl: 'git@bitbucket.org:acme/api.git',
+          defaultBranch: 'main',
+          localPath: '~/code/acme/api',
+          role: 'code',
+        },
+      ],
+      targetRepo: {
+        cloneUrl: 'git@bitbucket.org:acme/api.git',
+        defaultBranch: 'main',
+        localPath: '~/code/acme/api',
+      },
+      detectedAt: '2026-05-28T00:00:00.000Z',
+      stack: { type: 'unknown' },
+      activeMilestone: undefined,
+    });
+
+    expect(rendered).toContain(
+      'workspaces: [{"workspace":"acme","repos":["api","web"]},{"workspace":"client","repos":["portal"]}]',
+    );
+    expect(rendered).not.toContain('workspace: "acme"');
+    expect(rendered).toContain('postBack: { pullRequests: true, comments: true }');
+  });
 });

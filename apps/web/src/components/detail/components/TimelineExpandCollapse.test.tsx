@@ -109,6 +109,7 @@ function makeCostRow(runId: string, overrides: Partial<CostRowDto> = {}): CostRo
     provider: 'codex',
     inputTokens: 100,
     cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
     outputTokens: 50,
     reasoningOutputTokens: 0,
     costUsd: 0.01,

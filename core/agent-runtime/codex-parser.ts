@@ -8,6 +8,7 @@ export interface CodexEnvelope {
     inputTokens: number;
     outputTokens: number;
     cachedInputTokens: number;
+    cacheCreationInputTokens: number;
     reasoningOutputTokens: number;
     costUsd: number | null;
   };
@@ -183,6 +184,7 @@ export function parseCodexEnvelope(stdout: string): CodexEnvelope | null {
       inputTokens: rawCost?.inputTokens ?? 0,
       outputTokens: rawCost?.outputTokens ?? 0,
       cachedInputTokens: rawCost?.cachedInputTokens ?? 0,
+      cacheCreationInputTokens: rawCost?.cacheCreationInputTokens ?? 0,
       reasoningOutputTokens: rawCost?.reasoningOutputTokens ?? 0,
       costUsd: resolvedCostUsd,
     },

@@ -22,25 +22,31 @@ export function costFromCliEnvelope(envelope: unknown): CostUsage | null {
   const inputTokens = numericField(usage, ['input_tokens', 'inputTokens', 'prompt_tokens']) ?? 0;
   const outputTokens =
     numericField(usage, ['output_tokens', 'outputTokens', 'completion_tokens']) ?? 0;
+  const cacheReadInputTokens =
+    numericField(usage, ['cache_read_input_tokens', 'cacheReadInputTokens']) ?? 0;
+  const cacheCreationInputTokens =
+    numericField(usage, ['cache_creation_input_tokens', 'cacheCreationInputTokens']) ?? 0;
   const cachedInputTokens =
     numericField(usage, ['cached_input_tokens', 'cachedInputTokens']) ??
     numericField((usage.prompt_tokens_details ?? {}) as Record<string, unknown>, [
       'cached_tokens',
     ]) ??
-    0;
+    cacheReadInputTokens;
   const reasoningOutputTokens =
     numericField(usage, ['reasoning_output_tokens', 'reasoningOutputTokens']) ??
     numericField((usage.completion_tokens_details ?? {}) as Record<string, unknown>, [
       'reasoning_tokens',
     ]) ??
     0;
+  const totalInputTokens = inputTokens + cacheReadInputTokens + cacheCreationInputTokens;
 
-  if (cost == null && inputTokens === 0 && outputTokens === 0) return null;
+  if (cost == null && totalInputTokens === 0 && outputTokens === 0) return null;
 
   return {
-    inputTokens,
+    inputTokens: totalInputTokens,
     outputTokens,
     cachedInputTokens,
+    cacheCreationInputTokens,
     reasoningOutputTokens,
     costUsd: cost ?? 0,
     costLabel: 'estimated',
@@ -56,12 +62,14 @@ export function costFromApiUsage(input: {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
   reasoningOutputTokens?: number;
   costUsd: number;
 }): CostUsage {
   return {
     ...input,
     cachedInputTokens: input.cachedInputTokens ?? 0,
+    cacheCreationInputTokens: input.cacheCreationInputTokens ?? 0,
     reasoningOutputTokens: input.reasoningOutputTokens ?? 0,
     costLabel: 'exact',
   };

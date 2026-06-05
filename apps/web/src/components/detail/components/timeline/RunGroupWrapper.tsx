@@ -258,6 +258,7 @@ export function RunGroupWrapper({
                 label={runCost.costLabel}
                 size="sm"
                 cacheHitRatio={runCost.cacheHitRatio}
+                cacheCreationInputTokens={runCost.cacheCreationInputTokens}
                 reasoningOutputTokens={runCost.reasoningOutputTokens}
               />
             </span>
@@ -335,6 +336,7 @@ function aggregateRunGroupCosts(
   CostRowDto,
   | 'inputTokens'
   | 'cachedInputTokens'
+  | 'cacheCreationInputTokens'
   | 'outputTokens'
   | 'reasoningOutputTokens'
   | 'costUsd'
@@ -354,6 +356,7 @@ function aggregateRunGroupCosts(
 
   let inputTokens = 0;
   let cachedInputTokens = 0;
+  let cacheCreationInputTokens = 0;
   let outputTokens = 0;
   let reasoningOutputTokens = 0;
   let costUsd = 0;
@@ -361,6 +364,7 @@ function aggregateRunGroupCosts(
   for (const row of rows) {
     inputTokens += row.inputTokens;
     cachedInputTokens += row.cachedInputTokens;
+    cacheCreationInputTokens += row.cacheCreationInputTokens;
     outputTokens += row.outputTokens;
     reasoningOutputTokens += row.reasoningOutputTokens;
     costUsd += row.costUsd;
@@ -370,6 +374,7 @@ function aggregateRunGroupCosts(
   return {
     inputTokens,
     cachedInputTokens,
+    cacheCreationInputTokens,
     outputTokens,
     reasoningOutputTokens,
     costUsd,

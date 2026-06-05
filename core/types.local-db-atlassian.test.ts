@@ -32,6 +32,28 @@ describe('LocalDbSourceConfig Atlassian integration typing', () => {
     expect(config.integrations.jira.projectKeys).toEqual(['TAS', 'OPS']);
     expect(config.integrations.bitbucket.repos).toEqual(['api', 'web']);
   });
+
+  it('permits Bitbucket workspace groups for projects with several workspaces', () => {
+    const config = {
+      kind: 'local-db',
+      stateMachine: 'db',
+      integrations: {
+        bitbucket: {
+          enabled: true,
+          workspaces: [
+            { workspace: 'company', repos: ['api', 'web'] },
+            { workspace: 'client', repos: ['portal'] },
+          ],
+          postBack: {
+            pullRequests: true,
+            comments: true,
+          },
+        },
+      },
+    } satisfies LocalDbSourceConfig;
+
+    expect(config.integrations.bitbucket.workspaces).toHaveLength(2);
+  });
 });
 
 const _jiraCredentialsAreRejected = {

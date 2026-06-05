@@ -27,6 +27,7 @@ beforeAll(() => {
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0,
     reasoning_output_tokens INTEGER NOT NULL DEFAULT 0,
     cost_usd REAL NOT NULL DEFAULT 0,
     cost_label TEXT NOT NULL DEFAULT 'estimated',
@@ -78,6 +79,7 @@ describe('recordCost', () => {
       inputTokens: 1000,
       outputTokens: 500,
       cachedInputTokens: 250,
+      cacheCreationInputTokens: 75,
       reasoningOutputTokens: 50,
       costUsd: 0.012,
       costLabel: 'estimated',
@@ -93,6 +95,7 @@ describe('recordCost', () => {
       inputTokens: 1000,
       outputTokens: 500,
       cachedInputTokens: 250,
+      cacheCreationInputTokens: 75,
       reasoningOutputTokens: 50,
       costUsd: 0.012,
       costLabel: 'estimated',
@@ -111,6 +114,7 @@ describe('recordCost', () => {
       inputTokens: 100,
       outputTokens: 50,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0.001,
       costLabel: 'estimated' as const,
@@ -138,6 +142,7 @@ describe('recordToolStatsForRun', () => {
       inputTokens: 100,
       outputTokens: 10,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0.2,
       costLabel: 'estimated',
@@ -186,6 +191,7 @@ describe('recordToolStatsForRun', () => {
       inputTokens: 100,
       outputTokens: 10,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0.2,
       costLabel: 'estimated',
@@ -212,6 +218,7 @@ describe('recordToolStatsForRun', () => {
       inputTokens: 100,
       outputTokens: 10,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0.2,
       costLabel: 'estimated',
@@ -232,6 +239,7 @@ describe('recordToolStatsForRun', () => {
       inputTokens: 100,
       outputTokens: 10,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0.2,
       costLabel: 'estimated',
@@ -266,6 +274,7 @@ describe('totalsForProjectSince', () => {
       inputTokens: 100,
       outputTokens: 0,
       cachedInputTokens: 20,
+      cacheCreationInputTokens: 3,
       reasoningOutputTokens: 7,
       costUsd: 0.5,
       costLabel: 'estimated',
@@ -281,6 +290,7 @@ describe('totalsForProjectSince', () => {
       inputTokens: 300,
       outputTokens: 0,
       cachedInputTokens: 30,
+      cacheCreationInputTokens: 4,
       reasoningOutputTokens: 11,
       costUsd: 0.25,
       costLabel: 'exact',
@@ -292,6 +302,7 @@ describe('totalsForProjectSince', () => {
     expect(totals.totalRuns).toBe(2);
     expect(totals.inputTokens).toBe(400);
     expect(totals.cachedInputTokens).toBe(50);
+    expect(totals.cacheCreationInputTokens).toBe(7);
     expect(totals.reasoningOutputTokens).toBe(18);
     expect(totals.hasEstimated).toBe(true);
   });
@@ -307,6 +318,7 @@ describe('totalsForProjectSince', () => {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0.5,
       costLabel: 'exact',
@@ -334,6 +346,7 @@ describe('totalSpendForSkill', () => {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0.5,
       costLabel: 'exact',
@@ -349,6 +362,7 @@ describe('totalSpendForSkill', () => {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 1.0,
       costLabel: 'exact',
@@ -369,6 +383,7 @@ describe('totalSpendForSkill', () => {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 2.0,
       costLabel: 'exact',
@@ -391,6 +406,7 @@ describe('totalsByStageForProjectSince', () => {
       inputTokens: 100,
       outputTokens: 0,
       cachedInputTokens: 25,
+      cacheCreationInputTokens: 9,
       reasoningOutputTokens: 12,
       costUsd: 1.0,
       costLabel: 'estimated',
@@ -406,6 +422,7 @@ describe('totalsByStageForProjectSince', () => {
       inputTokens: 50,
       outputTokens: 0,
       cachedInputTokens: 10,
+      cacheCreationInputTokens: 2,
       reasoningOutputTokens: 3,
       costUsd: 0.3,
       costLabel: 'estimated',
@@ -416,6 +433,7 @@ describe('totalsByStageForProjectSince', () => {
     expect(stages[0].totalUsd).toBeCloseTo(1.0);
     expect(stages[0].inputTokens).toBe(100);
     expect(stages[0].cachedInputTokens).toBe(25);
+    expect(stages[0].cacheCreationInputTokens).toBe(9);
     expect(stages[0].reasoningOutputTokens).toBe(12);
     expect(stages[1].totalUsd).toBeCloseTo(0.3);
   });

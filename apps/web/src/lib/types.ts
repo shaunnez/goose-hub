@@ -388,6 +388,7 @@ export interface CostRowDto {
   provider: 'claude' | 'codex';
   inputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   outputTokens: number;
   reasoningOutputTokens: number;
   costUsd: number;
@@ -410,6 +411,7 @@ export interface CostWindowTotals {
   hasEstimated: boolean;
   inputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   reasoningOutputTokens: number;
   cacheHitRatio: number;
 }
@@ -600,6 +602,12 @@ export interface BootstrapRunDto {
   labelCounts?: { created: number; updated: number; skipped: number };
 }
 
+export interface BitbucketWorkspaceGroupDto {
+  workspace: string;
+  repos: string[];
+  defaultBranch?: string;
+}
+
 export type ProjectCreationSourceDto =
   | { kind: 'local-only' }
   | { kind: 'github-code'; repoRefs: string[]; defaultBranch?: string; localPath?: string }
@@ -609,7 +617,13 @@ export type ProjectCreationSourceDto =
       projectKeys: string[];
       importMode: 'manual' | 'assigned-to-me';
     }
-  | { kind: 'bitbucket'; workspace: string; repos: string[]; defaultBranch?: string }
+  | {
+      kind: 'bitbucket';
+      workspace?: string;
+      repos?: string[];
+      workspaces?: BitbucketWorkspaceGroupDto[];
+      defaultBranch?: string;
+    }
   | {
       kind: 'advanced';
       github?: { repoRefs: string[]; defaultBranch?: string; localPath?: string };
@@ -618,7 +632,12 @@ export type ProjectCreationSourceDto =
         projectKeys: string[];
         importMode: 'manual' | 'assigned-to-me';
       };
-      bitbucket?: { workspace: string; repos: string[]; defaultBranch?: string };
+      bitbucket?: {
+        workspace?: string;
+        repos?: string[];
+        workspaces?: BitbucketWorkspaceGroupDto[];
+        defaultBranch?: string;
+      };
     };
 
 export interface LocalProjectCreationRequestDto {

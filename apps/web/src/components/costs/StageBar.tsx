@@ -20,6 +20,7 @@ interface Props {
   totalRuns: number;
   maxUsd: number;
   cacheHitRatio: number;
+  cacheCreationInputTokens: number;
   reasoningOutputTokens: number;
 }
 
@@ -30,6 +31,7 @@ export function StageBar({
   totalRuns,
   maxUsd,
   cacheHitRatio,
+  cacheCreationInputTokens,
   reasoningOutputTokens,
 }: Props) {
   const pct = maxUsd > 0 ? Math.max(2, (totalUsd / maxUsd) * 100) : 0;
@@ -59,6 +61,8 @@ export function StageBar({
         </span>
         <span className="text-fg-2">·</span>
         <span className="text-fg-3">{Math.round(cacheHitRatio * 100)}% cache</span>
+        <span className="text-fg-2">·</span>
+        <span className="text-fg-3">cc {formatTokens(cacheCreationInputTokens)}</span>
         <span className="text-fg-2">·</span>
         <span className="text-fg-3">r {formatTokens(reasoningOutputTokens)}</span>
       </div>

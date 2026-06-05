@@ -47,6 +47,7 @@ export interface CostTotalDto {
   totalRuns: number;
   inputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   reasoningOutputTokens: number;
   cacheHitRatio: number;
   hasEstimated: boolean;
@@ -62,6 +63,7 @@ export interface CostRowDto {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   reasoningOutputTokens: number;
   cacheHitRatio: number;
   costUsd: number;
@@ -99,6 +101,7 @@ function toTotalDto(total: ProjectTotals): CostTotalDto {
     totalRuns: total.totalRuns,
     inputTokens: total.inputTokens ?? 0,
     cachedInputTokens: total.cachedInputTokens ?? 0,
+    cacheCreationInputTokens: total.cacheCreationInputTokens ?? 0,
     reasoningOutputTokens: total.reasoningOutputTokens ?? 0,
     cacheHitRatio: cacheHitRatio(total.inputTokens ?? 0, total.cachedInputTokens ?? 0),
     hasEstimated: total.hasEstimated,
@@ -129,12 +132,14 @@ function utcDayWindow(now: Date): { start: string; end: string } {
 function toProviderTotals(rows: CostRow[]): CostTotalDto {
   const inputTokens = rows.reduce((s, r) => s + r.inputTokens, 0);
   const cachedInputTokens = rows.reduce((s, r) => s + r.cachedInputTokens, 0);
+  const cacheCreationInputTokens = rows.reduce((s, r) => s + r.cacheCreationInputTokens, 0);
   const reasoningOutputTokens = rows.reduce((s, r) => s + r.reasoningOutputTokens, 0);
   return {
     totalUsd: rows.reduce((s, r) => s + r.costUsd, 0),
     totalRuns: rows.length,
     inputTokens,
     cachedInputTokens,
+    cacheCreationInputTokens,
     reasoningOutputTokens,
     cacheHitRatio: cacheHitRatio(inputTokens, cachedInputTokens),
     hasEstimated: rows.some((r) => r.costLabel === 'estimated'),
@@ -240,6 +245,7 @@ function toRowDto(r: CostRow | WorkItemToolStatsRow, stats?: WorkItemToolStatsRo
     inputTokens: r.inputTokens,
     outputTokens: r.outputTokens,
     cachedInputTokens: r.cachedInputTokens,
+    cacheCreationInputTokens: r.cacheCreationInputTokens,
     reasoningOutputTokens: r.reasoningOutputTokens,
     cacheHitRatio: cacheHitRatio(r.inputTokens, r.cachedInputTokens),
     costUsd: r.costUsd,

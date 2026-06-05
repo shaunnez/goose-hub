@@ -381,6 +381,52 @@ describe('local project creation', () => {
     }
   });
 
+  it('previews Bitbucket PR integration across multiple workspaces', async () => {
+    const result = await previewLocalProjectCreationService({
+      source: {
+        kind: 'bitbucket',
+        workspaces: [
+          { workspace: 'acme', repos: ['api', 'web'] },
+          { workspace: 'client', repos: ['portal'] },
+        ],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.slug).toBe('api');
+      expect(result.data.integrations).toEqual(['bitbucket']);
+      expect(result.data.repositories.map((repo) => repo.repoRef)).toEqual([
+        'acme/api',
+        'acme/web',
+        'client/portal',
+      ]);
+      expect(result.data.config).toContain(
+        'workspaces: [{"workspace":"acme","repos":["api","web"]},{"workspace":"client","repos":["portal"]}]',
+      );
+      expect(result.data.config).not.toContain('workspace: "acme"');
+    }
+  });
+
+  it('rejects more than three Bitbucket workspaces', async () => {
+    const result = await previewLocalProjectCreationService({
+      source: {
+        kind: 'bitbucket',
+        workspaces: [
+          { workspace: 'one', repos: ['api'] },
+          { workspace: 'two', repos: ['api'] },
+          { workspace: 'three', repos: ['api'] },
+          { workspace: 'four', repos: ['api'] },
+        ],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('bitbucket.workspaces supports up to 3 workspaces');
+    }
+  });
+
   it('writes project.config.ts locally without activating imports', async () => {
     const root = await mkdtemp(join(tmpdir(), 'goose-hub-target-projects-'));
     process.env.BOOTSTRAP_TARGET_PROJECTS_ROOT = root;

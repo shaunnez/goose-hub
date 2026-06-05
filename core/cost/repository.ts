@@ -31,6 +31,7 @@ export interface WorkItemToolStatsRow extends AgentRunToolStatsRow {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   reasoningOutputTokens: number;
   costUsd: number;
   costLabel: CostLabel;
@@ -53,6 +54,7 @@ export function recordCost(record: CostRecord): void {
       inputTokens: record.inputTokens,
       outputTokens: record.outputTokens,
       cachedInputTokens: record.cachedInputTokens,
+      cacheCreationInputTokens: record.cacheCreationInputTokens,
       reasoningOutputTokens: record.reasoningOutputTokens,
       costUsd: record.costUsd,
       costLabel: record.costLabel,
@@ -117,6 +119,7 @@ export function listToolStatsForWorkItem(workItemId: string): WorkItemToolStatsR
       inputTokens: agentRunCosts.inputTokens,
       outputTokens: agentRunCosts.outputTokens,
       cachedInputTokens: agentRunCosts.cachedInputTokens,
+      cacheCreationInputTokens: agentRunCosts.cacheCreationInputTokens,
       reasoningOutputTokens: agentRunCosts.reasoningOutputTokens,
       costUsd: agentRunCosts.costUsd,
       costLabel: agentRunCosts.costLabel,
@@ -137,6 +140,7 @@ export function listToolStatsForWorkItem(workItemId: string): WorkItemToolStatsR
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
     cachedInputTokens: row.cachedInputTokens,
+    cacheCreationInputTokens: row.cacheCreationInputTokens,
     reasoningOutputTokens: row.reasoningOutputTokens,
     costUsd: row.costUsd,
     costLabel: row.costLabel as CostLabel,
@@ -159,6 +163,7 @@ export interface ProjectTotals {
   totalRuns: number;
   inputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   reasoningOutputTokens: number;
   /** True when any contributing row was 'estimated'. UI uses this to qualify the figure. */
   hasEstimated: boolean;
@@ -175,6 +180,7 @@ export function totalsForProjectSince(projectId: string, sinceIso: string): Proj
       totalRuns: sql<number>`count(*)`,
       inputTokens: sql<number>`coalesce(sum(${agentRunCosts.inputTokens}), 0)`,
       cachedInputTokens: sql<number>`coalesce(sum(${agentRunCosts.cachedInputTokens}), 0)`,
+      cacheCreationInputTokens: sql<number>`coalesce(sum(${agentRunCosts.cacheCreationInputTokens}), 0)`,
       reasoningOutputTokens: sql<number>`coalesce(sum(${agentRunCosts.reasoningOutputTokens}), 0)`,
       hasEstimated: sql<number>`max(case when ${agentRunCosts.costLabel} = 'estimated' then 1 else 0 end)`,
     })
@@ -186,6 +192,7 @@ export function totalsForProjectSince(projectId: string, sinceIso: string): Proj
     totalRuns: row?.totalRuns ?? 0,
     inputTokens: row?.inputTokens ?? 0,
     cachedInputTokens: row?.cachedInputTokens ?? 0,
+    cacheCreationInputTokens: row?.cacheCreationInputTokens ?? 0,
     reasoningOutputTokens: row?.reasoningOutputTokens ?? 0,
     hasEstimated: (row?.hasEstimated ?? 0) === 1,
   };
@@ -199,6 +206,7 @@ export function totalsByStageForProjectSince(projectId: string, sinceIso: string
       totalRuns: sql<number>`count(*)`,
       inputTokens: sql<number>`coalesce(sum(${agentRunCosts.inputTokens}), 0)`,
       cachedInputTokens: sql<number>`coalesce(sum(${agentRunCosts.cachedInputTokens}), 0)`,
+      cacheCreationInputTokens: sql<number>`coalesce(sum(${agentRunCosts.cacheCreationInputTokens}), 0)`,
       reasoningOutputTokens: sql<number>`coalesce(sum(${agentRunCosts.reasoningOutputTokens}), 0)`,
       hasEstimated: sql<number>`max(case when ${agentRunCosts.costLabel} = 'estimated' then 1 else 0 end)`,
     })
@@ -213,6 +221,7 @@ export function totalsByStageForProjectSince(projectId: string, sinceIso: string
     totalRuns: r.totalRuns ?? 0,
     inputTokens: r.inputTokens ?? 0,
     cachedInputTokens: r.cachedInputTokens ?? 0,
+    cacheCreationInputTokens: r.cacheCreationInputTokens ?? 0,
     reasoningOutputTokens: r.reasoningOutputTokens ?? 0,
     hasEstimated: (r.hasEstimated ?? 0) === 1,
   }));
@@ -245,6 +254,7 @@ function toRow(r: typeof agentRunCosts.$inferSelect): CostRow {
     inputTokens: r.inputTokens,
     outputTokens: r.outputTokens,
     cachedInputTokens: r.cachedInputTokens,
+    cacheCreationInputTokens: r.cacheCreationInputTokens,
     reasoningOutputTokens: r.reasoningOutputTokens,
     costUsd: r.costUsd,
     costLabel: r.costLabel as CostLabel,

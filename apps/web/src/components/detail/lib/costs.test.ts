@@ -25,6 +25,7 @@ function row(partial: Partial<CostRowDto>): CostRowDto {
     provider: 'claude',
     inputTokens: 100,
     cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
     outputTokens: 50,
     reasoningOutputTokens: 0,
     costUsd: 0.01,
@@ -63,6 +64,7 @@ describe('useIssueCostsBreakdown', () => {
           costUsd: 0.05,
           inputTokens: 200,
           cachedInputTokens: 50,
+          cacheCreationInputTokens: 5,
           outputTokens: 100,
           reasoningOutputTokens: 12,
           cacheHitRatio: 0.25,
@@ -73,6 +75,7 @@ describe('useIssueCostsBreakdown', () => {
           costUsd: 0.06,
           inputTokens: 300,
           cachedInputTokens: 150,
+          cacheCreationInputTokens: 15,
           outputTokens: 100,
           reasoningOutputTokens: 8,
           cacheHitRatio: 0.5,
@@ -91,6 +94,7 @@ describe('useIssueCostsBreakdown', () => {
     expect(result.current.totalTokens).toBe(200 + 100 + 300 + 100 + 800 + 400);
     expect(result.current.totalInputTokens).toBe(200 + 300 + 800);
     expect(result.current.totalCachedInputTokens).toBe(200);
+    expect(result.current.totalCacheCreationInputTokens).toBe(20);
     expect(result.current.totalReasoningOutputTokens).toBe(20);
     expect(result.current.totalCacheHitRatio).toBeCloseTo(200 / 1300, 5);
     expect(result.current.byRun.get('r-dev-1')?.costUsd).toBe(0.25);
@@ -100,6 +104,7 @@ describe('useIssueCostsBreakdown', () => {
     expect(qa?.usd).toBeCloseTo(0.11, 5);
     expect(qa?.tokens).toBe(700);
     expect(qa?.cachedInputTokens).toBe(200);
+    expect(qa?.cacheCreationInputTokens).toBe(20);
     expect(qa?.reasoningOutputTokens).toBe(20);
     expect(qa?.cacheHitRatio).toBeCloseTo(0.4, 5);
 

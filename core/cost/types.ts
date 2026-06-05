@@ -34,6 +34,7 @@ export interface CostRecord {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   reasoningOutputTokens: number;
   costUsd: number;
   costLabel: CostLabel;
@@ -44,6 +45,7 @@ export interface CostUsage {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   reasoningOutputTokens: number;
   costUsd: number;
   costLabel: CostLabel;

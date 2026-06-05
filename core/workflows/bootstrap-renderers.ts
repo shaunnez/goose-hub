@@ -324,14 +324,25 @@ function renderLocalDbSourceBlock(source: LocalDbSourceConfig): string {
   }
 
   if (integrations?.bitbucket != null) {
-    integrationLines.push(
+    const bitbucketLines = [
       '      bitbucket: {',
       `        enabled: ${integrations.bitbucket.enabled ? 'true' : 'false'},`,
-      `        workspace: ${JSON.stringify(integrations.bitbucket.workspace)},`,
-      `        repos: ${JSON.stringify(integrations.bitbucket.repos)},`,
+    ];
+    if (integrations.bitbucket.workspaces != null) {
+      bitbucketLines.push(
+        `        workspaces: ${JSON.stringify(integrations.bitbucket.workspaces)},`,
+      );
+    } else {
+      bitbucketLines.push(
+        `        workspace: ${JSON.stringify(integrations.bitbucket.workspace)},`,
+        `        repos: ${JSON.stringify(integrations.bitbucket.repos)},`,
+      );
+    }
+    bitbucketLines.push(
       `        postBack: { pullRequests: ${integrations.bitbucket.postBack?.pullRequests === true ? 'true' : 'false'}, comments: ${integrations.bitbucket.postBack?.comments === true ? 'true' : 'false'} },`,
       '      },',
     );
+    integrationLines.push(...bitbucketLines);
   }
 
   if (integrationLines.length > 0) {

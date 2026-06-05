@@ -1,5 +1,6 @@
 import { createLocalProject, previewLocalProjectCreation } from '@/lib/api';
 import type {
+  BitbucketWorkspaceGroupDto,
   LocalProjectCreationPreviewDto,
   LocalProjectCreationRequestDto,
   LocalProjectCreationRunDto,
@@ -40,8 +41,7 @@ interface WizardState {
   jiraBaseUrl: string;
   jiraKeysText: string;
   jiraImportMode: 'manual' | 'assigned-to-me';
-  bitbucketWorkspace: string;
-  bitbucketReposText: string;
+  bitbucketWorkspacesText: string;
   preview: LocalProjectCreationPreviewDto | null;
   lastRequest: LocalProjectCreationRequestDto | null;
   result: LocalProjectCreationRunDto | null;
@@ -58,8 +58,7 @@ const INITIAL_STATE: WizardState = {
   jiraBaseUrl: '',
   jiraKeysText: '',
   jiraImportMode: 'manual',
-  bitbucketWorkspace: '',
-  bitbucketReposText: '',
+  bitbucketWorkspacesText: '',
   preview: null,
   lastRequest: null,
   result: null,
@@ -228,8 +227,7 @@ function buildSource(state: WizardState): ProjectCreationSourceDto {
     case 'bitbucket':
       return {
         kind: 'bitbucket',
-        workspace: state.bitbucketWorkspace.trim(),
-        repos: parseList(state.bitbucketReposText),
+        workspaces: parseBitbucketWorkspaceGroups(state.bitbucketWorkspacesText),
       };
     case 'advanced': {
       const source: Extract<ProjectCreationSourceDto, { kind: 'advanced' }> = { kind: 'advanced' };
@@ -246,10 +244,9 @@ function buildSource(state: WizardState): ProjectCreationSourceDto {
           importMode: state.jiraImportMode,
         };
       }
-      if (state.bitbucketWorkspace.trim() && parseList(state.bitbucketReposText).length > 0) {
+      if (state.bitbucketWorkspacesText.trim().length > 0) {
         source.bitbucket = {
-          workspace: state.bitbucketWorkspace.trim(),
-          repos: parseList(state.bitbucketReposText),
+          workspaces: parseBitbucketWorkspaceGroups(state.bitbucketWorkspacesText),
         };
       }
       return source;
@@ -266,14 +263,12 @@ function canAdvance(state: WizardState): boolean {
       return state.jiraBaseUrl.trim().length > 0 && parseList(state.jiraKeysText).length > 0;
     }
     if (state.mode === 'bitbucket') {
-      return (
-        state.bitbucketWorkspace.trim().length > 0 && parseList(state.bitbucketReposText).length > 0
-      );
+      return isValidBitbucketWorkspaceGroups(state.bitbucketWorkspacesText);
     }
     return (
       isValidRepoRefs(state.githubReposText) ||
       (state.jiraBaseUrl.trim().length > 0 && parseList(state.jiraKeysText).length > 0) ||
-      (state.bitbucketWorkspace.trim().length > 0 && parseList(state.bitbucketReposText).length > 0)
+      isValidBitbucketWorkspaceGroups(state.bitbucketWorkspacesText)
     );
   }
   if (state.step === 'submit') return state.result != null;
@@ -285,6 +280,37 @@ function parseList(raw: string): string[] {
     .split(/[\n,]+/)
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+function parseBitbucketWorkspaceGroups(raw: string): BitbucketWorkspaceGroupDto[] {
+  const lines = raw
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) throw new Error('Bitbucket workspaces are required');
+  if (lines.length > 3) throw new Error('Bitbucket supports up to 3 workspaces');
+
+  return lines.map((line, idx) => {
+    const separator = line.indexOf(':');
+    if (separator < 1) {
+      throw new Error(`Bitbucket workspace line ${idx + 1} must look like "workspace: repo,repo"`);
+    }
+    const workspace = line.slice(0, separator).trim();
+    const repos = parseList(line.slice(separator + 1));
+    if (workspace.length === 0 || repos.length === 0) {
+      throw new Error(`Bitbucket workspace line ${idx + 1} must include a workspace and repos`);
+    }
+    return { workspace, repos };
+  });
+}
+
+function isValidBitbucketWorkspaceGroups(raw: string): boolean {
+  try {
+    parseBitbucketWorkspaceGroups(raw);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function StepIndicator({ current }: { current: WizardStep }) {
@@ -424,24 +450,14 @@ function StepSource({
 
       {(state.mode === 'bitbucket' || state.mode === 'advanced') && (
         <div style={sectionGridStyle}>
-          <Field label="Bitbucket workspace" htmlFor="bootstrap-bitbucket-workspace">
-            <input
-              id="bootstrap-bitbucket-workspace"
-              data-testid="bootstrap-bitbucket-workspace-input"
-              value={state.bitbucketWorkspace}
-              onChange={(e) => onChange({ bitbucketWorkspace: e.target.value })}
-              placeholder="workspace"
-              style={textInputStyle}
-            />
-          </Field>
-          <Field label="Bitbucket repositories" htmlFor="bootstrap-bitbucket-repos">
-            <input
-              id="bootstrap-bitbucket-repos"
-              data-testid="bootstrap-bitbucket-repos-input"
-              value={state.bitbucketReposText}
-              onChange={(e) => onChange({ bitbucketReposText: e.target.value })}
-              placeholder="api,web"
-              style={textInputStyle}
+          <Field label="Bitbucket workspaces (max 3)" htmlFor="bootstrap-bitbucket-workspaces">
+            <textarea
+              id="bootstrap-bitbucket-workspaces"
+              data-testid="bootstrap-bitbucket-workspaces-input"
+              value={state.bitbucketWorkspacesText}
+              onChange={(e) => onChange({ bitbucketWorkspacesText: e.target.value })}
+              placeholder={'acme: api,web\nclient: portal'}
+              style={textareaStyle}
             />
           </Field>
         </div>

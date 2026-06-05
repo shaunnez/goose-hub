@@ -141,15 +141,44 @@ describe('BootstrapWizard', () => {
     const user = userEvent.setup();
     renderWizard();
     await user.click(screen.getByTestId('bootstrap-mode-bitbucket'));
-    await user.type(screen.getByTestId('bootstrap-bitbucket-workspace-input'), 'acme');
-    await user.type(screen.getByTestId('bootstrap-bitbucket-repos-input'), 'api,web');
+    await user.type(screen.getByTestId('bootstrap-bitbucket-workspaces-input'), 'acme: api,web');
     await user.click(screen.getByTestId('wizard-next'));
 
     await waitFor(() => expect(screen.getByTestId('step-preview')).toBeTruthy());
     expect(previewLocalProjectCreation).toHaveBeenCalledWith({
       slug: undefined,
       name: undefined,
-      source: { kind: 'bitbucket', workspace: 'acme', repos: ['api', 'web'] },
+      source: { kind: 'bitbucket', workspaces: [{ workspace: 'acme', repos: ['api', 'web'] }] },
+    });
+  });
+
+  it('previews Bitbucket PR integration across multiple workspaces', async () => {
+    const { previewLocalProjectCreation } = await import('@/lib/api');
+    vi.mocked(previewLocalProjectCreation).mockResolvedValue({
+      ...FIXTURE_PREVIEW,
+      integrations: ['bitbucket'],
+    });
+
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(screen.getByTestId('bootstrap-mode-bitbucket'));
+    await user.type(
+      screen.getByTestId('bootstrap-bitbucket-workspaces-input'),
+      'acme: api,web{enter}client: portal',
+    );
+    await user.click(screen.getByTestId('wizard-next'));
+
+    await waitFor(() => expect(screen.getByTestId('step-preview')).toBeTruthy());
+    expect(previewLocalProjectCreation).toHaveBeenCalledWith({
+      slug: undefined,
+      name: undefined,
+      source: {
+        kind: 'bitbucket',
+        workspaces: [
+          { workspace: 'acme', repos: ['api', 'web'] },
+          { workspace: 'client', repos: ['portal'] },
+        ],
+      },
     });
   });
 
@@ -166,8 +195,7 @@ describe('BootstrapWizard', () => {
     await user.type(screen.getByTestId('bootstrap-github-repos-input'), 'octo/widgets');
     await user.type(screen.getByTestId('bootstrap-jira-base-url-input'), 'https://example.net');
     await user.type(screen.getByTestId('bootstrap-jira-keys-input'), 'ENG');
-    await user.type(screen.getByTestId('bootstrap-bitbucket-workspace-input'), 'acme');
-    await user.type(screen.getByTestId('bootstrap-bitbucket-repos-input'), 'api');
+    await user.type(screen.getByTestId('bootstrap-bitbucket-workspaces-input'), 'acme: api');
     await user.click(screen.getByTestId('wizard-next'));
 
     await waitFor(() => expect(screen.getByTestId('step-preview')).toBeTruthy());
@@ -182,7 +210,7 @@ describe('BootstrapWizard', () => {
           projectKeys: ['ENG'],
           importMode: 'manual',
         },
-        bitbucket: { workspace: 'acme', repos: ['api'] },
+        bitbucket: { workspaces: [{ workspace: 'acme', repos: ['api'] }] },
       },
     });
   });

@@ -35,6 +35,7 @@ export function TimelineSectionGroupWrapper({
     let tokens = 0;
     let inputTokens = 0;
     let cachedInputTokens = 0;
+    let cacheCreationInputTokens = 0;
     let reasoningOutputTokens = 0;
     let usd = 0;
     let estimated = false;
@@ -44,6 +45,7 @@ export function TimelineSectionGroupWrapper({
       tokens += row.inputTokens + row.outputTokens;
       inputTokens += row.inputTokens;
       cachedInputTokens += row.cachedInputTokens;
+      cacheCreationInputTokens += row.cacheCreationInputTokens;
       reasoningOutputTokens += row.reasoningOutputTokens;
       usd += row.costUsd;
       estimated = estimated || row.costLabel === 'estimated';
@@ -52,6 +54,7 @@ export function TimelineSectionGroupWrapper({
       tokens,
       usd,
       cacheHitRatio: cachedInputTokens / Math.max(inputTokens, 1),
+      cacheCreationInputTokens,
       reasoningOutputTokens,
       label: estimated ? ('estimated' as const) : ('exact' as const),
     };
@@ -93,6 +96,7 @@ export function TimelineSectionGroupWrapper({
                 label={costs.label}
                 size="sm"
                 cacheHitRatio={costs.cacheHitRatio}
+                cacheCreationInputTokens={costs.cacheCreationInputTokens}
                 reasoningOutputTokens={costs.reasoningOutputTokens}
               />
             </span>

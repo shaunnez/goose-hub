@@ -102,6 +102,12 @@ export interface BootstrapRequestDto {
   name?: string;
 }
 
+export interface BitbucketWorkspaceGroupDto {
+  workspace: string;
+  repos: string[];
+  defaultBranch?: string;
+}
+
 export type ProjectCreationSourceDto =
   | { kind: 'local-only' }
   | { kind: 'github-code'; repoRefs: string[]; defaultBranch?: string; localPath?: string }
@@ -111,7 +117,13 @@ export type ProjectCreationSourceDto =
       projectKeys: string[];
       importMode: 'manual' | 'assigned-to-me';
     }
-  | { kind: 'bitbucket'; workspace: string; repos: string[]; defaultBranch?: string }
+  | {
+      kind: 'bitbucket';
+      workspace?: string;
+      repos?: string[];
+      workspaces?: BitbucketWorkspaceGroupDto[];
+      defaultBranch?: string;
+    }
   | {
       kind: 'advanced';
       github?: { repoRefs: string[]; defaultBranch?: string; localPath?: string };
@@ -120,7 +132,12 @@ export type ProjectCreationSourceDto =
         projectKeys: string[];
         importMode: 'manual' | 'assigned-to-me';
       };
-      bitbucket?: { workspace: string; repos: string[]; defaultBranch?: string };
+      bitbucket?: {
+        workspace?: string;
+        repos?: string[];
+        workspaces?: BitbucketWorkspaceGroupDto[];
+        defaultBranch?: string;
+      };
     };
 
 export interface LocalProjectCreationRequestDto {
@@ -566,23 +583,26 @@ function normalizeProjectCreationSource(
   };
 
   const addBitbucket = (bitbucket: {
-    workspace: string;
-    repos: string[];
+    workspace?: string;
+    repos?: string[];
+    workspaces?: BitbucketWorkspaceGroupDto[];
     defaultBranch?: string;
   }) => {
-    const workspace = requireNonEmpty(bitbucket.workspace, 'bitbucket.workspace');
-    const repos = normalizeStringList(bitbucket.repos, 'bitbucket.repos');
+    const workspaces = normalizeBitbucketWorkspaceGroups(bitbucket);
     integrations.bitbucket = {
       enabled: true,
-      workspace,
-      repos,
+      workspaces: workspaces.map(({ workspace, repos }) => ({ workspace, repos })),
       postBack: { pullRequests: true, comments: true },
     };
     requiredEnvVars.add('BITBUCKET_TOKEN or BITBUCKET_USERNAME + BITBUCKET_APP_PASSWORD');
     enabledIntegrations.push('bitbucket');
-    for (const repo of repos) {
-      const repoRef = `${workspace}/${repo}`;
-      repositories.push(bitbucketRepository(repoRef, bitbucket.defaultBranch ?? 'main'));
+    for (const group of workspaces) {
+      for (const repo of group.repos) {
+        const repoRef = `${group.workspace}/${repo}`;
+        repositories.push(
+          bitbucketRepository(repoRef, group.defaultBranch ?? bitbucket.defaultBranch ?? 'main'),
+        );
+      }
     }
   };
 
@@ -633,13 +653,16 @@ function defaultSlugForCreationSource(source: ProjectCreationSourceDto): string 
       return first.split('/')[1] ?? first;
     }
     case 'bitbucket':
-      return normalizeStringList(source.repos, 'bitbucket.repos')[0];
+      return normalizeBitbucketWorkspaceGroups(source)[0].repos[0];
     case 'jira':
       return normalizeStringList(source.projectKeys, 'jira.projectKeys')[0].toLowerCase();
     case 'advanced':
       if (source.github?.repoRefs?.length)
         return defaultSlugForCreationSource({ kind: 'github-code', ...source.github });
       if (source.bitbucket?.repos?.length) {
+        return defaultSlugForCreationSource({ kind: 'bitbucket', ...source.bitbucket });
+      }
+      if (source.bitbucket?.workspaces?.length) {
         return defaultSlugForCreationSource({ kind: 'bitbucket', ...source.bitbucket });
       }
       if (source.jira?.projectKeys?.length)
@@ -698,6 +721,34 @@ function normalizeStringList(values: unknown, field: string): string[] {
     .filter(Boolean);
   if (normalized.length === 0) throw new Error(`${field} must contain at least one value`);
   return normalized;
+}
+
+function normalizeBitbucketWorkspaceGroups(bitbucket: {
+  workspace?: string;
+  repos?: string[];
+  workspaces?: BitbucketWorkspaceGroupDto[];
+  defaultBranch?: string;
+}): BitbucketWorkspaceGroupDto[] {
+  const groups =
+    Array.isArray(bitbucket.workspaces) && bitbucket.workspaces.length > 0
+      ? bitbucket.workspaces
+      : [
+          {
+            workspace: bitbucket.workspace,
+            repos: bitbucket.repos,
+            defaultBranch: bitbucket.defaultBranch,
+          },
+        ];
+
+  if (groups.length > 3) {
+    throw new Error('bitbucket.workspaces supports up to 3 workspaces');
+  }
+
+  return groups.map((group, idx) => ({
+    workspace: requireNonEmpty(group.workspace, `bitbucket.workspaces[${idx}].workspace`),
+    repos: normalizeStringList(group.repos, `bitbucket.workspaces[${idx}].repos`),
+    defaultBranch: group.defaultBranch,
+  }));
 }
 
 function getTargetProjectsRoot(): string {

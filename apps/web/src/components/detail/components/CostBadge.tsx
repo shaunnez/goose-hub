@@ -8,6 +8,7 @@ interface CostBadgeProps {
   label?: 'estimated' | 'exact';
   size?: 'sm' | 'md';
   cacheHitRatio?: number;
+  cacheCreationInputTokens?: number;
   reasoningOutputTokens?: number;
   className?: string;
 }
@@ -24,6 +25,7 @@ export function CostBadge({
   label = 'exact',
   size = 'sm',
   cacheHitRatio,
+  cacheCreationInputTokens = 0,
   reasoningOutputTokens = 0,
   className,
 }: CostBadgeProps) {
@@ -36,11 +38,14 @@ export function CostBadge({
   const costStr = formatCost(usd, label);
   const cachePct =
     cacheHitRatio != null && cacheHitRatio > 0 ? `${Math.round(cacheHitRatio * 100)}%` : null;
+  const cacheCreateStr =
+    cacheCreationInputTokens > 0 ? formatTokens(cacheCreationInputTokens) : null;
   const reasoningStr = reasoningOutputTokens > 0 ? formatTokens(reasoningOutputTokens) : null;
   const details = [
     `${tokenStr} tokens`,
     costStr,
     cachePct != null ? `${cachePct} cache hit` : null,
+    cacheCreateStr != null ? `${cacheCreateStr} cache creation tokens` : null,
     reasoningStr != null ? `${reasoningStr} reasoning tokens` : null,
   ].filter((part): part is string => part != null);
   const title =
@@ -70,6 +75,14 @@ export function CostBadge({
             ·
           </span>
           <span className="tnum">cache {cachePct}</span>
+        </>
+      )}
+      {cacheCreateStr != null && (
+        <>
+          <span aria-hidden className="opacity-40">
+            ·
+          </span>
+          <span className="tnum">cc {cacheCreateStr}</span>
         </>
       )}
       {reasoningStr != null && (

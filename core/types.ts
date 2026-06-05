@@ -17,8 +17,12 @@ export interface LocalDbJiraIntegrationConfig {
 
 export interface LocalDbBitbucketIntegrationConfig {
   enabled: boolean;
-  workspace: string;
-  repos: string[];
+  workspace?: string;
+  repos?: string[];
+  workspaces?: Array<{
+    workspace: string;
+    repos: string[];
+  }>;
   postBack?: {
     pullRequests: boolean;
     comments: boolean;

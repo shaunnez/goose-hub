@@ -201,6 +201,7 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
       inputTokens: 20,
       outputTokens: 10,
       cachedInputTokens: 5,
+      cacheCreationInputTokens: 3,
       reasoningOutputTokens: 2,
       costUsd: 0.25,
       costLabel: 'estimated',
@@ -217,7 +218,7 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
         payload: expect.objectContaining({
           runId: 'run-abc',
           skill: 'fix-issue',
-          cost: expect.objectContaining({ usd: 0.25 }),
+          cost: expect.objectContaining({ usd: 0.25, cacheCreationInputTokens: 3 }),
         }),
       }),
     );
@@ -321,6 +322,7 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
       inputTokens: 100,
       outputTokens: 50,
       cachedInputTokens: 10,
+      cacheCreationInputTokens: 4,
       reasoningOutputTokens: 5,
       costUsd: 1.25,
       costLabel: 'estimated',
@@ -340,6 +342,7 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
         inputTokens: 100,
         outputTokens: 50,
         cachedInputTokens: 10,
+        cacheCreationInputTokens: 4,
         reasoningOutputTokens: 5,
       }),
     );
@@ -376,6 +379,7 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
       inputTokens: 100,
       outputTokens: 50,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 1.25,
       costLabel: 'exact',

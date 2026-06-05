@@ -23,6 +23,7 @@ describe('costFromCliEnvelope', () => {
       inputTokens: 1234,
       outputTokens: 567,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0.0421,
       costLabel: 'estimated',
@@ -38,6 +39,7 @@ describe('costFromCliEnvelope', () => {
       inputTokens: 10,
       outputTokens: 20,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0.1,
       costLabel: 'estimated',
@@ -49,6 +51,7 @@ describe('costFromCliEnvelope', () => {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0.5,
       costLabel: 'estimated',
@@ -63,6 +66,7 @@ describe('costFromCliEnvelope', () => {
       inputTokens: 500,
       outputTokens: 200,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0,
       costLabel: 'estimated',
@@ -86,12 +90,47 @@ describe('costFromCliEnvelope', () => {
     expect(result?.reasoningOutputTokens).toBe(13);
   });
 
+  it('extracts Claude cache read and cache creation tokens from CLI usage', () => {
+    const result = costFromCliEnvelope({
+      total_cost_usd: 0.017572550000000003,
+      usage: {
+        input_tokens: 9,
+        cache_creation_input_tokens: 12_501,
+        cache_read_input_tokens: 12_223,
+        output_tokens: 143,
+      },
+    });
+
+    expect(result).toEqual({
+      inputTokens: 24_733,
+      outputTokens: 143,
+      cachedInputTokens: 12_223,
+      cacheCreationInputTokens: 12_501,
+      reasoningOutputTokens: 0,
+      costUsd: 0.017572550000000003,
+      costLabel: 'estimated',
+    });
+  });
+
   it('defaults cached and reasoning tokens to 0 when absent', () => {
     const result = costFromCliEnvelope({
       usage: { input_tokens: 100, output_tokens: 5 },
     });
     expect(result?.cachedInputTokens).toBe(0);
+    expect(result?.cacheCreationInputTokens).toBe(0);
     expect(result?.reasoningOutputTokens).toBe(0);
+  });
+
+  it('treats cache-only usage as a recordable usage envelope', () => {
+    const result = costFromCliEnvelope({
+      usage: { cache_read_input_tokens: 10, cache_creation_input_tokens: 5 },
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 15,
+      cachedInputTokens: 10,
+      cacheCreationInputTokens: 5,
+    });
   });
 });
 
@@ -101,6 +140,7 @@ describe('costFromApiUsage', () => {
       inputTokens: 1,
       outputTokens: 2,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 0,
       costUsd: 0.003,
       costLabel: 'exact',

@@ -18,9 +18,10 @@ One row per agent run, keyed on `runId`.
 | `stage` | text | `triage`/`investigate`/`dev`/`qa`/`review`/`retrospective`/`other` |
 | `skill` | text | The exact skill name that ran (e.g. `retrospective-deep`) |
 | `modelId` | text | Model used (e.g. `claude-sonnet-4-6`) |
-| `inputTokens` | int | Prompt tokens |
+| `inputTokens` | int | Prompt tokens, including cache-read and cache-creation input when the runtime reports them separately |
 | `outputTokens` | int | Completion tokens |
 | `cachedInputTokens` | int | Prompt tokens reported as cache hits |
+| `cacheCreationInputTokens` | int | Prompt tokens written into provider cache |
 | `reasoningOutputTokens` | int | Reasoning tokens reported separately from visible output |
 | `costUsd` | real | Dollar figure for this run |
 | `costLabel` | text | `'estimated'` or `'exact'` — see below |
@@ -33,10 +34,12 @@ The `runId` unique index means duplicate inserts (retry loops) are ignored.
 
 The Claude CLI runtime calls `recordCost()` once per successful run, after
 parsing the `--output-format json` envelope. `costFromCliEnvelope()` reads
-`total_cost_usd` and `usage.{input_tokens,output_tokens}` from the envelope
-when present and returns a `CostUsage` with `costLabel: 'estimated'`. When
-the envelope has neither field we still record a zero-cost row so every run
-shows up on the dashboard — the `costLabel` is `'estimated'` and the cost
+`total_cost_usd`, `usage.{input_tokens,cache_read_input_tokens,cache_creation_input_tokens,output_tokens}`
+from the envelope when present and returns a `CostUsage` with
+`costLabel: 'estimated'`. `cachedInputTokens` is cache-read only so cache hit
+rate remains a hit-rate metric; `cacheCreationInputTokens` is stored separately.
+When the envelope has neither field we still record a zero-cost row so every
+run shows up on the dashboard — the `costLabel` is `'estimated'` and the cost
 is `0`.
 
 When a future code path talks to the Anthropic SDK directly (rather than

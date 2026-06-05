@@ -438,6 +438,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
           inputTokens: usage?.inputTokens ?? 0,
           outputTokens: usage?.outputTokens ?? 0,
           cachedInputTokens: usage?.cachedInputTokens ?? 0,
+          cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? 0,
           reasoningOutputTokens: usage?.reasoningOutputTokens ?? 0,
           costUsd: usage?.costUsd ?? 0,
           // No CLI usage data → still 'estimated', just zeroed.
@@ -551,6 +552,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
               inputTokens: usage?.inputTokens ?? 0,
               outputTokens: usage?.outputTokens ?? 0,
               cachedInputTokens: usage?.cachedInputTokens ?? 0,
+              cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? 0,
               reasoningOutputTokens: usage?.reasoningOutputTokens ?? 0,
               label: usage?.costLabel ?? 'estimated',
             },

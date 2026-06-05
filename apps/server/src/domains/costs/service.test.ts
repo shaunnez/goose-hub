@@ -52,6 +52,7 @@ describe('getCostSummary', () => {
         hasEstimated: true,
         inputTokens: 1000,
         cachedInputTokens: 250,
+        cacheCreationInputTokens: 50,
         reasoningOutputTokens: 30,
       }) // week
       .mockReturnValueOnce({
@@ -60,6 +61,7 @@ describe('getCostSummary', () => {
         hasEstimated: true,
         inputTokens: 2000,
         cachedInputTokens: 400,
+        cacheCreationInputTokens: 90,
         reasoningOutputTokens: 90,
       }); // month
     mockTotalsByStage.mockReturnValue([
@@ -70,6 +72,7 @@ describe('getCostSummary', () => {
         hasEstimated: true,
         inputTokens: 1000,
         cachedInputTokens: 300,
+        cacheCreationInputTokens: 60,
         reasoningOutputTokens: 60,
       },
       {
@@ -79,6 +82,7 @@ describe('getCostSummary', () => {
         hasEstimated: false,
         inputTokens: 500,
         cachedInputTokens: 100,
+        cacheCreationInputTokens: 10,
         reasoningOutputTokens: 10,
       },
     ]);
@@ -94,6 +98,7 @@ describe('getCostSummary', () => {
         inputTokens: 100,
         outputTokens: 50,
         cachedInputTokens: 25,
+        cacheCreationInputTokens: 7,
         reasoningOutputTokens: 5,
         costUsd: 1.5,
         costLabel: 'estimated',
@@ -111,6 +116,7 @@ describe('getCostSummary', () => {
         inputTokens: 80,
         outputTokens: 30,
         cachedInputTokens: 20,
+        cacheCreationInputTokens: 0,
         reasoningOutputTokens: 4,
         costUsd: 2.0,
         costLabel: 'exact',
@@ -124,19 +130,23 @@ describe('getCostSummary', () => {
     if (!r.ok) return;
     expect(r.data.windows.week.totalUsd).toBe(1.2);
     expect(r.data.windows.week.cacheHitRatio).toBe(0.25);
+    expect(r.data.windows.week.cacheCreationInputTokens).toBe(50);
     expect(r.data.windows.week.reasoningOutputTokens).toBe(30);
     expect(r.data.windows.month.totalUsd).toBe(4.5);
     expect(r.data.windows.month.cachedInputTokens).toBe(400);
+    expect(r.data.windows.month.cacheCreationInputTokens).toBe(90);
     expect(r.data.windows.month.reasoningOutputTokens).toBe(90);
     expect(r.data.byStage).toHaveLength(2);
     expect(r.data.byStage[0].stage).toBe('dev');
     expect(r.data.byStage[0].cacheHitRatio).toBe(0.3);
+    expect(r.data.byStage[0].cacheCreationInputTokens).toBe(60);
     expect(r.data.byStage[0].reasoningOutputTokens).toBe(60);
     expect(r.data.byProvider.claude).toMatchObject({
       totalUsd: 1.5,
       totalRuns: 1,
       hasEstimated: true,
       cachedInputTokens: 25,
+      cacheCreationInputTokens: 7,
       reasoningOutputTokens: 5,
       cacheHitRatio: 0.25,
     });
@@ -145,6 +155,7 @@ describe('getCostSummary', () => {
       totalRuns: 1,
       hasEstimated: false,
       cachedInputTokens: 20,
+      cacheCreationInputTokens: 0,
       reasoningOutputTokens: 4,
       cacheHitRatio: 0.25,
     });
@@ -205,6 +216,7 @@ describe('getCostSummary', () => {
         inputTokens: 600,
         outputTokens: 500,
         cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
         reasoningOutputTokens: 0,
         costUsd: 0.12,
         costLabel: 'estimated',
@@ -222,6 +234,7 @@ describe('getCostSummary', () => {
         inputTokens: 900,
         outputTokens: 100,
         cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
         reasoningOutputTokens: 0,
         costUsd: 0.2,
         costLabel: 'estimated',
@@ -275,6 +288,7 @@ describe('getCostsForWorkItem', () => {
         inputTokens: 100,
         outputTokens: 50,
         cachedInputTokens: 20,
+        cacheCreationInputTokens: 6,
         reasoningOutputTokens: 5,
         costUsd: 0.01,
         costLabel: 'estimated',
@@ -292,6 +306,7 @@ describe('getCostsForWorkItem', () => {
         inputTokens: 80,
         outputTokens: 30,
         cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
         reasoningOutputTokens: 0,
         costUsd: 0.005,
         costLabel: 'exact',
@@ -309,6 +324,7 @@ describe('getCostsForWorkItem', () => {
         inputTokens: 100,
         outputTokens: 50,
         cachedInputTokens: 20,
+        cacheCreationInputTokens: 6,
         reasoningOutputTokens: 5,
         costUsd: 0.01,
         costLabel: 'estimated',
@@ -337,6 +353,7 @@ describe('getCostsForWorkItem', () => {
       uniquePathsRead: 2,
       redundantReads: 1,
       cachedInputTokens: 20,
+      cacheCreationInputTokens: 6,
       reasoningOutputTokens: 5,
       cacheHitRatio: 0.2,
     });
@@ -360,6 +377,7 @@ describe('getToolStatsForWorkItem', () => {
         inputTokens: 100,
         outputTokens: 20,
         cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
         reasoningOutputTokens: 0,
         costUsd: 0.1,
         costLabel: 'estimated',

@@ -111,6 +111,10 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
   const totalTokens = data.rows.reduce((s, r) => s + r.inputTokens + r.outputTokens, 0);
   const totalInputTokens = data.rows.reduce((s, r) => s + r.inputTokens, 0);
   const totalCachedInputTokens = data.rows.reduce((s, r) => s + r.cachedInputTokens, 0);
+  const totalCacheCreationInputTokens = data.rows.reduce(
+    (s, r) => s + r.cacheCreationInputTokens,
+    0,
+  );
   const totalReasoningTokens = data.rows.reduce((s, r) => s + r.reasoningOutputTokens, 0);
   const cacheHitRatio = totalCachedInputTokens / Math.max(totalInputTokens, 1);
   const maxPersonaToks = Math.max(...personaSummaries.map((p) => p.toks), 1);
@@ -160,6 +164,11 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
           label="Cache hit"
           value={formatCacheHitPercent(cacheHitRatio)}
           sub={`${formatTokens(totalCachedInputTokens)} cached input`}
+        />
+        <StatTile
+          label="Cache create"
+          value={formatTokens(totalCacheCreationInputTokens)}
+          sub="created input cache"
         />
         <StatTile
           label="Reasoning"
@@ -269,6 +278,11 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
                   <span className="block text-[10px] text-fg-4">
                     cache {formatCacheHitPercent(r.cacheHitRatio)}
                   </span>
+                  {r.cacheCreationInputTokens > 0 && (
+                    <span className="block text-[10px] text-fg-4">
+                      cc {formatTokens(r.cacheCreationInputTokens)}
+                    </span>
+                  )}
                 </span>
                 <span
                   className={`font-mono text-[11.5px] pr-4 ${
