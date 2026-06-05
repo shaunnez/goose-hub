@@ -294,6 +294,18 @@ describe('Misc timeline events', () => {
         },
       },
       {
+        kind: 'agent.feature-enhance-empty',
+        title: 'Feature grounding empty',
+        payload: {
+          enhanceRunId: 'grounding-run:feature-enhance',
+          reasons: ['tool-call-blocked', 'no-grounded-output'],
+          repoIntelCallCount: 1,
+          blockedToolCallCount: 1,
+          blockedToolNames: ['search_text'],
+          validationIssues: [{ path: 'candidateFiles.0.source', message: 'Invalid source' }],
+        },
+      },
+      {
         kind: 'agent.bug-enhance-workspace-empty',
         title: 'Bug grounding workspace missing',
         payload: { workspaceDir: '/tmp/missing', runId: 'bug-run' },
@@ -391,6 +403,12 @@ describe('Misc timeline events', () => {
     expect(rendered).toContain('$0.80 cap');
     expect(rendered).toContain('stages triage → investigate → implement → qa → review → retro');
     expect(rendered).toContain('bug with no seed - fail-safe up to T2');
+    expect(rendered).toContain('grounding-run:feature-enhance');
+    expect(rendered).toContain('1 repo-intel calls');
+    expect(rendered).toContain('search_text');
+    expect(rendered).toContain('1 blocked tools');
+    expect(rendered).toContain('1 validation issues');
+    expect(rendered).toContain('tool-call-blocked, no-grounded-output');
     expect(rendered).not.toContain('"rawProbeKey"');
     expect(rendered).not.toContain('raw-value');
     expect(rendered).not.toContain('"selectedStages"');

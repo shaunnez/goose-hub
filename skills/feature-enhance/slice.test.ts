@@ -82,4 +82,55 @@ describe('feature-enhance prompt', () => {
     expect(prompt).toContain('Do not invent files');
     expect(prompt).toContain('If no files are found');
   });
+
+  it('declares Claude and Codex runtime-visible read tools', () => {
+    const prompt = readPrompt();
+    for (const toolName of [
+      'mcp__factory-tools__repo_intel.query',
+      'mcp__factory-tools__search_text',
+      'mcp__factory-tools__list_dir',
+      'mcp__factory-tools__list_files',
+      'mcp__factory-tools__read_file',
+      'repo_intel.query',
+      'search_text',
+      'list_dir',
+      'list_files',
+      'read_file',
+    ]) {
+      expect(prompt).toContain(toolName);
+    }
+  });
+
+  it('explicitly forbids blocked native and delegation tools', () => {
+    const prompt = readPrompt();
+    for (const forbidden of [
+      'ToolSearch',
+      'native Read',
+      'Bash',
+      'Agent',
+      'Skill',
+      'AskUserQuestion',
+      'MCP resources',
+      'file://',
+      'delegation',
+      'user questions',
+    ]) {
+      expect(prompt).toContain(forbidden);
+    }
+  });
+
+  it('caps exploration and requires valid low-confidence JSON on grounding failure', () => {
+    const prompt = readPrompt();
+    expect(prompt).toContain('Maximum 5 tool calls total');
+    expect(prompt).toContain('return valid low-confidence JSON');
+    expect(prompt).toContain('Stop once 1-3 grounded candidates are found');
+  });
+
+  it('requires tool-backed evidence for emitted candidate files', () => {
+    const prompt = readPrompt();
+    expect(prompt).toContain(
+      'Non-empty `candidateFiles` must include at least one tool-verified candidate',
+    );
+    expect(prompt).toContain('Every emitted candidate file must be backed by tool evidence');
+  });
 });

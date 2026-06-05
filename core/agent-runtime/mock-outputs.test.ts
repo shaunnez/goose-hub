@@ -60,6 +60,39 @@ describe('resolveMockOutput — repo-match', () => {
   });
 });
 
+describe('resolveMockOutput — feature-enhance', () => {
+  it('returns tool-verified grounding with a matching repo-intel tool event', () => {
+    const r = resolveMockOutput(
+      makeSpec({
+        skill: 'feature-enhance',
+        runId: 'grounding-run:feature-enhance',
+        context: { projectId: 'goose-hub-self', workItemId: 'github:owner/repo#42' },
+        workItemId: 'github:owner/repo#42',
+      }),
+    );
+    const out = r.output as {
+      candidateFiles: Array<{ source?: string }>;
+    };
+
+    expect(out.candidateFiles).toEqual([
+      expect.objectContaining({ source: 'tool-verified' }),
+    ]);
+    expect(r.events).toEqual([
+      expect.objectContaining({
+        kind: 'agent.tool-call',
+        projectId: 'goose-hub-self',
+        workItemId: 'github:owner/repo#42',
+        runId: 'grounding-run:feature-enhance',
+        payload: expect.objectContaining({
+          tool_name: 'repo_intel.query',
+          status: 'ok',
+          blocked: false,
+        }),
+      }),
+    ]);
+  });
+});
+
 describe('resolveMockOutput — implement', () => {
   it('returns a deterministic implement plan with a mock PR url', () => {
     const r = resolveMockOutput(makeSpec({ skill: 'implement' }));

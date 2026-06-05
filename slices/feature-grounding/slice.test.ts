@@ -4,7 +4,7 @@ import type { FeatureEnhanceOutput } from '@goose-hub/skills/feature-enhance/sch
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockDispatchWave = vi.fn();
-const mockInvokeSkill = vi.fn();
+const mockRunFeatureEnhance = vi.fn();
 const mockPersistScoutReportForRun = vi.fn();
 const mockAppendEvent = vi.fn();
 const mockReplay = vi.fn();
@@ -14,8 +14,8 @@ vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
   dispatchWave: (...args: unknown[]) => mockDispatchWave(...args),
 }));
 
-vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
-  invokeSkill: (...args: unknown[]) => mockInvokeSkill(...args),
+vi.mock('@goose-hub/core/agent-runtime/feature-enhance-runner.js', () => ({
+  runFeatureEnhance: (...args: unknown[]) => mockRunFeatureEnhance(...args),
 }));
 
 vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
@@ -175,12 +175,11 @@ function replayWith(input: { framed?: unknown; selectedRoute?: WorkflowRouteDeci
 
 async function runWith(routeDecision: WorkflowRouteDecision, output: FeatureEnhanceOutput) {
   replayWith({ selectedRoute: routeDecision });
-  mockInvokeSkill.mockResolvedValueOnce({
+  mockRunFeatureEnhance.mockResolvedValueOnce({
+    ok: true,
     output,
-    decisionSummaries: [],
-    events: [],
+    enhanceRunId: 'grounding-run:feature-enhance',
     personaId: 'triager-test',
-    role: 'triager',
   });
   const { runFeatureGroundingWorkflow } = await import('./workflow.js');
   return runFeatureGroundingWorkflow(
@@ -249,8 +248,8 @@ describe('feature-grounding workflow', () => {
     const result = await runWith(route('T0'), enhancement());
 
     expect(result.nextState).toBe('factory:dev-ready');
-    expect(mockInvokeSkill).toHaveBeenCalledWith(
-      expect.objectContaining({ skillName: 'feature-enhance' }),
+    expect(mockRunFeatureEnhance).toHaveBeenCalledWith(
+      expect.objectContaining({ enhanceRunId: expect.stringContaining(':feature-enhance') }),
     );
     expect(mockDispatchWave).not.toHaveBeenCalled();
     const enhancedEvent = mockAppendEvent.mock.calls.find(
@@ -330,25 +329,60 @@ describe('feature-grounding workflow', () => {
     ]);
   });
 
-  it('empty feature-enhance output asks for product clarification instead of implementation guessing', async () => {
-    const result = await runWith(
-      route('T0'),
-      enhancement({
-        candidateFiles: [],
-        existingSurfaces: [],
-        similarPatterns: [],
-        testSurfaces: [],
-        acceptanceHints: [],
-        openQuestions: ['No matching repo surface found.'],
-        confidence: 'low',
-        escalationSignals: ['needs product clarification'],
-      }),
+  it('runner failure emits parent failure, transitions to needs-human, and does not launch scouts', async () => {
+    replayWith({ selectedRoute: route('T2') });
+    mockRunFeatureEnhance.mockResolvedValueOnce({
+      ok: false,
+      enhanceRunId: 'grounding-run:feature-enhance',
+      reason: 'no-grounded-output',
+      telemetry: {
+        parentRunId: 'grounding-run',
+        enhanceRunId: 'grounding-run:feature-enhance',
+        reason: 'no-grounded-output',
+        reasons: ['no-grounded-output'],
+        blockedToolNames: [],
+        toolCallCount: 1,
+        repoIntelCallCount: 1,
+        blockedToolCallCount: 0,
+        runtime: 'claude-cli',
+        modelId: 'claude-3-5-haiku-latest',
+        outputSchemaHash: 'abc123',
+      },
+    });
+    const { runFeatureGroundingWorkflow } = await import('./workflow.js');
+
+    const result = await runFeatureGroundingWorkflow(
+      makeWorkItem(),
+      makeSource(),
+      'goose-hub-self',
+      process.cwd(),
+      {
+        createWorktreeImpl: () => process.cwd(),
+        cleanupWorktreeImpl: vi.fn(),
+      },
     );
 
-    expect(result.nextState).toBe('factory:grilling');
+    expect(result.nextState).toBe('factory:needs-human');
     expect(mockDispatchWave).not.toHaveBeenCalled();
+    const failedEvent = mockAppendEvent.mock.calls.find(
+      ([event]) => event.kind === 'agent.run-failed',
+    )?.[0];
+    expect(failedEvent.payload).toMatchObject({
+      error: 'feature-enhance produced no valid grounded output',
+      enhanceRunId: 'grounding-run:feature-enhance',
+      reason: 'no-grounded-output',
+      failureDetails: {
+        reasons: ['no-grounded-output'],
+        toolCallCount: 1,
+        repoIntelCallCount: 1,
+      },
+    });
     expect(mockTransitionAndEmitState).toHaveBeenCalledWith(
-      expect.objectContaining({ to: 'factory:grilling' }),
+      expect.objectContaining({
+        from: 'factory:grounding',
+        to: 'factory:needs-human',
+        by: 'feature-grounding',
+      }),
     );
   });
 
@@ -364,7 +398,8 @@ describe('feature-grounding workflow', () => {
         },
       },
     });
-    mockInvokeSkill.mockResolvedValueOnce({
+    mockRunFeatureEnhance.mockResolvedValueOnce({
+      ok: true,
       output: enhancement({
         candidateFiles: [],
         existingSurfaces: [],
@@ -373,10 +408,8 @@ describe('feature-grounding workflow', () => {
         confidence: 'low',
         escalationSignals: ['needs PRD clarification'],
       }),
-      decisionSummaries: [],
-      events: [],
+      enhanceRunId: 'grounding-run:feature-enhance',
       personaId: 'triager-test',
-      role: 'triager',
     });
     const { runFeatureGroundingWorkflow } = await import('./workflow.js');
     const result = await runFeatureGroundingWorkflow(
@@ -391,7 +424,7 @@ describe('feature-grounding workflow', () => {
     );
 
     expect(result.nextState).toBe('factory:prd-drafting');
-    expect(mockInvokeSkill).toHaveBeenCalledWith(
+    expect(mockRunFeatureEnhance).toHaveBeenCalledWith(
       expect.objectContaining({
         context: expect.objectContaining({
           workItem: expect.objectContaining({ body: 'Original\n\nFramed details' }),
