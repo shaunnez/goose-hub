@@ -724,6 +724,22 @@ describe('runTriageBatch decision-summary events (#206)', () => {
           (e.payload as { error?: string }).error === 'repo-match output validation failed',
       );
     expect(failedEvents).toHaveLength(1);
+    expect(failedEvents[0][0].payload).toMatchObject({
+      error: 'repo-match output validation failed',
+      validationIssues: expect.arrayContaining([
+        expect.objectContaining({
+          path: 'candidates',
+          code: 'invalid_type',
+          message: expect.any(String),
+        }),
+        expect.objectContaining({
+          path: 'decisionSummaries',
+          code: 'invalid_type',
+          message: expect.any(String),
+        }),
+      ]),
+      outputPreview: '{"not":"a-valid-repo-match-output"}',
+    });
   });
 });
 

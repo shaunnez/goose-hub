@@ -47,6 +47,25 @@ function typeFromLabels(labels: readonly string[]): WorkItemType | null {
   return null;
 }
 
+function validationIssuesForEvent(
+  issues: Array<{ path: PropertyKey[]; code: string; message: string }>,
+) {
+  return issues.map((issue) => ({
+    path: issue.path.length > 0 ? issue.path.map(String).join('.') : '<root>',
+    code: issue.code,
+    message: issue.message,
+  }));
+}
+
+function outputPreviewForEvent(output: unknown, maxChars = 2000): string {
+  try {
+    const text = typeof output === 'string' ? output : JSON.stringify(output);
+    return (text ?? String(output)).slice(0, maxChars);
+  } catch {
+    return String(output).slice(0, maxChars);
+  }
+}
+
 function readReposMd(slug: string): string {
   if (!isValidSlug(slug)) {
     // Defence-in-depth (#201). Caller's getSourceForSlug already filtered
@@ -274,9 +293,14 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
 
     const repoMatchParsed = safeParseOutputForSchema(RepoMatchOutputSchema, repoMatchResult.output);
     if (!repoMatchParsed.success) {
+      const validationIssues = validationIssuesForEvent(repoMatchParsed.error.issues);
+      const outputPreview = outputPreviewForEvent(repoMatchResult.output);
       logger.warn('triage-batch repo-match output invalid, using empty candidates', {
         slug,
         workItemId,
+        runId: repoMatchRunId,
+        validationIssues,
+        outputPreview,
       });
       // Surface the parse failure as an event so the timeline records it
       // (currently silent — #206).
@@ -284,7 +308,12 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
         projectId,
         workItemId,
         kind: 'agent.run-failed',
-        payload: { runId: repoMatchRunId, error: 'repo-match output validation failed' },
+        payload: {
+          runId: repoMatchRunId,
+          error: 'repo-match output validation failed',
+          validationIssues,
+          outputPreview,
+        },
         runId: repoMatchRunId,
       });
       accumulatePersonaStats({
