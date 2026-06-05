@@ -1745,6 +1745,40 @@ describe('runQaWorkflow', () => {
       expect(preflightCompletedIndex).toBeGreaterThan(preflightStartedIndex);
       expect(preflightCompletedIndex).toBeLessThan(summaryIndex);
     });
+
+    it('marks qa.preflight-completed failed when deterministic command steps fail', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const worktree = makeGitWorktreeWithChange('src/foo.ts');
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: worktree, baseBranch: 'main' },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+          executableChecks: [],
+        });
+
+        const preflightCompleted = vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.find(([event]) => event.kind === 'qa.preflight-completed');
+
+        expect(preflightCompleted?.[0].payload).toMatchObject({
+          status: 'failed',
+        });
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('test-run propagation', () => {

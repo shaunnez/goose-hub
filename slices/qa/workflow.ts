@@ -113,6 +113,22 @@ function appendQaPreflightStepEvent(input: {
   });
 }
 
+function qaPreflightCompletedStatus(input: {
+  verificationSummary: VerificationSummary;
+  executableChecksStatus: 'passed' | 'failed' | 'skipped';
+}): 'passed' | 'failed' {
+  const failed = [
+    input.verificationSummary.commands.lint?.status,
+    input.verificationSummary.commands.typecheck?.status,
+    input.verificationSummary.commands.test.status,
+    input.verificationSummary.e2e.status,
+    input.verificationSummary.evidence.status,
+    input.executableChecksStatus,
+  ].some((status) => status === 'failed');
+
+  return failed ? 'failed' : 'passed';
+}
+
 function localIssueRef(ref: string | undefined): string | null {
   const match = ref?.trim().match(/^#?(\d+)$/);
   return match?.[1] != null ? match[1] : null;
@@ -949,7 +965,10 @@ export async function runQaWorkflow(
       kind: 'qa.preflight-completed',
       payload: {
         runId,
-        status: executableChecksStatus === 'failed' ? 'failed' : 'passed',
+        status: qaPreflightCompletedStatus({
+          verificationSummary,
+          executableChecksStatus,
+        }),
       },
       runId,
     });
