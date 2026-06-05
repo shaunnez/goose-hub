@@ -55,6 +55,18 @@ export interface ProjectRepositoryConfig extends TargetRepoConfig {
   id: string;
   repoRef: string;
   role?: 'code' | 'docs' | 'infra' | 'unknown';
+  branchStrategy?: BranchStrategyConfig;
+}
+
+export interface BranchPreferenceConfig {
+  repoNamePattern: string;
+  branches: string[];
+}
+
+export interface BranchStrategyConfig {
+  preferredBranches?: BranchPreferenceConfig[];
+  fallbackBranches?: string[];
+  useRemoteHeadFallback?: boolean;
 }
 
 export interface StackConfig {
@@ -235,6 +247,8 @@ export interface ProjectConfig {
   targetRepo: TargetRepoConfig;
   /** Canonical registry of code/doc/infra repositories a Work Item may target. */
   repositories?: ProjectRepositoryConfig[];
+  /** Project-level branch policy used when preparing repository checkouts. */
+  branchStrategy?: BranchStrategyConfig;
   stack: StackConfig;
   mode: 'interactive' | 'supervised' | 'autonomous';
   storage: { kind: 'local'; path: string };

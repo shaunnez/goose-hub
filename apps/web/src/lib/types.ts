@@ -22,7 +22,7 @@ export interface WorkItemDto {
   id: string;
   canonicalWorkItemId: string;
   externalId: string;
-  repoRef: string;
+  repoRef: string | null;
   title: string;
   body: string;
   type: string;

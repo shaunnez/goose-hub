@@ -20,6 +20,8 @@ import { persistScoutReportForRun } from '@goose-hub/core/scout-reports/reposito
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { extractIdentifiers } from '@goose-hub/core/symbol-index/lookup.js';
+import { ensureSelectedRepositoryCheckout } from '@goose-hub/core/workspaces/checkout-readiness.js';
+import { resolveRepositoryForWorkItem } from '@goose-hub/core/workspaces/repo-affinity.js';
 import { resolveWorkflowBaseForWorkItem } from '@goose-hub/core/workspaces/workflow-base.js';
 import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
 
@@ -211,13 +213,28 @@ export async function runFeatureGroundingWorkflow(
       model: groundingBudget.modelOverride,
       skillProvider: groundingBudget.provider,
     });
-  const workflowBase = resolveWorkflowBaseFn(
-    projectId,
-    workItem.id,
-    targetRepo,
-    projectConfig?.targetRepo?.defaultBranch,
+  const selectedRepository = ensureSelectedRepositoryCheckout(
+    workItem.id.startsWith('local:') ? projectConfig : null,
+    resolveRepositoryForWorkItem({
+      project: workItem.id.startsWith('local:') ? projectConfig : null,
+      workItem,
+      fallbackLocalPath: targetRepo,
+    }),
   );
-  const worktreePath = createWtFn(targetRepo, runId, workflowBase.ref);
+  const workflowBase =
+    selectedRepository.workflowBase ??
+    resolveWorkflowBaseFn(
+      projectId,
+      workItem.id,
+      selectedRepository.localPath,
+      selectedRepository.defaultBranch,
+    );
+  const worktreePath = createWtFn(
+    selectedRepository.localPath,
+    runId,
+    workflowBase.ref,
+    selectedRepository.repoRef,
+  );
 
   const resolveScoutBudget: ScoutBudgetResolver = (skill, projectBudgets, currentProjectId) =>
     resolveSkillRuntimeForProject({
@@ -425,6 +442,6 @@ Feature-grounding mode:
     });
     return { nextState: 'factory:needs-human' };
   } finally {
-    cleanupWtFn(runId);
+    cleanupWtFn(worktreePath);
   }
 }

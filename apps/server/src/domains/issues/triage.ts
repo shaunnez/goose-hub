@@ -1,5 +1,6 @@
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { listProjectRepoRefs } from '@goose-hub/core/projects/repositories.js';
+import { LocalDbWorkItemRepository } from '@goose-hub/core/state-source/local-db-repository.js';
 import type { Result } from '#shared/middleware.js';
 import { getProject } from '#shared/projects.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
@@ -91,6 +92,16 @@ export async function overrideIssueRepo(
   if (!resolved.ok) return resolved;
   const { canonicalWorkItemId: workItemId } = resolved.data;
   const projectId = resolved.data.projectId;
+
+  if (resolved.data.isLocalDb) {
+    new LocalDbWorkItemRepository().createRepoLink({
+      projectId,
+      itemId: workItemId,
+      repoRef: repo,
+      role: 'primary',
+      source: 'manual',
+    });
+  }
 
   eventStore.appendEvent({ projectId, workItemId, kind: 'agent.repo-override', payload: { repo } });
 

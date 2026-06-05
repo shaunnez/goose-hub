@@ -67,6 +67,19 @@ describe('createWorktree', () => {
     );
   });
 
+  it('uses a repo-aware path when repoRef is provided', () => {
+    createWorktree('/repo/path', 'run-abc-123', 'origin/main', 'owner/repo');
+
+    expect(vi.mocked(mkdirSync)).toHaveBeenCalledWith(WT('run-abc-123'), {
+      recursive: true,
+    });
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'git',
+      ['worktree', 'add', '--detach', join(WT('run-abc-123'), 'owner-repo'), 'origin/main'],
+      expect.objectContaining({ cwd: '/repo/path' }),
+    );
+  });
+
   it('returns the worktree path', () => {
     const result = createWorktree('/repo/path', 'run-abc-123');
     expect(result).toBe(WT('run-abc-123'));

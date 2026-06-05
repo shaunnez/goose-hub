@@ -67,6 +67,8 @@ import {
 } from '@goose-hub/core/workflow-routing/events.js';
 import { selectWorkflowRoute } from '@goose-hub/core/workflow-routing/select-route.js';
 import { buildRouteSignals } from '@goose-hub/core/workflow-routing/signals.js';
+import { ensureSelectedRepositoryCheckout } from '@goose-hub/core/workspaces/checkout-readiness.js';
+import { resolveRepositoryForWorkItem } from '@goose-hub/core/workspaces/repo-affinity.js';
 import { resolveWorkflowBaseForWorkItem } from '@goose-hub/core/workspaces/workflow-base.js';
 import {
   cleanupWorktree,
@@ -378,13 +380,28 @@ export async function runInvestigateWorkflow(
       model: investigatorModelOverride,
       skillProvider: forcedRuntimeProvider ?? investigateBudget.provider,
     });
-  const workflowBase = resolveWorkflowBaseFn(
-    projectId,
-    workItem.id,
-    targetRepo,
-    projectConfig?.targetRepo?.defaultBranch,
+  const selectedRepository = ensureSelectedRepositoryCheckout(
+    workItem.id.startsWith('local:') ? projectConfig : null,
+    resolveRepositoryForWorkItem({
+      project: workItem.id.startsWith('local:') ? projectConfig : null,
+      workItem,
+      fallbackLocalPath: targetRepo,
+    }),
   );
-  const worktreePath = createWtFn(targetRepo, runId, workflowBase.ref);
+  const workflowBase =
+    selectedRepository.workflowBase ??
+    resolveWorkflowBaseFn(
+      projectId,
+      workItem.id,
+      selectedRepository.localPath,
+      selectedRepository.defaultBranch,
+    );
+  const worktreePath = createWtFn(
+    selectedRepository.localPath,
+    runId,
+    workflowBase.ref,
+    selectedRepository.repoRef,
+  );
 
   if (workItem.type === 'bug') {
     prewarmWtFn(worktreePath, '@goose-hub/web');
@@ -1046,7 +1063,7 @@ export async function runInvestigateWorkflow(
               plan: planParsed.data,
               workspaceDir: worktreePath,
               issueNumber: Number(workItem.externalId),
-              repo: workItem.repoRef,
+              repo: selectedRepository.repoRef,
             });
           } else if (finalParsed.success) {
             // Backward-compatible while older agents still return the final payload.
@@ -1213,7 +1230,7 @@ export async function runInvestigateWorkflow(
       });
     }
   } finally {
-    cleanupWorktree(runId);
+    cleanupWorktree(worktreePath);
   }
 }
 

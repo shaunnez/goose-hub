@@ -45,7 +45,7 @@ describe('LocalDbStateSource', () => {
   }
 
   it('creates, gets, lists, comments, labels, and transitions without GitHub', async () => {
-    const { source } = trackedSource();
+    const { source, repository } = trackedSource();
     const created = await source.createIssue({
       title: 'Local source',
       body: 'Depends on: owner/repo#7\nBlocks: #9',
@@ -57,14 +57,31 @@ describe('LocalDbStateSource', () => {
     expect(created).toMatchObject({
       id: 'local:proj#1',
       externalId: '1',
-      repoRef: 'owner/repo',
+      repoRef: null,
       type: 'bug',
       priority: 'high',
       state: 'factory:triaging',
-      dependsOn: ['7'],
+      dependsOn: ['owner/repo#7'],
       blocks: ['9'],
       externalRefs: [],
     });
+    expect(repository.listRepoLinks('proj', created.id)).toEqual([]);
+    repository.createRepoLink({
+      projectId: 'proj',
+      itemId: created.id,
+      repoRef: 'owner/related',
+      role: 'related',
+      source: 'test',
+    });
+    await expect(source.getItem(created.id)).resolves.toMatchObject({ repoRef: null });
+    repository.createRepoLink({
+      projectId: 'proj',
+      itemId: created.id,
+      repoRef: 'owner/repo',
+      role: 'primary',
+      source: 'test',
+    });
+    await expect(source.getItem(created.id)).resolves.toMatchObject({ repoRef: 'owner/repo' });
     expect((await source.getItem('1')).id).toBe(created.id);
     expect((await source.listOpenWork()).map((item) => item.id)).toEqual([created.id]);
     expect(await source.listLabels(created.id)).toEqual([
@@ -161,6 +178,26 @@ describe('LocalDbStateSource', () => {
         ],
       },
     ]);
+  });
+
+  it('uses explicit primary repo links when present', async () => {
+    const { source, repository } = trackedSource();
+    const created = await source.createIssue({
+      title: 'Repo-assigned work',
+      body: 'Depends on: owner/repo#7',
+    });
+    repository.createRepoLink({
+      projectId: 'proj',
+      itemId: created.id,
+      repoRef: 'owner/repo',
+      role: 'primary',
+      source: 'manual',
+    });
+
+    await expect(source.getItem(created.id)).resolves.toMatchObject({
+      repoRef: 'owner/repo',
+      dependsOn: ['7'],
+    });
   });
 
   it('omits open Work Items whose Jira issue ref is hidden', async () => {
