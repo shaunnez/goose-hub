@@ -1439,6 +1439,28 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(new Set([QA_RUN]));
   });
 
+  it('groups QA preflight events before agent runtime metadata arrives', () => {
+    const QA_RUN = 'qa-preflight-run-123';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'qa.preflight-started', QA_RUN, {
+        payload: { runId: QA_RUN, status: 'running' },
+      }),
+      makeEvent(2, 'qa.preflight-step-started', QA_RUN, {
+        payload: { runId: QA_RUN, step: 'lint', status: 'running', command: 'pnpm lint' },
+      }),
+    ]);
+
+    const qaSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'qa',
+    );
+
+    expect(qaSections).toHaveLength(1);
+    expect(qaSections[0].segmentId).toBe(`qa:${QA_RUN}`);
+    expect(qaSections[0].items[0]).toMatchObject({ kind: 'run-group', runId: QA_RUN });
+    expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(new Set([QA_RUN]));
+  });
+
   it('splits repeated QA attempts on the same pipeline into separate QA sections', () => {
     const PIPELINE_RUN = 'pipeline-qa-repeat';
     const QA_RUN_1 = 'qa-run-first';

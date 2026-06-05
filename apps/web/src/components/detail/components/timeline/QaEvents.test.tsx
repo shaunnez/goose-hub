@@ -99,6 +99,64 @@ describe('QA timeline events', () => {
     expect(document.body.textContent).not.toContain('"changedFileCount"');
   });
 
+  it('renders preflight running, passed, failed, and skipped step cards', () => {
+    const events = [
+      {
+        ...makeEvent('qa.preflight-step-started', {
+          step: 'lint',
+          command: 'pnpm lint',
+          status: 'running',
+        }),
+        id: 1,
+      },
+      {
+        ...makeEvent('qa.preflight-step-completed', {
+          step: 'test',
+          command: 'pnpm test',
+          status: 'passed',
+          durationMs: 1250,
+        }),
+        id: 2,
+      },
+      {
+        ...makeEvent('qa.preflight-step-failed', {
+          step: 'e2e',
+          command: 'pnpm test:e2e',
+          status: 'failed',
+          durationMs: 2200,
+          exitCode: 1,
+          reason: 'browser failed',
+        }),
+        id: 3,
+      },
+      {
+        ...makeEvent('qa.preflight-step-completed', {
+          step: 'evidence',
+          status: 'skipped',
+          reason: 'no evidence event was recorded',
+        }),
+        id: 4,
+      },
+    ];
+
+    render(
+      <ul>{events.map((event, index) => renderTimelineItem({ kind: 'event', event }, index))}</ul>,
+    );
+
+    expect(screen.getByText('Lint')).toBeTruthy();
+    expect(screen.getByText('Tests')).toBeTruthy();
+    expect(screen.getByText('E2E')).toBeTruthy();
+    expect(screen.getByText('Evidence')).toBeTruthy();
+    expect(screen.getByText('running')).toBeTruthy();
+    expect(screen.getByText('passed')).toBeTruthy();
+    expect(screen.getByText('failed')).toBeTruthy();
+    expect(screen.getByText('skipped')).toBeTruthy();
+    expect(screen.getByText('1.3s')).toBeTruthy();
+    expect(screen.getByText('exit 1')).toBeTruthy();
+    expect(screen.getByText('browser failed')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('"stderr"');
+  });
+
   it('renders fix-feedback completion payloads without raw JSON', () => {
     const event = makeEvent('agent.fix-feedback-complete', {
       filesWritten: 3,

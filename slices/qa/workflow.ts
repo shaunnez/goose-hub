@@ -52,6 +52,7 @@ export type { VerifyCommand } from './deterministic-tiers.js';
 import { findDevTestsRun, findPrOpenedHints, getPrDiff } from './qa-helpers.js';
 import { buildSyntheticQaOutput } from './synthetic-output.js';
 import {
+  type QaPreflightStepEvent,
   type RunQaCommand,
   buildVerificationSummary,
   estimateVerificationSummaryBytes,
@@ -83,6 +84,34 @@ const EXECUTABLE_CHECK_OUTPUT_LIMIT = 4_000;
 const QA_CONTEXT_CRITERIA_OUTPUT_LIMIT = 1_000;
 const QA_CONTEXT_VALUE_LIMIT_BYTES = 60_000;
 const QA_CONTEXT_STRING_PREVIEW_CHARS = 4_000;
+
+function appendQaPreflightStepEvent(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  event: QaPreflightStepEvent;
+}): void {
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind:
+      input.event.status === 'running'
+        ? 'qa.preflight-step-started'
+        : input.event.status === 'failed'
+          ? 'qa.preflight-step-failed'
+          : 'qa.preflight-step-completed',
+    payload: {
+      runId: input.runId,
+      step: input.event.step,
+      ...(input.event.command != null ? { command: input.event.command } : {}),
+      status: input.event.status,
+      ...(input.event.durationMs != null ? { durationMs: input.event.durationMs } : {}),
+      ...(input.event.exitCode != null ? { exitCode: input.event.exitCode } : {}),
+      ...(input.event.reason != null ? { reason: input.event.reason } : {}),
+    },
+    runId: input.runId,
+  });
+}
 
 function localIssueRef(ref: string | undefined): string | null {
   const match = ref?.trim().match(/^#?(\d+)$/);
@@ -799,6 +828,13 @@ export async function runQaWorkflow(
     // Run tests deterministically before invoking the QA agent so the agent
     // grades against real numbers instead of re-running the suite. Failures
     // here are non-fatal — the agent still runs without testRun.
+    eventStore.appendEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      kind: 'qa.preflight-started',
+      payload: { runId, status: 'running' },
+      runId,
+    });
     const testCommand = projectConfig?.stack?.testCommand ?? DEFAULT_TEST_COMMAND;
     const lintCommand = projectConfig?.stack?.lintCommand ?? 'pnpm biome check .';
     const typecheckCommand = projectConfig?.stack?.typecheckCommand;
@@ -842,6 +878,13 @@ export async function runQaWorkflow(
       commandTimeoutMs: resolvedBudget.budgets.timeoutMs,
       runTests,
       ...(runCommand != null ? { runCommand } : {}),
+      onStep: (event) =>
+        appendQaPreflightStepEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          runId,
+          event,
+        }),
     });
     const verificationSummary = ensureExplicitEvidenceSummary({
       projectId: projectSlug,
@@ -849,11 +892,66 @@ export async function runQaWorkflow(
       runId,
       summary: rawVerificationSummary,
     });
-    const criteriaResults = await runExecutableChecks({
-      workspaceDir,
-      checks: executableChecks,
-      ...(qaEnv != null ? { env: qaEnv } : {}),
-      defaultTimeoutMs: resolvedBudget.budgets.timeoutMs,
+    appendQaPreflightStepEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      runId,
+      event: {
+        step: 'executable-checks',
+        status: 'running',
+      },
+    });
+    const executableChecksStartedAt = Date.now();
+    let criteriaResults: CriteriaResult[];
+    try {
+      criteriaResults = await runExecutableChecks({
+        workspaceDir,
+        checks: executableChecks,
+        ...(qaEnv != null ? { env: qaEnv } : {}),
+        defaultTimeoutMs: resolvedBudget.budgets.timeoutMs,
+      });
+    } catch (err) {
+      appendQaPreflightStepEvent({
+        projectId: projectSlug,
+        workItemId: workItem.id,
+        runId,
+        event: {
+          step: 'executable-checks',
+          status: 'failed',
+          durationMs: Date.now() - executableChecksStartedAt,
+          reason: err instanceof Error ? err.message : String(err),
+        },
+      });
+      throw err;
+    }
+    const executableChecksStatus =
+      executableChecks == null || executableChecks.length === 0
+        ? 'skipped'
+        : criteriaResults.every((result) => result.passed)
+          ? 'passed'
+          : 'failed';
+    appendQaPreflightStepEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      runId,
+      event: {
+        step: 'executable-checks',
+        status: executableChecksStatus,
+        durationMs: Date.now() - executableChecksStartedAt,
+        ...(executableChecksStatus === 'skipped'
+          ? { reason: 'no executable acceptance checks configured' }
+          : {}),
+      },
+    });
+    eventStore.appendEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      kind: 'qa.preflight-completed',
+      payload: {
+        runId,
+        status: executableChecksStatus === 'failed' ? 'failed' : 'passed',
+      },
+      runId,
     });
 
     eventStore.appendEvent({
