@@ -183,6 +183,40 @@ type DogfoodSeedAppliedPayload = {
       };
 };
 
+type FeatureGroundingFile = {
+  path?: string;
+  confidence?: string;
+  source?: string;
+  reason?: string;
+  root?: string;
+};
+
+type FeatureGroundingPayload = {
+  groundingRunId?: string;
+  enhanceRunId?: string;
+  candidateFiles?: FeatureGroundingFile[];
+  existingSurfaces?: string[];
+  plannedFiles?: string[];
+  testSurfaces?: string[];
+  reusablePatterns?: string[];
+  acceptanceHints?: string[];
+  openQuestions?: string[];
+  confidence?: string;
+  routeTier?: string;
+  selectedStages?: string[];
+  scoutsLaunched?: string[];
+  budgetCaps?: RouteBudgetCaps;
+  baseBranch?: string;
+  investigationSeed?: {
+    candidateFiles?: FeatureGroundingFile[];
+    candidateSymbols?: unknown[];
+    testFiles?: string[];
+    recentlyChangedFiles?: string[];
+    priorInvestigationRunIds?: string[];
+    builtAt?: string;
+  };
+};
+
 function formatShortId(value: string | undefined): string | null {
   if (value == null || value.length === 0) return null;
   return value.length <= 12 ? value : value.slice(0, 8);
@@ -267,6 +301,121 @@ function formatTruthSignal(value: DogfoodSeedAppliedPayload['truthSignal']): str
 
 function factoryResourceFromStderr(stderr: string | null): string | null {
   return stderr?.match(/factory:\/\/[^\s)]+/)?.[0] ?? null;
+}
+
+function compactCount(label: string, count: number | undefined): string | null {
+  return typeof count === 'number' ? `${count} ${label}${count === 1 ? '' : 's'}` : null;
+}
+
+function compactArrayCount(label: string, value: unknown[] | undefined): string | null {
+  return Array.isArray(value) ? compactCount(label, value.length) : null;
+}
+
+function featureGroundingFiles(payload: FeatureGroundingPayload | null): FeatureGroundingFile[] {
+  if (Array.isArray(payload?.candidateFiles) && payload.candidateFiles.length > 0) {
+    return payload.candidateFiles;
+  }
+  return Array.isArray(payload?.investigationSeed?.candidateFiles)
+    ? payload.investigationSeed.candidateFiles
+    : [];
+}
+
+function FeatureGroundingList({ title, items }: { title: string; items?: string[] }) {
+  const visible = (items ?? []).filter((item) => item.length > 0).slice(0, 4);
+  if (visible.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-fg-4 mb-1">{title}</div>
+      <ul className="flex flex-col gap-1 text-[11.5px] text-fg-3">
+        {visible.map((item) => (
+          <li key={item} className="leading-relaxed">
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function FeatureGroundingEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as FeatureGroundingPayload | null;
+  const files = featureGroundingFiles(p);
+  const seed = p?.investigationSeed;
+  const facts = [
+    p?.routeTier,
+    p?.confidence != null ? `${p.confidence} confidence` : null,
+    p?.baseBranch != null ? `base ${p.baseBranch}` : null,
+    formatBudgetCaps(p?.budgetCaps),
+    formatRouteStages(p?.selectedStages ?? []),
+    compactArrayCount('scout', p?.scoutsLaunched),
+    compactArrayCount('seed file', seed?.candidateFiles),
+    compactArrayCount('symbol', seed?.candidateSymbols),
+    compactArrayCount('test file', seed?.testFiles),
+  ].filter((fact): fact is string => fact != null && fact.length > 0);
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-[color:var(--accent)]/25 bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-2 text-[11px] text-fg-3">
+        <FileStack size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">
+          {EVENT_KIND_LABEL[event.kind] ?? event.kind}
+        </span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+
+      {files.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {files.slice(0, 5).map((file) => (
+            <div
+              key={`${file.path ?? 'file'}-${file.confidence ?? ''}`}
+              className="rounded border border-line/60 bg-bg/40 px-2.5 py-2"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-[12px] text-fg break-all">{file.path}</span>
+                {file.confidence != null && (
+                  <span className="rounded border border-line/50 px-1.5 py-0.5 text-[10px] font-mono uppercase text-fg-4">
+                    {file.confidence}
+                  </span>
+                )}
+                {file.source != null && (
+                  <span className="rounded border border-line/50 px-1.5 py-0.5 text-[10px] font-mono text-fg-4">
+                    {file.source}
+                  </span>
+                )}
+              </div>
+              {file.reason != null && (
+                <div className="mt-1 text-[11.5px] text-fg-3">{file.reason}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {facts.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-2">
+          {facts.map((fact) => (
+            <span key={fact}>{fact}</span>
+          ))}
+        </div>
+      )}
+
+      <FeatureGroundingList title="Existing surfaces" items={p?.existingSurfaces} />
+      <FeatureGroundingList title="Reusable patterns" items={p?.reusablePatterns} />
+      <FeatureGroundingList title="Acceptance hints" items={p?.acceptanceHints} />
+      <FeatureGroundingList title="Open questions" items={p?.openQuestions} />
+
+      {(p?.groundingRunId != null || p?.enhanceRunId != null) && (
+        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-fg-5 font-mono">
+          {p.groundingRunId != null && <span>grounding {formatShortId(p.groundingRunId)}</span>}
+          {p.enhanceRunId != null && <span>enhance {formatShortId(p.enhanceRunId)}</span>}
+        </div>
+      )}
+    </li>
+  );
 }
 
 export function ManualActionEvent({ event }: { event: AgentEventDto }) {

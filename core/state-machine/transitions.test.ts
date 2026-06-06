@@ -22,8 +22,9 @@ describe('isLegalTransition — section 9.1 happy paths', () => {
       'factory:prd-drafting',
       'factory:archived',
     ]));
-  it('grounding can route to grill or PRD drafting', () =>
+  it('grounding can route to dev-ready, grill, or PRD drafting', () =>
     expect(legalTargets('factory:grounding')).toStrictEqual([
+      'factory:dev-ready',
       'factory:grilling',
       'factory:prd-drafting',
       'factory:needs-human',

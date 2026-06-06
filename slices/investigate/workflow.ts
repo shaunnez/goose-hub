@@ -380,46 +380,10 @@ export async function runInvestigateWorkflow(
       model: investigatorModelOverride,
       skillProvider: forcedRuntimeProvider ?? investigateBudget.provider,
     });
-  const selectedRepository = ensureSelectedRepositoryCheckout(
-    workItem.id.startsWith('local:') ? projectConfig : null,
-    resolveRepositoryForWorkItem({
-      project: workItem.id.startsWith('local:') ? projectConfig : null,
-      workItem,
-      fallbackLocalPath: targetRepo,
-    }),
-  );
-  const workflowBase =
-    selectedRepository.workflowBase ??
-    resolveWorkflowBaseFn(
-      projectId,
-      workItem.id,
-      selectedRepository.localPath,
-      selectedRepository.defaultBranch,
-    );
-  const worktreePath = createWtFn(
-    selectedRepository.localPath,
-    runId,
-    workflowBase.ref,
-    selectedRepository.repoRef,
-  );
-
-  if (workItem.type === 'bug') {
-    prewarmWtFn(worktreePath, '@goose-hub/web');
-  }
-
-  const workItemCtx = {
-    number: Number(workItem.externalId),
-    title: workItem.title,
-    body: workItem.body,
-  };
-
   const scoutJsonSchema = toJsonSchema(ScoutOutputSchema);
   const investigateJsonSchema = toJsonSchema(InvestigateSchema) as Record<string, unknown>;
-  const investigateSchemaDiagnostics = writeOutputSchemaArtifact({
-    worktreePath,
-    runId,
-    schema: investigateJsonSchema,
-  });
+  let worktreePathForCleanup: string | null = null;
+  let investigateSchemaDiagnostics: ReturnType<typeof writeOutputSchemaArtifact> | null = null;
   let scoutEffortHints: Record<string, RuntimeEffort> = {};
   let finalInvestigationPlan: InvestigationPlan | undefined;
   let investigationContradictions: unknown[] = [];
@@ -453,24 +417,64 @@ export async function runInvestigateWorkflow(
     };
   };
 
-  eventStore.appendEvent({
-    projectId,
-    workItemId: workItem.id,
-    kind: 'agent.run-started',
-    payload: {
-      skill: 'investigate',
+  try {
+    const selectedRepository = ensureSelectedRepositoryCheckout(
+      workItem.id.startsWith('local:') ? projectConfig : null,
+      resolveRepositoryForWorkItem({
+        project: workItem.id.startsWith('local:') ? projectConfig : null,
+        workItem,
+        fallbackLocalPath: targetRepo,
+      }),
+    );
+    const workflowBase =
+      selectedRepository.workflowBase ??
+      resolveWorkflowBaseFn(
+        projectId,
+        workItem.id,
+        selectedRepository.localPath,
+        selectedRepository.defaultBranch,
+      );
+    const worktreePath = createWtFn(
+      selectedRepository.localPath,
+      runId,
+      workflowBase.ref,
+      selectedRepository.repoRef,
+    );
+    worktreePathForCleanup = worktreePath;
+
+    if (workItem.type === 'bug') {
+      prewarmWtFn(worktreePath, '@goose-hub/web');
+    }
+
+    const workItemCtx = {
+      number: Number(workItem.externalId),
+      title: workItem.title,
+      body: workItem.body,
+    };
+
+    investigateSchemaDiagnostics = writeOutputSchemaArtifact({
+      worktreePath,
+      runId,
+      schema: investigateJsonSchema,
+    });
+
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.run-started',
+      payload: {
+        skill: 'investigate',
+        runId,
+        personaId,
+        baseBranch: workflowBase.branch,
+        modelId: investigatorModelOverride,
+        runtime: runtimeNameForModel(investigatorModelOverride),
+        ...investigateSchemaDiagnostics,
+      },
       runId,
       personaId,
-      baseBranch: workflowBase.branch,
-      modelId: investigatorModelOverride,
-      runtime: runtimeNameForModel(investigatorModelOverride),
-      ...investigateSchemaDiagnostics,
-    },
-    runId,
-    personaId,
-  });
+    });
 
-  try {
     let synthesisScoutDigest: ScoutReportDigestBundle | undefined;
 
     if (investigationSwarmEnabled) {
@@ -1185,7 +1189,7 @@ export async function runInvestigateWorkflow(
             modelId: investigatorModelOverride,
             runtime: runtimeNameForModel(investigatorModelOverride),
             provider: tryProviderOf(investigatorModelOverride) ?? 'claude',
-            outputSchemaHash: investigateSchemaDiagnostics.outputSchemaHash,
+            outputSchemaHash: investigateSchemaDiagnostics?.outputSchemaHash,
           }),
         },
         runId,
@@ -1230,7 +1234,7 @@ export async function runInvestigateWorkflow(
       });
     }
   } finally {
-    cleanupWorktree(worktreePath);
+    if (worktreePathForCleanup != null) cleanupWorktree(worktreePathForCleanup);
   }
 }
 

@@ -264,6 +264,7 @@ export const TIMELINE_EVENT_CLASSIFICATION = Object.freeze(
 const skillToSection = buildSkillSectionMap();
 const stateToSection = buildStateSectionMap();
 const SKILL_SECTION_ALIASES = new Map<string, TimelineSectionId>([
+  ['feature-grounding', 'grounding'],
   ['parallel-implement', 'implementation'],
   ['evidence-post', 'evidence'],
 ]);

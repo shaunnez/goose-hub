@@ -59,6 +59,7 @@ import {
   DiscoveryBudgetExceededEvent,
   DogfoodSeedAppliedEvent,
   FallbackEvent,
+  FeatureGroundingEvent,
   InvestigationContextInjectedEvent,
   InvestigationDigestAppliedEvent,
   InvestigationSeedBuiltEvent,
@@ -239,6 +240,9 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <InvestigationSeedBuiltEvent key={event.id} event={event} />;
     case 'agent.bug-enhance-lazy':
       return <BugEnhanceLazyEvent key={event.id} event={event} />;
+    case 'feature.grounding-enhanced':
+    case 'feature.grounding-complete':
+      return <FeatureGroundingEvent key={event.id} event={event} />;
     case 'agent.redundant-read':
       return <RedundantReadEvent key={event.id} event={event} />;
     case 'agent.fallback-triggered':

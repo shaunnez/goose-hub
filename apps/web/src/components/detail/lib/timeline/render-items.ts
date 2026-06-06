@@ -174,6 +174,7 @@ export function itemStartedAt(item: RenderItem): string | null {
 }
 
 export function itemEndedAt(item: RenderItem): string | null {
+  if (item.kind === 'event') return terminalEventEndedAt(item.event);
   if (
     item.kind === 'timeline-section' ||
     item.kind === 'run-group' ||
@@ -185,6 +186,10 @@ export function itemEndedAt(item: RenderItem): string | null {
     return item.endedAt;
   }
   return null;
+}
+
+function terminalEventEndedAt(event: AgentEventDto): string | null {
+  return event.kind === 'feature.grounding-complete' ? event.createdAt : null;
 }
 
 export function itemLastEventAt(item: RenderItem): string | null {

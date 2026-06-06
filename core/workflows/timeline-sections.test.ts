@@ -193,6 +193,7 @@ describe('timeline sections', () => {
   it('keeps skill identity separate from timeline section identity', () => {
     expect(timelineSectionForSkill('write-prd')).toBe('prd');
     expect(timelineSectionForSkill('advise-on-prd')).toBe('prd');
+    expect(timelineSectionForSkill('feature-grounding')).toBe('grounding');
     expect(timelineSectionForSkill('bug-enhance')).toBe('investigation');
     expect(timelineSectionForSkill('parallel-implement')).toBe('implementation');
     expect(timelineSectionForSkill('evidence-post')).toBe('evidence');

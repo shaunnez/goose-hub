@@ -19,6 +19,7 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
     'factory:archived',
   ],
   'factory:grounding': [
+    'factory:dev-ready',
     'factory:grilling',
     'factory:prd-drafting',
     'factory:needs-human',

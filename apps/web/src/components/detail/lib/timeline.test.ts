@@ -1592,6 +1592,47 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     ).toHaveLength(2);
   });
 
+  it('flattens redundant parent feature-grounding wrappers while keeping child runtime runs', () => {
+    const GROUNDING_RUN = 'grounding-run';
+    const ENHANCE_RUN = `${GROUNDING_RUN}:feature-enhance`;
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', ENHANCE_RUN, {
+        payload: { skill: 'feature-enhance', workflowSkill: 'feature-grounding' },
+      }),
+      makeEvent(2, 'agent.run-completed', ENHANCE_RUN, {
+        payload: { skill: 'feature-enhance' },
+      }),
+      makeEvent(3, 'feature.grounding-enhanced', GROUNDING_RUN, {
+        payload: { groundingRunId: GROUNDING_RUN, enhanceRunId: ENHANCE_RUN },
+      }),
+      makeEvent(4, 'feature.grounding-complete', GROUNDING_RUN, {
+        payload: { groundingRunId: GROUNDING_RUN },
+      }),
+      makeEvent(5, 'agent.run-failed', GROUNDING_RUN, {
+        payload: { skill: 'feature-grounding', runId: GROUNDING_RUN },
+      }),
+    ]);
+
+    const grounding = section(items, 'grounding');
+    expect(grounding).toBeDefined();
+    expect(
+      grounding?.items.some((item) => item.kind === 'run-group' && item.runId === GROUNDING_RUN),
+    ).toBe(false);
+    expect(grounding?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'run-group', runId: ENHANCE_RUN }),
+        expect.objectContaining({
+          kind: 'event',
+          event: expect.objectContaining({ kind: 'feature.grounding-complete' }),
+        }),
+        expect.objectContaining({
+          kind: 'event',
+          event: expect.objectContaining({ kind: 'agent.run-failed' }),
+        }),
+      ]),
+    );
+  });
+
   it('flattens redundant single investigation and contract phase wrappers', () => {
     const items = groupTimelineEventsByCanonicalSection([
       makeEvent(1, 'agent.run-started', 'investigate-flat:scout:pattern:0', {

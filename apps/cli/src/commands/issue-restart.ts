@@ -1,9 +1,9 @@
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { type RestartIssueResult, restartIssue } from '@goose-hub/core/projects/restart-issue.js';
 import { STATES, type StateName } from '@goose-hub/core/state-machine/states.js';
-import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
 import type { Schedule, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
+import { createCliStateSource } from '../source.js';
 
 const VALID_SCHEDULES = new Set<Schedule>(['current', 'next', 'later', 'blocked-by']);
 
@@ -75,20 +75,13 @@ export async function issueRestartCommand(rawArgs: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) {
-    console.error('GITHUB_TOKEN is required. Set it in .env or the environment.');
+  let source: ReturnType<typeof createCliStateSource>;
+  try {
+    source = createCliStateSource(config);
+  } catch (err) {
+    console.error(errorMessage(err));
     process.exit(1);
   }
-
-  if (config.source.kind !== 'github') {
-    console.error(
-      `goose issue restart currently supports github-labels projects only. ${args.slug} uses ${config.source.kind}.`,
-    );
-    process.exit(1);
-  }
-
-  const source = new GitHubLabelsSource(config.id, config.source.repo, token);
   let oldItem: WorkItem;
   try {
     oldItem = await source.getItem(args.id);

@@ -13,11 +13,13 @@ import { logger } from '@goose-hub/core/logger.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { buildRepoRegistryContext } from '@goose-hub/core/projects/repo-registry-context.js';
 import type { StateSource, WorkItemType } from '@goose-hub/core/state-source/interface.js';
+import { LocalDbWorkItemRepository } from '@goose-hub/core/state-source/local-db-repository.js';
 import { targetStateForTriage } from '@goose-hub/core/workflows/triage-routing.js';
 import { type VaguenessScore, scoreVagueness } from '@goose-hub/core/workflows/vagueness-gate.js';
-import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
+import { RepoCandidateSchema, RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
 import { TriageOutputSchema } from '@goose-hub/skills/triage/schema.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
+import { z } from 'zod';
 import { checkDailyBudget } from '#shared/budget.js';
 import { getProject } from '#shared/projects.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
@@ -64,6 +66,18 @@ function outputPreviewForEvent(output: unknown, maxChars = 2000): string {
   } catch {
     return String(output).slice(0, maxChars);
   }
+}
+
+const RepoMatchCandidateFallbackSchema = z.object({
+  candidates: z.array(RepoCandidateSchema).default([]),
+});
+
+function repoMatchFallbackFromInvalidOutput(output: unknown) {
+  const parsed = safeParseOutputForSchema(RepoMatchCandidateFallbackSchema, output);
+  return {
+    candidates: parsed.success ? parsed.data.candidates : [],
+    decisionSummaries: [],
+  };
 }
 
 function readReposMd(slug: string): string {
@@ -330,7 +344,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     }
     const repoMatchOutput = repoMatchParsed.success
       ? repoMatchParsed.data
-      : { candidates: [], decisionSummaries: [] };
+      : repoMatchFallbackFromInvalidOutput(repoMatchResult.output);
     logger.info('triage-batch repo-match complete', {
       slug,
       workItemId,
@@ -345,6 +359,18 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
         kind: 'agent.decision-summary',
         payload: { skill: 'repo-match', ...summary },
         runId: repoMatchRunId,
+      });
+    }
+
+    const primaryRepoCandidate = repoMatchOutput.candidates[0];
+    if (item.id.startsWith('local:') && primaryRepoCandidate != null) {
+      new LocalDbWorkItemRepository().createRepoLink({
+        projectId,
+        itemId: item.id,
+        repoRef: primaryRepoCandidate.repo,
+        role: 'primary',
+        confidence: primaryRepoCandidate.confidence,
+        source: 'repo-match',
       });
     }
 

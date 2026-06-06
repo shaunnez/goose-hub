@@ -541,6 +541,21 @@ describe('groupEvents — run-group metadata', () => {
     }
   });
 
+  it('infers feature-grounding display skill from feature grounding events', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(1, 'grounding-run', 'feature.grounding-enhanced'),
+      makeRunEvent(2, 'grounding-run', 'feature.grounding-complete'),
+    ];
+
+    const result = groupEvents(events);
+
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].skill).toBe('feature-grounding');
+      expect(result[0].endedAt).toBe(events[1].createdAt);
+    }
+  });
+
   it('prefers lifecycle skill over newer decision-summary skill without display metadata', () => {
     const events: AgentEventDto[] = [
       {

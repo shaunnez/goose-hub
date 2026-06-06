@@ -102,6 +102,9 @@ export function extractRunMeta(items: RenderItem[]): {
     if (displaySkill == null && ev.kind === 'agent.fix-feedback-complete') {
       displaySkill = 'fix-feedback';
     }
+    if (displaySkill == null && ev.kind.startsWith('feature.grounding-')) {
+      displaySkill = 'feature-grounding';
+    }
     if (fallbackSkill == null && p?.skill != null) fallbackSkill = p.skill;
     if (modelId == null && p?.modelId != null) modelId = p.modelId;
     if (runtime == null && p?.runtime != null) runtime = p.runtime;
@@ -133,6 +136,8 @@ export function extractRunMeta(items: RenderItem[]): {
       // grill-me runs don't emit agent.run-completed - these are the terminal events
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'decompose.completed') {
+      if (endedAt == null) endedAt = ev.createdAt;
+    } else if (ev.kind === 'feature.grounding-complete') {
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'parallel-implement.iteration-started') {
       if (startedAt == null) startedAt = ev.createdAt;

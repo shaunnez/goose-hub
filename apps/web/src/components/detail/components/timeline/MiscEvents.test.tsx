@@ -165,6 +165,50 @@ describe('Misc timeline events', () => {
     expect(rendered).not.toContain('"hadExistingSeed"');
   });
 
+  it('renders feature grounding events as focused cards instead of raw JSON', () => {
+    const event = makeEvent('feature.grounding-enhanced', {
+      groundingRunId: '9e0d7d75-1124-4977-bbc1-f5ffb65c0651',
+      enhanceRunId: '9e0d7d75-1124-4977-bbc1-f5ffb65c0651:feature-enhance',
+      candidateFiles: [
+        {
+          path: 'apps/web/src/components/chrome/TopBar.tsx',
+          confidence: 'high',
+          source: 'tool-verified',
+          reason: 'Header component owns capture and search buttons.',
+        },
+      ],
+      existingSurfaces: ['apps/web/src/components/chrome/TopBar.tsx'],
+      reusablePatterns: ['Modal state managed in TopBar via useState.'],
+      acceptanceHints: ['Pressing Cmd+J opens capture modal.'],
+      confidence: 'high',
+      routeTier: 'T0',
+      selectedStages: ['triage', 'implement', 'qa', 'review', 'retro'],
+      budgetCaps: { maxUsd: 0.3, maxScouts: 0, allowWave2: false, reviewerSlots: 1 },
+      baseBranch: 'main',
+      investigationSeed: {
+        candidateFiles: [{ path: 'apps/web/src/components/chrome/TopBar.tsx', root: 'worktree' }],
+        candidateSymbols: [],
+        testFiles: [],
+      },
+      rawProbeKey: 'raw-value',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Feature grounding enhanced')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('apps/web/src/components/chrome/TopBar.tsx');
+    expect(rendered).toContain('Header component owns capture and search buttons.');
+    expect(rendered).toContain('T0');
+    expect(rendered).toContain('$0.30 cap');
+    expect(rendered).toContain('stages triage → implement → qa → review → retro');
+    expect(rendered).toContain('Modal state managed in TopBar');
+    expect(rendered).toContain('Pressing Cmd+J opens capture modal.');
+    expect(rendered).not.toContain('"candidateFiles"');
+    expect(rendered).not.toContain('rawProbeKey');
+    expect(rendered).not.toContain('raw-value');
+  });
+
   it('renders agent.redundant-read as a compact warning instead of raw JSON', () => {
     const event = makeEvent('agent.redundant-read', {
       path: 'apps/web/src/components/chat/components/ChatPanel.tsx',

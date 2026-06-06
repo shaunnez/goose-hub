@@ -373,28 +373,11 @@ export async function runFeatureGroundingWorkflow(
       model: groundingBudget.modelOverride,
       skillProvider: groundingBudget.provider,
     });
-  const selectedRepository = ensureSelectedRepositoryCheckout(
-    workItem.id.startsWith('local:') ? projectConfig : null,
-    resolveRepositoryForWorkItem({
-      project: workItem.id.startsWith('local:') ? projectConfig : null,
-      workItem,
-      fallbackLocalPath: targetRepo,
-    }),
-  );
-  const workflowBase =
-    selectedRepository.workflowBase ??
-    resolveWorkflowBaseFn(
-      projectId,
-      workItem.id,
-      selectedRepository.localPath,
-      selectedRepository.defaultBranch,
-    );
-  const worktreePath = createWtFn(
-    selectedRepository.localPath,
-    runId,
-    workflowBase.ref,
-    selectedRepository.repoRef,
-  );
+  let setup: {
+    selectedRepository: ReturnType<typeof ensureSelectedRepositoryCheckout>;
+    workflowBase: ReturnType<typeof resolveWorkflowBaseFn>;
+    worktreePath: string;
+  } | null = null;
 
   const resolveScoutBudget: ScoutBudgetResolver = (skill, projectBudgets, currentProjectId) =>
     resolveSkillRuntimeForProject({
@@ -406,6 +389,29 @@ export async function runFeatureGroundingWorkflow(
     });
 
   try {
+    const selectedRepository = ensureSelectedRepositoryCheckout(
+      workItem.id.startsWith('local:') ? projectConfig : null,
+      resolveRepositoryForWorkItem({
+        project: workItem.id.startsWith('local:') ? projectConfig : null,
+        workItem,
+        fallbackLocalPath: targetRepo,
+      }),
+    );
+    const workflowBase =
+      selectedRepository.workflowBase ??
+      resolveWorkflowBaseFn(
+        projectId,
+        workItem.id,
+        selectedRepository.localPath,
+        selectedRepository.defaultBranch,
+      );
+    const worktreePath = createWtFn(
+      selectedRepository.localPath,
+      runId,
+      workflowBase.ref,
+      selectedRepository.repoRef,
+    );
+    setup = { selectedRepository, workflowBase, worktreePath };
     const swarmEnabled = getUseInvestigationSwarm(
       projectConfig?.id ?? projectId,
       projectConfig?.investigationSwarm?.enabled ?? true,
@@ -437,12 +443,12 @@ export async function runFeatureGroundingWorkflow(
           : {}),
         projectContext: {
           projectId,
-          targetRepo: selectedRepository.localPath,
-          defaultBranch: workflowBase.branch,
+          targetRepo: setup.selectedRepository.localPath,
+          defaultBranch: setup.workflowBase.branch,
         },
       },
       overrides: {
-        workspaceDir: worktreePath,
+        workspaceDir: setup.worktreePath,
         runtimeOverride: deps.runtime,
         projectConfigOverride: projectConfig,
         extraEventPayload: {
@@ -453,7 +459,7 @@ export async function runFeatureGroundingWorkflow(
     });
     const enhanced = pruneFeatureEnhanceOutput(
       enhanceResult.output as FeatureEnhanceOutput,
-      worktreePath,
+      setup.worktreePath,
     );
     const investigationSeed = toInvestigationSeed(enhanced);
     const route = routeForFeatureGrounding({
@@ -475,7 +481,7 @@ export async function runFeatureGroundingWorkflow(
         routeTier: route.tier,
         selectedStages: route.selectedStages,
         budgetCaps: route.budgetCaps,
-        baseBranch: workflowBase.branch,
+        baseBranch: setup.workflowBase.branch,
       },
       runId,
       personaId: enhanceResult.personaId,
@@ -499,7 +505,7 @@ export async function runFeatureGroundingWorkflow(
         parentRunId: runId,
         scoutSpecs,
         workItem: workItemCtx,
-        worktreePath,
+        worktreePath: setup.worktreePath,
         projectId,
         workItemId: workItem.id,
         runtime,
@@ -616,7 +622,7 @@ Feature-grounding mode:
         routeTier: route.tier,
         selectedStages: route.selectedStages,
         scoutsLaunched: scoutSpecs.map((spec) => spec.scoutName),
-        baseBranch: workflowBase.branch,
+        baseBranch: setup.workflowBase.branch,
       },
       runId,
       personaId,
@@ -665,6 +671,6 @@ Feature-grounding mode:
     });
     return { nextState: 'factory:needs-human' };
   } finally {
-    cleanupWtFn(worktreePath);
+    if (setup != null) cleanupWtFn(setup.worktreePath);
   }
 }

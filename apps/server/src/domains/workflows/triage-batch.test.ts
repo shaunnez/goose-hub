@@ -2,6 +2,8 @@ import type { AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockCreateRepoLink = vi.hoisted(() => vi.fn());
+
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
 vi.mock('#shared/projects.js', () => ({ getProject: vi.fn().mockResolvedValue(null) }));
@@ -43,6 +45,12 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
       .fn()
       .mockReturnValue({ id: 1, kind: 'agent.triage-complete', payload: {}, createdAt: '' }),
   },
+}));
+
+vi.mock('@goose-hub/core/state-source/local-db-repository.js', () => ({
+  LocalDbWorkItemRepository: vi.fn().mockImplementation(() => ({
+    createRepoLink: mockCreateRepoLink,
+  })),
 }));
 
 const mockAccumulatePersonaStats = vi.fn();
@@ -97,9 +105,9 @@ function makeRepoMatchOutput() {
   };
 }
 
-function makeMockSource(items: WorkItem[] = []): StateSource {
+function makeMockSource(items: WorkItem[] = [], projectId = 'goose-hub-self'): StateSource {
   return {
-    projectId: 'goose-hub-self',
+    projectId,
     repoRef: 'shaunnez/goose-hub',
     listOpenWork: vi.fn().mockResolvedValue(items),
     listClosedWorkByMilestone: vi.fn().mockResolvedValue([]),
@@ -774,6 +782,109 @@ describe('runTriageBatch onward routing after accept', () => {
       '42',
       'factory:accepted',
       'factory:investigating',
+    );
+  });
+
+  it('persists the top repo-match candidate as the primary repo link for local-db items', async () => {
+    const source = makeMockSource(
+      [
+        makeWorkItem({
+          id: 'local:shift4-smartpay#12',
+          externalId: '12',
+          repoRef: null,
+        }),
+      ],
+      'shift4-smartpay',
+    );
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: {
+          candidates: [
+            {
+              repo: 'smartpayplatform/transaction-verification-api',
+              confidence: 92,
+              evidence: 'body mentions transaction-verification-api',
+              tier: 3 as const,
+            },
+          ],
+          decisionSummaries: [{ kind: 'PLAN', summary: 'Matched by explicit service name' }],
+        },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('shift4-smartpay', source);
+
+    expect(mockCreateRepoLink).toHaveBeenCalledWith({
+      projectId: 'shift4-smartpay',
+      itemId: 'local:shift4-smartpay#12',
+      repoRef: 'smartpayplatform/transaction-verification-api',
+      role: 'primary',
+      confidence: 92,
+      source: 'repo-match',
+    });
+  });
+
+  it('persists valid repo-match candidates when decision summaries fail validation', async () => {
+    const source = makeMockSource(
+      [
+        makeWorkItem({
+          id: 'local:shift4-smartpay#12',
+          externalId: '12',
+          repoRef: null,
+        }),
+      ],
+      'shift4-smartpay',
+    );
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: {
+          candidates: [
+            {
+              repo: 'smartpayplatform/transaction-verification-api',
+              confidence: 92,
+              evidence: 'body mentions transaction-verification-api',
+              tier: 3 as const,
+            },
+          ],
+          decisionSummaries: [{ kind: 'INVESTIGATE', summary: 'Invalid enum from model' }],
+        },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('shift4-smartpay', source);
+
+    expect(mockCreateRepoLink).toHaveBeenCalledWith({
+      projectId: 'shift4-smartpay',
+      itemId: 'local:shift4-smartpay#12',
+      repoRef: 'smartpayplatform/transaction-verification-api',
+      role: 'primary',
+      confidence: 92,
+      source: 'repo-match',
+    });
+    expect(source.comment).toHaveBeenCalledWith(
+      '12',
+      expect.stringContaining('smartpayplatform/transaction-verification-api'),
+    );
+    expect(vi.mocked(eventStore.appendEvent)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({ error: 'repo-match output validation failed' }),
+      }),
     );
   });
 

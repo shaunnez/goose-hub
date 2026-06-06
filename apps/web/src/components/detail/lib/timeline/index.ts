@@ -805,6 +805,8 @@ function groupItemsInsideTimelineSection(
   discoverSessionByWorkflowOrRunId: DiscoverSessionRunIndex,
 ): RenderItem[] {
   switch (section) {
+    case 'grounding':
+      return flattenRedundantGroundingRunGroups(items);
     case 'investigation':
       return flattenRedundantSectionPhase(section, groupByInvestigationPhase(items));
     case 'grill':
@@ -828,6 +830,22 @@ function groupItemsInsideTimelineSection(
     default:
       return items;
   }
+}
+
+function flattenRedundantGroundingRunGroups(items: RenderItem[]): RenderItem[] {
+  return items.flatMap((item) => {
+    if (item.kind === 'run-group' && isRedundantGroundingRunGroup(item)) return item.items;
+    return [item];
+  });
+}
+
+function isRedundantGroundingRunGroup(item: Extract<RenderItem, { kind: 'run-group' }>): boolean {
+  if (item.skill !== 'feature-grounding') return false;
+  const events = eventFromRenderItem(item);
+  if (!events.some((event) => event.kind.startsWith('feature.grounding-'))) return false;
+  return events.every(
+    (event) => event.kind.startsWith('feature.grounding-') || event.kind === 'agent.run-failed',
+  );
 }
 
 function flattenRedundantSectionPhase(

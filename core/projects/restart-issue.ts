@@ -2,6 +2,7 @@ import { transitionAndEmitState } from '../event-stream/state-transition.js';
 import { eventStore } from '../event-stream/store.js';
 import { STATES, type StateName } from '../state-machine/states.js';
 import type { Schedule, StateSource, WorkItem } from '../state-source/interface.js';
+import { LocalDbWorkItemRepository } from '../state-source/local-db-repository.js';
 
 export interface RestartIssueInput {
   source: StateSource;
@@ -10,6 +11,7 @@ export interface RestartIssueInput {
   targetState?: StateName;
   schedule?: Schedule;
   actor?: string;
+  localDbRepository?: Pick<LocalDbWorkItemRepository, 'listRepoLinks' | 'createRepoLink'>;
 }
 
 export interface RestartIssueResult {
@@ -48,6 +50,26 @@ function newIssueComment(oldItem: WorkItem): string {
   return ['Restarted via Goose Hub.', '', `Original issue: ${issueRef(oldItem)}`].join('\n');
 }
 
+function copyLocalDbRepoLinks(input: {
+  projectId: string;
+  oldItem: WorkItem;
+  newItem: WorkItem;
+  repository: Pick<LocalDbWorkItemRepository, 'listRepoLinks' | 'createRepoLink'>;
+}): void {
+  if (!input.oldItem.id.startsWith('local:') || !input.newItem.id.startsWith('local:')) return;
+
+  for (const link of input.repository.listRepoLinks(input.projectId, input.oldItem.id)) {
+    input.repository.createRepoLink({
+      projectId: input.projectId,
+      itemId: input.newItem.id,
+      repoRef: link.repoRef,
+      role: link.role,
+      confidence: link.confidence,
+      source: link.source,
+    });
+  }
+}
+
 export async function restartIssue(input: RestartIssueInput): Promise<RestartIssueResult> {
   const actor = input.actor ?? 'cli:issue-restart';
   const oldItem = await input.source.getItem(input.itemId);
@@ -65,6 +87,13 @@ export async function restartIssue(input: RestartIssueInput): Promise<RestartIss
     milestoneId: oldItem.milestoneId,
     initialState: targetState,
     extraLabels,
+  });
+
+  copyLocalDbRepoLinks({
+    projectId: input.projectId,
+    oldItem,
+    newItem,
+    repository: input.localDbRepository ?? new LocalDbWorkItemRepository(),
   });
 
   if (schedule !== 'current') {
