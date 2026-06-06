@@ -28,10 +28,11 @@ that bypasses the design system.
 
 ---
 
-## 1. Files over 500 LOC (47 files)
+## 1. Files over 500 LOC (48 files)
 
 Sorted by size. "Split" = recommend decomposition; "OK" = legitimately large
-single-concern (data/generated/canvas).
+single-concern (data/generated/canvas). Covers `.ts`/`.tsx` plus `.js`/`.mjs`
+source (one `.mjs` script qualifies).
 
 | LOC | File | Verdict |
 |---|---|---|
@@ -72,6 +73,7 @@ single-concern (data/generated/canvas).
 | 665 | `core/state-source/local-db-repository.ts` | Split |
 | 606 | `apps/web/src/components/office/game/layers/PersonaLayer.ts` | OK — Phaser layer |
 | 597 | `core/agent-runtime/claude-cli.ts` | Split — `run()` ~470 LOC |
+| 590 | `scripts/file-m1-issues.mjs` | OK — standalone one-off issue-filing script |
 | 580 | `apps/web/src/components/detail/components/timeline/QaEvents.tsx` | Borderline |
 | 557 | `apps/server/src/domains/issues/transitions.ts` | Borderline — high cohesion |
 | 550 | `core/workflows/bootstrap-renderers.ts` | Split — 2 large renderers |
@@ -178,7 +180,7 @@ share an `enhance-common.ts`.
 - `cleanMarkdownText`/`loadSkillDescription` markdown parsing living in a router; inline `SKILL_CALLERS` registry duplicating the skill catalogue.
 
 ### Core
-- Duplicate entry `'resources/list failed'` in `ADVISORY_RUNTIME_SURFACE_PATTERNS` (`codex-cli.ts:87-101`) — second silently shadows first.
+- Two entries share the `surface: 'resources/list failed'` label in `ADVISORY_RUNTIME_SURFACE_PATTERNS` (`codex-cli.ts:87-101`) but their regexes differ — the second adds `(?:\?path=[^\s]+)?` to match path-qualified failures (`resources/list?path=… failed`) the first regex misses. **Not dead duplication** (initial finding corrected); at most a readability nit since the identical `surface`/`toolName` labels obscure that they cover distinct inputs.
 - Audit-path hooks swallow errors silently (`pre-tool-use-hook.ts:130`, `post-tool-use-hook.ts:102/131`, `decision-capture-hook.ts:96` — all `.catch(() => {})`).
 - `console.*` not routed through `core/logger.ts`: `db/migrate.ts:7`, `schema-bridge.ts:16`, `read-prompt.ts:27`, `codex-parser.ts:283`, `claude-cli.ts:121`, `interventions/applier.ts:213`, `interventions/proposer.ts:324`.
 - Name collision: `FallbackPolicy` is both a union (`types.ts:85`) and an interface (`fallback.ts:7`); the `AgentConfig.fallbackPolicy` field appears to be never read in `core/` (possibly dead config).
