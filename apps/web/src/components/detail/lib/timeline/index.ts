@@ -748,8 +748,11 @@ function qaSegmentIdForEvent(
   event: AgentEventDto,
   implementationPipelineByRunId: ReadonlyMap<string, string>,
 ): string | null {
-  if (event.runId != null && event.runId.trim() !== '') return event.runId;
-  return implementationPipelineIdForEvent(event, implementationPipelineByRunId);
+  return (
+    eventPayloadString(event, 'qaAttemptId') ??
+    implementationPipelineIdForEvent(event, implementationPipelineByRunId) ??
+    (event.runId != null && event.runId.trim() !== '' ? event.runId : null)
+  );
 }
 
 function isDevPhaseEvent(event: AgentEventDto): boolean {

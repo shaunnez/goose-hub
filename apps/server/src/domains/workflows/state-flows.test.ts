@@ -105,8 +105,16 @@ vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
   accumulatePersonaStats: vi.fn(),
 }));
 
+const STATE_FLOWS_WORKTREE = '/tmp/goose-hub-state-flows-worktree';
+
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
-  createWorktree: vi.fn().mockReturnValue('/private/tmp/goose-hub-state-flows-worktree'),
+  WorktreeDependencyPreflightError: class WorktreeDependencyPreflightError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'WorktreeDependencyPreflightError';
+    }
+  },
+  createWorktree: vi.fn().mockReturnValue(STATE_FLOWS_WORKTREE),
   cleanupWorktree: vi.fn(),
   prewarmWorktree: vi.fn(),
   resolveWorkflowBase: vi.fn().mockReturnValue({
@@ -129,7 +137,7 @@ vi.mock('../../shared/source.js', () => ({
 }));
 
 afterEach(() => {
-  rmSync('/private/tmp/goose-hub-state-flows-worktree', { recursive: true, force: true });
+  rmSync(STATE_FLOWS_WORKTREE, { recursive: true, force: true });
 });
 
 // ─── Factories ───────────────────────────────────────────────────────────────

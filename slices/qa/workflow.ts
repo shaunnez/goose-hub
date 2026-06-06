@@ -90,6 +90,7 @@ function appendQaPreflightStepEvent(input: {
   projectId: string;
   workItemId: string;
   runId: string;
+  qaAttemptId: string;
   event: QaPreflightStepEvent;
 }): void {
   eventStore.appendEvent({
@@ -103,6 +104,7 @@ function appendQaPreflightStepEvent(input: {
           : 'qa.preflight-step-completed',
     payload: {
       runId: input.runId,
+      qaAttemptId: input.qaAttemptId,
       step: input.event.step,
       ...(input.event.command != null ? { command: input.event.command } : {}),
       status: input.event.status,
@@ -112,6 +114,81 @@ function appendQaPreflightStepEvent(input: {
     },
     runId: input.runId,
   });
+}
+
+function qaEventPayload(input: {
+  runId: string;
+  qaAttemptId: string;
+  payload?: Record<string, unknown>;
+}): Record<string, unknown> {
+  return {
+    runId: input.runId,
+    qaAttemptId: input.qaAttemptId,
+    ...(input.payload ?? {}),
+  };
+}
+
+const QA_WORKFLOW_TERMINAL_EVENTS = new Set([
+  'qa.workflow-completed',
+  'qa.workflow-failed',
+  'qa.workflow-aborted',
+  'qa.completed',
+  'qa.verification-blocked',
+]);
+
+function qaAttemptIdFromEvent(event: { runId?: string | null; payload: unknown }): string | null {
+  const payload = event.payload as Record<string, unknown> | null;
+  const explicit = payload?.qaAttemptId;
+  if (typeof explicit === 'string' && explicit.trim() !== '') return explicit;
+  if (event.runId != null && event.runId.trim() !== '') return event.runId;
+  const payloadRunId = payload?.runId;
+  return typeof payloadRunId === 'string' && payloadRunId.trim() !== '' ? payloadRunId : null;
+}
+
+function abortUnterminatedQaAttempts(input: {
+  projectId: string;
+  workItemId: string;
+  currentRunId: string;
+  currentQaAttemptId: string;
+  priorEvents: ReturnType<typeof eventStore.replay>;
+}): void {
+  const openAttempts = new Map<string, string | null>();
+
+  for (const event of input.priorEvents) {
+    const payload = event.payload as Record<string, unknown> | null;
+    const isQaAgentRuntimeEvent =
+      (event.kind === 'agent.run-started' ||
+        event.kind === 'agent.run-completed' ||
+        event.kind === 'agent.run-failed') &&
+      payload?.skill === 'qa';
+    if (!event.kind.startsWith('qa.') && !isQaAgentRuntimeEvent) continue;
+
+    const qaAttemptId = qaAttemptIdFromEvent(event);
+    if (qaAttemptId == null || qaAttemptId === input.currentQaAttemptId) continue;
+
+    if (QA_WORKFLOW_TERMINAL_EVENTS.has(event.kind)) {
+      openAttempts.delete(qaAttemptId);
+      continue;
+    }
+    openAttempts.set(qaAttemptId, event.runId ?? null);
+  }
+
+  for (const [qaAttemptId, runId] of openAttempts) {
+    eventStore.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      kind: 'qa.workflow-aborted',
+      payload: {
+        runId: runId ?? qaAttemptId,
+        qaAttemptId,
+        status: 'aborted',
+        reason: 'superseded',
+        supersededByRunId: input.currentRunId,
+        supersededByQaAttemptId: input.currentQaAttemptId,
+      },
+      runId: runId ?? qaAttemptId,
+    });
+  }
 }
 
 function qaPreflightCompletedStatus(input: {
@@ -636,6 +713,7 @@ export async function runQaWorkflow(
   deps: QaWorkflowDeps = {},
 ): Promise<void> {
   const runId = crypto.randomUUID();
+  const qaAttemptId = runId;
   const runTests = deps.runTests ?? defaultRunTests;
   const runCommand = deps.runCommand;
   const executableChecks = deps.executableChecks;
@@ -669,12 +747,48 @@ export async function runQaWorkflow(
   // Snapshot prior events BEFORE this run's outcome is appended.
   // shouldEscalateQa uses this count to decide: Nth failure = N-1 priors.
   const priorEvents = eventStore.replay({ workItemId: workItem.id });
+  abortUnterminatedQaAttempts({
+    projectId: projectSlug,
+    workItemId: workItem.id,
+    currentRunId: runId,
+    currentQaAttemptId: qaAttemptId,
+    priorEvents,
+  });
+  eventStore.appendEvent({
+    projectId: projectSlug,
+    workItemId: workItem.id,
+    kind: 'qa.workflow-started',
+    payload: qaEventPayload({ runId, qaAttemptId, payload: { status: 'running' } }),
+    runId,
+  });
 
   const evidencePosted = [...priorEvents].reverse().find((e) => e.kind === 'evidence.posted');
   const evidenceCommentUrl = (evidencePosted?.payload as { commentUrl?: string } | undefined)
     ?.commentUrl;
 
   const devTestsRun = findDevTestsRun(workItem.id, prHints.devRunId ?? prHints.pipelineRunId);
+  let workflowTerminalEmitted = false;
+  const emitQaWorkflowTerminal = (
+    kind: 'qa.workflow-completed' | 'qa.workflow-failed',
+    payload: Record<string, unknown> = {},
+  ) => {
+    if (workflowTerminalEmitted) return;
+    workflowTerminalEmitted = true;
+    eventStore.appendEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      kind,
+      payload: qaEventPayload({
+        runId,
+        qaAttemptId,
+        payload: {
+          status: kind === 'qa.workflow-completed' ? 'completed' : 'failed',
+          ...payload,
+        },
+      }),
+      runId,
+    });
+  };
 
   try {
     // ─── Deterministic 3-tier verify (M19.19) ────────────────────────────────
@@ -696,6 +810,7 @@ export async function runQaWorkflow(
         projectSlug,
         workItemId: workItem.id,
         runId,
+        qaAttemptId,
         regressionPolicy,
         runTier,
         changedFiles: buildPrDiffWithContext(prDiff).changedFiles,
@@ -716,6 +831,8 @@ export async function runQaWorkflow(
           workItemId: workItem.id,
           kind: 'qa.verification-blocked',
           payload: {
+            runId,
+            qaAttemptId,
             failedTier,
             reason: infrastructureFailure.reason,
             findings: infrastructureFailure.findings,
@@ -758,6 +875,12 @@ export async function runQaWorkflow(
           to: 'factory:needs-human',
           by: 'qa',
           runId,
+          extraPayload: { qaAttemptId },
+        });
+        emitQaWorkflowTerminal('qa.workflow-failed', {
+          reason: 'verification-blocked',
+          failedTier,
+          nextState: 'factory:needs-human',
         });
         return;
       }
@@ -772,18 +895,22 @@ export async function runQaWorkflow(
         projectId: projectSlug,
         workItemId: workItem.id,
         kind: 'qa.completed',
-        payload: {
-          verdict: synthetic.verdict,
-          overallScore: synthetic.overallScore,
-          threshold: synthetic.threshold,
-          tierResults: synthetic.tierResults,
-          qualityScores: synthetic.qualityScores,
-          findings: synthetic.findings,
-          deterministic: true,
-          agentSkipped: true,
-          failureCategory: classifyQaFailure({ failedTier }),
-          ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
-        },
+        payload: qaEventPayload({
+          runId,
+          qaAttemptId,
+          payload: {
+            verdict: synthetic.verdict,
+            overallScore: synthetic.overallScore,
+            threshold: synthetic.threshold,
+            tierResults: synthetic.tierResults,
+            qualityScores: synthetic.qualityScores,
+            findings: synthetic.findings,
+            deterministic: true,
+            agentSkipped: true,
+            failureCategory: classifyQaFailure({ failedTier }),
+            ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
+          },
+        }),
         runId,
       });
 
@@ -804,7 +931,7 @@ export async function runQaWorkflow(
           projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'agent.retry-escalated',
-          payload: { stage: 'qa', maxRetries: DEFAULT_MAX_RETRIES, runId },
+          payload: { stage: 'qa', maxRetries: DEFAULT_MAX_RETRIES, runId, qaAttemptId },
           runId,
         });
       }
@@ -837,6 +964,12 @@ export async function runQaWorkflow(
         to: nextState,
         by: 'qa',
         runId,
+        extraPayload: { qaAttemptId },
+      });
+      emitQaWorkflowTerminal('qa.workflow-failed', {
+        reason: 'deterministic-short-circuit',
+        failedTier,
+        nextState,
       });
       return;
     }
@@ -853,7 +986,7 @@ export async function runQaWorkflow(
       projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'qa.preflight-started',
-      payload: { runId, status: 'running' },
+      payload: qaEventPayload({ runId, qaAttemptId, payload: { status: 'running' } }),
       runId,
     });
     const testCommand = qaStack?.testCommand ?? DEFAULT_TEST_COMMAND;
@@ -904,6 +1037,7 @@ export async function runQaWorkflow(
           projectId: projectSlug,
           workItemId: workItem.id,
           runId,
+          qaAttemptId,
           event,
         }),
     });
@@ -917,6 +1051,7 @@ export async function runQaWorkflow(
       projectId: projectSlug,
       workItemId: workItem.id,
       runId,
+      qaAttemptId,
       event: {
         step: 'executable-checks',
         status: 'running',
@@ -936,6 +1071,7 @@ export async function runQaWorkflow(
         projectId: projectSlug,
         workItemId: workItem.id,
         runId,
+        qaAttemptId,
         event: {
           step: 'executable-checks',
           status: 'failed',
@@ -955,6 +1091,7 @@ export async function runQaWorkflow(
       projectId: projectSlug,
       workItemId: workItem.id,
       runId,
+      qaAttemptId,
       event: {
         step: 'executable-checks',
         status: executableChecksStatus,
@@ -968,13 +1105,16 @@ export async function runQaWorkflow(
       projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'qa.preflight-completed',
-      payload: {
+      payload: qaEventPayload({
         runId,
-        status: qaPreflightCompletedStatus({
-          verificationSummary,
-          executableChecksStatus,
-        }),
-      },
+        qaAttemptId,
+        payload: {
+          status: qaPreflightCompletedStatus({
+            verificationSummary,
+            executableChecksStatus,
+          }),
+        },
+      }),
       runId,
     });
 
@@ -982,19 +1122,23 @@ export async function runQaWorkflow(
       projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'qa.verification-summary-built',
-      payload: {
-        changedFileCount: verificationSummary.changedFiles.count,
-        diffCharCount: verificationSummary.changedFiles.diffCharCount,
-        contextByteSizeEstimate: estimateVerificationSummaryBytes(verificationSummary),
-        lintStatus: verificationSummary.commands.lint?.status ?? 'skipped',
-        typecheckStatus: verificationSummary.commands.typecheck?.status ?? 'skipped',
-        testStatus: verificationSummary.commands.test.status,
-        e2eStatus: verificationSummary.e2e.status,
-        evidenceStatus: verificationSummary.evidence.status,
-        evidenceReason: verificationSummary.evidence.reason,
-        executableCheckCount: criteriaResults.length,
-        executableCheckPassedCount: criteriaResults.filter((result) => result.passed).length,
-      },
+      payload: qaEventPayload({
+        runId,
+        qaAttemptId,
+        payload: {
+          changedFileCount: verificationSummary.changedFiles.count,
+          diffCharCount: verificationSummary.changedFiles.diffCharCount,
+          contextByteSizeEstimate: estimateVerificationSummaryBytes(verificationSummary),
+          lintStatus: verificationSummary.commands.lint?.status ?? 'skipped',
+          typecheckStatus: verificationSummary.commands.typecheck?.status ?? 'skipped',
+          testStatus: verificationSummary.commands.test.status,
+          e2eStatus: verificationSummary.e2e.status,
+          evidenceStatus: verificationSummary.evidence.status,
+          evidenceReason: verificationSummary.evidence.reason,
+          executableCheckCount: criteriaResults.length,
+          executableCheckPassedCount: criteriaResults.filter((result) => result.passed).length,
+        },
+      }),
       runId,
     });
 
@@ -1014,6 +1158,8 @@ export async function runQaWorkflow(
         workItemId: workItem.id,
         kind: 'agent.disclosure',
         payload: {
+          runId,
+          qaAttemptId,
           ...preparedDiff.disclosure,
           skill: 'qa',
           ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
@@ -1074,6 +1220,7 @@ export async function runQaWorkflow(
       ...(qaEnv != null ? { env: qaEnv } : {}),
       ...resolvedBudget,
       personaId,
+      extraEventPayload: { qaAttemptId },
       outputJsonSchema: qaJsonSchema,
       appendSystemPrompt: qaPrompt,
     });
@@ -1090,6 +1237,7 @@ export async function runQaWorkflow(
         kind: 'agent.log',
         payload: {
           runId,
+          qaAttemptId,
           skill: 'qa',
           stream: 'telemetry',
           metric: 'criteria_results_agent_copy_replaced',
@@ -1117,7 +1265,7 @@ export async function runQaWorkflow(
           projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'qa.tier-disagreement',
-          payload: { runId, disagreements },
+          payload: { runId, qaAttemptId, disagreements },
           runId,
         });
         throw new Error(
@@ -1145,11 +1293,15 @@ export async function runQaWorkflow(
           projectId: projectSlug,
           workItemId: workItem.id,
           kind,
-          payload: {
-            tier,
-            findings: groundTruthTierResults[tier].findings,
-            failureCategory: classifyQaFailure({ failedTier: tier }),
-          },
+          payload: qaEventPayload({
+            runId,
+            qaAttemptId,
+            payload: {
+              tier,
+              findings: groundTruthTierResults[tier].findings,
+              failureCategory: classifyQaFailure({ failedTier: tier }),
+            },
+          }),
           runId,
         });
       }
@@ -1219,21 +1371,25 @@ export async function runQaWorkflow(
       projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'qa.completed',
-      payload: {
-        verdict,
-        overallScore: qaOutput.overallScore,
-        threshold: qaOutput.threshold,
-        tierResults: groundTruthTierResults,
-        qualityScores: qaOutput.qualityScores,
-        findings: qaOutput.findings,
-        verificationSummary,
-        qaActionability,
-        ...(qaFailureCategory != null ? { failureCategory: qaFailureCategory } : {}),
-        ...(criteriaResults.length > 0 ? { criteriaResults } : {}),
-        ...(testRun ? { testRun } : {}),
-        ...(deterministic != null ? { deterministic: true } : {}),
-        ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
-      },
+      payload: qaEventPayload({
+        runId,
+        qaAttemptId,
+        payload: {
+          verdict,
+          overallScore: qaOutput.overallScore,
+          threshold: qaOutput.threshold,
+          tierResults: groundTruthTierResults,
+          qualityScores: qaOutput.qualityScores,
+          findings: qaOutput.findings,
+          verificationSummary,
+          qaActionability,
+          ...(qaFailureCategory != null ? { failureCategory: qaFailureCategory } : {}),
+          ...(criteriaResults.length > 0 ? { criteriaResults } : {}),
+          ...(testRun ? { testRun } : {}),
+          ...(deterministic != null ? { deterministic: true } : {}),
+          ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
+        },
+      }),
       runId,
     });
 
@@ -1244,6 +1400,7 @@ export async function runQaWorkflow(
         kind: 'agent.verify-command',
         payload: {
           runId,
+          qaAttemptId,
           criterionId: cr.criterionId,
           checkId: cr.checkId,
           ac: cr.ac,
@@ -1285,7 +1442,7 @@ export async function runQaWorkflow(
           projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'agent.retry-escalated',
-          payload: { stage: 'qa', maxRetries: DEFAULT_MAX_RETRIES, runId },
+          payload: { stage: 'qa', maxRetries: DEFAULT_MAX_RETRIES, runId, qaAttemptId },
           runId,
         });
       }
@@ -1315,6 +1472,13 @@ export async function runQaWorkflow(
       to: nextState,
       by: 'qa',
       runId,
+      extraPayload: { qaAttemptId },
+    });
+    emitQaWorkflowTerminal(passes ? 'qa.workflow-completed' : 'qa.workflow-failed', {
+      verdict,
+      overallScore: qaOutput.overallScore,
+      threshold: qaOutput.threshold,
+      nextState,
     });
   } catch (err) {
     accumulatePersonaStats({ personaName: personaId, role: 'qa', outcome: 'failure' });
@@ -1325,6 +1489,8 @@ export async function runQaWorkflow(
       kind: 'agent.run-failed',
       payload: {
         runId,
+        qaAttemptId,
+        skill: 'qa',
         error: error.message,
         failureCategory: classifyQaFailure({ orchestration: true }),
       },
@@ -1348,6 +1514,12 @@ export async function runQaWorkflow(
       to: 'factory:needs-human',
       by: 'qa',
       runId,
+      extraPayload: { qaAttemptId },
+    });
+    emitQaWorkflowTerminal('qa.workflow-failed', {
+      reason: 'exception',
+      error: error.message,
+      nextState: 'factory:needs-human',
     });
   }
 }

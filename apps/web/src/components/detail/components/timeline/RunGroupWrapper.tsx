@@ -139,6 +139,7 @@ export function RunGroupWrapper({
       item.event.kind === 'agent.run-failed' &&
       (item.event.payload as { orphaned?: boolean } | null)?.orphaned === true,
   );
+  const qaPreflightStatus = getQaPreflightStatus(groupEventList);
 
   const isWritePrdStuck = computeIsWritePrdStuck(groupEventList);
   const isLatestRun = context?.latestRunId === runId;
@@ -188,6 +189,14 @@ export function RunGroupWrapper({
       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
         <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
         Live
+      </span>
+    ) : qaPreflightStatus === 'superseded' ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 whitespace-nowrap">
+        Preflight superseded
+      </span>
+    ) : qaPreflightStatus === 'abandoned' ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 whitespace-nowrap">
+        Preflight abandoned
       </span>
     ) : isFailed ? (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-[color:var(--danger)] border border-red-500/20">
@@ -249,7 +258,7 @@ export function RunGroupWrapper({
             </>
           )}
           <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
-          <span className="w-[72px] shrink-0 flex justify-start">{statusBadge}</span>
+          <span className="w-[128px] shrink-0 flex justify-start">{statusBadge}</span>
           {runCost && (
             <span className="shrink-0">
               <CostBadge
@@ -383,4 +392,32 @@ function aggregateRunGroupCosts(
     modelId: rows[0].modelId,
     provider: rows[0].provider,
   };
+}
+
+function getQaPreflightStatus(
+  events: Array<{ kind: string; payload?: unknown }>,
+): 'abandoned' | 'superseded' | null {
+  const hasPreflight = events.some((event) => event.kind.startsWith('qa.preflight-'));
+  if (!hasPreflight) return null;
+  const aborted = events.find((event) => event.kind === 'qa.workflow-aborted');
+  if ((aborted?.payload as { reason?: string } | null)?.reason === 'superseded') {
+    return 'superseded';
+  }
+  if (aborted != null) return 'abandoned';
+  const hasAgentStarted = events.some(
+    (event) =>
+      event.kind === 'agent.run-started' &&
+      (event.payload as { skill?: string } | null)?.skill === 'qa',
+  );
+  const hasTerminal = events.some((event) =>
+    [
+      'qa.completed',
+      'qa.verification-blocked',
+      'qa.workflow-completed',
+      'qa.workflow-failed',
+      'qa.workflow-aborted',
+    ].includes(event.kind),
+  );
+  if (hasTerminal || hasAgentStarted) return null;
+  return 'abandoned';
 }

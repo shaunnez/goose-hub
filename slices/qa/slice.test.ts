@@ -63,7 +63,15 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
-  return { ...actual, readFileSync: vi.fn().mockReturnValue('# mock prompt') };
+  return {
+    ...actual,
+    readFileSync: vi.fn((path, ...args) => {
+      if (String(path).endsWith('package.json')) {
+        return actual.readFileSync(path, ...args);
+      }
+      return '# mock prompt';
+    }),
+  };
 });
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -177,6 +185,30 @@ function makeGitWorktreeWithChange(changedPath: string): string {
   writeFileSync(fullPath, 'export const after = 2;\n');
   execFileSync('git', ['add', changedPath], { cwd: dir });
   execFileSync('git', ['commit', '-m', 'change'], { cwd: dir });
+  return dir;
+}
+
+function writeNodePackage(
+  dir: string,
+  scripts: Record<string, string> = {
+    test: 'vitest --reporter=json',
+    lint: 'biome check .',
+  },
+): void {
+  writeFileSync(
+    join(dir, 'package.json'),
+    `${JSON.stringify({ packageManager: 'pnpm@10.33.0', scripts }, null, 2)}\n`,
+  );
+}
+
+function makeNodeWorktree(
+  scripts: Record<string, string> = {
+    test: 'vitest --reporter=json',
+    lint: 'biome check .',
+  },
+): string {
+  const dir = mkdtempSync(join(tmpdir(), 'qa-node-worktree-'));
+  writeNodePackage(dir, scripts);
   return dir;
 }
 
@@ -1484,13 +1516,14 @@ describe('runQaWorkflow', () => {
     it('passes verificationSummary into QA context and allowlist', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
+      const worktree = makeNodeWorktree();
       mockReplay.mockReturnValue([
         {
           id: 1,
           kind: 'pr.opened',
           payload: {
             prNumber: 99,
-            worktreePath: '/wt/abc',
+            worktreePath: worktree,
             baseBranch: 'develop',
             prHeadSha: 'abc1234',
           },
@@ -1499,28 +1532,32 @@ describe('runQaWorkflow', () => {
       ]);
       mockRun.mockResolvedValueOnce(makePassResult());
 
-      const { runQaWorkflow } = await import('./workflow.js');
-      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
-        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
-        runCommand: vi.fn(async (_cwd, command) => ({ command, status: 'passed' as const })),
-      });
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+          runCommand: vi.fn(async (_cwd, command) => ({ command, status: 'passed' as const })),
+        });
 
-      const spec = mockRun.mock.calls[0][0] as {
-        context: Record<string, unknown>;
-        contextAllowlist: string[];
-      };
-      expect(spec.context.verificationSummary).toMatchObject({
-        pr: { number: 99, baseBranch: 'develop', headSha: 'abc1234' },
-        commands: {
-          lint: { command: 'pnpm biome check .', status: 'passed' },
-          test: { command: 'pnpm test --reporter=json', status: 'failed' },
-        },
-        testRun: {
-          failed: 1,
-          failingSuites: ['core/cart.test.ts'],
-        },
-      });
-      expect(spec.contextAllowlist).toContain('verificationSummary');
+        const spec = mockRun.mock.calls[0][0] as {
+          context: Record<string, unknown>;
+          contextAllowlist: string[];
+        };
+        expect(spec.context.verificationSummary).toMatchObject({
+          pr: { number: 99, baseBranch: 'develop', headSha: 'abc1234' },
+          commands: {
+            lint: { command: 'pnpm run lint', status: 'passed' },
+            test: { command: 'pnpm test', status: 'failed' },
+          },
+          testRun: {
+            failed: 1,
+            failingSuites: ['core/cart.test.ts'],
+          },
+        });
+        expect(spec.contextAllowlist).toContain('verificationSummary');
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
     });
 
     it('emits explicit evidence skip status when no evidence workflow event exists', async () => {
@@ -1672,8 +1709,9 @@ describe('runQaWorkflow', () => {
     it('emits qa.verification-summary-built telemetry with compact statuses', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
+      const worktree = makeNodeWorktree();
       mockReplay.mockReturnValue([
-        { id: 1, kind: 'pr.opened', payload: { worktreePath: '/wt/abc' }, createdAt: '' },
+        { id: 1, kind: 'pr.opened', payload: { worktreePath: worktree }, createdAt: '' },
         {
           id: 2,
           kind: 'evidence.post-failed',
@@ -1683,27 +1721,32 @@ describe('runQaWorkflow', () => {
       ]);
       mockRun.mockResolvedValueOnce(makePassResult());
 
-      const { runQaWorkflow } = await import('./workflow.js');
-      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
-      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
-        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
-        runCommand: vi.fn(async (_cwd, command) => ({ command, status: 'passed' as const })),
-      });
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+          runCommand: vi.fn(async (_cwd, command) => ({ command, status: 'passed' as const })),
+        });
 
-      const summaryEvent = vi
-        .mocked(eventStore.appendEvent)
-        .mock.calls.find(([e]) => e.kind === 'qa.verification-summary-built');
-      expect(summaryEvent).toBeDefined();
-      expect(summaryEvent?.[0].payload).toMatchObject({
-        lintStatus: 'passed',
-        typecheckStatus: 'skipped',
-        testStatus: 'failed',
-        e2eStatus: 'skipped',
-        evidenceStatus: 'failed',
-      });
-      expect(
-        (summaryEvent?.[0].payload as { contextByteSizeEstimate?: number }).contextByteSizeEstimate,
-      ).toBeGreaterThan(0);
+        const summaryEvent = vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.find(([e]) => e.kind === 'qa.verification-summary-built');
+        expect(summaryEvent).toBeDefined();
+        expect(summaryEvent?.[0].payload).toMatchObject({
+          lintStatus: 'passed',
+          typecheckStatus: 'skipped',
+          testStatus: 'failed',
+          e2eStatus: 'skipped',
+          evidenceStatus: 'failed',
+        });
+        expect(
+          (summaryEvent?.[0].payload as { contextByteSizeEstimate?: number })
+            .contextByteSizeEstimate,
+        ).toBeGreaterThan(0);
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
     });
 
     it('emits qa.preflight-started and step telemetry before verification summary', async () => {
@@ -1746,10 +1789,174 @@ describe('runQaWorkflow', () => {
       expect(preflightCompletedIndex).toBeLessThan(summaryIndex);
     });
 
+    it('propagates qaAttemptId across QA lifecycle, preflight, agent, completion, and transition events', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn(),
+        executableChecks: [],
+      });
+
+      const calls = vi.mocked(eventStore.appendEvent).mock.calls.map(([event]) => event);
+      const started = calls.find((event) => event.kind === 'qa.workflow-started');
+      const qaAttemptId = (started?.payload as { qaAttemptId?: string } | undefined)?.qaAttemptId;
+
+      expect(qaAttemptId).toEqual(expect.any(String));
+      for (const kind of [
+        'qa.workflow-started',
+        'qa.preflight-started',
+        'qa.preflight-step-completed',
+        'qa.preflight-completed',
+        'qa.verification-summary-built',
+        'qa.completed',
+        'qa.workflow-completed',
+        'state.transitioned',
+      ]) {
+        const event = calls.find((candidate) => candidate.kind === kind);
+        expect(event?.payload).toMatchObject({ qaAttemptId });
+      }
+
+      const spec = mockRun.mock.calls[0][0] as { extraEventPayload?: { qaAttemptId?: string } };
+      expect(spec.extraEventPayload).toEqual({ qaAttemptId });
+    });
+
+    it('aborts unterminated prior QA attempts before starting a replacement attempt', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          projectId: 'test-project',
+          workItemId: item.id,
+          kind: 'qa.preflight-started',
+          payload: { runId: 'stale-qa-run', status: 'running' },
+          runId: 'stale-qa-run',
+          personaId: null,
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn(),
+        executableChecks: [],
+      });
+
+      const calls = vi.mocked(eventStore.appendEvent).mock.calls.map(([event]) => event);
+      const abortedIndex = calls.findIndex((event) => event.kind === 'qa.workflow-aborted');
+      const startedIndex = calls.findIndex((event) => event.kind === 'qa.workflow-started');
+      const startedPayload = calls[startedIndex]?.payload as { qaAttemptId?: string } | undefined;
+
+      expect(abortedIndex).toBeGreaterThanOrEqual(0);
+      expect(abortedIndex).toBeLessThan(startedIndex);
+      expect(calls[abortedIndex]).toMatchObject({
+        runId: 'stale-qa-run',
+        payload: {
+          qaAttemptId: 'stale-qa-run',
+          reason: 'superseded',
+          supersededByQaAttemptId: startedPayload?.qaAttemptId,
+        },
+      });
+    });
+
+    it('uses the event row runId for legacy deterministic QA attempt identity', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          projectId: 'test-project',
+          workItemId: item.id,
+          kind: 'qa.structural-passed',
+          payload: { runId: 'implementation-run', tier: 'structural' },
+          runId: 'legacy-qa-run',
+          personaId: null,
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn(),
+        executableChecks: [],
+      });
+
+      const aborted = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.map(([event]) => event)
+        .find((event) => event.kind === 'qa.workflow-aborted');
+
+      expect(aborted).toMatchObject({
+        runId: 'legacy-qa-run',
+        payload: {
+          runId: 'legacy-qa-run',
+          qaAttemptId: 'legacy-qa-run',
+          reason: 'superseded',
+        },
+      });
+    });
+
+    it('aborts prior QA attempts that only reached runtime completion', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          projectId: 'test-project',
+          workItemId: item.id,
+          kind: 'agent.run-started',
+          payload: { skill: 'qa' },
+          runId: 'partial-qa-run',
+          personaId: null,
+          createdAt: '',
+        },
+        {
+          id: 2,
+          projectId: 'test-project',
+          workItemId: item.id,
+          kind: 'agent.run-completed',
+          payload: { skill: 'qa' },
+          runId: 'partial-qa-run',
+          personaId: null,
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn(),
+        executableChecks: [],
+      });
+
+      expect(
+        vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.map(([event]) => event)
+          .find((event) => event.kind === 'qa.workflow-aborted'),
+      ).toMatchObject({
+        runId: 'partial-qa-run',
+        payload: {
+          qaAttemptId: 'partial-qa-run',
+          reason: 'superseded',
+        },
+      });
+    });
+
     it('marks qa.preflight-completed failed when deterministic command steps fail', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
       const worktree = makeGitWorktreeWithChange('src/foo.ts');
+      writeNodePackage(worktree, { test: 'vitest --reporter=json' });
       mockReplay.mockReturnValue([
         {
           id: 1,
@@ -1806,27 +2013,33 @@ describe('runQaWorkflow', () => {
     it('runs the injected test runner against the worktree path before invoking the agent', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
+      const worktree = makeNodeWorktree({ test: 'vitest --reporter=json' });
       mockReplay.mockReturnValue([
         {
           id: 1,
           kind: 'pr.opened',
-          payload: { worktreePath: '/wt/abc' },
+          payload: { worktreePath: worktree },
           createdAt: '',
         },
       ]);
       mockRun.mockResolvedValueOnce(makePassResult());
       const runTests = vi.fn().mockResolvedValue(sampleTestRun);
 
-      const { runQaWorkflow } = await import('./workflow.js');
-      await runQaWorkflow(item, source, 'test-project', 'owner/repo', { runTests });
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', { runTests });
 
-      expect(runTests).toHaveBeenCalledTimes(1);
-      expect(runTests).toHaveBeenCalledWith('/wt/abc', expect.stringContaining('pnpm test'));
+        expect(runTests).toHaveBeenCalledTimes(1);
+        expect(runTests).toHaveBeenCalledWith(worktree, expect.stringContaining('pnpm test'));
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
     });
 
     it('uses worktreePath from the parallel-implement pr.opened payload', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
+      const worktree = makeNodeWorktree({ test: 'vitest --reporter=json' });
       mockReplay.mockReturnValue([
         {
           id: 1,
@@ -1835,7 +2048,7 @@ describe('runQaWorkflow', () => {
             prNumber: 99,
             prUrl: 'https://github.com/owner/repo/pull/99',
             branch: 'factory/dev-run-123',
-            worktreePath: '/wt/parallel-abc',
+            worktreePath: worktree,
             devRunId: 'dev-run-123',
             pipelineRunId: 'pipeline-run-123',
           },
@@ -1845,12 +2058,16 @@ describe('runQaWorkflow', () => {
       mockRun.mockResolvedValueOnce(makePassResult());
       const runTests = vi.fn().mockResolvedValue(sampleTestRun);
 
-      const { runQaWorkflow } = await import('./workflow.js');
-      await runQaWorkflow(item, source, 'test-project', 'owner/repo', { runTests });
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', { runTests });
 
-      expect(runTests).toHaveBeenCalledWith('/wt/parallel-abc', expect.any(String));
-      const spec = mockRun.mock.calls[0][0] as { workspaceDir?: string };
-      expect(spec.workspaceDir).toBe('/wt/parallel-abc');
+        expect(runTests).toHaveBeenCalledWith(worktree, expect.any(String));
+        const spec = mockRun.mock.calls[0][0] as { workspaceDir?: string };
+        expect(spec.workspaceDir).toBe(worktree);
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
     });
 
     it('emits qa.completed with pipelineRunId from a legacy fix-issue pr.opened payload', async () => {
@@ -2244,58 +2461,68 @@ describe('runQaWorkflow', () => {
     it('keeps raw testRun out of the agent context while preserving compact verificationSummary', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
+      const worktree = makeNodeWorktree({ test: 'vitest --reporter=json' });
       mockReplay.mockReturnValue([
         {
           id: 1,
           kind: 'pr.opened',
-          payload: { worktreePath: '/wt/abc' },
+          payload: { worktreePath: worktree },
           createdAt: '',
         },
       ]);
       mockRun.mockResolvedValueOnce(makePassResult());
 
-      const { runQaWorkflow } = await import('./workflow.js');
-      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
-        runTests: vi.fn().mockResolvedValue(sampleTestRun),
-      });
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          runTests: vi.fn().mockResolvedValue(sampleTestRun),
+        });
 
-      const spec = mockRun.mock.calls[0][0] as {
-        context: { testRun?: unknown; verificationSummary?: { testRun?: unknown } };
-        contextAllowlist: string[];
-      };
-      expect(spec.context.testRun).toBeUndefined();
-      expect(spec.contextAllowlist).not.toContain('testRun');
-      expect(spec.context.verificationSummary?.testRun).toMatchObject({
-        total: sampleTestRun.total,
-        passed: sampleTestRun.passed,
-        failed: sampleTestRun.failed,
-      });
+        const spec = mockRun.mock.calls[0][0] as {
+          context: { testRun?: unknown; verificationSummary?: { testRun?: unknown } };
+          contextAllowlist: string[];
+        };
+        expect(spec.context.testRun).toBeUndefined();
+        expect(spec.contextAllowlist).not.toContain('testRun');
+        expect(spec.context.verificationSummary?.testRun).toMatchObject({
+          total: sampleTestRun.total,
+          passed: sampleTestRun.passed,
+          failed: sampleTestRun.failed,
+        });
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
     });
 
     it('includes testRun in the qa.completed payload when present', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
+      const worktree = makeNodeWorktree({ test: 'vitest --reporter=json' });
       mockReplay.mockReturnValue([
         {
           id: 1,
           kind: 'pr.opened',
-          payload: { worktreePath: '/wt/abc' },
+          payload: { worktreePath: worktree },
           createdAt: '',
         },
       ]);
       mockRun.mockResolvedValueOnce(makePassResult());
 
-      const { runQaWorkflow } = await import('./workflow.js');
-      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
-      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
-        runTests: vi.fn().mockResolvedValue(sampleTestRun),
-      });
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          runTests: vi.fn().mockResolvedValue(sampleTestRun),
+        });
 
-      const completed = vi
-        .mocked(eventStore.appendEvent)
-        .mock.calls.find(([e]) => e.kind === 'qa.completed');
-      const payload = completed?.[0].payload as Record<string, unknown>;
-      expect(payload.testRun).toEqual(sampleTestRun);
+        const completed = vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.find(([e]) => e.kind === 'qa.completed');
+        const payload = completed?.[0].payload as Record<string, unknown>;
+        expect(payload.testRun).toEqual(sampleTestRun);
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
     });
 
     it('omits testRun from qa.completed when the runner returns null', async () => {

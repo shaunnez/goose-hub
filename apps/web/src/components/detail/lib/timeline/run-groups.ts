@@ -40,10 +40,30 @@ export function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {
 function getRunId(item: RenderItem): string | null {
   if (item.kind === 'event') {
     if (item.event.kind.startsWith('workflow.route-')) return null;
+    const qaAttemptId = qaAttemptIdForTimelineEvent(item.event);
+    if (qaAttemptId != null) return qaAttemptId;
     const runId = (item.event as AgentEventDto & { runId?: string | null }).runId ?? null;
     return scoutBaseRunId(runId);
   }
   return null;
+}
+
+function qaAttemptIdForTimelineEvent(event: AgentEventDto): string | null {
+  if (!isQaTimelineEvent(event)) return null;
+  const payload = event.payload as Record<string, unknown> | null;
+  const qaAttemptId = payload?.qaAttemptId;
+  return typeof qaAttemptId === 'string' && qaAttemptId.trim() !== '' ? qaAttemptId : null;
+}
+
+function isQaTimelineEvent(event: AgentEventDto): boolean {
+  if (event.kind.startsWith('qa.')) return true;
+  const payload = event.payload as Record<string, unknown> | null;
+  return (
+    (event.kind === 'agent.run-started' ||
+      event.kind === 'agent.run-completed' ||
+      event.kind === 'agent.run-failed') &&
+    payload?.skill === 'qa'
+  );
 }
 
 function scoutBaseRunId(runId: string | null): string | null {
@@ -163,7 +183,7 @@ export function extractRunMeta(items: RenderItem[]): {
       }
     } else if (ev.kind.startsWith('qa.')) {
       if (displaySkill == null) displaySkill = 'qa';
-      if (ev.kind === 'qa.completed' || ev.kind === 'qa.verification-blocked') {
+      if (isQaTerminalEvent(ev.kind)) {
         if (endedAt == null || ms > new Date(endedAt).getTime()) endedAt = ev.createdAt;
       }
     } else if (ev.kind.startsWith('dev-review.')) {
@@ -189,6 +209,16 @@ export function extractRunMeta(items: RenderItem[]): {
     modelId,
     runtime,
   };
+}
+
+function isQaTerminalEvent(kind: string): boolean {
+  return (
+    kind === 'qa.completed' ||
+    kind === 'qa.verification-blocked' ||
+    kind === 'qa.workflow-completed' ||
+    kind === 'qa.workflow-failed' ||
+    kind === 'qa.workflow-aborted'
+  );
 }
 
 export function groupByRunId(items: RenderItem[]): RenderItem[] {

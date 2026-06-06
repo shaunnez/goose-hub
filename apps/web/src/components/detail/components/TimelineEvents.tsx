@@ -104,6 +104,7 @@ import {
   QaPreflightStepEvent,
   QaVerificationBlockedEvent,
   QaVerificationSummaryBuiltEvent,
+  QaWorkflowEvent,
 } from './timeline/QaEvents';
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
 import { AgentRetryEscalatedEvent } from './timeline/RetryEvents';
@@ -343,6 +344,11 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <QaVerificationBlockedEvent key={event.id} event={event} />;
     case 'qa.verification-summary-built':
       return <QaVerificationSummaryBuiltEvent key={event.id} event={event} />;
+    case 'qa.workflow-started':
+    case 'qa.workflow-completed':
+    case 'qa.workflow-failed':
+    case 'qa.workflow-aborted':
+      return <QaWorkflowEvent key={event.id} event={event} />;
     case 'qa.preflight-started':
     case 'qa.preflight-completed':
       return <QaPreflightEvent key={event.id} event={event} />;
