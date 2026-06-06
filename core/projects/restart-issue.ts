@@ -2,7 +2,7 @@ import { transitionAndEmitState } from '../event-stream/state-transition.js';
 import { eventStore } from '../event-stream/store.js';
 import { STATES, type StateName } from '../state-machine/states.js';
 import type { Schedule, StateSource, WorkItem } from '../state-source/interface.js';
-import { LocalDbWorkItemRepository } from '../state-source/local-db-repository.js';
+import type { LocalDbWorkItemRepository } from '../state-source/local-db-repository.js';
 
 export interface RestartIssueInput {
   source: StateSource;
@@ -102,12 +102,14 @@ export async function restartIssue(input: RestartIssueInput): Promise<RestartIss
     }
   }
 
-  copyLocalDbRepoLinks({
-    projectId: input.projectId,
-    oldItem,
-    newItem,
-    repository: input.localDbRepository ?? new LocalDbWorkItemRepository(),
-  });
+  if (input.localDbRepository != null) {
+    copyLocalDbRepoLinks({
+      projectId: input.projectId,
+      oldItem,
+      newItem,
+      repository: input.localDbRepository,
+    });
+  }
 
   if (schedule !== 'current') {
     await input.source.setLabelInGroup(newItem.id, 'schedule', schedule);
