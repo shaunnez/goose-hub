@@ -3,6 +3,7 @@ import { eventStore } from '../../../event-stream/store.js';
 import { getProjectBySlug } from '../../../projects/loader.js';
 import type { WorkItem } from '../../../state-source/interface.js';
 import { listLocalDbRepoLinks } from '../../../workspaces/repo-affinity.js';
+import { stackCommandsForWorktree } from '../../../workspaces/stack-commands.js';
 import { recordDecision } from '../../tools/record-decision.js';
 import { emitToolCall } from '../audit.js';
 import type { FactoryContext } from '../context.js';
@@ -119,7 +120,7 @@ export async function getStackCommands(
     );
   }
 
-  const stack = project.stack;
+  const stack = await stackCommandsForWorktree(ctx.workspaceRoot, project.stack);
   const result: GetStackCommandsResult = {
     runtime: stack.runtime,
     packageManager: stack.packageManager,

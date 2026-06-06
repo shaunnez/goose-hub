@@ -31,6 +31,7 @@ import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interfa
 import { parseVitestJson } from '@goose-hub/core/test-runner/parse-vitest-json.js';
 import type { RegressionPolicy, TierResult } from '@goose-hub/core/verify/tiers.js';
 import { runTier as defaultRunTier } from '@goose-hub/core/verify/tiers.js';
+import { stackCommandsForWorktree } from '@goose-hub/core/workspaces/stack-commands.js';
 import {
   type CriteriaResult,
   CriteriaResultSchema,
@@ -732,11 +733,15 @@ export async function runQaWorkflow(
   const { personaId } = selectPersona(projectSlug, 'qa');
   const prHints = findPrOpenedHints(workItem.id);
   const workspaceDir = prHints.worktreePath;
+  const qaStack =
+    workspaceDir != null
+      ? await stackCommandsForWorktree(workspaceDir, projectConfig?.stack)
+      : projectConfig?.stack;
   const prDiff = getPrDiff(workItem, workspaceDir, prHints.baseBranch);
   const regressionPolicy: RegressionPolicy = projectConfig?.regressionPolicy ?? 'escalate';
   const settingsProjectId = projectConfig?.id ?? projectSlug;
   const e2eConfigDefault: QaE2eMode =
-    projectConfig?.qaE2eMode ?? (projectConfig?.stack?.e2eCommand != null ? 'ui-changed' : 'off');
+    projectConfig?.qaE2eMode ?? (qaStack?.e2eCommand != null ? 'ui-changed' : 'off');
   const qaE2eMode = getQaE2eMode(settingsProjectId, e2eConfigDefault);
 
   // Snapshot prior events BEFORE this run's outcome is appended.
@@ -984,13 +989,13 @@ export async function runQaWorkflow(
       payload: qaEventPayload({ runId, qaAttemptId, payload: { status: 'running' } }),
       runId,
     });
-    const testCommand = projectConfig?.stack?.testCommand ?? DEFAULT_TEST_COMMAND;
-    const lintCommand = projectConfig?.stack?.lintCommand ?? 'pnpm biome check .';
-    const typecheckCommand = projectConfig?.stack?.typecheckCommand;
-    const configuredE2eCommand = projectConfig?.stack?.e2eCommand;
+    const testCommand = qaStack?.testCommand ?? DEFAULT_TEST_COMMAND;
+    const lintCommand = qaStack?.lintCommand;
+    const typecheckCommand = qaStack?.typecheckCommand;
+    const configuredE2eCommand = qaStack?.e2eCommand;
     const testCapture = resolveVitestJsonCapture({
       workspaceDir,
-      runtime: projectConfig?.stack?.runtime,
+      runtime: qaStack?.runtime,
       testCommand,
     });
     const [webPort, apiPort] =

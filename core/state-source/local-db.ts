@@ -16,6 +16,7 @@ import type {
   StateSource,
   Subscription,
   WorkItem,
+  WorkItemRepoLink,
   WorkItemType,
 } from './interface.js';
 import { LocalDbWorkItemRepository, parseExternalRefMetadata } from './local-db-repository.js';
@@ -254,6 +255,26 @@ export class LocalDbStateSource implements StateSource {
       `exec:${item.exec}`,
       ...this.repository.listLabels(this.projectId, itemId),
     ];
+  }
+
+  listRepoLinks(itemId: string): WorkItemRepoLink[] {
+    return this.repository.listRepoLinks(this.projectId, itemId).map((link) => ({
+      repoRef: link.repoRef,
+      role: link.role,
+      confidence: link.confidence,
+      source: link.source,
+    }));
+  }
+
+  createRepoLink(input: { itemId: string } & WorkItemRepoLink): void {
+    this.repository.createRepoLink({
+      projectId: this.projectId,
+      itemId: input.itemId,
+      repoRef: input.repoRef,
+      role: input.role,
+      confidence: input.confidence ?? null,
+      source: input.source ?? 'restart',
+    });
   }
 
   async attach(_itemId: string, _artifact: Artifact): Promise<void> {

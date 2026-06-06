@@ -18,6 +18,13 @@ export interface WorkItemExternalRef {
   createdAt: string;
 }
 
+export interface WorkItemRepoLink {
+  repoRef: string;
+  role: string;
+  confidence?: number | null;
+  source?: string | null;
+}
+
 /**
  * Default values applied when a work item has no label in the corresponding
  * group. Used by the ingress parsers in `github-labels.ts` so the fallback
@@ -125,6 +132,8 @@ export interface StateSource {
   removeLabel(itemId: string, name: string): Promise<void>;
   /** Return all labels currently on the item (state labels + extra labels). */
   listLabels?(itemId: string): Promise<string[]>;
+  listRepoLinks?(itemId: string): Promise<WorkItemRepoLink[]> | WorkItemRepoLink[];
+  createRepoLink?(input: { itemId: string } & WorkItemRepoLink): Promise<void> | void;
   attach(itemId: string, artifact: Artifact): Promise<void>;
   createIssue(input: CreateIssueInput): Promise<WorkItem>;
   createMilestone(title: string): Promise<Milestone>;
