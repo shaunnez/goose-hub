@@ -24,6 +24,13 @@ The context contains:
 
 Return a JSON object:
 
+Decision summary contract:
+
+- Use only canonical decision summary kinds.
+- Use `PLAN` for the matching approach.
+- Use `VERDICT` for the selected repository.
+- Never emit `MATCH`, `REPO_MATCH`, `SELECTED`, or any other custom `decisionSummaries[].kind` value.
+
 <!-- output-example -->
 ```json
 {
@@ -37,7 +44,7 @@ Return a JSON object:
   ],
   "decisionSummaries": [
     {
-      "kind": "PLAN",
+      "kind": "VERDICT",
       "summary": "Selected shaunnez/goose-hub as the best repository match.",
       "evidence": "Factory workflows and skill prompts"
     }

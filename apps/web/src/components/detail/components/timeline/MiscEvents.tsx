@@ -63,6 +63,22 @@ type InvestigationSeedBuiltPayload = {
   builtMs?: number;
 };
 
+type CheckoutReadinessPayload = {
+  runId?: string;
+  repoRef?: string;
+  checkoutPath?: string;
+  defaultBranch?: string;
+  selectedBy?: string;
+  checkoutSource?: string;
+  readiness?: {
+    checkoutSource?: string;
+    selectionSource?: string;
+    checkoutPath?: string;
+    configuredLocalPath?: string | null;
+    managedClonePath?: string;
+  } | null;
+};
+
 type BugEnhanceLazyPayload = {
   hadExistingSeed?: boolean;
   producedSeed?: boolean;
@@ -796,6 +812,65 @@ export function InvestigationSeedBuiltEvent({ event }: { event: AgentEventDto })
         )}
         {builtMs != null && <span>{builtMs} ms</span>}
       </div>
+    </li>
+  );
+}
+
+export function CheckoutReadinessEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as CheckoutReadinessPayload | null;
+  const readiness = p?.readiness ?? null;
+  const checkoutPath = readiness?.checkoutPath ?? p?.checkoutPath ?? null;
+  const managedClonePath = readiness?.managedClonePath ?? null;
+  const configuredLocalPath = readiness?.configuredLocalPath ?? null;
+  const checkoutSource = readiness?.checkoutSource ?? p?.checkoutSource ?? null;
+  const selectionSource = readiness?.selectionSource ?? null;
+  const shortRunId = formatShortId(p?.runId ?? event.runId ?? undefined);
+
+  const facts = [
+    p?.repoRef,
+    p?.defaultBranch != null ? `base ${p.defaultBranch}` : null,
+    p?.selectedBy,
+    checkoutSource,
+    selectionSource != null ? `selected from ${selectionSource}` : null,
+  ].filter((fact): fact is string => fact != null && fact.length > 0);
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <GitBranch size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Checkout ready</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      {facts.length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+          {facts.map((fact) => (
+            <span key={fact}>{fact}</span>
+          ))}
+        </div>
+      )}
+      {checkoutPath != null && (
+        <div className="mt-2 text-[11.5px] text-fg-3">
+          Checkout: <span className="font-mono text-fg-2 break-all">{checkoutPath}</span>
+        </div>
+      )}
+      {configuredLocalPath != null && configuredLocalPath !== checkoutPath && (
+        <div className="mt-1 text-[11.5px] text-fg-3">
+          Configured local path:{' '}
+          <span className="font-mono text-fg-2 break-all">{configuredLocalPath}</span>
+        </div>
+      )}
+      {managedClonePath != null && managedClonePath !== checkoutPath && (
+        <div className="mt-1 text-[11.5px] text-fg-3">
+          Managed clone: <span className="font-mono text-fg-2 break-all">{managedClonePath}</span>
+        </div>
+      )}
+      {shortRunId != null && (
+        <div className="mt-1 text-[11px] font-mono text-fg-4">run {shortRunId}</div>
+      )}
     </li>
   );
 }

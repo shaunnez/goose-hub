@@ -31,6 +31,10 @@ vi.mock('./read-prompt.js', () => ({
   readPromptWithContext: vi.fn().mockReturnValue('# mock prompt'),
 }));
 
+vi.mock('./run-record.js', () => ({
+  recordAgentRun: vi.fn(),
+}));
+
 vi.mock('./schema-bridge.js', () => ({
   toJsonSchema: vi.fn().mockReturnValue({}),
 }));
@@ -55,6 +59,7 @@ vi.mock('node:fs', () => ({
 
 const { runBugEnhance } = await import('./bug-enhance-runner.js');
 const { eventStore } = await import('../event-stream/store.js');
+const { recordAgentRun } = await import('./run-record.js');
 const { resolveSkillRuntimeForProject } = await import('./skill-runtime-resolver.js');
 
 function makeHints(paths: string[]): GroundedHints {
@@ -403,6 +408,13 @@ describe('runBugEnhance — repo-intel grounding contract', () => {
     const result = await runBugEnhance(BASE_INPUT);
 
     expect(result).toEqual({ markdown: null, groundedHints: null });
+    expect(recordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: expect.any(String),
+        skill: 'bug-enhance',
+        outcome: 'failure',
+      }),
+    );
     expect(eventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'agent.bug-enhance-empty',

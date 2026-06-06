@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { eq, sql } from 'drizzle-orm';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { db } from '../db/db.js';
+import { agentRuns } from '../db/schema.js';
 import type { ProjectConfig } from '../types.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { ContextValidationError, OutputValidationError, invokeSkill } from './invoke-skill.js';
+import { recordAgentRun } from './run-record.js';
 
 const uid = () => `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -24,6 +28,21 @@ function mockRuntime(output: unknown = VALID_ECHO_OUTPUT): AgentRuntime & { call
     },
   };
 }
+
+beforeEach(() => {
+  db.run(sql`CREATE TABLE IF NOT EXISTS agent_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    persona_id TEXT NOT NULL,
+    work_item_id TEXT,
+    project_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    skill TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  )`);
+  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS agent_runs_run_id_uniq ON agent_runs (run_id)`);
+});
 
 describe('invokeSkill', () => {
   it('rejects invalid context without spawning runtime', async () => {
@@ -119,6 +138,33 @@ describe('invokeSkill', () => {
         overrides: { runtimeOverride: badOutputRuntime },
       }),
     ).rejects.toBeInstanceOf(OutputValidationError);
+  });
+
+  it('marks an already-completed run as failed when output validation fails', async () => {
+    const projectId = uid();
+    const runId = uid();
+    recordAgentRun({
+      runId,
+      personaId: `${projectId}/developer/0`,
+      workItemId: null,
+      projectId,
+      role: 'developer',
+      skill: 'echo-test',
+      outcome: 'success',
+    });
+
+    await expect(
+      invokeSkill({
+        skillName: 'echo-test',
+        projectId,
+        runId,
+        context: VALID_ECHO_CTX,
+        overrides: { runtimeOverride: mockRuntime({ notEcho: true }) },
+      }),
+    ).rejects.toBeInstanceOf(OutputValidationError);
+
+    const [found] = db.select().from(agentRuns).where(eq(agentRuns.runId, runId)).all();
+    expect(found.outcome).toBe('failure');
   });
 
   it('normalizes null object properties before output validation', async () => {

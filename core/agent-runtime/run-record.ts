@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import { db } from '../db/db.js';
 import { agentRuns } from '../db/schema.js';
 import type { Role } from '../types.js';
@@ -26,4 +27,11 @@ export function recordAgentRun(record: AgentRunRecord): void {
     })
     .onConflictDoNothing({ target: agentRuns.runId })
     .run();
+
+  if (record.outcome === 'failure') {
+    db.update(agentRuns)
+      .set({ outcome: 'failure' })
+      .where(eq(agentRuns.runId, record.runId))
+      .run();
+  }
 }

@@ -61,6 +61,14 @@ describe('repo-match schema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects invented decision summary kinds such as MATCH', () => {
+    const result = RepoMatchOutputSchema.safeParse({
+      candidates: [{ repo: 'x/y', confidence: 95, evidence: 'explicit repo name', tier: 3 }],
+      decisionSummaries: [{ kind: 'MATCH', summary: 'Selected x/y as the target repo' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('zod toJSONSchema roundtrip produces valid JSON Schema object', () => {
     const jsonSchema = toJSONSchema(RepoMatchOutputSchema);
     expect(typeof jsonSchema).toBe('object');
@@ -102,6 +110,16 @@ describe('repo-match skill config', () => {
   it('contextSchema rejects missing workItem entirely', () => {
     const invalid = RepoMatchContextSchema.safeParse({});
     expect(invalid.success).toBe(false);
+  });
+});
+
+describe('repo-match prompt', () => {
+  const prompt = readFileSync(new URL('prompt.md', import.meta.url), 'utf8');
+
+  it('pins repo selection decision summaries to canonical decision kinds', () => {
+    expect(prompt).toContain('Use only canonical decision summary kinds');
+    expect(prompt).toContain('Use `VERDICT` for the selected repository');
+    expect(prompt).toContain('Never emit `MATCH`');
   });
 });
 

@@ -15,6 +15,7 @@ import type { ProjectConfig } from '../types.js';
 import type { AgentRuntime } from './interface.js';
 import { safeParseOutputForSchema } from './output-normalization.js';
 import { readPromptWithContext } from './read-prompt.js';
+import { recordAgentRun } from './run-record.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { selectPersona } from './select-persona.js';
 import { selectRuntime } from './select-runtime.js';
@@ -321,6 +322,15 @@ export async function runFeatureEnhance(
         runId: input.enhanceRunId,
         errors: parsed.error.issues,
         raw: JSON.stringify(result.output),
+      });
+      recordAgentRun({
+        runId: input.enhanceRunId,
+        personaId,
+        workItemId: input.workItemId,
+        projectId: input.projectId,
+        role,
+        skill: FEATURE_ENHANCE_SKILL,
+        outcome: 'failure',
       });
       const telemetry = appendEmptyEvent({
         runInput: input,

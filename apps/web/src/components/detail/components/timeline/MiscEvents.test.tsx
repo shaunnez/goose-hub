@@ -142,6 +142,43 @@ describe('Misc timeline events', () => {
     expect(rendered).not.toContain('"candidateFileCount"');
   });
 
+  it('renders agent.checkout-readiness as checkout metadata instead of raw JSON', () => {
+    const event = makeEvent('agent.checkout-readiness', {
+      runId: '68adf1e9-e9d4-49a6-86c4-8ebdd058425f',
+      repoRef: 'shaunnez/goose-hub',
+      checkoutPath: '/Users/shaunnesbitt/.factory/repos/goose-hub-self/shaunnez/goose-hub',
+      defaultBranch: 'main',
+      selectedBy: 'repo-link-primary',
+      checkoutSource: 'managed-clone',
+      readiness: {
+        checkoutSource: 'managed-clone',
+        selectionSource: 'configured-local-path',
+        checkoutPath: '/Users/shaunnesbitt/.factory/repos/goose-hub-self/shaunnez/goose-hub',
+        configuredLocalPath: '/Users/shaunnesbitt/projects/goose-hub',
+        managedClonePath: '/Users/shaunnesbitt/.factory/repos/goose-hub-self/shaunnez/goose-hub',
+      },
+      rawProbeKey: 'raw-value',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Checkout ready')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('shaunnez/goose-hub');
+    expect(rendered).toContain('base main');
+    expect(rendered).toContain('repo-link-primary');
+    expect(rendered).toContain('managed-clone');
+    expect(rendered).toContain('selected from configured-local-path');
+    expect(rendered).toContain(
+      'Checkout: /Users/shaunnesbitt/.factory/repos/goose-hub-self/shaunnez/goose-hub',
+    );
+    expect(rendered).toContain('Configured local path: /Users/shaunnesbitt/projects/goose-hub');
+    expect(rendered).toContain('run 68adf1e9');
+    expect(rendered).not.toContain('"readiness"');
+    expect(rendered).not.toContain('rawProbeKey');
+    expect(rendered).not.toContain('raw-value');
+  });
+
   it('renders agent.bug-enhance-lazy as seed counts instead of raw JSON', () => {
     const event = makeEvent('agent.bug-enhance-lazy', {
       hadExistingSeed: false,

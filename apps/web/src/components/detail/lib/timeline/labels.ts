@@ -22,6 +22,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.run-started': 'Agent run started',
   'agent.run-completed': 'Agent run completed',
   'agent.run-failed': 'Agent run failed',
+  'agent.checkout-readiness': 'Checkout ready',
   'agent.runtime-advisory': 'Runtime advisory',
   'agent.budget-exceeded': 'Agent budget exceeded',
   'agent.tool-call': 'Tool call',

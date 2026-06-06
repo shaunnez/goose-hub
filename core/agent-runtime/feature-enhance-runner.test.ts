@@ -48,6 +48,10 @@ vi.mock('./read-prompt.js', () => ({
   readPromptWithContext: vi.fn().mockReturnValue('# mock feature-enhance prompt'),
 }));
 
+vi.mock('./run-record.js', () => ({
+  recordAgentRun: vi.fn(),
+}));
+
 vi.mock('./schema-bridge.js', () => ({
   toJsonSchema: vi.fn().mockReturnValue({ type: 'object', title: 'FeatureEnhanceOutput' }),
 }));
@@ -57,6 +61,7 @@ vi.mock('../logger.js', () => ({
 }));
 
 const { runFeatureEnhance } = await import('./feature-enhance-runner.js');
+const { recordAgentRun } = await import('./run-record.js');
 const { resolveSkillRuntimeForProject } = await import('./skill-runtime-resolver.js');
 
 function makeToolEvent(toolName: string, overrides: Record<string, unknown> = {}): AgentEvent {
@@ -175,6 +180,13 @@ describe('runFeatureEnhance', () => {
     const result = await runFeatureEnhance(makeInput());
 
     expect(result).toMatchObject({ ok: false, reason: 'output-validation-failed' });
+    expect(recordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'grounding-run:feature-enhance',
+        skill: 'feature-enhance',
+        outcome: 'failure',
+      }),
+    );
     expect(mockAppendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'agent.feature-enhance-empty',

@@ -12,6 +12,7 @@ import { logger } from '../logger.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import { safeParseOutputForSchema } from './output-normalization.js';
 import { readPromptWithContext } from './read-prompt.js';
+import { recordAgentRun } from './run-record.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { groundedHintsToSeed } from './scout-prefetch.js';
 import { selectPersona } from './select-persona.js';
@@ -117,6 +118,15 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
       logger.warn('bug-enhance: output validation failed', {
         errors: parsed.error.issues,
         raw: JSON.stringify(result.output),
+      });
+      recordAgentRun({
+        runId,
+        personaId,
+        workItemId: input.workItemId,
+        projectId: input.projectId,
+        role: 'triager',
+        skill: 'bug-enhance',
+        outcome: 'failure',
       });
       emitBugEnhanceEmpty({
         input,

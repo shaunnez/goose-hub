@@ -9,6 +9,7 @@ import type { AgentResult, AgentRuntime, SkillConfig } from './interface.js';
 import { tryProviderOf } from './models.js';
 import { safeParseOutputForSchema } from './output-normalization.js';
 import { readPromptWithContext } from './read-prompt.js';
+import { recordAgentRun } from './run-record.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { selectPersona } from './select-persona.js';
 import { selectRuntime } from './select-runtime.js';
@@ -242,6 +243,15 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<InvokeSkillR
     const outResult = safeParseOutputForSchema(skillConfig.outputSchema, result.output);
     if (!outResult.success) {
       const provider = tryProviderOf(modelOverride);
+      recordAgentRun({
+        runId,
+        personaId,
+        workItemId: workItemId ?? null,
+        projectId,
+        role,
+        skill: skillName,
+        outcome: 'failure',
+      });
       throw new OutputValidationError(
         outResult.error.issues.map((i) => ({
           path: i.path as Array<string | number>,

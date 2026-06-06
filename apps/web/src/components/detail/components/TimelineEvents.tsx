@@ -51,6 +51,7 @@ import { AgentLogEvent, AgentLogGroupEvent } from './timeline/LogEvents';
 import {
   AcceptanceContractAuthoredEvent,
   AgentBudgetExceededEvent,
+  CheckoutReadinessEvent,
   AgentDisclosureEvent,
   AgentModelSelectedEvent,
   BugEnhanceLazyEvent,
@@ -237,6 +238,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentModelSelectedEvent key={event.id} event={event} />;
     case 'agent.budget-exceeded':
       return <AgentBudgetExceededEvent key={event.id} event={event} />;
+    case 'agent.checkout-readiness':
+      return <CheckoutReadinessEvent key={event.id} event={event} />;
     case 'agent.investigation-seed-built':
       return <InvestigationSeedBuiltEvent key={event.id} event={event} />;
     case 'agent.bug-enhance-lazy':

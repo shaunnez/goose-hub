@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { BugEnhanceOutputSchema } from './schema.js';
+import config from './skill.config.js';
 
 function readPrompt(): string {
   return readFileSync(new URL('prompt.md', import.meta.url), 'utf8');
@@ -147,6 +148,10 @@ describe('BugEnhanceOutputSchema', () => {
 });
 
 describe('bug-enhance prompt', () => {
+  it('is configured with the read tool bundle', () => {
+    expect(config.toolBundles).toEqual(['read']);
+  });
+
   it('grounds server-api request paths through route lookup before generic symbol lookup', () => {
     const prompt = readPrompt();
 
@@ -162,6 +167,41 @@ describe('bug-enhance prompt', () => {
 
     expect(prompt).toContain('Claude CLI: `mcp__factory-tools__repo_intel.query`');
     expect(prompt).toContain('Codex CLI: `repo_intel.query`');
+    expect(prompt).toContain('Never use `repo_intel_query`');
     expect(prompt).not.toContain('call `repo_intel.query');
+  });
+
+  it('declares all runtime-visible read tools and forbids native/delegation tools', () => {
+    const prompt = readPrompt();
+
+    for (const toolName of [
+      'mcp__factory-tools__repo_intel.query',
+      'mcp__factory-tools__search_text',
+      'mcp__factory-tools__list_dir',
+      'mcp__factory-tools__list_files',
+      'mcp__factory-tools__read_file',
+      'repo_intel.query',
+      'search_text',
+      'list_dir',
+      'list_files',
+      'read_file',
+    ]) {
+      expect(prompt).toContain(toolName);
+    }
+
+    for (const forbidden of [
+      'ToolSearch',
+      'native Read',
+      'Bash',
+      'Agent',
+      'Skill',
+      'AskUserQuestion',
+      'MCP resources',
+      'file://',
+      'delegation',
+      'user questions',
+    ]) {
+      expect(prompt).toContain(forbidden);
+    }
   });
 });
