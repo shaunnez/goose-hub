@@ -60,12 +60,14 @@ const WORKFLOW_GROUP_TO_TIMELINE_SECTION: Record<WorkflowGroup, TimelineSectionI
 
 const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'dogfood.seed-applied': 'system',
+  'agent.checkout-readiness': 'system',
   'agent.triage-complete': 'triage',
   'agent.repo-override': 'triage',
   'agent.investigation-complete': 'investigation',
   'feature.framed': 'grounding',
   'feature.grounding-enhanced': 'grounding',
   'feature.grounding-complete': 'grounding',
+  'agent.feature-enhance-empty': 'grounding',
   'agent.investigation-context-injected': 'investigation',
   'agent.investigation-seed-built': 'investigation',
   'agent.investigation-seed-empty': 'investigation',
@@ -265,6 +267,7 @@ const skillToSection = buildSkillSectionMap();
 const stateToSection = buildStateSectionMap();
 const SKILL_SECTION_ALIASES = new Map<string, TimelineSectionId>([
   ['feature-grounding', 'grounding'],
+  ['feature-enhance', 'grounding'],
   ['parallel-implement', 'implementation'],
   ['evidence-post', 'evidence'],
 ]);
@@ -438,6 +441,7 @@ function timelineSectionFromHistoricalRunId(
 ): TimelineSectionId | null {
   if (runId == null) return null;
   if (runId.includes(':scout:')) return 'investigation';
+  if (runId.includes(':feature-enhance')) return 'grounding';
   if (runId.includes(':bug-enhance')) return 'investigation';
   if (runId.endsWith(':grill-me')) return 'grill';
   if (runId.endsWith(':write-prd') || runId.endsWith(':advise-on-prd')) return 'prd';

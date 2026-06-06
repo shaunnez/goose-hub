@@ -3,6 +3,11 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { GIT_ENV } from './git-env.js';
+import {
+  type PackageManager,
+  installCommandForPackageManager,
+  stackCommandsForWorktree,
+} from './stack-commands.js';
 
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 
@@ -24,12 +29,28 @@ export type IntegrationWorktree = {
 export class WorktreeDependencyPreflightError extends Error {
   readonly command: readonly string[];
   readonly cwd: string;
+  readonly packageManager?: string;
+  readonly exitCode?: number | null;
+  readonly stderrTail?: string;
 
-  constructor(message: string, opts: { command: readonly string[]; cwd: string; cause?: unknown }) {
+  constructor(
+    message: string,
+    opts: {
+      command: readonly string[];
+      cwd: string;
+      cause?: unknown;
+      packageManager?: string;
+      exitCode?: number | null;
+      stderrTail?: string;
+    },
+  ) {
     super(message);
     this.name = 'WorktreeDependencyPreflightError';
     this.command = opts.command;
     this.cwd = opts.cwd;
+    this.packageManager = opts.packageManager;
+    this.exitCode = opts.exitCode;
+    this.stderrTail = opts.stderrTail;
     this.cause = opts.cause;
   }
 }
@@ -272,21 +293,62 @@ export function reattachIntegrationWorktreeAtRemoteTip(
 }
 
 /**
- * Runs `pnpm install --frozen-lockfile` in the worktree to warm node_modules before the agent
- * starts. Eliminates the first wasted turn where the agent discovers and installs dependencies.
+ * Runs the selected package manager's install command in the worktree before the
+ * agent starts. Eliminates the first wasted turn where the agent discovers and
+ * installs dependencies.
  *
  * @param worktreePath - Absolute path to the worktree directory.
  * @param filter - Optional pnpm workspace filter (e.g. `"./apps/web"`). When provided, only that
  *   package and its dependencies are installed.
  */
-export function prewarmWorktree(worktreePath: string, filter?: string): void {
-  const args = filter
-    ? ['install', '--frozen-lockfile', '--filter', filter]
-    : ['install', '--frozen-lockfile'];
-  execFileSync('pnpm', args, {
-    cwd: worktreePath,
-    stdio: 'pipe',
-  });
+export async function prewarmWorktree(worktreePath: string, filter?: string): Promise<void> {
+  const stack = await stackCommandsForWorktree(worktreePath);
+  const packageManager = stack.packageManager;
+  if (packageManager !== 'pnpm' && packageManager !== 'npm' && packageManager !== 'yarn') {
+    return;
+  }
+  const command = await installCommandForPackageManager(
+    worktreePath,
+    packageManager as PackageManager,
+    filter,
+  );
+  try {
+    execFileSync(command[0], command.slice(1), {
+      cwd: worktreePath,
+      stdio: 'pipe',
+    });
+  } catch (err) {
+    const details = dependencyPreflightErrorDetails(err);
+    throw new WorktreeDependencyPreflightError(
+      `worktree dependency preflight failed: ${command.join(' ')}`,
+      {
+        command,
+        cwd: worktreePath,
+        packageManager,
+        cause: err,
+        ...details,
+      },
+    );
+  }
+}
+
+function dependencyPreflightErrorDetails(err: unknown): {
+  exitCode?: number | null;
+  stderrTail?: string;
+} {
+  if (err == null || typeof err !== 'object') return {};
+  const record = err as { status?: unknown; stderr?: unknown };
+  const exitCode = typeof record.status === 'number' ? record.status : null;
+  const rawStderr = Buffer.isBuffer(record.stderr)
+    ? record.stderr.toString('utf8')
+    : typeof record.stderr === 'string'
+      ? record.stderr
+      : '';
+  const stderrTail = rawStderr.trim().split('\n').slice(-20).join('\n');
+  return {
+    exitCode,
+    ...(stderrTail.length > 0 ? { stderrTail } : {}),
+  };
 }
 
 export function assertPnpmPackageExecutableAvailable(
@@ -303,7 +365,7 @@ export function assertPnpmPackageExecutableAvailable(
   } catch (err) {
     throw new WorktreeDependencyPreflightError(
       `worktree dependencies unavailable: ${packageFilter} ${executable} binary not resolvable`,
-      { command: ['pnpm', ...args], cwd: worktreePath, cause: err },
+      { command: ['pnpm', ...args], cwd: worktreePath, packageManager: 'pnpm', cause: err },
     );
   }
 }

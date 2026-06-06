@@ -59,6 +59,9 @@ describe('timeline sections', () => {
     expect(
       resolveTimelineSection({ kind: 'agent.run-started', payload: { skill: 'bug-enhance' } }),
     ).toBe('investigation');
+    expect(
+      resolveTimelineSection({ kind: 'agent.run-started', payload: { skill: 'feature-enhance' } }),
+    ).toBe('grounding');
   });
 
   it('falls through display aliases to the durable runtime skill for section ownership', () => {
@@ -132,6 +135,12 @@ describe('timeline sections', () => {
     ).toBe('investigation');
   });
 
+  it('routes feature-enhance child runtime events to grounding', () => {
+    expect(
+      resolveTimelineSection({ kind: 'agent.tool-call', runId: 'grounding-1:feature-enhance' }),
+    ).toBe('grounding');
+  });
+
   it('maps control flow to transitions and unknown telemetry to system', () => {
     expect(resolveTimelineSection({ kind: 'state.transitioned' })).toBe('transitions');
     expect(resolveTimelineSection({ kind: 'manual.action' })).toBe('transitions');
@@ -140,6 +149,11 @@ describe('timeline sections', () => {
 
   it('routes investigation digest events to the investigation section', () => {
     expect(resolveTimelineSection({ kind: 'investigation.digest-applied' })).toBe('investigation');
+  });
+
+  it('routes feature-enhance empty diagnostics to grounding', () => {
+    expect(resolveTimelineSection({ kind: 'agent.feature-enhance-empty' })).toBe('grounding');
+    expect(TIMELINE_EVENT_CLASSIFICATION['agent.feature-enhance-empty']).toBe('direct');
   });
 
   it('routes post-implementation evidence events to Evidence instead of Dev Review', () => {
@@ -194,6 +208,7 @@ describe('timeline sections', () => {
     expect(timelineSectionForSkill('write-prd')).toBe('prd');
     expect(timelineSectionForSkill('advise-on-prd')).toBe('prd');
     expect(timelineSectionForSkill('feature-grounding')).toBe('grounding');
+    expect(timelineSectionForSkill('feature-enhance')).toBe('grounding');
     expect(timelineSectionForSkill('bug-enhance')).toBe('investigation');
     expect(timelineSectionForSkill('parallel-implement')).toBe('implementation');
     expect(timelineSectionForSkill('evidence-post')).toBe('evidence');

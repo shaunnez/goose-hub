@@ -16,10 +16,23 @@ export interface CheckoutReadinessResult {
   baseBranch: string;
   baseRef: string;
   selectionReason: string;
+  checkoutSource: 'managed-clone';
+  configuredLocalPath?: string | null;
 }
 
 export interface PreparedWorkItemRepository extends SelectedWorkItemRepository {
   workflowBase?: WorkflowBase;
+  readiness?: {
+    checkoutSource:
+      | 'configured-local-path'
+      | 'project-target-path'
+      | 'fallback-path'
+      | 'managed-clone';
+    selectionSource?: SelectedWorkItemRepository['checkoutSource'];
+    checkoutPath: string;
+    configuredLocalPath?: string | null;
+    managedClonePath?: string;
+  };
 }
 
 export interface EnsureRepositoryCheckoutOptions {
@@ -176,6 +189,8 @@ export function ensureRepositoryCheckout(
     baseBranch: base.branch,
     baseRef: base.ref,
     selectionReason: options.selectionReason ?? 'repo-link-primary',
+    checkoutSource: 'managed-clone',
+    configuredLocalPath: repoConfig.localPath.length > 0 ? repoConfig.localPath : null,
   };
 }
 
@@ -197,6 +212,14 @@ export function ensureSelectedRepositoryCheckout(
     ...selected,
     localPath: checkout.clonePath,
     defaultBranch: checkout.baseBranch,
+    checkoutSource: 'managed-clone',
+    readiness: {
+      checkoutSource: 'managed-clone',
+      selectionSource: selected.checkoutSource,
+      checkoutPath: checkout.clonePath,
+      configuredLocalPath: checkout.configuredLocalPath,
+      managedClonePath: checkout.clonePath,
+    },
     workflowBase: {
       branch: checkout.baseBranch,
       ref: checkout.baseRef,

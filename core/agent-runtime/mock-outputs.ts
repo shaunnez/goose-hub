@@ -637,7 +637,7 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
             {
               path: 'apps/web/src/components/detail/IssueDetailPage.tsx',
               confidence: 'medium',
-              source: 'inferred',
+              source: 'tool-verified',
               reason: 'Mock feature-enhance anchors detail-page feature work.',
             },
           ],
@@ -650,7 +650,22 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
           escalationSignals: [],
         },
         decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock feature-enhance for e2e test' }],
-        events: [],
+        events: [
+          {
+            id: 1,
+            projectId: (spec.context.projectId as string | undefined) ?? 'mock-project',
+            workItemId: workItemId ?? null,
+            kind: 'agent.tool-call',
+            payload: {
+              tool_name: 'repo_intel.query',
+              status: 'ok',
+              blocked: false,
+            },
+            runId: spec.runId,
+            personaId: spec.personaId,
+            createdAt: new Date(0).toISOString(),
+          },
+        ],
       };
 
     // retrospective-cross-run — triggered by the nightly playbook service.

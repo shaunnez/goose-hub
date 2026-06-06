@@ -136,6 +136,7 @@ describe('repo affinity', () => {
       repoRef: 'owner/docs',
       localPath: docsRepoPath,
       defaultBranch: 'trunk',
+      checkoutSource: 'configured-local-path',
       selectedBy: 'repo-link-primary',
     });
   });
@@ -177,6 +178,7 @@ describe('repo affinity', () => {
       repoRef: 'owner/docs',
       localPath: docsRepoPath,
       defaultBranch: 'trunk',
+      checkoutSource: 'configured-local-path',
       selectedBy: 'repo-override',
     });
   });
@@ -192,6 +194,7 @@ describe('repo affinity', () => {
       repoRef: 'owner/app',
       localPath: appRepoPath,
       defaultBranch: 'main',
+      checkoutSource: 'configured-local-path',
       selectedBy: 'work-item',
     });
   });
@@ -216,6 +219,8 @@ describe('repo affinity', () => {
       }),
     ).toMatchObject({
       localPath: fallbackRepoPath,
+      checkoutSource: 'fallback-path',
+      configuredLocalPath: expect.stringContaining('~/missing-'),
     });
   });
 
@@ -241,6 +246,8 @@ describe('repo affinity', () => {
     ).toMatchObject({
       localPath: targetRepoPath,
       defaultBranch: 'develop',
+      checkoutSource: 'project-target-path',
+      configuredLocalPath: expect.stringContaining('repo-affinity-missing-configured-'),
     });
   });
 
@@ -264,6 +271,8 @@ describe('repo affinity', () => {
       }),
     ).toMatchObject({
       localPath: fallbackRepoPath,
+      checkoutSource: 'fallback-path',
+      configuredLocalPath: expect.stringContaining('repo-affinity-missing-configured-'),
     });
   });
 });

@@ -17,6 +17,12 @@ export interface SelectedWorkItemRepository {
   localPath: string;
   defaultBranch: string;
   role: string;
+  checkoutSource?:
+    | 'configured-local-path'
+    | 'project-target-path'
+    | 'fallback-path'
+    | 'managed-clone';
+  configuredLocalPath?: string;
   selectedBy: 'repo-link-primary' | 'repo-override' | 'work-item' | 'project';
 }
 
@@ -147,14 +153,24 @@ export function resolveRepositoryForWorkItem(input: {
   }
   const configuredLocalPath = normalizeExistingLocalPath(configuredRepo?.localPath);
   const targetLocalPath = normalizeExistingLocalPath(project?.targetRepo?.localPath);
+  const selectedLocalPath = configuredLocalPath ?? targetLocalPath ?? input.fallbackLocalPath;
   return {
     repoRef,
-    localPath: configuredLocalPath ?? targetLocalPath ?? input.fallbackLocalPath,
+    localPath: selectedLocalPath,
     defaultBranch:
       (configuredLocalPath != null ? configuredRepo?.defaultBranch : null) ??
       project?.targetRepo?.defaultBranch ??
       'main',
     role: repoLink?.role ?? configuredRepo?.role ?? 'unknown',
+    checkoutSource:
+      configuredLocalPath != null
+        ? 'configured-local-path'
+        : targetLocalPath != null
+          ? 'project-target-path'
+          : 'fallback-path',
+    ...(configuredRepo?.localPath != null && configuredRepo.localPath.length > 0
+      ? { configuredLocalPath: configuredRepo.localPath }
+      : {}),
     selectedBy:
       repoLink?.role === 'primary'
         ? 'repo-link-primary'

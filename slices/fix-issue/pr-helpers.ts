@@ -10,6 +10,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { ObservedChangedFilesPacket } from '@goose-hub/core/workspaces/observed-changes.js';
+import { stackCommandsForWorktree } from '@goose-hub/core/workspaces/stack-commands.js';
 import {
   EvidencePostPlanSchema,
   EvidencePostSchema,
@@ -276,12 +277,29 @@ export function resolveWorktreeHeadSha(worktreePath: string): string {
   }
 }
 
-export async function deriveStack(projectId: string): Promise<{
+export async function deriveStack(
+  projectId: string,
+  worktreePath?: string,
+): Promise<{
+  packageManager?: string;
+  installCommand?: string[];
   testCommand: string;
   lintCommand?: string;
   typecheckCommand?: string;
+  e2eCommand?: string;
 }> {
   const config = await getProjectBySlug(projectId);
+  if (worktreePath != null) {
+    const stack = await stackCommandsForWorktree(worktreePath, config?.stack);
+    return {
+      packageManager: stack.packageManager,
+      installCommand: stack.installCommand,
+      testCommand: stack.testCommand,
+      lintCommand: stack.lintCommand,
+      typecheckCommand: stack.typecheckCommand,
+      e2eCommand: stack.e2eCommand,
+    };
+  }
   if (config?.stack) {
     return {
       testCommand: config.stack.testCommand,

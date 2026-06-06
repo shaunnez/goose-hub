@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { runFeatureEnhance } from '@goose-hub/core/agent-runtime/feature-enhance-runner.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
-import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
@@ -41,6 +41,7 @@ export interface FeatureGroundingWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
   cleanupWorktreeImpl?: typeof cleanupWorktree;
   resolveWorkflowBaseImpl?: typeof resolveWorkflowBaseForWorkItem;
+  runFeatureEnhanceImpl?: typeof runFeatureEnhance;
   runtime?: AgentRuntime;
 }
 
@@ -357,6 +358,7 @@ export async function runFeatureGroundingWorkflow(
   const createWtFn = deps.createWorktreeImpl ?? createWorktree;
   const cleanupWtFn = deps.cleanupWorktreeImpl ?? cleanupWorktree;
   const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBaseForWorkItem;
+  const runFeatureEnhanceFn = deps.runFeatureEnhanceImpl ?? runFeatureEnhance;
   const projectConfig = await getProjectBySlug(projectId);
   const configRuntime = projectConfig?.agentConfig?.runtime ?? 'auto';
   const groundingBudget = resolveSkillRuntimeForProject({
@@ -426,11 +428,11 @@ export async function runFeatureGroundingWorkflow(
       body: groundedBody,
     };
     const enhanceRunId = `${runId}:feature-enhance`;
-    const enhanceResult = await invokeSkill({
-      skillName: 'feature-enhance',
+    const enhanceResult = await runFeatureEnhanceFn({
       projectId,
       workItemId: workItem.id,
-      runId: enhanceRunId,
+      enhanceRunId,
+      parentRunId: runId,
       context: {
         workItem: workItemCtx,
         ...(framedFeature != null
@@ -447,20 +449,51 @@ export async function runFeatureGroundingWorkflow(
           defaultBranch: setup.workflowBase.branch,
         },
       },
-      overrides: {
-        workspaceDir: setup.worktreePath,
-        runtimeOverride: deps.runtime,
-        projectConfigOverride: projectConfig,
-        extraEventPayload: {
-          parentRunId: runId,
-          workflowSkill: 'feature-grounding',
-        },
+      workspaceDir: setup.worktreePath,
+      runtimeOverride: deps.runtime,
+      projectConfigOverride: projectConfig,
+      extraEventPayload: {
+        workflowSkill: 'feature-grounding',
       },
     });
-    const enhanced = pruneFeatureEnhanceOutput(
-      enhanceResult.output as FeatureEnhanceOutput,
-      setup.worktreePath,
-    );
+
+    if (!enhanceResult.ok) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.run-failed',
+        payload: {
+          skill: 'feature-grounding',
+          runId,
+          error: 'feature-enhance produced no valid grounded output',
+          enhanceRunId: enhanceResult.enhanceRunId,
+          reason: enhanceResult.reason,
+          failureDetails: {
+            reasons: enhanceResult.telemetry.reasons,
+            toolCallCount: enhanceResult.telemetry.toolCallCount,
+            repoIntelCallCount: enhanceResult.telemetry.repoIntelCallCount,
+            blockedToolNames: enhanceResult.telemetry.blockedToolNames,
+            validationIssueCount: enhanceResult.telemetry.validationIssues?.length ?? 0,
+          },
+        },
+        runId,
+        personaId,
+      });
+      await transitionAndEmitState({
+        mode: 'legal',
+        source: stateSource,
+        itemId: workItem.externalId,
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:grounding',
+        to: 'factory:needs-human',
+        by: 'feature-grounding',
+        runId,
+      });
+      return { nextState: 'factory:needs-human' };
+    }
+
+    const enhanced = pruneFeatureEnhanceOutput(enhanceResult.output, setup.worktreePath);
     const investigationSeed = toInvestigationSeed(enhanced);
     const route = routeForFeatureGrounding({
       projectId,

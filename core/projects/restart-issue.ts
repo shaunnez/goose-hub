@@ -88,6 +88,19 @@ export async function restartIssue(input: RestartIssueInput): Promise<RestartIss
     initialState: targetState,
     extraLabels,
   });
+  const repoLinks =
+    input.source.listRepoLinks != null ? await input.source.listRepoLinks(oldItem.id) : [];
+  if (input.source.createRepoLink != null) {
+    for (const link of repoLinks) {
+      await input.source.createRepoLink({
+        itemId: newItem.id,
+        repoRef: link.repoRef,
+        role: link.role,
+        confidence: link.confidence ?? null,
+        source: link.source ?? 'restart',
+      });
+    }
+  }
 
   copyLocalDbRepoLinks({
     projectId: input.projectId,

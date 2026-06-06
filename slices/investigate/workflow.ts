@@ -71,6 +71,7 @@ import { ensureSelectedRepositoryCheckout } from '@goose-hub/core/workspaces/che
 import { resolveRepositoryForWorkItem } from '@goose-hub/core/workspaces/repo-affinity.js';
 import { resolveWorkflowBaseForWorkItem } from '@goose-hub/core/workspaces/workflow-base.js';
 import {
+  WorktreeDependencyPreflightError,
   cleanupWorktree,
   createWorktree,
   prewarmWorktree,
@@ -304,7 +305,7 @@ function runtimeNameForModel(modelId: string): 'codex-cli' | 'claude-cli' {
  */
 export interface InvestigateWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
-  prewarmWorktreeImpl?: typeof prewarmWorktree;
+  prewarmWorktreeImpl?: (worktreePath: string, filter?: string) => void | Promise<void>;
   resolveWorkflowBaseImpl?: typeof resolveWorkflowBaseForWorkItem;
   runtime?: AgentRuntime;
   playwrightEvidenceRunner?: typeof runPlaywrightReproPlan;
@@ -426,6 +427,22 @@ export async function runInvestigateWorkflow(
         fallbackLocalPath: targetRepo,
       }),
     );
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.checkout-readiness',
+      payload: {
+        runId,
+        repoRef: selectedRepository.repoRef,
+        checkoutPath: selectedRepository.localPath,
+        defaultBranch: selectedRepository.defaultBranch,
+        selectedBy: selectedRepository.selectedBy,
+        checkoutSource: selectedRepository.checkoutSource,
+        readiness: selectedRepository.readiness ?? null,
+      },
+      runId,
+      personaId,
+    });
     const workflowBase =
       selectedRepository.workflowBase ??
       resolveWorkflowBaseFn(
@@ -443,7 +460,34 @@ export async function runInvestigateWorkflow(
     worktreePathForCleanup = worktreePath;
 
     if (workItem.type === 'bug') {
-      prewarmWtFn(worktreePath, '@goose-hub/web');
+      try {
+        await prewarmWtFn(worktreePath, '@goose-hub/web');
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        eventStore.appendEvent({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'agent.run-failed',
+          payload:
+            err instanceof WorktreeDependencyPreflightError
+              ? {
+                  runId,
+                  error: error.message,
+                  phase: 'prewarm',
+                  repoRef: selectedRepository.repoRef,
+                  checkoutPath: selectedRepository.localPath,
+                  worktreePath,
+                  packageManager: err.packageManager,
+                  command: err.command.join(' '),
+                  exitCode: err.exitCode ?? null,
+                  stderrTail: err.stderrTail ?? null,
+                }
+              : { runId, error: error.message, phase: 'prewarm' },
+          runId,
+          personaId,
+        });
+        throw err;
+      }
     }
 
     const workItemCtx = {

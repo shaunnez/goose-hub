@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import { eventStore } from '../../../event-stream/store.js';
 import { getProjectBySlug } from '../../../projects/loader.js';
 import type { ProjectConfig, StackConfig } from '../../../types.js';
+import { stackCommandsForWorktree } from '../../../workspaces/stack-commands.js';
 import type { RepoRelativePath } from '../../path-contract.js';
 import { type ParsedTestFailures, parseTestFailures } from '../../test-failure-parser.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
@@ -109,7 +110,7 @@ async function loadStack(
   if (project == null) {
     throw new StackCommandMissingError('test', ctx.projectId);
   }
-  return { project, stack: project.stack };
+  return { project, stack: await stackCommandsForWorktree(ctx.workspaceRoot, project.stack) };
 }
 
 function handleBlocked(

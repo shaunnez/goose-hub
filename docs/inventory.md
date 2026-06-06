@@ -104,7 +104,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `stack-detector` | yes | Stack detector for target project repositories. Closes M12.01 (#304). |
 | `webhook-runbook` | yes | **Status:** Documentation slice for M12 project bootstrap. |
 
-## skills/ (39 entries, 0 missing README)
+## skills/ (40 entries, 0 missing README)
 
 | Name | README | Summary |
 |---|---|---|
@@ -119,6 +119,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `echo-test` | yes | Trivial echo-back skill used to prove the M4 runtime pipeline end-to-end. |
 | `echo-test-holdout` | yes | Holdout variant of echo-test that verifies context allowlist enforcement. |
 | `evidence-post` | yes | Runs the slice's Playwright spec on the PR commit, captures screenshots and a continuous WebM walkthrough to `evidence/issue-<N>/`, commits those artefacts to the PR branch, and posts a comment on the linked issue with the screenshots embedded inline via `raw.githubusercontent.com` URLs **pinned to the PR head commit SHA**. |
+| `feature-enhance` | yes | Read-only feature grounding pass for fresh feature work. It turns product-language intent into candidate repository surfaces before the `factory:grounding` workflow decides whether scouts are needed. |
 | `feature-frame` | yes | Frames vague feature work items before grill-me. It adds append-only scaffold content, required refined intent, proposed acceptance criteria, optional grounded hints, and a boolean gate for whether grilling is still needed. |
 | `grill-me` | yes | Runs a structured discovery session on a vague work item. Asks ONE focused question per round (Mat Pocock interrogation pattern) until the intent is precise enough to hand off to a PRD writer. |
 | `hub-chat` | yes | The default assistant the user (Shaun) talks to inside the Goose Hub web UI. Interactive multi-turn skill, invoked once per round. Conversation history lives in the `chat_messages` table (M20). The orchestrator slice that drives the loop is `slices/chat-orchestrator/`. |
