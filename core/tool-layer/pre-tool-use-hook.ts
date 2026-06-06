@@ -62,6 +62,16 @@ function bashCommand(toolInput) {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
 
+function canonicalToolName(toolName) {
+  if (toolName === 'mcp__factory-tools__repo_intel_query') {
+    return 'mcp__factory-tools__repo_intel.query';
+  }
+  if (toolName === 'repo_intel_query') {
+    return 'repo_intel.query';
+  }
+  return toolName;
+}
+
 function denyHookResponse(reason) {
   return {
     decision: 'block',
@@ -130,8 +140,9 @@ async function main() {
 
   // Normalise Codex hook aliases → canonical CC shape.
   const rawToolName = call?.tool_name ?? call?.name ?? '';
-  const toolName =
+  const displayToolName =
     rawToolName === 'command_execution' || rawToolName === 'bash' ? 'Bash' : rawToolName;
+  const toolName = canonicalToolName(displayToolName);
   const toolInput =
     asObj(call?.tool_input) ??
     asObj(call?.parameters) ??

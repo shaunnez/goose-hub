@@ -1,19 +1,24 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { GIT_ENV } from './git-env.js';
+import { repoId } from './worktree.js';
 
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 
 /**
  * Resolves the scratch worktree path for a given (runId, wpId) pair.
- * Pattern: ~/.factory/workspaces/<runId>__wp__<wpId>/
+ * Legacy pattern: ~/.factory/workspaces/<runId>__wp__<wpId>/
+ * Repo-aware pattern: ~/.factory/workspaces/<runId>/<repoId>__wp__<wpId>/
  *
  * Avoid path delimiter characters because pnpm refuses to add node_modules/.bin
  * paths containing them to PATH when running package-scoped executables.
  */
-export function wpWorktreePath(runId: string, wpId: string): string {
+export function wpWorktreePath(runId: string, wpId: string, repoRef?: string): string {
+  if (repoRef != null && repoRef.length > 0) {
+    return join(WORKSPACES_DIR, runId, `${repoId(repoRef)}__wp__${wpId}`);
+  }
   return join(WORKSPACES_DIR, `${runId}__wp__${wpId}`);
 }
 
@@ -37,9 +42,10 @@ export function createWpScratchWorktree(
   runId: string,
   wpId: string,
   baseRef?: string,
+  repoRef?: string,
 ): string {
-  const wtPath = wpWorktreePath(runId, wpId);
-  mkdirSync(WORKSPACES_DIR, { recursive: true });
+  const wtPath = wpWorktreePath(runId, wpId, repoRef);
+  mkdirSync(dirname(wtPath), { recursive: true });
   const args = ['worktree', 'add', '--detach', wtPath];
   if (baseRef != null && baseRef.length > 0) args.push(baseRef);
   execFileSync('git', args, {
@@ -54,8 +60,12 @@ export function createWpScratchWorktree(
  * Removes the git scratch worktree for a given (runId, wpId) pair.
  * Idempotent: no-ops when the worktree path does not exist.
  */
-export function cleanupWpWorktree(runId: string, wpId: string): void {
-  for (const wtPath of [wpWorktreePath(runId, wpId), legacyWpWorktreePath(runId, wpId)]) {
+export function cleanupWpWorktree(runId: string, wpId: string, repoRef?: string): void {
+  for (const wtPath of [
+    ...(repoRef != null && repoRef.length > 0 ? [wpWorktreePath(runId, wpId, repoRef)] : []),
+    wpWorktreePath(runId, wpId),
+    legacyWpWorktreePath(runId, wpId),
+  ]) {
     if (!existsSync(wtPath)) continue;
     try {
       execFileSync('git', ['worktree', 'remove', '--force', wtPath], {
@@ -74,9 +84,9 @@ export function cleanupWpWorktree(runId: string, wpId: string): void {
  * Removes all WP scratch worktrees created for a given runId.
  * Called by the orchestrator in its finally block on both success and failure paths.
  */
-export function cleanupAllWpWorktrees(runId: string, wpIds: string[]): void {
+export function cleanupAllWpWorktrees(runId: string, wpIds: string[], repoRef?: string): void {
   for (const wpId of wpIds) {
-    cleanupWpWorktree(runId, wpId);
+    cleanupWpWorktree(runId, wpId, repoRef);
   }
 }
 

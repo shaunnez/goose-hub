@@ -178,6 +178,43 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     expect(systemPrompt).toContain('skill prompt body');
   });
 
+  it('passes Claude-safe MCP tool names while preserving canonical env allowlist', async () => {
+    const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
+    mockSpawn.mockReturnValue(makeChild(0, envelope));
+    vi.mocked(bindToolsForAgentSpec).mockReturnValueOnce({
+      allowlist: [
+        'mcp__factory-tools__read_file',
+        'mcp__factory-tools__repo_intel.query',
+        'mcp__factory-tools__search_text',
+      ],
+      enabledToolsByServer: {
+        'factory-tools': ['read_file', 'repo_intel.query', 'search_text'],
+      },
+      nativeTools: [],
+      mcpServerBundles: [],
+      mcpServerNames: ['factory-tools'],
+      sandboxMode: 'read-only',
+      warnings: [],
+      fingerprints: {
+        toolBindingHash: 'binding-hash',
+        toolAllowlistHash: 'allowlist-hash',
+        mcpServerSetHash: 'server-hash',
+      },
+    });
+
+    const runtime = new ClaudeCliRuntime();
+    await runtime.run(makeSpec({ toolBundles: ['read'] }));
+
+    const argv = mockSpawn.mock.calls[0][1] as string[];
+    const allowedTools = argv[argv.indexOf('--allowedTools') + 1];
+    expect(allowedTools).toContain('mcp__factory-tools__repo_intel_query');
+    expect(allowedTools).not.toContain('mcp__factory-tools__repo_intel.query');
+
+    const env = (mockSpawn.mock.calls[0][2] as { env: Record<string, string> }).env;
+    expect(env.FACTORY_RUN_ALLOWLIST).toContain('mcp__factory-tools__repo_intel.query');
+    expect(env.FACTORY_RUN_ALLOWLIST).not.toContain('mcp__factory-tools__repo_intel_query');
+  });
+
   it('inserts a success row when CLI exits with valid envelope', async () => {
     const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
     mockSpawn.mockReturnValue(makeChild(0, envelope));

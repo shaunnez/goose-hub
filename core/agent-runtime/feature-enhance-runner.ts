@@ -155,18 +155,22 @@ function isGrounded(output: FeatureEnhanceOutput): boolean {
   );
 }
 
+function hasToolVerifiedCandidate(output: FeatureEnhanceOutput): boolean {
+  return output.candidateFiles.some((candidate) => candidate.source === 'tool-verified');
+}
+
 function buildEmptyReasons(input: {
   output: FeatureEnhanceOutput;
   toolAnalysis: ToolEventAnalysis;
 }): FeatureEnhanceEmptyReason[] {
   const reasons = new Set<FeatureEnhanceEmptyReason>();
+  const hasVerifiedCandidate = hasToolVerifiedCandidate(input.output);
   if (input.toolAnalysis.toolCallCount === 0) reasons.add('no-tool-call-made');
-  if (input.toolAnalysis.blockedToolCallCount > 0) reasons.add('tool-call-blocked');
+  if (input.toolAnalysis.blockedToolCallCount > 0 && !hasVerifiedCandidate) {
+    reasons.add('tool-call-blocked');
+  }
   if (!isGrounded(input.output)) reasons.add('no-grounded-output');
-  if (
-    input.output.candidateFiles.length > 0 &&
-    !input.output.candidateFiles.some((candidate) => candidate.source === 'tool-verified')
-  ) {
+  if (input.output.candidateFiles.length > 0 && !hasVerifiedCandidate) {
     reasons.add('candidate-files-without-tool-verified-evidence');
   }
   return Array.from(reasons);

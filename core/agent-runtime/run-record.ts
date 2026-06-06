@@ -29,9 +29,6 @@ export function recordAgentRun(record: AgentRunRecord): void {
     .run();
 
   if (record.outcome === 'failure') {
-    db.update(agentRuns)
-      .set({ outcome: 'failure' })
-      .where(eq(agentRuns.runId, record.runId))
-      .run();
+    db.update(agentRuns).set({ outcome: 'failure' }).where(eq(agentRuns.runId, record.runId)).run();
   }
 }

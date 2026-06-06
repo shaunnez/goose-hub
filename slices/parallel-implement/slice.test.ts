@@ -532,6 +532,7 @@ function makeGitRepo(paths: Record<string, string> = {}): string {
 
 function makeStateSource(
   overrides: Partial<{
+    repoRef: string;
     transitionState: (...args: unknown[]) => Promise<void>;
     comment: (...args: unknown[]) => Promise<void>;
     listComments: (...args: unknown[]) => Promise<unknown[]>;
@@ -2640,6 +2641,103 @@ describe('parallel-implement concurrency: 3 fake builders on disjoint files', ()
 });
 
 describe('parallel-implement durable integration branch persistence', () => {
+  it('uses the selected work item repository for integration worktrees, WP worktrees, and PRs', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const integrationCalls: Array<{
+      repo: string;
+      pipelineRunId: string;
+      branchName: string;
+      baseRef?: string;
+      repoRef?: string;
+    }> = [];
+    const wpCalls: Array<{
+      repo: string;
+      runId: string;
+      wpId: string;
+      baseRef?: string;
+      repoRef?: string;
+    }> = [];
+    const prCalls: Array<{ repo: string; branchName: string }> = [];
+    const iterations: Array<{ wpId: string; status: string }> = [];
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem({
+        id: 'github:owner/selected-repo#560',
+        repoRef: 'owner/selected-repo',
+      }),
+      spec,
+      'pipeline-run-selected-repo',
+      makeStateSource({ repoRef: 'owner/default-repo' }),
+      'unknown-project',
+      '/tmp/selected-checkout',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        createIntegrationWorktreeImpl: (repo, pipelineRunId, branchName, baseRef, repoRef) => {
+          integrationCalls.push({ repo, pipelineRunId, branchName, baseRef, repoRef });
+          return {
+            worktreePath: '/tmp/integration-selected',
+            previousHeadSha: 'base-sha',
+          };
+        },
+        createWpWorktreeImpl: (repo, runId, wpId, baseRef, repoRef) => {
+          wpCalls.push({ repo, runId, wpId, baseRef, repoRef });
+          return `/tmp/wp-${wpId}`;
+        },
+        cleanupWpWorktreesImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha-wp1',
+        pushBranchImpl: () => undefined,
+        resolveRemoteBranchHeadImpl: () => 'sha-wp1',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: (_runId, wpId, _iteration, status) => {
+          iterations.push({ wpId, status });
+        },
+        getLastStatusImpl: (_runId, wpId) => {
+          const last = [...iterations].reverse().find((iteration) => iteration.wpId === wpId);
+          return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+        },
+        openPRImpl: async (input) => {
+          prCalls.push({ repo: input.repo, branchName: input.branchName });
+          return {
+            prNumber: 1,
+            prUrl: 'https://gh/pr/1',
+            branch: input.branchName,
+            base: input.baseBranch ?? 'main',
+          };
+        },
+        appendEvent,
+      },
+    );
+
+    expect(result.status).toBe('success');
+    expect(integrationCalls).toEqual([
+      {
+        repo: '/tmp/selected-checkout',
+        pipelineRunId: 'pipeline-run-selected-repo',
+        branchName: 'factory/run/pipeline-run-selected-repo',
+        baseRef: 'origin/main',
+        repoRef: 'owner/selected-repo',
+      },
+    ]);
+    expect(wpCalls).toEqual([
+      expect.objectContaining({
+        repo: '/tmp/selected-checkout',
+        wpId: 'WP1',
+        repoRef: 'owner/selected-repo',
+      }),
+    ]);
+    expect(prCalls).toEqual([
+      { repo: 'owner/selected-repo', branchName: 'factory/run/pipeline-run-selected-repo' },
+    ]);
+    expect(
+      events.find((event) => event.kind === 'agent.checkout-readiness')?.payload,
+    ).toMatchObject({
+      repoRef: 'owner/selected-repo',
+      checkoutPath: '/tmp/selected-checkout',
+    });
+  });
+
   it('pushes and verifies each WP commit before emitting wp-persisted and opening PR without repush', async () => {
     const wp1 = makeWp('WP1', ['core/a.ts']);
     const spec = makeSpec([wp1]);
@@ -2745,7 +2843,7 @@ describe('parallel-implement durable integration branch persistence', () => {
       spec,
       'pipeline-run-local',
       makeStateSource(),
-      'goose-hub-self',
+      'unknown-project',
       '/tmp/repo',
       {
         runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),

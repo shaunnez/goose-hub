@@ -51,10 +51,10 @@ import { AgentLogEvent, AgentLogGroupEvent } from './timeline/LogEvents';
 import {
   AcceptanceContractAuthoredEvent,
   AgentBudgetExceededEvent,
-  CheckoutReadinessEvent,
   AgentDisclosureEvent,
   AgentModelSelectedEvent,
   BugEnhanceLazyEvent,
+  CheckoutReadinessEvent,
   CompactOperationalEvent,
   ContractDriftEvent,
   DiscoveryBudgetExceededEvent,

@@ -100,6 +100,18 @@ describe('deployHooks', () => {
     expect(scriptContent).toContain('deny');
   });
 
+  it('canonicalizes Claude-sanitized dotted MCP tool names before allowlist checks', () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    deployHooks();
+
+    const scriptContent = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    expect(scriptContent).toContain('function canonicalToolName');
+    expect(scriptContent).toContain("toolName === 'mcp__factory-tools__repo_intel_query'");
+    expect(scriptContent).toContain("return 'mcp__factory-tools__repo_intel.query'");
+    expect(scriptContent).toContain('const toolName = canonicalToolName(displayToolName)');
+  });
+
   it('the written script emits a tool-call audit event over HTTP', () => {
     vi.mocked(existsSync).mockReturnValue(false);
 

@@ -30,6 +30,7 @@ import { upsertGithubExternalRef } from '@goose-hub/core/integrations/github/ext
 import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { ensureSelectedRepositoryCheckout } from '@goose-hub/core/workspaces/checkout-readiness.js';
 import {
   type ObservedChangedFilesPacket,
   deriveObservedChangedFiles,
@@ -43,6 +44,7 @@ import {
   resolveRemoteBranchHead,
   revertWpChanges,
 } from '@goose-hub/core/workspaces/orchestrator-git.js';
+import { resolveRepositoryForWorkItem } from '@goose-hub/core/workspaces/repo-affinity.js';
 import { stackCommandsForWorktree } from '@goose-hub/core/workspaces/stack-commands.js';
 import {
   WorktreeDependencyPreflightError,
@@ -548,14 +550,20 @@ export async function runParallelImplementWorkflow(
     deps.createIssueWorktreeImpl != null || deps.createIntegrationWorktreeImpl != null;
   const createIntegrationFn =
     deps.createIntegrationWorktreeImpl ??
-    ((repo: string, pipelineId: string, _branchName: string, baseRef?: string) => {
+    ((
+      repo: string,
+      pipelineId: string,
+      _branchName: string,
+      baseRef?: string,
+      repoRef?: string,
+    ) => {
       if (deps.createIssueWorktreeImpl != null) {
         return {
-          worktreePath: createIssueFn(repo, pipelineId, baseRef),
+          worktreePath: createIssueFn(repo, pipelineId, baseRef, repoRef),
           previousHeadSha: null,
         };
       }
-      return createIntegrationWorktree(repo, pipelineId, _branchName, baseRef);
+      return createIntegrationWorktree(repo, pipelineId, _branchName, baseRef, repoRef);
     });
   const reattachIntegrationFn =
     deps.reattachIntegrationWorktreeAtRemoteTipImpl ?? reattachIntegrationWorktreeAtRemoteTip;
@@ -606,7 +614,22 @@ export async function runParallelImplementWorkflow(
   const verifyExistingPrFn = deps.verifyExistingPrImpl ?? verifyExistingPrState;
 
   const projectConfig = await getProjectBySlug(projectId);
-  const workflowBase = resolveWorkflowBaseFn(targetRepo, projectConfig?.targetRepo?.defaultBranch);
+  const selectedRepository = ensureSelectedRepositoryCheckout(
+    workItem.id.startsWith('local:') ? projectConfig : null,
+    resolveRepositoryForWorkItem({
+      project: workItem.id.startsWith('local:') ? projectConfig : null,
+      workItem,
+      fallbackLocalPath: targetRepo,
+    }),
+  );
+  const targetCheckout = selectedRepository.localPath;
+  const workflowWorkItem =
+    selectedRepository.repoRef === workItem.repoRef
+      ? workItem
+      : { ...workItem, repoRef: selectedRepository.repoRef };
+  const workflowBase =
+    selectedRepository.workflowBase ??
+    resolveWorkflowBaseFn(targetCheckout, selectedRepository.defaultBranch);
   const projectSettingsRow = readProjectSettings(projectId);
   const implementWpBudgetConfig = resolveImplementWpBudgetConfig(
     projectConfig?.budgets,
@@ -636,12 +659,28 @@ export async function runParallelImplementWorkflow(
     ((wt: string, msg: string) => orchestratorCommitAll(wt, msg));
 
   const { personaId } = (deps.selectPersonaImpl ?? selectPersona)(projectId, 'developer');
+  append({
+    projectId,
+    workItemId: workItem.id,
+    kind: 'agent.checkout-readiness',
+    payload: {
+      runId,
+      repoRef: selectedRepository.repoRef,
+      checkoutPath: selectedRepository.localPath,
+      defaultBranch: selectedRepository.defaultBranch,
+      selectedBy: selectedRepository.selectedBy,
+      checkoutSource: selectedRepository.checkoutSource,
+      readiness: selectedRepository.readiness ?? null,
+    },
+    runId,
+    personaId,
+  });
   const implementWpPrompt = readPromptWithContext('implement-wp', projectId);
   const implementWpJsonSchema = toJsonSchema(ImplementWpSchema);
   const investigation = latestInvestigationContext({
     projectId,
     workItemId: workItem.id,
-    worktreePath: targetRepo,
+    worktreePath: targetCheckout,
   });
   const latestPrd =
     workItem.type === 'feature'
@@ -661,7 +700,7 @@ export async function runParallelImplementWorkflow(
       : undefined;
   const normalizedSpec = normalizeEngineeringSpecPaths({
     spec,
-    worktreePath: targetRepo,
+    worktreePath: targetCheckout,
     referencePaths: investigation?.keyFiles.map((file) => file.path) ?? [],
   });
   if (normalizedSpec.fields.length > 0) {
@@ -694,7 +733,7 @@ export async function runParallelImplementWorkflow(
   }
   const specForRun = normalizedSpec.spec;
 
-  const stack = await stackCommandsForWorktree(targetRepo, projectConfig?.stack);
+  const stack = await stackCommandsForWorktree(targetCheckout, projectConfig?.stack);
 
   const allWpIds = specForRun.workPackages.map((wp) => wp.id);
   const scratchWorktrees = new Map<string, string>(); // wpId → path
@@ -753,7 +792,7 @@ export async function runParallelImplementWorkflow(
     if (latestPersisted != null) {
       let remoteHead: string | undefined;
       try {
-        remoteHead = resolveRemoteBranchHeadFn(targetRepo, integrationBranch);
+        remoteHead = resolveRemoteBranchHeadFn(targetCheckout, integrationBranch);
       } catch (err) {
         throw new PersistenceFailureError(
           'missing-remote-branch',
@@ -775,11 +814,12 @@ export async function runParallelImplementWorkflow(
       }
       try {
         integrationWorktree = reattachIntegrationFn(
-          targetRepo,
+          targetCheckout,
           pipelineRunId,
           integrationBranch,
           latestPersisted.pushedSha,
           workflowBase.ref,
+          selectedRepository.repoRef,
         );
       } catch (err) {
         throw new PersistenceFailureError(
@@ -791,10 +831,11 @@ export async function runParallelImplementWorkflow(
     } else {
       // Create the integration worktree (all WP commits land here).
       integrationWorktree = createIntegrationFn(
-        targetRepo,
+        targetCheckout,
         pipelineRunId,
         integrationBranch,
         workflowBase.ref,
+        selectedRepository.repoRef,
       );
     }
     issueWorktreePath = integrationWorktree.worktreePath;
@@ -852,7 +893,13 @@ export async function runParallelImplementWorkflow(
         const scratchBaseRef = integrationHeadSha ?? workflowBase.ref;
         for (const wp of batchWps) {
           if (scratchWorktrees.has(wp.id)) continue;
-          const wtPath = createWpFn(targetRepo, runId, wp.id, scratchBaseRef);
+          const wtPath = createWpFn(
+            targetCheckout,
+            runId,
+            wp.id,
+            scratchBaseRef,
+            selectedRepository.repoRef,
+          );
           await prewarmWtFn(wtPath);
           scratchWorktrees.set(wp.id, wtPath);
         }
@@ -871,13 +918,13 @@ export async function runParallelImplementWorkflow(
             pipelineRunId,
             projectId,
             workItemId: workItem.id,
-            workItem,
+            workItem: workflowWorkItem,
             scratchWorktreePath: scratchWorktrees.get(wp.id) ?? '/tmp/missing-scratch',
             stack,
             runtime,
             budgets: resolveImplementWpBudget({
               defaultBudgets: implementWpBudget.budgets,
-              workItem,
+              workItem: workflowWorkItem,
               wp,
               budgetConfig: implementWpBudgetConfig,
             }),
@@ -1243,7 +1290,7 @@ export async function runParallelImplementWorkflow(
         );
       }
       const remoteHead = resolveRemoteBranchHeadFn(
-        issueWorktreePath ?? targetRepo,
+        issueWorktreePath ?? targetCheckout,
         integrationBranch,
       );
       if (remoteHead !== integrationHeadSha) {
@@ -1255,7 +1302,7 @@ export async function runParallelImplementWorkflow(
       let livePr: ExistingPipelinePr;
       try {
         livePr = await verifyExistingPrFn({
-          repo: stateSource.repoRef,
+          repo: selectedRepository.repoRef,
           pr: existingPr,
           token: process.env.GITHUB_TOKEN ?? '',
         });
@@ -1469,7 +1516,7 @@ export async function runParallelImplementWorkflow(
     const linkedIssueRef = workItem.id.startsWith('local:')
       ? latestLinkedGithubIssue(workItem)
       : null;
-    const repoRef = linkedIssueRef?.repoRef ?? stateSource.repoRef;
+    const repoRef = selectedRepository.repoRef;
     const branchName = integrationBranch;
     const title = `M19.XX: ${workItem.title.slice(0, 50)}`;
     const closesIssueNumber =
@@ -1478,7 +1525,7 @@ export async function runParallelImplementWorkflow(
       Number.isFinite(closesIssueNumber) &&
       (linkedIssueRef != null || !workItem.id.startsWith('local:'));
     const body = buildParallelPrBody({
-      workItem,
+      workItem: workflowWorkItem,
       spec: specForRun,
       wpResults: allWpResults,
       closesIssueNumber: shouldCloseGithubIssue ? closesIssueNumber : null,
@@ -1613,8 +1660,8 @@ export async function runParallelImplementWorkflow(
         ...(err instanceof WorktreeDependencyPreflightError
           ? {
               phase: 'prewarm',
-              repoRef: workItem.repoRef ?? null,
-              checkoutPath: targetRepo,
+              repoRef: selectedRepository.repoRef,
+              checkoutPath: targetCheckout,
               worktreePath: err.cwd,
               packageManager: err.packageManager,
               command: err.command.join(' '),
@@ -1635,7 +1682,7 @@ export async function runParallelImplementWorkflow(
     );
     return { status: 'failed', devRunId: runId, errorReason: error.message };
   } finally {
-    cleanupWpsFn(runId, allWpIds);
+    cleanupWpsFn(runId, allWpIds, selectedRepository.repoRef);
     if (issueWorktreePath != null) {
       // Integration worktree persists until PR merge (QA reuses it). Cleanup on merge.
       // Scratch worktrees are removed immediately — they are build-only.

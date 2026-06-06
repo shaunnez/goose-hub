@@ -202,9 +202,42 @@ describe('runFeatureEnhance', () => {
     );
   });
 
-  it('captures blocked tool calls as blocked tool names', async () => {
+  it('accepts grounded output with tool-verified candidates despite incidental blocked calls', async () => {
     mockRunFn.mockResolvedValue({
       output: makeOutput(),
+      decisionSummaries: [],
+      events: [
+        makeToolEvent('mcp__factory-tools__search_text', {
+          blocked: true,
+          status: 'failed',
+        }),
+      ],
+    });
+
+    const result = await runFeatureEnhance(makeInput());
+
+    expect(result).toMatchObject({
+      ok: true,
+      output: expect.objectContaining({
+        candidateFiles: expect.arrayContaining([
+          expect.objectContaining({ source: 'tool-verified' }),
+        ]),
+      }),
+    });
+    expect(mockAppendEvent).not.toHaveBeenCalled();
+  });
+
+  it('keeps blocked tool calls fatal when output has no grounded evidence', async () => {
+    mockRunFn.mockResolvedValue({
+      output: makeOutput({
+        candidateFiles: [],
+        existingSurfaces: [],
+        similarPatterns: [],
+        testSurfaces: [],
+        acceptanceHints: [],
+        openQuestions: ['No matching repo surface found.'],
+        confidence: 'low',
+      }),
       decisionSummaries: [],
       events: [
         makeToolEvent('mcp__factory-tools__search_text', {
@@ -220,6 +253,7 @@ describe('runFeatureEnhance', () => {
     expect(mockAppendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({
+          reasons: ['tool-call-blocked', 'no-grounded-output'],
           blockedToolCallCount: 1,
           blockedToolNames: ['search_text'],
         }),

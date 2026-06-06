@@ -175,6 +175,22 @@ function localBranchExists(worktreePath: string, branchName: string): boolean {
   }
 }
 
+function assertExistingGitWorktree(worktreePath: string): void {
+  try {
+    execFileSync('git', ['rev-parse', '--git-dir'], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+      env: GIT_ENV,
+    });
+  } catch (err) {
+    const error = new Error(
+      `existing integration worktree path is not a git worktree: ${worktreePath}`,
+    );
+    (error as Error & { cause?: unknown }).cause = err;
+    throw error;
+  }
+}
+
 /**
  * Creates or reattaches the durable per-pipeline integration worktree.
  *
@@ -202,6 +218,8 @@ export function createIntegrationWorktree(
       stdio: 'pipe',
       env: GIT_ENV,
     });
+  } else {
+    assertExistingGitWorktree(wtPath);
   }
 
   if (localBranchExists(wtPath, branchName)) {
@@ -266,8 +284,15 @@ export function reattachIntegrationWorktreeAtRemoteTip(
   branchName: string,
   expectedRemoteSha: string,
   baseRef?: string,
+  repoRef?: string,
 ): IntegrationWorktree {
-  const integrationWorktree = createIntegrationWorktree(repo, pipelineRunId, branchName, baseRef);
+  const integrationWorktree = createIntegrationWorktree(
+    repo,
+    pipelineRunId,
+    branchName,
+    baseRef,
+    repoRef,
+  );
 
   if (!worktreeIsClean(integrationWorktree.worktreePath)) {
     throw new Error('integration worktree is dirty; refusing to reset to remote tip');

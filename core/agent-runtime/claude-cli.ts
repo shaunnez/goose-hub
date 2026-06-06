@@ -65,6 +65,13 @@ function outputSchemaHash(schema: JsonSchema | undefined): string | undefined {
   return createHash('sha256').update(stableJson(schema)).digest('hex').slice(0, 16);
 }
 
+function toClaudeAllowedToolName(toolName: string): string {
+  if (toolName === 'mcp__factory-tools__repo_intel.query') {
+    return 'mcp__factory-tools__repo_intel_query';
+  }
+  return toolName;
+}
+
 /**
  * Extracts a JSON value from a result string.
  * Handles direct JSON and markdown-fenced JSON blocks (```json ... ```).
@@ -210,6 +217,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
     const { contextXml } = assembleSpawnContext(spec);
     const allowedTools = toolBinding.allowlist;
+    const claudeAllowedTools = allowedTools.map(toClaudeAllowedToolName);
     const mcpConfigPath = spec.mcpConfigPath ?? factoryMcpConfigPath;
 
     // Build argv array — Security rule: never use shell: true
@@ -239,8 +247,8 @@ export class ClaudeCliRuntime implements AgentRuntime {
     // resolve to an empty list. An empty list means "no tools" (e.g. grill-me uses
     // the 'core' bundle which grants no filesystem access). Omitting the flag
     // entirely would leave the agent unrestricted.
-    if (spec.toolBundles.length > 0 || allowedTools.length > 0) {
-      argv.push('--allowedTools', allowedTools.join(','));
+    if (spec.toolBundles.length > 0 || claudeAllowedTools.length > 0) {
+      argv.push('--allowedTools', claudeAllowedTools.join(','));
     }
 
     if (jsonSchema != null && Object.keys(jsonSchema).length > 0) {

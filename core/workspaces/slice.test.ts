@@ -248,6 +248,63 @@ describe('createIntegrationWorktree', () => {
     );
   });
 
+  it('uses a repo-aware path when repoRef is provided', () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+      if (cmd === 'git' && Array.isArray(args) && args[0] === 'rev-parse') {
+        return 'base-tip\n';
+      }
+      return Buffer.from('');
+    });
+
+    createIntegrationWorktree(
+      '/repo/path',
+      'run-abc-123',
+      'factory/run/run-abc-123',
+      'main',
+      'owner/repo',
+    );
+
+    const repoAwarePath = join(WT('run-abc-123'), 'owner-repo');
+    expect(vi.mocked(mkdirSync)).toHaveBeenCalledWith(WT('run-abc-123'), {
+      recursive: true,
+    });
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'git',
+      ['worktree', 'add', '--detach', repoAwarePath, 'main'],
+      expect.objectContaining({ cwd: '/repo/path' }),
+    );
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'git',
+      ['checkout', 'factory/run/run-abc-123'],
+      expect.objectContaining({ cwd: repoAwarePath }),
+    );
+  });
+
+  it('fails clearly when an existing integration path is not a git worktree', () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+      if (
+        cmd === 'git' &&
+        Array.isArray(args) &&
+        args[0] === 'rev-parse' &&
+        args[1] === '--git-dir'
+      ) {
+        throw new Error('fatal: not a git repository');
+      }
+      return Buffer.from('');
+    });
+
+    expect(() =>
+      createIntegrationWorktree('/repo/path', 'run-abc-123', 'factory/run/run-abc-123', 'main'),
+    ).toThrow('existing integration worktree path is not a git worktree');
+    expect(vi.mocked(execFileSync)).not.toHaveBeenCalledWith(
+      'git',
+      ['checkout', expect.any(String)],
+      expect.any(Object),
+    );
+  });
+
   it('does not reset an existing integration branch when checkout fails', () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(execFileSync).mockImplementation((cmd, args) => {
