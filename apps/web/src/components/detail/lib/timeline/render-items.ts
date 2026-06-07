@@ -14,6 +14,9 @@ export function effectiveTimestamp(item: RenderItem): number {
   if (item.kind === 'investigation-phase') {
     return new Date(item.lastEventAt ?? item.startedAt ?? 0).getTime();
   }
+  if (item.kind === 'research-phase') {
+    return new Date(item.lastEventAt ?? item.startedAt ?? 0).getTime();
+  }
   if (item.kind === 'event') return new Date(item.event.createdAt).getTime();
   if (item.kind === 'phase-group') return new Date(item.startedAt ?? 0).getTime();
   if (item.kind === 'review-group') {
@@ -66,6 +69,7 @@ function sortTimelineItemChildrenForReading(item: RenderItem): RenderItem {
     item.kind === 'timeline-section' ||
     item.kind === 'run-group' ||
     item.kind === 'investigation-phase' ||
+    item.kind === 'research-phase' ||
     item.kind === 'phase-group' ||
     item.kind === 'review-group'
   ) {
@@ -88,6 +92,7 @@ export function collectRunIdsForTimelineSection(items: RenderItem[]): Set<string
       item.kind === 'timeline-section' ||
       item.kind === 'run-group' ||
       item.kind === 'investigation-phase' ||
+      item.kind === 'research-phase' ||
       item.kind === 'phase-group' ||
       item.kind === 'review-group'
     ) {
@@ -135,6 +140,7 @@ export function collectBillableRunIdsForTimelineSection(
       item.kind === 'timeline-section' ||
       item.kind === 'run-group' ||
       item.kind === 'investigation-phase' ||
+      item.kind === 'research-phase' ||
       item.kind === 'phase-group' ||
       item.kind === 'review-group'
     ) {
@@ -151,6 +157,7 @@ export function eventFromRenderItem(item: RenderItem): AgentEventDto[] {
   if (item.kind === 'timeline-section') return item.items.flatMap(eventFromRenderItem);
   if (item.kind === 'run-group') return item.items.flatMap(eventFromRenderItem);
   if (item.kind === 'investigation-phase') return item.items.flatMap(eventFromRenderItem);
+  if (item.kind === 'research-phase') return item.items.flatMap(eventFromRenderItem);
   if (item.kind === 'phase-group') return item.items.flatMap(eventFromRenderItem);
   if (item.kind === 'review-group') return item.items.flatMap(eventFromRenderItem);
   if (item.kind === 'intervention-group') return [];
@@ -164,6 +171,7 @@ export function itemStartedAt(item: RenderItem): string | null {
     item.kind === 'timeline-section' ||
     item.kind === 'run-group' ||
     item.kind === 'investigation-phase' ||
+    item.kind === 'research-phase' ||
     item.kind === 'phase-group' ||
     item.kind === 'review-group' ||
     item.kind === 'intervention-group'
@@ -179,6 +187,7 @@ export function itemEndedAt(item: RenderItem): string | null {
     item.kind === 'timeline-section' ||
     item.kind === 'run-group' ||
     item.kind === 'investigation-phase' ||
+    item.kind === 'research-phase' ||
     item.kind === 'phase-group' ||
     item.kind === 'review-group' ||
     item.kind === 'intervention-group'
@@ -199,6 +208,7 @@ export function itemLastEventAt(item: RenderItem): string | null {
     item.kind === 'timeline-section' ||
     item.kind === 'run-group' ||
     item.kind === 'investigation-phase' ||
+    item.kind === 'research-phase' ||
     item.kind === 'phase-group' ||
     item.kind === 'review-group' ||
     item.kind === 'intervention-group'

@@ -64,6 +64,8 @@ describe('isLegalTransition — section 9.1 happy paths', () => {
     expect(isLegalTransition('factory:research-pending', 'factory:research-complete')).toBe(true));
   it('research-complete → dev-ready', () =>
     expect(isLegalTransition('factory:research-complete', 'factory:dev-ready')).toBe(true));
+  it('research-complete → needs-human', () =>
+    expect(isLegalTransition('factory:research-complete', 'factory:needs-human')).toBe(true));
 
   // dev loop
   it('dev-ready → in-progress', () =>

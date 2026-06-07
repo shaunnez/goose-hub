@@ -10,6 +10,7 @@ function getRenderItemRunId(item: RenderItem): string | null {
 function getInvestigationChildParentRunId(item: RenderItem): string | null {
   const runId = getRenderItemRunId(item);
   if (runId == null) return null;
+  if (runId.includes(':research:scout:')) return null;
   for (const marker of [':scout:', ':bug-enhance']) {
     const markerIndex = runId.indexOf(marker);
     if (markerIndex > 0) return runId.slice(0, markerIndex);
@@ -22,7 +23,11 @@ function getInvestigationPayloadParentRunIds(item: RenderItem): string[] {
   for (const event of eventFromRenderItem(item)) {
     if (!event.kind.startsWith('swarm.')) continue;
     const payload = event.payload as { parentRunId?: unknown } | null;
-    if (typeof payload?.parentRunId === 'string' && payload.parentRunId.trim() !== '') {
+    if (
+      typeof payload?.parentRunId === 'string' &&
+      payload.parentRunId.trim() !== '' &&
+      !payload.parentRunId.includes(':research')
+    ) {
       parentRunIds.add(payload.parentRunId);
     }
   }

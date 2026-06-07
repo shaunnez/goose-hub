@@ -171,6 +171,16 @@ type AdvisorVerdict =
 
 **PRD override:** `factory:from-prd` remains authoritative for `type:feature`: PRD-derived feature work routes directly to `factory:dev-ready` even when the deterministic gate scores it `vague:high`. The parent PRD path already performed framing, so triage must not send those children back through framing or grilling.
 
+## Research Workflow Lifecycle
+
+**Purpose:** Research is a distinct workflow for answering what is true, what options exist, and what follow-up work may be needed. It uses read-only repository discovery mechanics but does not emit bug investigation artifacts, Playwright repro packets, feature grilling output, or implementation fix hints.
+
+**Two-actor lifecycle:** `dispatchResearch` consumes `factory:research-pending`, runs `slices/research`, emits `agent.research-complete`, and transitions only to `factory:research-complete`. `dispatchResearchComplete` consumes `factory:research-complete` and owns the terminal routing hop.
+
+**Routing authority:** The server, not the `research` skill, decides the next state from the structured research artifact. `actionability: directly-actionable` with exactly one actionable follow-up routes to `factory:dev-ready`; zero actionable follow-ups, multiple actionable follow-ups, advisory, ambiguous, blocked, or missing artifacts route to `factory:needs-human`.
+
+**Resume contract:** A failed research run emits `agent.run-failed` with `skill: research`, forces `factory:needs-human`, and can be resumed by forcing the work item back to `factory:research-pending` before rerunning `dispatchResearch`.
+
 ## Operator Intervention Control Plane
 
 **Purpose:** Durable operator interventions explain and resolve stuck work-item

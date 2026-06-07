@@ -57,6 +57,15 @@ export type RenderItem =
       lastEventAt: string | null;
     }
   | {
+      kind: 'research-phase';
+      researchRunId: string;
+      items: RenderItem[];
+      status: 'started' | 'live' | 'completed' | 'failed';
+      startedAt: string | null;
+      endedAt: string | null;
+      lastEventAt: string | null;
+    }
+  | {
       kind: 'phase-group';
       phase: 'grill' | 'prd' | 'contract' | 'dev';
       pipelineRunId: string;

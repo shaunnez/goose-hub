@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRunTriageBatch = vi.fn();
 const mockRunInvestigateWorkflow = vi.fn();
+const mockRunResearchWorkflow = vi.fn();
 const mockRunAcceptanceContractWorkflow = vi.fn();
 const mockRunFixIssueWorkflow = vi.fn();
 const mockRunQaWorkflow = vi.fn();
@@ -80,6 +81,10 @@ vi.mock('../domains/workflows/triage-batch.js', () => ({
 
 vi.mock('../../../../slices/investigate/workflow.js', () => ({
   runInvestigateWorkflow: mockRunInvestigateWorkflow,
+}));
+
+vi.mock('../../../../slices/research/workflow.js', () => ({
+  runResearchWorkflow: mockRunResearchWorkflow,
 }));
 
 vi.mock('../../../../slices/acceptance-contract/workflow.js', () => ({
@@ -194,6 +199,7 @@ beforeEach(() => {
   }
   mockRunTriageBatch.mockResolvedValue(undefined);
   mockRunInvestigateWorkflow.mockResolvedValue(undefined);
+  mockRunResearchWorkflow.mockResolvedValue(undefined);
   mockRunAcceptanceContractWorkflow.mockResolvedValue(undefined);
   mockRunFixIssueWorkflow.mockResolvedValue(undefined);
   mockRunQaWorkflow.mockResolvedValue(undefined);
@@ -428,6 +434,28 @@ describe('dispatchProjectTick', () => {
 
     expect(mockRunFixIssueWorkflow).toHaveBeenCalledOnce();
     expect(mockRunFixIssueWorkflow).toHaveBeenCalledWith(
+      item,
+      source,
+      'my-project',
+      expect.any(String),
+      undefined,
+    );
+  });
+
+  it('dispatches an existing local item in factory:research-pending to research', async () => {
+    const item = workItem('factory:research-pending', '12');
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      listOpenWork: vi.fn().mockResolvedValue([item]),
+      getItem: vi.fn().mockResolvedValue(item),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchProjectTick } = await import('./dispatch.js');
+    await dispatchProjectTick('my-project');
+
+    expect(mockRunResearchWorkflow).toHaveBeenCalledOnce();
+    expect(mockRunResearchWorkflow).toHaveBeenCalledWith(
       item,
       source,
       'my-project',
@@ -730,6 +758,162 @@ describe('dispatchInvestigate', () => {
     expect(mockEventStoreAppendEvent).not.toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'state.transitioned' }),
     );
+  });
+});
+
+// ─── dispatchResearch ─────────────────────────────────────────────────────
+
+describe('dispatchResearch', () => {
+  it('runs the research workflow for research-pending work', async () => {
+    const item = workItem('factory:research-pending', '77', {});
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchResearch } = await import('./dispatch.js');
+    await dispatchResearch('goose-hub-self', 77);
+
+    expect(mockRunResearchWorkflow).toHaveBeenCalledWith(
+      item,
+      source,
+      'goose-hub-self',
+      expect.any(String),
+      undefined,
+    );
+  });
+
+  it('returns early and logs when source is null', async () => {
+    mockGetSourceForSlug.mockResolvedValue(null);
+
+    const { dispatchResearch } = await import('./dispatch.js');
+    await dispatchResearch('no-source', 77);
+
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      'dispatchResearch: no source for slug',
+      expect.objectContaining({ slug: 'no-source' }),
+    );
+    expect(mockRunResearchWorkflow).not.toHaveBeenCalled();
+  });
+});
+
+// ─── dispatchResearchComplete ─────────────────────────────────────────────
+
+describe('dispatchResearchComplete', () => {
+  function researchCompleteSource() {
+    return {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue({
+        id: 'github:shaunnez/goose-hub#77',
+        externalId: '77',
+        state: 'factory:research-complete',
+      }),
+      comment: vi.fn().mockResolvedValue(undefined),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  const researchArtifact = {
+    summary: 'Found a direct implementation path.',
+    answer: 'The research workflow can be added as a distinct slice.',
+    evidence: [],
+    options: [],
+    followUpWork: [
+      {
+        type: 'feature',
+        title: 'Add research workflow',
+        rationale: 'Research-pending needs executable dispatch.',
+        actionable: true,
+      },
+    ],
+    actionability: 'directly-actionable',
+    openQuestions: [],
+    decisionSummaries: [{ kind: 'PLAN', summary: 'Route single actionable research to dev.' }],
+  };
+
+  it('routes directly actionable research with one actionable follow-up to dev-ready', async () => {
+    const source = researchCompleteSource();
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.research-complete',
+        payload: { research: researchArtifact },
+      },
+    ]);
+
+    const { dispatchResearchComplete } = await import('./dispatch.js');
+    await dispatchResearchComplete('goose-hub-self', 77);
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      'github:shaunnez/goose-hub#77',
+      'factory:research-complete',
+      'factory:dev-ready',
+    );
+    expect(source.comment).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['zero actionable follow-ups', { ...researchArtifact, followUpWork: [] }],
+    [
+      'multiple actionable follow-ups',
+      {
+        ...researchArtifact,
+        followUpWork: [
+          researchArtifact.followUpWork[0],
+          { ...researchArtifact.followUpWork[0], title: 'Second follow-up' },
+        ],
+      },
+    ],
+    ['advisory output', { ...researchArtifact, actionability: 'advisory' }],
+    ['ambiguous output', { ...researchArtifact, actionability: 'ambiguous' }],
+    ['blocked output', { ...researchArtifact, actionability: 'blocked' }],
+  ])('routes %s to needs-human', async (_name, research) => {
+    const source = researchCompleteSource();
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.research-complete',
+        payload: { research },
+      },
+    ]);
+
+    const { dispatchResearchComplete } = await import('./dispatch.js');
+    await dispatchResearchComplete('goose-hub-self', 77);
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      'github:shaunnez/goose-hub#77',
+      'factory:research-complete',
+      'factory:needs-human',
+    );
+    expect(source.comment).toHaveBeenCalledWith(
+      '77',
+      expect.stringContaining('Research complete. Human choice is needed'),
+    );
+  });
+
+  it('suppresses duplicate equivalent research-complete transitions', async () => {
+    const source = researchCompleteSource();
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.research-complete',
+        payload: { research: researchArtifact },
+      },
+      {
+        kind: 'state.transitioned',
+        payload: {
+          from: 'factory:research-complete',
+          to: 'factory:dev-ready',
+          by: 'research-complete',
+        },
+      },
+    ]);
+
+    const { dispatchResearchComplete } = await import('./dispatch.js');
+    await dispatchResearchComplete('goose-hub-self', 77);
+
+    expect(source.transitionState).not.toHaveBeenCalled();
   });
 });
 
@@ -2744,6 +2928,41 @@ describe('dispatchForLabel', () => {
 
     expect(source.forceState).toHaveBeenCalledWith(item.id, 'factory:needs-qa');
     expect(mockRunQaWorkflow).toHaveBeenCalledOnce();
+  });
+
+  it('resumes needs-human research failures through research-pending', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#1177',
+      externalId: '1177',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'research workflow',
+      body: 'body',
+      state: 'factory:needs-human',
+      priority: 'medium',
+      type: 'research',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      forceState: vi.fn().mockResolvedValue(undefined),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.run-failed',
+        runId: 'research-run',
+        payload: { runId: 'research-run', skill: 'research', error: 'schema failed' },
+      },
+    ]);
+
+    const { dispatchResumeIssue } = await import('./dispatch.js');
+    await dispatchResumeIssue('goose-hub-self', 1177);
+
+    expect(source.forceState).toHaveBeenCalledWith(item.id, 'factory:research-pending');
+    expect(mockRunResearchWorkflow).toHaveBeenCalledOnce();
   });
 
   it('resumes needs-human fix-feedback implement failures through needs-fix', async () => {

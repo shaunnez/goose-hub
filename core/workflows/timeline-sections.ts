@@ -5,6 +5,7 @@ export const TIMELINE_SECTION_DEFINITIONS = [
   { id: 'triage', title: 'Triage' },
   { id: 'grounding', title: 'Grounding' },
   { id: 'investigation', title: 'Investigation' },
+  { id: 'research', title: 'Research' },
   { id: 'grill', title: 'Grill' },
   { id: 'prd', title: 'PRD' },
   { id: 'decompose', title: 'Decompose' },
@@ -44,6 +45,7 @@ const WORKFLOW_GROUP_TO_TIMELINE_SECTION: Record<WorkflowGroup, TimelineSectionI
   triage: 'triage',
   grounding: 'grounding',
   investigation: 'investigation',
+  research: 'research',
   grill: 'grill',
   prd: 'prd',
   decompose: 'decompose',
@@ -54,7 +56,6 @@ const WORKFLOW_GROUP_TO_TIMELINE_SECTION: Record<WorkflowGroup, TimelineSectionI
   review: 'review',
   conflict: 'conflict',
   retro: 'retro',
-  research: 'system',
   terminal: 'system',
 };
 
@@ -64,6 +65,7 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'agent.triage-complete': 'triage',
   'agent.repo-override': 'triage',
   'agent.investigation-complete': 'investigation',
+  'agent.research-complete': 'research',
   'feature.framed': 'grounding',
   'feature.grounding-enhanced': 'grounding',
   'feature.grounding-complete': 'grounding',
@@ -319,10 +321,15 @@ export function resolveTimelineSection(
 
   if (event.kind.startsWith('repo-match.')) return 'triage';
   if (event.kind.startsWith('investigation.')) return 'investigation';
+  if (event.kind.startsWith('research.')) return 'research';
   if (event.kind.startsWith('grill.')) return 'grill';
   if (event.kind.startsWith('prd.')) return 'prd';
   if (event.kind.startsWith('decompose.')) return 'decompose';
-  if (event.kind.startsWith('swarm.')) return 'investigation';
+  if (event.kind.startsWith('swarm.')) {
+    const parentRunId = typeof payload?.parentRunId === 'string' ? payload.parentRunId : null;
+    if (parentRunId?.includes(':research')) return 'research';
+    return 'investigation';
+  }
   if (event.kind.startsWith('qa.')) return 'qa';
   if (event.kind.startsWith('review.')) return 'review';
   if (event.kind.startsWith('evidence.')) return 'evidence';
@@ -444,6 +451,7 @@ function timelineSectionFromHistoricalRunId(
   runId: string | null | undefined,
 ): TimelineSectionId | null {
   if (runId == null) return null;
+  if (runId.includes(':research')) return 'research';
   if (runId.includes(':scout:')) return 'investigation';
   if (runId.includes(':feature-enhance')) return 'grounding';
   if (runId.includes(':bug-enhance')) return 'investigation';

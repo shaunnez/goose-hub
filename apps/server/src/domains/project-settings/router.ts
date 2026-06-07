@@ -176,6 +176,7 @@ const SKILL_CALLERS: Record<string, string[]> = {
   review: ['final review gate'],
   'resolve-conflict': ['conflict resolution workflow'],
   investigate: ['bug investigation workflow', 'debug route'],
+  research: ['research workflow'],
   'acceptance-contract': ['legacy bug acceptance contract gate'],
   'playwright-repro': ['bug evidence workflow'],
   'advise-on-plan': ['advisor gate'],
@@ -255,7 +256,7 @@ function dbImplementWpOverrides(row: ReturnType<typeof readProjectSettings>) {
 }
 
 function roleForSkill(skill: string): Role | undefined {
-  if (skill === 'advise-on-plan') return 'researcher';
+  if (skill === 'advise-on-plan' || skill === 'research') return 'researcher';
   if (skill === 'advise-on-prd' || skill === 'write-prd') return 'prd-writer';
   if (skill === 'bug-enhance' || skill === 'triage') return 'triager';
   if (skill === 'code-quality-audit') return 'auditor';

@@ -27,6 +27,7 @@ import {
   dispatchRetro,
   dispatchReview,
 } from './dispatch-qa-review.js';
+import { dispatchResearch, dispatchResearchComplete } from './dispatch-research.js';
 import { dispatchTriageBatch } from './dispatch-triage.js';
 import { resolveActiveMilestone } from './resolve-milestone.js';
 import { getSourceForSlug } from './source.js';
@@ -35,6 +36,8 @@ export const DISPATCHABLE_WORK_ITEM_STATES = new Set<StateName>([
   'factory:triaging',
   'factory:investigating',
   'factory:investigation-complete',
+  'factory:research-pending',
+  'factory:research-complete',
   'factory:dev-ready',
   'factory:spec-ready',
   'factory:needs-qa',
@@ -99,6 +102,14 @@ export async function dispatchCurrentWorkItemState(slug: string, item: WorkItem)
   }
   if (item.state === 'factory:investigation-complete') {
     await dispatchInvestigationComplete(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:research-pending') {
+    await dispatchResearch(slug, issueNumber);
+    return;
+  }
+  if (item.state === 'factory:research-complete') {
+    await dispatchResearchComplete(slug, issueNumber);
     return;
   }
   if (item.state === 'factory:dev-ready') {
@@ -301,6 +312,14 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
     dispatch: dispatchResolveConflict,
   },
   'factory:investigating': { targetState: 'factory:investigating', dispatch: dispatchInvestigate },
+  'factory:research-pending': {
+    targetState: 'factory:research-pending',
+    dispatch: dispatchResearch,
+  },
+  'factory:research-complete': {
+    targetState: 'factory:research-complete',
+    dispatch: dispatchResearchComplete,
+  },
   'factory:retrospecting': { targetState: 'factory:retrospecting', dispatch: dispatchRetro },
   'factory:qa-failed': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
   'factory:needs-fix': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
@@ -594,6 +613,24 @@ export async function dispatchResumeIssue(
         extraPayload: interventionEventPayload(options.intervention),
       });
       await dispatchInvestigate(slug, issueNumber);
+      return;
+    }
+
+    if (failedSkill === 'research') {
+      logger.info(
+        'dispatchResumeIssue: needs-human from research failure, resuming to research-pending',
+        { slug, issueNumber },
+      );
+      await source.forceState(workItemId, 'factory:research-pending');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:research-pending',
+        by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
+      });
+      await dispatchResearch(slug, issueNumber);
       return;
     }
 

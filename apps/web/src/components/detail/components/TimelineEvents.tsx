@@ -1,6 +1,7 @@
 import type { RenderItem, TimelineContext } from '../lib/timeline';
 import { AgentImplementCompleteEvent } from './timeline/AgentImplementCompleteEvent';
 import { AgentInvestigationCompleteEvent } from './timeline/AgentInvestigationCompleteEvent';
+import { AgentResearchCompleteEvent } from './timeline/AgentResearchCompleteEvent';
 import {
   AgentRunStatusEvent,
   AgentSpawnedEvent,
@@ -108,6 +109,7 @@ import {
   QaWorkflowEvent,
 } from './timeline/QaEvents';
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
+import { ResearchPhaseWrapper } from './timeline/ResearchPhaseWrapper';
 import { AgentRetryEscalatedEvent } from './timeline/RetryEvents';
 import { ReviewCompletedEvent } from './timeline/ReviewCompletedEvent';
 import { ReviewGroupWrapper } from './timeline/ReviewGroupWrapper';
@@ -204,6 +206,21 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       <InvestigationPhaseWrapper
         key={`investigation-phase-${item.investigationRunId}`}
         investigationRunId={item.investigationRunId}
+        items={item.items}
+        status={item.status}
+        startedAt={item.startedAt}
+        endedAt={item.endedAt}
+        lastEventAt={item.lastEventAt}
+        context={context}
+        renderItem={renderTimelineItem}
+      />
+    );
+  }
+  if (item.kind === 'research-phase') {
+    return (
+      <ResearchPhaseWrapper
+        key={`research-phase-${item.researchRunId}`}
+        researchRunId={item.researchRunId}
         items={item.items}
         status={item.status}
         startedAt={item.startedAt}
@@ -371,6 +388,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentTriageCompleteEvent key={event.id} event={event} />;
     case 'agent.investigation-complete':
       return <AgentInvestigationCompleteEvent key={event.id} event={event} />;
+    case 'agent.research-complete':
+      return <AgentResearchCompleteEvent key={event.id} event={event} />;
     case 'pr.opened':
       return <PrOpenedEvent key={event.id} event={event} />;
     case 'review.completed':

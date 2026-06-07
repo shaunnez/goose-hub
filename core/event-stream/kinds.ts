@@ -27,6 +27,7 @@ export const EVENT_KINDS = [
   'github.label.changed',
   'github.label-mirror-warning',
   'agent.investigation-complete',
+  'agent.research-complete',
   'feature.framed',
   'feature.grounding-enhanced',
   'feature.grounding-complete',

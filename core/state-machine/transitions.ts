@@ -31,7 +31,7 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
   'factory:decomposing': ['factory:issues-created', 'factory:archived'],
   'factory:issues-created': ['factory:dev-ready', 'factory:done', 'factory:archived'],
   'factory:research-pending': ['factory:research-complete', 'factory:archived'],
-  'factory:research-complete': ['factory:dev-ready', 'factory:archived'],
+  'factory:research-complete': ['factory:dev-ready', 'factory:needs-human', 'factory:archived'],
   'factory:investigating': [
     'factory:investigation-complete',
     'factory:needs-human',
