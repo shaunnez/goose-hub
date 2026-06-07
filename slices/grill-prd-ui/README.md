@@ -82,7 +82,6 @@ The Reject button calls `POST /reject-prd`, which:
 
 ## Tests
 
-- `slice.test.ts` — slice-level smoke test that asserts the approve/reject helpers work end-to-end against the in-memory state source.
 - `apps/web/src/components/detail/components/PRDSection.test.tsx` — RTL
   component tests covering empty / drafting / approved-state / advisor-notes
   / approve-button / reject-button / parse-error scenarios.
