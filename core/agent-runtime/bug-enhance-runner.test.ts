@@ -293,7 +293,7 @@ describe('runBugEnhance — repo-intel grounding contract', () => {
       makeAgentResult(hints, {
         enhancedContent:
           '**Repro steps**\n1. Open the header.\n\n**Location**\napps/web/src/components/header/CaptureHeader.tsx',
-        events: [makeToolEvent('mcp__factory-tools__repo_intel.query')],
+        events: [makeToolEvent('mcp__factory-tools__repo_intel_query')],
       }),
     );
 

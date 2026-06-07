@@ -220,8 +220,10 @@ function payloadRecord(value: unknown): Record<string, unknown> | null {
 function normalizedToolName(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   if (value.startsWith('mcp__factory-tools__')) {
-    return value.slice('mcp__factory-tools__'.length);
+    const localName = value.slice('mcp__factory-tools__'.length);
+    return localName === 'repo_intel_query' ? 'repo_intel.query' : localName;
   }
+  if (value === 'repo_intel_query') return 'repo_intel.query';
   return value;
 }
 

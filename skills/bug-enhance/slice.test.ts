@@ -165,9 +165,9 @@ describe('bug-enhance prompt', () => {
   it('names the runtime-visible repo-intel query tool for Claude and Codex', () => {
     const prompt = readPrompt();
 
-    expect(prompt).toContain('Claude CLI: `mcp__factory-tools__repo_intel.query`');
+    expect(prompt).toContain('Claude CLI: `mcp__factory-tools__repo_intel_query`');
     expect(prompt).toContain('Codex CLI: `repo_intel.query`');
-    expect(prompt).toContain('Never use `repo_intel_query`');
+    expect(prompt).toContain('Never use bare `repo_intel_query`');
     expect(prompt).not.toContain('call `repo_intel.query');
   });
 
@@ -175,7 +175,7 @@ describe('bug-enhance prompt', () => {
     const prompt = readPrompt();
 
     for (const toolName of [
-      'mcp__factory-tools__repo_intel.query',
+      'mcp__factory-tools__repo_intel_query',
       'mcp__factory-tools__search_text',
       'mcp__factory-tools__list_dir',
       'mcp__factory-tools__list_files',

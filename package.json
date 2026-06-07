@@ -19,6 +19,7 @@
     "test:e2e:pipeline": "pnpm --filter @goose-hub/web test:e2e:pipeline",
     "test:e2e:pipeline:fast": "pnpm --filter @goose-hub/web test:e2e:pipeline:fast",
     "manifest": "tsx scripts/build-manifest.ts",
+    "setup:claude-mcp": "tsx scripts/setup-claude-mcp.ts",
     "audit-docs": "tsx scripts/audit-docs.ts",
     "path-drift:report": "tsx scripts/report-path-drift.ts",
     "symbol-index": "tsx scripts/build-symbol-index.ts",

@@ -23,7 +23,9 @@ Prefer the \`mcp__factory-tools__*\` tools over native Read / Write / Edit / Glo
 - Verification: \`mcp__factory-tools__run_tests\`, \`mcp__factory-tools__run_lint\`, \`mcp__factory-tools__run_typecheck\`, \`mcp__factory-tools__run_isolated_test\` (not raw \`pnpm\` invocations)
 - Git read-only: \`mcp__factory-tools__get_status\`, \`mcp__factory-tools__get_diff\`, \`mcp__factory-tools__get_changed_files\`, \`mcp__factory-tools__get_head_sha\`, \`mcp__factory-tools__get_merge_base\`
 - Project context: \`mcp__factory-tools__get_project_context\`, \`mcp__factory-tools__get_stack_commands\`
-- Repository intelligence: \`mcp__factory-tools__repo_intel.query\`
+- Repository intelligence: \`mcp__factory-tools__repo_intel_query\`
+
+The Factory MCP tools are already exposed in this run. Do not use ToolSearch or any tool-discovery surface to find them; call the listed Factory tool names directly. If a direct Factory tool call reports that the tool does not exist, return valid low-confidence JSON naming the exact missing tool; do not fall back to ToolSearch, Bash, resources, or native file tools.
 
 All paths are workspace-relative. Absolute paths and \`..\` traversal are rejected. Commands run with \`shell: false\`; no shell strings. Output is byte-capped and timeouts are per-tool. Every call emits a structured \`agent.tool-call\` audit event.
 
@@ -49,6 +51,8 @@ Use the Factory MCP tools exposed by the \`factory-tools\` MCP server. Do not us
 - Git read-only: \`get_status\`, \`get_diff\`, \`get_changed_files\`, \`get_head_sha\`, \`get_merge_base\`
 - Project context: \`get_project_context\`, \`get_stack_commands\`
 - Repository intelligence: \`repo_intel.query\`
+
+The Factory MCP tools are already exposed in this run. Do not use ToolSearch or any tool-discovery surface to find them; call the listed Factory tool names directly. If a direct Factory tool call reports that the tool does not exist, return valid low-confidence JSON naming the exact missing tool; do not fall back to ToolSearch, Bash, resources, or native file tools.
 
 All paths are workspace-relative. Absolute paths and \`..\` traversal are rejected. Commands run with \`shell: false\`; no shell strings. Output is byte-capped and timeouts are per-tool. Every call emits a structured \`agent.tool-call\` audit event.
 

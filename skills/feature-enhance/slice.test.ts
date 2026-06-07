@@ -86,7 +86,7 @@ describe('feature-enhance prompt', () => {
   it('declares Claude and Codex runtime-visible read tools', () => {
     const prompt = readPrompt();
     for (const toolName of [
-      'mcp__factory-tools__repo_intel.query',
+      'mcp__factory-tools__repo_intel_query',
       'mcp__factory-tools__search_text',
       'mcp__factory-tools__list_dir',
       'mcp__factory-tools__list_files',
@@ -99,6 +99,9 @@ describe('feature-enhance prompt', () => {
     ]) {
       expect(prompt).toContain(toolName);
     }
+    expect(prompt).not.toContain('mcp__factory-tools__repo_intel.query');
+    expect(prompt).toContain('Do not assume Factory tools are unavailable');
+    expect(prompt).toContain('Do not use ToolSearch to discover schemas');
   });
 
   it('explicitly forbids blocked native and delegation tools', () => {
@@ -124,6 +127,9 @@ describe('feature-enhance prompt', () => {
     expect(prompt).toContain('Maximum 5 tool calls total');
     expect(prompt).toContain('return valid low-confidence JSON');
     expect(prompt).toContain('Stop once 1-3 grounded candidates are found');
+    expect(prompt).toContain('First grounding call');
+    expect(prompt).toContain('{ "intent": "fuzzy-component"');
+    expect(prompt).toContain('{ "intent": "recent-touched"');
   });
 
   it('requires tool-backed evidence for emitted candidate files', () => {

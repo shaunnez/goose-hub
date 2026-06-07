@@ -10,6 +10,20 @@ See `docs/inventory.md` for an auto-generated, always-current map of every packa
 
 Drift-check: `pnpm audit-docs` reports drift between governance docs and code (role lists, file references, milestone span, skill structure). Run it before merging changes that touch `core/types.ts` or the skill catalogue.
 
+## Local Claude MCP Setup
+
+Goose Hub's Claude runtime uses the local `factory-tools` MCP server for agent file, search, git, verification, QA, and evidence tools. The runtime writes a per-run MCP config at `<worktree>/.factory/mcp-config.json`, but Claude Code enterprise MCP policy may still block local stdio servers unless the exact command is allowlisted.
+
+After cloning and installing dependencies, run:
+
+```bash
+pnpm setup:claude-mcp
+```
+
+The script adds the machine-specific `factory-tools` `serverCommand` entry to `~/.claude/settings.json`. It detects the current Node binary, the repo-local `tsx` launcher, and `core/tool-layer/mcp/server.ts`.
+
+If Claude still logs `Warning: MCP server blocked by enterprise policy: factory-tools`, local project/user settings are not enough for that machine. The org-managed Claude allowlist must permit the exact `serverCommand` printed by `pnpm setup:claude-mcp`.
+
 ## What's built
 
 ### Web UI

@@ -19,11 +19,11 @@ You have at most **5 tool calls total** for this run. Prefer the runtime-visible
 
 Use only these runtime-visible read-only repository tools:
 
-- Claude CLI: `mcp__factory-tools__repo_intel.query`, `mcp__factory-tools__search_text`, `mcp__factory-tools__list_dir`, `mcp__factory-tools__list_files`, `mcp__factory-tools__read_file`
+- Claude CLI: `mcp__factory-tools__repo_intel_query`, `mcp__factory-tools__search_text`, `mcp__factory-tools__list_dir`, `mcp__factory-tools__list_files`, `mcp__factory-tools__read_file`
 - Codex CLI: `repo_intel.query`, `search_text`, `list_dir`, `list_files`, `read_file`
 
 When this prompt says "repo-intel query tool", use the exact name exposed in your runtime.
-Never use `repo_intel_query`; the tool name has a dot: `repo_intel.query`.
+Never use bare `repo_intel_query`; Codex uses the dot form `repo_intel.query`, while Claude uses the prefixed alias `mcp__factory-tools__repo_intel_query`.
 
 Forbidden tools and behaviours:
 

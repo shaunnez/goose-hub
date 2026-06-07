@@ -327,7 +327,9 @@ describe('runFeatureEnhance', () => {
       }),
       decisionSummaries: [],
       events: [
+        makeToolEvent('mcp__factory-tools__repo_intel_query'),
         makeToolEvent('mcp__factory-tools__repo_intel.query'),
+        makeToolEvent('repo_intel_query'),
         makeToolEvent('repo_intel.query'),
       ],
     });
@@ -337,7 +339,7 @@ describe('runFeatureEnhance', () => {
     expect(mockAppendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({
-          repoIntelCallCount: 2,
+          repoIntelCallCount: 4,
           runtime: 'codex-cli',
           modelId: 'gpt-5-codex',
         }),

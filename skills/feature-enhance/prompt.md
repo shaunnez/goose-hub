@@ -12,8 +12,9 @@ You ground a fresh feature request against the repository before spec or impleme
 
 Use only these runtime-visible read-only repository tools:
 
-- Claude: `mcp__factory-tools__repo_intel.query`, `mcp__factory-tools__search_text`, `mcp__factory-tools__list_dir`, `mcp__factory-tools__list_files`, `mcp__factory-tools__read_file`
+- Claude: `mcp__factory-tools__repo_intel_query`, `mcp__factory-tools__search_text`, `mcp__factory-tools__list_dir`, `mcp__factory-tools__list_files`, `mcp__factory-tools__read_file`
 - Codex: `repo_intel.query`, `search_text`, `list_dir`, `list_files`, `read_file`
+- Do not assume Factory tools are unavailable. Do not use ToolSearch to discover schemas. Call a Factory tool directly.
 
 Forbidden tools and behaviours:
 
@@ -24,7 +25,11 @@ Forbidden tools and behaviours:
 ## Tool budget
 
 - Maximum 5 tool calls total.
-- Prefer `repo_intel.query` / `mcp__factory-tools__repo_intel.query`.
+- Prefer `repo_intel.query` / `mcp__factory-tools__repo_intel_query`.
+- First grounding call: use the repo-intel query tool directly with one of:
+  - `{ "intent": "route-for-url", "url": "<route>" }`
+  - `{ "intent": "fuzzy-component", "phrase": "<visible feature phrase>", "limit": 5 }`
+  - `{ "intent": "recent-touched", "sinceDays": 14, "limit": 5 }`
 - Stop once 1-3 grounded candidates are found.
 - Keep this pass cheap. Prefer targeted repo-intel and search calls over broad exploration.
 - If tools are blocked or evidence is missing, return valid low-confidence JSON.

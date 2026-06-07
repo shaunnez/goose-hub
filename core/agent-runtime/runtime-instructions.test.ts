@@ -56,10 +56,13 @@ describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS', () => {
       'mcp__factory-tools__run_tests',
       'mcp__factory-tools__get_diff',
       'mcp__factory-tools__get_project_context',
-      'mcp__factory-tools__repo_intel.query',
+      'mcp__factory-tools__repo_intel_query',
     ]) {
       expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain(name);
     }
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).not.toContain(
+      'mcp__factory-tools__repo_intel.query',
+    );
   });
 
   it('does not advertise workflow-owned tools to the agent', () => {
@@ -91,6 +94,16 @@ describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS', () => {
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('mcp__factory-tools__list_dir');
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('mcp__factory-tools__list_files');
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('mcp__factory-tools__search_text');
+  });
+
+  it('forbids tool discovery for already exposed Factory tools', () => {
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain(
+      'The Factory MCP tools are already exposed in this run',
+    );
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('Do not use ToolSearch');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain(
+      'call the listed Factory tool names directly',
+    );
   });
 });
 
@@ -124,6 +137,16 @@ describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX', () => {
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('`list_dir`');
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('`list_files`');
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('`search_text`');
+  });
+
+  it('forbids tool discovery for already exposed Factory tools', () => {
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain(
+      'The Factory MCP tools are already exposed in this run',
+    );
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('Do not use ToolSearch');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain(
+      'call the listed Factory tool names directly',
+    );
   });
 });
 
