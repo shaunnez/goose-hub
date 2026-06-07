@@ -80,6 +80,8 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'agent.discovery-budget-exceeded': 'investigation',
   'agent.wrong-surface-guard': 'investigation',
   'acceptance.contract-authored': 'delivery-router',
+  'acceptance.contract-output-normalized': 'delivery-router',
+  'acceptance.contract-validation-failed': 'delivery-router',
   'spec.completed': 'delivery-router',
   'spec.prd-context-attached': 'delivery-router',
   'spec.wp-issues-created': 'delivery-router',

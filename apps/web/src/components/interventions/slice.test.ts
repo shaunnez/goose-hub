@@ -7,8 +7,8 @@ vi.mock('@/lib/api', () => ({
   fetchProjectInterventions: vi.fn(),
 }));
 
+import { describe, expect, it } from 'vitest';
 import { OperatorQueuePage } from './OperatorQueuePage';
-import { describe, it, expect } from 'vitest';
 
 describe('interventions slice', () => {
   // Smoke test only — verifies the module exports the component.

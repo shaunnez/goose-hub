@@ -43,6 +43,8 @@ export const EVENT_KINDS = [
   'agent.output-fact-mismatch',
   'agent.contract-gate-blocked',
   'acceptance.contract-authored',
+  'acceptance.contract-output-normalized',
+  'acceptance.contract-validation-failed',
   'qa.structural-passed',
   'qa.structural-failed',
   'qa.functional-passed',
