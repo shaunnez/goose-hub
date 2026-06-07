@@ -77,6 +77,15 @@ describe('timeline sections', () => {
     ).toBe('implementation');
   });
 
+  it('routes acceptance-contract normalization telemetry to delivery-router', () => {
+    expect(resolveTimelineSection({ kind: 'acceptance.contract-output-normalized' })).toBe(
+      'delivery-router',
+    );
+    expect(resolveTimelineSection({ kind: 'acceptance.contract-validation-failed' })).toBe(
+      'delivery-router',
+    );
+  });
+
   it('uses earlier run metadata when completion events are incomplete', () => {
     const events = [
       { kind: 'agent.run-completed', runId: 'discover-1' },
