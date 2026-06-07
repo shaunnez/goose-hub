@@ -68,8 +68,8 @@ router.get('/:slug/issues/:id/legal-targets', async (c) => {
 
 const EventsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().optional(),
-  before: z.coerce.number().int().positive().optional(),
-  after: z.coerce.number().int().positive().optional(),
+  before: z.coerce.number().int().nonnegative().optional(),
+  after: z.coerce.number().int().nonnegative().optional(),
 });
 
 router.get('/:slug/issues/:id/events', async (c) => {
