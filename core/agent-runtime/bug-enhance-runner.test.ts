@@ -425,4 +425,46 @@ describe('runBugEnhance — repo-intel grounding contract', () => {
       }),
     );
   });
+
+  it('retries sparse UI-web bugs that returned unknown without making a tool call', async () => {
+    const hints = makeHints(['apps/web/src/components/header/CaptureHeader.tsx']);
+    mockRunFn
+      .mockResolvedValueOnce(
+        makeAgentResult(undefined, {
+          enhancedContent: '',
+          category: 'unknown',
+          events: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeAgentResult(hints, {
+          enhancedContent:
+            '**Repro steps**\n1. Open the header.\n\n**Location**\napps/web/src/components/header/CaptureHeader.tsx',
+          category: 'ui-web',
+          events: [makeToolEvent('repo_intel.query')],
+        }),
+      );
+
+    const result = await runBugEnhance({
+      ...BASE_INPUT,
+      title: 'capture bug 2',
+      body: 'Capture key in the header should open with apple J key. And the button should show that label just like search does',
+    });
+
+    expect(mockRunFn).toHaveBeenCalledTimes(2);
+    expect(mockRunFn.mock.calls[1][0]).toMatchObject({
+      runId: expect.stringMatching(/:grounding-retry$/),
+      skill: 'bug-enhance',
+    });
+    expect(mockRunFn.mock.calls[1][0].appendSystemPrompt).toContain(
+      'Grounding retry: this bug report has UI-web signals',
+    );
+    expect(result.markdown).toContain('CaptureHeader.tsx');
+    expect(result.groundedHints?.candidateFiles).toEqual([
+      expect.objectContaining({ path: 'apps/web/src/components/header/CaptureHeader.tsx' }),
+    ]);
+    expect(eventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.bug-enhance-empty' }),
+    );
+  });
 });

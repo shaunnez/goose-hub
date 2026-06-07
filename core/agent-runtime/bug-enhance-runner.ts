@@ -10,6 +10,7 @@ import type { AgentEvent } from '../event-stream/store.js';
 import { eventStore } from '../event-stream/store.js';
 import { logger } from '../logger.js';
 import { getProjectBySlug } from '../projects/loader.js';
+import type { AgentSpec } from './interface.js';
 import { safeParseOutputForSchema } from './output-normalization.js';
 import { readPromptWithContext } from './read-prompt.js';
 import { recordAgentRun } from './run-record.js';
@@ -20,6 +21,8 @@ import { selectRuntime } from './select-runtime.js';
 import { resolveSkillRuntimeForProject } from './skill-runtime-resolver.js';
 
 const jsonSchema = toJsonSchema(BugEnhanceOutputSchema);
+const UI_WEB_BUG_SIGNAL_RE =
+  /\b(ui|browser|frontend|page|route|screen|modal|dialog|button|header|search|shortcut|keyboard|key|click|label|capture|cmd|command|apple)\b|⌘/i;
 
 export interface BugEnhanceResult {
   /** Markdown sections to append after the original bug body, if any. */
@@ -84,7 +87,7 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
     const appendSystemPrompt =
       pathGroundingPrompt.length > 0 ? `${prompt}\n\n${pathGroundingPrompt}` : prompt;
 
-    const result = await runtime.run({
+    const baseSpec: AgentSpec = {
       runId,
       role: 'triager',
       skill: 'bug-enhance',
@@ -111,7 +114,9 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
             },
           }
         : {}),
-    });
+    };
+
+    let result = await runtime.run(baseSpec);
 
     const parsed = safeParseOutputForSchema(BugEnhanceOutputSchema, result.output);
     if (!parsed.success) {
@@ -146,18 +151,35 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
       return { markdown: null, groundedHints: null };
     }
 
-    const content = parsed.data.enhancedContent.trim();
+    let parsedData = parsed.data;
+    let toolAnalysis = analyzeToolEvents(result.events);
+    if (shouldRetryUiWebGrounding(input, parsedData, toolAnalysis)) {
+      const retrySpec = buildGroundingRetrySpec(baseSpec);
+      const retryResult = await runtime.run(retrySpec);
+      const retryParsed = safeParseOutputForSchema(BugEnhanceOutputSchema, retryResult.output);
+      if (retryParsed.success) {
+        result = retryResult;
+        parsedData = retryParsed.data;
+        toolAnalysis = analyzeToolEvents(result.events);
+      } else {
+        logger.warn('bug-enhance: grounding retry output validation failed', {
+          errors: retryParsed.error.issues,
+          raw: JSON.stringify(retryResult.output),
+        });
+      }
+    }
+
+    const content = parsedData.enhancedContent.trim();
     if (content.length === 0) {
       logger.warn('bug-enhance: enhancedContent empty after trim', {
         runId,
-        decisions: parsed.data.decisionSummaries,
+        decisions: parsedData.decisionSummaries,
       });
     }
-    const toolAnalysis = analyzeToolEvents(result.events);
-    const rawHints = hasUsableHints(parsed.data.groundedHints) ? parsed.data.groundedHints : null;
+    const rawHints = hasUsableHints(parsedData.groundedHints) ? parsedData.groundedHints : null;
     const groundedHints = rawHints != null ? pruneNonExistentPaths(rawHints, input, runId) : null;
     const emptyReasons = buildEmptyReasons({
-      category: parsed.data.category,
+      category: parsedData.category,
       enhancedContentLength: content.length,
       hasGroundedHints: groundedHints != null,
       toolAnalysis,
@@ -168,7 +190,7 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
         runId,
         reasons: emptyReasons,
         analysis: toolAnalysis,
-        category: parsed.data.category ?? null,
+        category: parsedData.category ?? null,
         enhancedContentLength: content.length,
         hasGroundedHints: groundedHints != null,
       });
@@ -266,6 +288,35 @@ function buildEmptyReasons(input: {
   if (input.enhancedContentLength === 0) reasons.add('empty-enhanced-content');
   if (!input.hasGroundedHints) reasons.add('no-grounded-hints');
   return Array.from(reasons);
+}
+
+function shouldRetryUiWebGrounding(
+  input: RunBugEnhanceInput,
+  output: { category?: BugCategory; groundedHints?: GroundedHints },
+  analysis: ToolEventAnalysis,
+): boolean {
+  if (analysis.toolCallCount > 0) return false;
+  if (output.category != null && output.category !== 'unknown') return false;
+  if (hasUsableHints(output.groundedHints)) return false;
+  return UI_WEB_BUG_SIGNAL_RE.test(`${input.title}\n${input.body}`);
+}
+
+function buildGroundingRetrySpec(baseSpec: AgentSpec): AgentSpec {
+  const instruction = [
+    'Grounding retry: this bug report has UI-web signals but the first pass returned unknown without making a Factory read/search/file tool call.',
+    'Classify it as ui-web unless a Factory evidence call proves a different surface.',
+    'Before returning, call at least one Factory evidence tool: repo_intel.query, search_text, list_files, or read_file.',
+    'Start from visible terms in the work item such as header, button, search, capture, shortcut, label, and key.',
+  ].join('\n');
+
+  return {
+    ...baseSpec,
+    runId: `${baseSpec.runId}:grounding-retry`,
+    appendSystemPrompt:
+      baseSpec.appendSystemPrompt != null && baseSpec.appendSystemPrompt.length > 0
+        ? `${baseSpec.appendSystemPrompt}\n\n${instruction}`
+        : instruction,
+  };
 }
 
 function emitBugEnhanceEmpty(input: {
