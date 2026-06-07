@@ -1,5 +1,9 @@
 import { parseIssueBodyAcceptanceCriteria } from '@goose-hub/core/acceptance-contracts/issue-body.js';
-import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
+import type {
+  AcceptanceContract,
+  ExecutableCheck,
+} from '@goose-hub/core/acceptance-contracts/types.js';
+import { storeArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
@@ -18,6 +22,21 @@ import {
 export interface AcceptanceContractWorkflowDeps {
   runtime?: AgentRuntime;
 }
+
+const EXECUTABLE_CHECK_KINDS = new Set<NonNullable<ExecutableCheck['kind']>>([
+  'unit',
+  'integration',
+  'e2e',
+  'api',
+  'lint',
+  'typecheck',
+  'custom',
+]);
+
+type AcceptanceContractNormalizationStats = {
+  droppedInvalidKindCount: number;
+  droppedUngroundedCheckCount: number;
+};
 
 export class AcceptanceContractValidationError extends Error {
   runId: string;
@@ -88,6 +107,114 @@ function mockOutput(workItem: WorkItem, investigation: ReturnType<typeof latestI
   } satisfies AcceptanceContractOutput;
 }
 
+function emptyNormalizationStats(): AcceptanceContractNormalizationStats {
+  return { droppedInvalidKindCount: 0, droppedUngroundedCheckCount: 0 };
+}
+
+function normalizationChanged(stats: AcceptanceContractNormalizationStats): boolean {
+  return stats.droppedInvalidKindCount > 0 || stats.droppedUngroundedCheckCount > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function groundingText(
+  workItem: WorkItem,
+  investigation: ReturnType<typeof latestInvestigation>,
+): string {
+  return [
+    workItem.title,
+    workItem.body ?? '',
+    investigation.findings ?? '',
+    ...(investigation.keyFiles ?? []).flatMap((file) => [file.path, file.reason ?? '']),
+    ...(investigation.openQuestions ?? []),
+  ].join('\n');
+}
+
+function normalizeExecutableChecksForGrounding(
+  value: unknown,
+  grounding: string,
+  stats: AcceptanceContractNormalizationStats,
+): unknown[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const checks: unknown[] = [];
+
+  for (const rawCheck of value) {
+    if (!isRecord(rawCheck) || typeof rawCheck.command !== 'string' || rawCheck.command === '') {
+      stats.droppedUngroundedCheckCount += 1;
+      continue;
+    }
+    if (!grounding.includes(rawCheck.command)) {
+      stats.droppedUngroundedCheckCount += 1;
+      continue;
+    }
+
+    let check = { ...rawCheck };
+    if (
+      check.kind != null &&
+      (typeof check.kind !== 'string' ||
+        !EXECUTABLE_CHECK_KINDS.has(check.kind as NonNullable<ExecutableCheck['kind']>))
+    ) {
+      const { kind: _kind, ...checkWithoutKind } = check;
+      check = checkWithoutKind;
+      stats.droppedInvalidKindCount += 1;
+    }
+    checks.push(check);
+  }
+
+  return checks.length > 0 ? checks : undefined;
+}
+
+function normalizeAcceptanceContractOutput(
+  rawOutput: unknown,
+  workItem: WorkItem,
+  investigation: ReturnType<typeof latestInvestigation>,
+): { output: unknown; stats: AcceptanceContractNormalizationStats } {
+  const stats = emptyNormalizationStats();
+  if (!isRecord(rawOutput) || !Array.isArray(rawOutput.criteria))
+    return { output: rawOutput, stats };
+
+  const grounding = groundingText(workItem, investigation);
+  const criteria = rawOutput.criteria.map((rawCriterion) => {
+    if (!isRecord(rawCriterion)) return rawCriterion;
+    const executableChecks = normalizeExecutableChecksForGrounding(
+      rawCriterion.executableChecks,
+      grounding,
+      stats,
+    );
+    if (executableChecks != null) {
+      return { ...rawCriterion, executableChecks };
+    }
+    const { executableChecks: _executableChecks, ...criterionWithoutChecks } = rawCriterion;
+    return criterionWithoutChecks;
+  });
+
+  return { output: { ...rawOutput, criteria }, stats };
+}
+
+function storeValidationFailureArtifact(input: {
+  projectSlug: string;
+  workItemId: string;
+  runId: string;
+  rawOutput: unknown;
+  normalizedOutput: unknown;
+  issues: unknown;
+}) {
+  return storeArtifact({
+    projectId: input.projectSlug,
+    workItemId: input.workItemId,
+    runId: input.runId,
+    kind: 'acceptance-contract-validation-output',
+    summary: 'Raw acceptance-contract output failed validation',
+    payload: {
+      rawOutput: input.rawOutput,
+      normalizedOutput: input.normalizedOutput,
+      issues: input.issues,
+    },
+  });
+}
+
 export async function runAcceptanceContractWorkflow(
   workItem: WorkItem,
   _stateSource: StateSource,
@@ -145,8 +272,44 @@ export async function runAcceptanceContractWorkflow(
             })
           ).output;
 
-  const parsed = safeParseOutputForSchema(AcceptanceContractOutputSchema, rawOutput);
+  const normalized = normalizeAcceptanceContractOutput(rawOutput, workItem, investigation);
+  if (normalizationChanged(normalized.stats)) {
+    eventStore.appendEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      kind: 'acceptance.contract-output-normalized',
+      payload: {
+        skill: 'acceptance-contract',
+        droppedInvalidKindCount: normalized.stats.droppedInvalidKindCount,
+        droppedUngroundedCheckCount: normalized.stats.droppedUngroundedCheckCount,
+      },
+      runId,
+      personaId,
+    });
+  }
+
+  const parsed = safeParseOutputForSchema(AcceptanceContractOutputSchema, normalized.output);
   if (!parsed.success) {
+    const artifact = storeValidationFailureArtifact({
+      projectSlug,
+      workItemId: workItem.id,
+      runId,
+      rawOutput,
+      normalizedOutput: normalized.output,
+      issues: parsed.error.issues,
+    });
+    eventStore.appendEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      kind: 'acceptance.contract-validation-failed',
+      payload: {
+        skill: 'acceptance-contract',
+        issueCount: parsed.error.issues.length,
+        artifact,
+      },
+      runId,
+      personaId,
+    });
     throw new AcceptanceContractValidationError(
       `Acceptance contract output validation failed: ${JSON.stringify(parsed.error.issues)}`,
       runId,
