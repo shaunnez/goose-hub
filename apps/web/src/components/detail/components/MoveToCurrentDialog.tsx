@@ -126,7 +126,6 @@ export function MoveToCurrentDialog({
     }
     return movable;
     // depQueries is intentionally included to recompute when query results arrive.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allLoaded, deps, targets, depQueries, projects.length, item.repoRef]);
 
   const doMove = useCallback(
