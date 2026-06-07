@@ -957,7 +957,12 @@ describe('runFixIssueWorkflow (#183)', () => {
         reason: 'Symbol index: imports dispatchWave',
       },
     ]);
-    const openPRImpl = vi.fn();
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 100,
+      prUrl: 'https://github.com/owner/repo/pull/100',
+      branch: 'factory/abc',
+      base: 'main',
+    });
 
     const runtime: AgentRuntime = {
       run: vi.fn().mockResolvedValueOnce({
@@ -1001,11 +1006,16 @@ describe('runFixIssueWorkflow (#183)', () => {
     );
   });
 
-  it('fires the frontend evidence gate after package-relative paths are normalized', async () => {
+  it('allows frontend unit-test coverage after package-relative paths are normalized', async () => {
     const item = makeWorkItem({ priority: 'medium', type: 'bug' });
     const source = makeStateSource();
     const worktreePath = makeTempWorktree(['apps/web/src/components/chrome/slice.test.ts']);
-    const openPRImpl = vi.fn();
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 100,
+      prUrl: 'https://github.com/owner/repo/pull/100',
+      branch: 'factory/abc',
+      base: 'main',
+    });
 
     const runtime: AgentRuntime = {
       run: vi.fn().mockResolvedValueOnce({
@@ -1034,7 +1044,7 @@ describe('runFixIssueWorkflow (#183)', () => {
       cleanupWorktreeImpl: vi.fn(),
     });
 
-    expect(openPRImpl).not.toHaveBeenCalled();
+    expect(openPRImpl).toHaveBeenCalled();
     const repaired = vi
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([event]) => event.kind === 'agent.output-repaired');
@@ -1053,9 +1063,7 @@ describe('runFixIssueWorkflow (#183)', () => {
     const failed = vi
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([event]) => event.kind === 'agent.run-failed');
-    expect((failed?.[0].payload as { error?: string }).error).toContain(
-      'evidenceSpecPath is required for apps/web changes',
-    );
+    expect(failed).toBeUndefined();
   });
 
   it('passes the wrong-surface guard when normalized output matches an investigation key file', async () => {
@@ -2193,7 +2201,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
   it('with evidenceSpecPath set: runs evidence-post skill and emits evidence.posted on success', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
-    const worktreePath = makeTempWorktree(['evidence/spec.json']);
+    const worktreePath = makeTempWorktree(['apps/web/e2e/issue-42.spec.ts']);
 
     const evidenceOutput = {
       screenshots: [{ path: 'evidence/issue-42/step-1.png', caption: 'Initial state', step: 1 }],
@@ -2207,7 +2215,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       run: vi
         .fn()
         .mockResolvedValueOnce({
-          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          output: makeImplementOutput({ evidenceSpecPath: 'apps/web/e2e/issue-42.spec.ts' }),
           decisionSummaries: [],
           events: [],
         } satisfies AgentResult)
@@ -2255,7 +2263,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
   it('passes worktreePath as workspaceDir on the evidence-post run spec (so git commands work)', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
-    const worktreePath = makeTempWorktree(['evidence/spec.json']);
+    const worktreePath = makeTempWorktree(['apps/web/e2e/issue-42.spec.ts']);
 
     const evidenceOutput = {
       screenshots: [],
@@ -2269,7 +2277,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       run: vi
         .fn()
         .mockResolvedValueOnce({
-          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          output: makeImplementOutput({ evidenceSpecPath: 'apps/web/e2e/issue-42.spec.ts' }),
           decisionSummaries: [],
           events: [],
         } satisfies AgentResult)
@@ -2308,7 +2316,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
   it('looks up the BEFORE comment URL from agent.investigation-complete and passes into evidence-post context', async () => {
     const item = makeWorkItem({ priority: 'medium', type: 'bug' });
     const source = makeStateSource();
-    const worktreePath = makeTempWorktree(['evidence/spec.json']);
+    const worktreePath = makeTempWorktree(['apps/web/e2e/issue-42.spec.ts']);
 
     const evidenceOutput = {
       screenshots: [],
@@ -2322,7 +2330,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       run: vi
         .fn()
         .mockResolvedValueOnce({
-          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          output: makeImplementOutput({ evidenceSpecPath: 'apps/web/e2e/issue-42.spec.ts' }),
           decisionSummaries: [],
           events: [],
         } satisfies AgentResult)
@@ -2418,13 +2426,13 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
   it('evidence-post runtime failure: emits evidence.post-failed and still transitions to needs-qa (best-effort)', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
-    const worktreePath = makeTempWorktree(['evidence/spec.json']);
+    const worktreePath = makeTempWorktree(['apps/web/e2e/issue-42.spec.ts']);
 
     const runtime: AgentRuntime = {
       run: vi
         .fn()
         .mockResolvedValueOnce({
-          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          output: makeImplementOutput({ evidenceSpecPath: 'apps/web/e2e/issue-42.spec.ts' }),
           decisionSummaries: [],
           events: [],
         } satisfies AgentResult)
@@ -2467,13 +2475,13 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
   it('evidence-post invalid output: emits evidence.post-failed and still transitions to needs-qa', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
-    const worktreePath = makeTempWorktree(['evidence/spec.json']);
+    const worktreePath = makeTempWorktree(['apps/web/e2e/issue-42.spec.ts']);
 
     const runtime: AgentRuntime = {
       run: vi
         .fn()
         .mockResolvedValueOnce({
-          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          output: makeImplementOutput({ evidenceSpecPath: 'apps/web/e2e/issue-42.spec.ts' }),
           decisionSummaries: [],
           events: [],
         } satisfies AgentResult)
@@ -2708,13 +2716,13 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
     // Covers line 448: `err instanceof Error ? err : new Error(String(err))` in runEvidencePost
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
-    const worktreePath = makeTempWorktree(['evidence/spec.json']);
+    const worktreePath = makeTempWorktree(['apps/web/e2e/issue-42.spec.ts']);
 
     const runtime: AgentRuntime = {
       run: vi
         .fn()
         .mockResolvedValueOnce({
-          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          output: makeImplementOutput({ evidenceSpecPath: 'apps/web/e2e/issue-42.spec.ts' }),
           decisionSummaries: [],
           events: [],
         } satisfies AgentResult)

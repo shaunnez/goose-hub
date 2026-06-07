@@ -3,6 +3,7 @@ import { eventStore } from '../event-stream/store.js';
 import { redactSecrets } from '../tool-layer/secret-redaction.js';
 import type { ModelTier } from '../types.js';
 import type { SkillBudgetOverride } from './budgets.js';
+import { storeGateFailureArtifact } from './gate-failure-artifacts.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { HoldoutFallbackForbiddenError } from './interface.js';
 import { defaultModelForTierAndProvider, providerOf, tierOf } from './models.js';
@@ -70,6 +71,15 @@ export async function runWithEscalation<T>(
 
   const escalated = resolveEscalatedBudgetsForProject(spec.skill, projectBudgets, projectId);
   if (escalated == null) {
+    storeGateFailureArtifact({
+      projectId,
+      workItemId: workItemId ?? null,
+      runId: spec.runId,
+      skill: spec.skill,
+      gate: 'output-schema',
+      rawOutput: result.output,
+      issues: formatZodIssues(parsed.error.issues),
+    });
     throw makeValidationError(spec.skill, parsed.error.issues, result.output, null);
   }
 
@@ -83,6 +93,15 @@ export async function runWithEscalation<T>(
   // the same model one more shot at producing valid output). Reject only
   // strict downgrade, which is a misconfiguration.
   if (currentTier != null && TIER_RANK[targetTier] < TIER_RANK[currentTier]) {
+    storeGateFailureArtifact({
+      projectId,
+      workItemId: workItemId ?? null,
+      runId: spec.runId,
+      skill: spec.skill,
+      gate: 'output-schema',
+      rawOutput: result.output,
+      issues: formatZodIssues(parsed.error.issues),
+    });
     throw makeValidationError(spec.skill, parsed.error.issues, result.output, null);
   }
 
@@ -138,6 +157,15 @@ export async function runWithEscalation<T>(
         repairRawOutputPreview: previewOutput(retryResult.output),
       },
       runId: retryRunId,
+    });
+    storeGateFailureArtifact({
+      projectId,
+      workItemId: workItemId ?? null,
+      runId: retryRunId,
+      skill: spec.skill,
+      gate: 'output-schema-retry',
+      rawOutput: retryResult.output,
+      issues: formatZodIssues(retryParsed.error.issues),
     });
     throw makeValidationError(spec.skill, retryParsed.error.issues, retryResult.output, targetTier);
   }

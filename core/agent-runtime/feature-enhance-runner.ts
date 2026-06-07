@@ -7,11 +7,16 @@ import featureEnhanceConfig, {
   FeatureEnhanceContextSchema,
 } from '@goose-hub/skills/feature-enhance/skill.config.js';
 import type { z } from 'zod';
-import type { AgentEvent } from '../event-stream/store.js';
+import type { ArtifactRef } from '../agent-artifacts/types.js';
 import { eventStore } from '../event-stream/store.js';
 import { logger } from '../logger.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { ProjectConfig } from '../types.js';
+import { storeGateFailureArtifact } from './gate-failure-artifacts.js';
+import {
+  type GroundedOutputToolAnalysis,
+  analyzeGroundedOutputToolEvents,
+} from './grounded-output-guard.js';
 import type { AgentRuntime } from './interface.js';
 import { safeParseOutputForSchema } from './output-normalization.js';
 import { readPromptWithContext } from './read-prompt.js';
@@ -31,6 +36,7 @@ export type FeatureEnhanceEmptyReason =
   | 'output-validation-failed'
   | 'runtime-failed'
   | 'runtime-max-turn-failed'
+  | 'factory-tools-not-used'
   | 'no-grounded-output'
   | 'candidate-files-without-tool-verified-evidence';
 
@@ -41,9 +47,11 @@ export type FeatureEnhanceEmptyPayload = {
   reasons: FeatureEnhanceEmptyReason[];
   validationIssues?: Array<{ path: string; message: string }>;
   outputPreview?: string;
+  artifactRef?: ArtifactRef;
   blockedToolNames: string[];
   toolCallCount: number;
   repoIntelCallCount: number;
+  successfulFactoryToolCallCount: number;
   blockedToolCallCount: number;
   runtime?: string;
   modelId?: string;
@@ -70,13 +78,6 @@ export type RunFeatureEnhanceInput = {
   runtimeOverride?: AgentRuntime;
   projectConfigOverride?: Partial<ProjectConfig> | null;
   extraEventPayload?: Record<string, unknown>;
-};
-
-type ToolEventAnalysis = {
-  toolCallCount: number;
-  repoIntelCallCount: number;
-  blockedToolCallCount: number;
-  blockedToolNames: string[];
 };
 
 type RuntimeDiagnostics = {
@@ -106,47 +107,6 @@ function outputPreview(output: unknown): string {
   return serialized.slice(0, 2_000);
 }
 
-function payloadRecord(value: unknown): Record<string, unknown> | null {
-  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function normalizedToolName(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  if (value.startsWith('mcp__factory-tools__')) {
-    const localName = value.slice('mcp__factory-tools__'.length);
-    return localName === 'repo_intel_query' ? 'repo_intel.query' : localName;
-  }
-  if (value === 'repo_intel_query') return 'repo_intel.query';
-  return value;
-}
-
-function analyzeToolEvents(events: readonly AgentEvent[]): ToolEventAnalysis {
-  let toolCallCount = 0;
-  let repoIntelCallCount = 0;
-  let blockedToolCallCount = 0;
-  const blockedToolNames = new Set<string>();
-
-  for (const event of events) {
-    if (event.kind !== 'agent.tool-call') continue;
-    toolCallCount++;
-    const payload = payloadRecord(event.payload);
-    const toolName = normalizedToolName(payload?.tool_name ?? payload?.toolName ?? payload?.tool);
-    if (toolName === 'repo_intel.query') repoIntelCallCount++;
-    if (payload?.blocked === true || payload?.status === 'failed') {
-      blockedToolCallCount++;
-      if (toolName != null) blockedToolNames.add(toolName);
-    }
-  }
-
-  return {
-    toolCallCount,
-    repoIntelCallCount,
-    blockedToolCallCount,
-    blockedToolNames: Array.from(blockedToolNames),
-  };
-}
-
 function isGrounded(output: FeatureEnhanceOutput): boolean {
   return (
     output.candidateFiles.length > 0 ||
@@ -163,10 +123,13 @@ function hasToolVerifiedCandidate(output: FeatureEnhanceOutput): boolean {
 
 function buildEmptyReasons(input: {
   output: FeatureEnhanceOutput;
-  toolAnalysis: ToolEventAnalysis;
+  toolAnalysis: GroundedOutputToolAnalysis;
 }): FeatureEnhanceEmptyReason[] {
   const reasons = new Set<FeatureEnhanceEmptyReason>();
   const hasVerifiedCandidate = hasToolVerifiedCandidate(input.output);
+  if (input.toolAnalysis.successfulFactoryToolCallCount === 0) {
+    reasons.add('factory-tools-not-used');
+  }
   if (input.toolAnalysis.toolCallCount === 0) reasons.add('no-tool-call-made');
   if (input.toolAnalysis.blockedToolCallCount > 0 && !hasVerifiedCandidate) {
     reasons.add('tool-call-blocked');
@@ -181,11 +144,12 @@ function buildEmptyReasons(input: {
 function appendEmptyEvent(input: {
   runInput: RunFeatureEnhanceInput;
   reasons: FeatureEnhanceEmptyReason[];
-  analysis: ToolEventAnalysis;
+  analysis: GroundedOutputToolAnalysis;
   diagnostics: RuntimeDiagnostics;
   personaId?: string;
   details?: Partial<
-    Pick<FeatureEnhanceEmptyPayload, 'validationIssues' | 'outputPreview' | 'error'>
+    Pick<FeatureEnhanceEmptyPayload, 'validationIssues' | 'outputPreview' | 'error'> &
+      Pick<FeatureEnhanceEmptyPayload, 'artifactRef'>
   >;
 }): FeatureEnhanceEmptyPayload {
   const [reason = 'no-grounded-output'] = input.reasons;
@@ -197,6 +161,7 @@ function appendEmptyEvent(input: {
     blockedToolNames: input.analysis.blockedToolNames,
     toolCallCount: input.analysis.toolCallCount,
     repoIntelCallCount: input.analysis.repoIntelCallCount,
+    successfulFactoryToolCallCount: input.analysis.successfulFactoryToolCallCount,
     blockedToolCallCount: input.analysis.blockedToolCallCount,
     ...(input.diagnostics.runtime != null ? { runtime: input.diagnostics.runtime } : {}),
     ...(input.diagnostics.modelId != null ? { modelId: input.diagnostics.modelId } : {}),
@@ -272,9 +237,14 @@ export async function runFeatureEnhance(
       reasons: ['output-validation-failed'],
       analysis: {
         toolCallCount: 0,
+        factoryToolCallCount: 0,
+        successfulFactoryToolCallCount: 0,
         repoIntelCallCount: 0,
+        successfulRepoIntelCallCount: 0,
         blockedToolCallCount: 0,
         blockedToolNames: [],
+        advisoryResourceProbeFailureCount: 0,
+        advisoryResourceProbeNames: [],
       },
       diagnostics,
       personaId,
@@ -294,97 +264,144 @@ export async function runFeatureEnhance(
   }
 
   try {
-    const result = await runtime.run({
-      runId: input.enhanceRunId,
-      role,
-      skill: FEATURE_ENHANCE_SKILL,
-      ...(input.workspaceDir != null ? { workspaceDir: input.workspaceDir } : {}),
-      context: {
-        ...contextResult.data,
-        projectId: input.projectId,
-        workItemId: input.workItemId,
-      },
-      contextAllowlist: featureEnhanceConfig.contextAllowlist,
-      freshContext: featureEnhanceConfig.freshContext,
-      toolBundles: ['read'],
-      toolExtras: [],
-      budgets: resolved.budgets,
-      effort: resolved.effort,
-      personaId,
-      workItemId: input.workItemId,
-      modelOverride: resolved.modelOverride,
-      outputJsonSchema,
-      appendSystemPrompt,
-      extraEventPayload: {
-        ...input.extraEventPayload,
-        ...(input.parentRunId != null ? { parentRunId: input.parentRunId } : {}),
-      },
-    });
-
-    const analysis = analyzeToolEvents(result.events);
-    const parsed = safeParseOutputForSchema(FeatureEnhanceOutputSchema, result.output);
-    if (!parsed.success) {
-      logger.warn('feature-enhance: output validation failed', {
-        runId: input.enhanceRunId,
-        errors: parsed.error.issues,
-        raw: JSON.stringify(result.output),
-      });
-      recordAgentRun({
-        runId: input.enhanceRunId,
-        personaId,
-        workItemId: input.workItemId,
-        projectId: input.projectId,
+    for (let attemptIndex = 0; attemptIndex < 2; attemptIndex++) {
+      const attemptRunId =
+        attemptIndex === 0 ? input.enhanceRunId : `${input.enhanceRunId}:retry:${attemptIndex}`;
+      const attemptInput =
+        attemptRunId === input.enhanceRunId ? input : { ...input, enhanceRunId: attemptRunId };
+      const result = await runtime.run({
+        runId: attemptRunId,
         role,
         skill: FEATURE_ENHANCE_SKILL,
-        outcome: 'failure',
-      });
-      const telemetry = appendEmptyEvent({
-        runInput: input,
-        reasons: ['output-validation-failed'],
-        analysis,
-        diagnostics,
+        ...(input.workspaceDir != null ? { workspaceDir: input.workspaceDir } : {}),
+        context: {
+          ...contextResult.data,
+          projectId: input.projectId,
+          workItemId: input.workItemId,
+        },
+        contextAllowlist: featureEnhanceConfig.contextAllowlist,
+        freshContext: featureEnhanceConfig.freshContext,
+        toolBundles: ['read'],
+        toolExtras: [],
+        budgets: resolved.budgets,
+        effort: resolved.effort,
         personaId,
-        details: {
-          validationIssues: parsed.error.issues.map((issue) => ({
-            path: issue.path.join('.'),
-            message: issue.message,
-          })),
-          outputPreview: outputPreview(result.output),
+        workItemId: input.workItemId,
+        modelOverride: resolved.modelOverride,
+        outputJsonSchema,
+        appendSystemPrompt,
+        extraEventPayload: {
+          ...input.extraEventPayload,
+          ...(input.parentRunId != null ? { parentRunId: input.parentRunId } : {}),
+          ...(attemptIndex > 0
+            ? { attempt: 'grounding-tool-retry', retryOf: input.enhanceRunId }
+            : {}),
         },
       });
-      return {
-        ok: false,
-        enhanceRunId: input.enhanceRunId,
-        reason: telemetry.reason,
-        telemetry,
-      };
-    }
 
-    const emptyReasons = buildEmptyReasons({ output: parsed.data, toolAnalysis: analysis });
-    if (emptyReasons.length > 0) {
-      const telemetry = appendEmptyEvent({
-        runInput: input,
-        reasons: emptyReasons,
-        analysis,
-        diagnostics,
-        personaId,
-        details: { outputPreview: outputPreview(parsed.data) },
-      });
-      return {
-        ok: false,
-        enhanceRunId: input.enhanceRunId,
-        reason: telemetry.reason,
-        telemetry,
-      };
-    }
+      const analysis = analyzeGroundedOutputToolEvents(result.events);
+      const parsed = safeParseOutputForSchema(FeatureEnhanceOutputSchema, result.output);
+      if (!parsed.success) {
+        const validationIssues = parsed.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        }));
+        logger.warn('feature-enhance: output validation failed', {
+          runId: attemptRunId,
+          errors: parsed.error.issues,
+          raw: JSON.stringify(result.output),
+        });
+        const artifactRef = storeGateFailureArtifact({
+          projectId: input.projectId,
+          workItemId: input.workItemId,
+          runId: attemptRunId,
+          skill: FEATURE_ENHANCE_SKILL,
+          gate: 'output-schema',
+          rawOutput: result.output,
+          issues: validationIssues,
+        });
+        recordAgentRun({
+          runId: attemptRunId,
+          personaId,
+          workItemId: input.workItemId,
+          projectId: input.projectId,
+          role,
+          skill: FEATURE_ENHANCE_SKILL,
+          outcome: 'failure',
+        });
+        const telemetry = appendEmptyEvent({
+          runInput: attemptInput,
+          reasons: ['output-validation-failed'],
+          analysis,
+          diagnostics,
+          personaId,
+          details: {
+            validationIssues,
+            outputPreview: outputPreview(result.output),
+            ...(artifactRef != null ? { artifactRef } : {}),
+          },
+        });
+        return {
+          ok: false,
+          enhanceRunId: attemptRunId,
+          reason: telemetry.reason,
+          telemetry,
+        };
+      }
 
-    return { ok: true, output: parsed.data, enhanceRunId: input.enhanceRunId, personaId };
+      const emptyReasons = buildEmptyReasons({ output: parsed.data, toolAnalysis: analysis });
+      if (analysis.successfulFactoryToolCallCount === 0 && attemptIndex === 0) {
+        continue;
+      }
+      if (emptyReasons.length > 0) {
+        const artifactRef = storeGateFailureArtifact({
+          projectId: input.projectId,
+          workItemId: input.workItemId,
+          runId: attemptRunId,
+          skill: FEATURE_ENHANCE_SKILL,
+          gate: emptyReasons[0],
+          rawOutput: parsed.data,
+          issues: emptyReasons.map((reason) => ({ path: 'agent.tool-call', message: reason })),
+        });
+        recordAgentRun({
+          runId: attemptRunId,
+          personaId,
+          workItemId: input.workItemId,
+          projectId: input.projectId,
+          role,
+          skill: FEATURE_ENHANCE_SKILL,
+          outcome: 'failure',
+        });
+        const telemetry = appendEmptyEvent({
+          runInput: attemptInput,
+          reasons: emptyReasons,
+          analysis,
+          diagnostics,
+          personaId,
+          details: {
+            outputPreview: outputPreview(parsed.data),
+            ...(artifactRef != null ? { artifactRef } : {}),
+          },
+        });
+        return {
+          ok: false,
+          enhanceRunId: attemptRunId,
+          reason: telemetry.reason,
+          telemetry,
+        };
+      }
+
+      return { ok: true, output: parsed.data, enhanceRunId: attemptRunId, personaId };
+    }
+    throw new Error('feature-enhance retry loop exhausted');
   } catch (err) {
     logger.error('feature-enhance: agent run failed', {
       runId: input.enhanceRunId,
       err: String(err),
     });
-    const analysis = analyzeToolEvents(eventStore.replay({ runId: input.enhanceRunId }));
+    const analysis = analyzeGroundedOutputToolEvents(
+      eventStore.replay({ runId: input.enhanceRunId }),
+    );
     const telemetry = appendEmptyEvent({
       runInput: input,
       reasons: [runtimeFailureReason(err)],

@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import type { ExecutableCheck } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildCodeContextBundle } from '@goose-hub/core/agent-runtime/code-context.js';
+import { storeGateFailureArtifact } from '@goose-hub/core/agent-runtime/gate-failure-artifacts.js';
+import { groundedOutputToolUseFailure } from '@goose-hub/core/agent-runtime/grounded-output-guard.js';
 import type {
   AgentBudgets,
   AgentResult,
@@ -12,6 +14,7 @@ import type {
 import type { InvestigationContext } from '@goose-hub/core/agent-runtime/investigation-context.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
+import { recordAgentRun } from '@goose-hub/core/agent-runtime/run-record.js';
 import {
   collectReportedRunTestFailures,
   collectWrittenTestVerificationFailures,
@@ -763,6 +766,19 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
 
   const parsed = safeParseOutputForSchema(ImplementWpSchema, result.output);
   if (!parsed.success) {
+    const validationIssues = parsed.error.issues.map((issue) => ({
+      path: issue.path.join('.'),
+      message: issue.message,
+    }));
+    const artifactRef = storeGateFailureArtifact({
+      projectId,
+      workItemId: workItemId ?? null,
+      runId: wpRunId,
+      skill: 'implement-wp',
+      gate: 'output-schema',
+      rawOutput: result.output,
+      issues: validationIssues,
+    });
     const reason = `schema validation failed: ${parsed.error.issues
       .map((i) => `${i.path.join('.')}: ${i.message}`)
       .join('; ')}`;
@@ -770,7 +786,12 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       projectId,
       workItemId: workItemId ?? null,
       kind: 'parallel-implement.wp-failed',
-      payload: { wpId: wp.id, wpRunId, errorReason: reason },
+      payload: {
+        wpId: wp.id,
+        wpRunId,
+        errorReason: reason,
+        ...(artifactRef != null ? { artifactRef } : {}),
+      },
       runId: wpRunId,
     });
     opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned.map(fileOwnedPath));
@@ -856,6 +877,63 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       errorReason: acceptanceFailure.reason,
       runId: wpRunId,
       acceptanceFailure,
+    };
+  }
+
+  const groundingFailure = groundedOutputToolUseFailure({
+    skill: 'implement-wp',
+    events: runEvents,
+    allowMissingAudit: true,
+  });
+  if (groundingFailure != null) {
+    const artifactRef = storeGateFailureArtifact({
+      projectId,
+      workItemId: workItemId ?? null,
+      runId: wpRunId,
+      skill: 'implement-wp',
+      gate: groundingFailure.reason,
+      rawOutput: result.output,
+      issues: [{ path: 'agent.tool-call', message: groundingFailure.message }],
+    });
+    opts.appendEvent({
+      projectId,
+      workItemId: workItemId ?? null,
+      kind: 'agent.contract-gate-blocked',
+      payload: {
+        runId: wpRunId,
+        skill: 'implement-wp',
+        wpId: wp.id,
+        gate: 'implement-wp-grounded-output',
+        reason: groundingFailure.reason,
+        toolCallCount: groundingFailure.analysis.toolCallCount,
+        successfulFactoryToolCallCount: groundingFailure.analysis.successfulFactoryToolCallCount,
+        ...(artifactRef != null ? { artifactRef } : {}),
+      },
+      runId: wpRunId,
+    });
+    opts.appendEvent({
+      projectId,
+      workItemId: workItemId ?? null,
+      kind: 'parallel-implement.wp-failed',
+      payload: { wpId: wp.id, wpRunId, errorReason: groundingFailure.message },
+      runId: wpRunId,
+    });
+    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned.map(fileOwnedPath));
+    opts.recordIterationFn(runId, wp.id, iteration, 'failed', groundingFailure.message);
+    recordAgentRun({
+      runId: wpRunId,
+      personaId: opts.personaId,
+      workItemId: workItemId ?? null,
+      projectId,
+      role: 'developer',
+      skill: 'implement-wp',
+      outcome: 'failure',
+    });
+    return {
+      status: 'failed',
+      wpId: wp.id,
+      errorReason: groundingFailure.message,
+      runId: wpRunId,
     };
   }
 

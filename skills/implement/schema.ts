@@ -94,11 +94,23 @@ export const ImplementSchema = z
   .superRefine((val, ctx) => {
     const touchesWeb = val.filesWritten.some((f) => f.path.startsWith('apps/web/'));
     const hasEvidenceBlockerSummary = hasEvidenceBlockerDecision(val.decisionSummaries);
-    if (touchesWeb && val.evidenceSpecPath === null && !hasEvidenceBlockerSummary) {
+    const writtenUnitOrComponentTests = val.testsWritten
+      .map((test) => test.path)
+      .filter((path) => path.startsWith('apps/web/') && !path.startsWith('apps/web/e2e/'));
+    const runPaths = new Set(val.testsRun.paths);
+    const hasTargetedFrontendUnitTests =
+      writtenUnitOrComponentTests.length > 0 &&
+      writtenUnitOrComponentTests.some((path) => runPaths.has(path));
+    if (
+      touchesWeb &&
+      val.evidenceSpecPath === null &&
+      !hasEvidenceBlockerSummary &&
+      !hasTargetedFrontendUnitTests
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          'evidenceSpecPath is required when filesWritten includes apps/web/ files unless a TOOL_FAILURE, UNCERTAINTY, or SKIP_GATE decision summary explains the e2e/evidence blockage or disabled setting',
+          'evidenceSpecPath is required when filesWritten includes apps/web/ files unless targeted unit/component tests were written and run, or a TOOL_FAILURE, UNCERTAINTY, or SKIP_GATE decision summary explains the e2e/evidence blockage or disabled setting',
         path: ['evidenceSpecPath'],
       });
     }

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { storeGateFailureArtifact } from '@goose-hub/core/agent-runtime/gate-failure-artifacts.js';
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { persistEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
@@ -814,6 +815,18 @@ export async function runSpecAuthorWorkflow(
 
     if (!attempt.validation.ok) {
       const errors = formatValidationErrors(attempt.validation).join('; ');
+      const artifactRef = storeGateFailureArtifact({
+        projectId,
+        workItemId: workItem.id,
+        runId: attempt.runId,
+        skill: 'spec-author',
+        gate: 'structural-validation',
+        rawOutput: attempt.spec,
+        issues: attempt.validation.errors.map((error) => ({
+          path: error.ref,
+          message: `${error.rule}: ${error.message}`,
+        })),
+      });
       eventStore.appendEvent({
         projectId,
         workItemId: workItem.id,
@@ -822,6 +835,7 @@ export async function runSpecAuthorWorkflow(
           runId: attempt.runId,
           skill: 'spec-author',
           error: `Validation failed: ${errors}`,
+          ...(artifactRef != null ? { artifactRef } : {}),
         },
         runId: attempt.runId,
       });

@@ -73,6 +73,21 @@ describe('implement output schema', () => {
     ).toBe(true);
   });
 
+  it('accepts ordinary web changes without evidenceSpecPath when targeted unit tests were written and run', () => {
+    expect(
+      ImplementSchema.safeParse({
+        ...baseValid,
+        filesWritten: [{ path: 'apps/web/src/components/Foo.tsx', reason: 'copy fix' }],
+        testsWritten: [{ path: 'apps/web/src/components/Foo.test.tsx', cases: 2 }],
+        testsRun: {
+          command: 'pnpm test apps/web/src/components/Foo.test.tsx',
+          paths: ['apps/web/src/components/Foo.test.tsx'],
+        },
+        evidenceSpecPath: null,
+      }).success,
+    ).toBe(true);
+  });
+
   it('rejects web changes without evidenceSpecPath when no evidence blocker is recorded', () => {
     expect(
       ImplementSchema.safeParse({

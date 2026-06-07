@@ -2,9 +2,12 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { skillsRoot } from '@goose-hub/skills';
+import type { ArtifactRef } from '../agent-artifacts/types.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { ProjectConfig } from '../types.js';
 import type { ResolvedBudget } from './budgets.js';
+import { storeGateFailureArtifact } from './gate-failure-artifacts.js';
+import { groundedOutputToolUseFailure } from './grounded-output-guard.js';
 import type { AgentResult, AgentRuntime, SkillConfig } from './interface.js';
 import { tryProviderOf } from './models.js';
 import { safeParseOutputForSchema } from './output-normalization.js';
@@ -35,6 +38,7 @@ export class OutputValidationError extends Error {
     runtime?: string;
     modelId?: string;
     provider?: string;
+    artifactRef?: ArtifactRef;
   };
 
   constructor(
@@ -48,6 +52,7 @@ export class OutputValidationError extends Error {
       runtime?: string;
       modelId?: string;
       provider?: string;
+      artifactRef?: ArtifactRef;
     } = {},
   ) {
     super(`invokeSkill: output validation failed for '${skillName}'`);
@@ -63,6 +68,7 @@ export class OutputValidationError extends Error {
       ...(diagnostics.runtime != null ? { runtime: diagnostics.runtime } : {}),
       ...(diagnostics.modelId != null ? { modelId: diagnostics.modelId } : {}),
       ...(diagnostics.provider != null ? { provider: diagnostics.provider } : {}),
+      ...(diagnostics.artifactRef != null ? { artifactRef: diagnostics.artifactRef } : {}),
     };
   }
 }
@@ -108,6 +114,8 @@ export type InvokeSkillInput = {
     freshContextOverride?: boolean;
     /** Skip runtime-owned agent.run-started when caller already emitted the parent marker. */
     suppressRunStarted?: boolean;
+    /** Explicitly permits schema-valid output after zero Factory tool calls for known safe runs. */
+    noToolSafe?: boolean;
     /**
      * Fired immediately after `selectPersona()` resolves a persona but before
      * the spawn. Callers that need to record `persona_stats` on a throw can
@@ -243,6 +251,22 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<InvokeSkillR
     const outResult = safeParseOutputForSchema(skillConfig.outputSchema, result.output);
     if (!outResult.success) {
       const provider = tryProviderOf(modelOverride);
+      const issues = outResult.error.issues.map((i) => ({
+        path: i.path as Array<string | number>,
+        message: i.message,
+      }));
+      const artifactRef = storeGateFailureArtifact({
+        projectId,
+        workItemId: workItemId ?? null,
+        runId,
+        skill: skillName,
+        gate: 'output-schema',
+        rawOutput: result.output,
+        issues: issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+      });
       recordAgentRun({
         runId,
         personaId,
@@ -252,23 +276,62 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<InvokeSkillR
         skill: skillName,
         outcome: 'failure',
       });
-      throw new OutputValidationError(
-        outResult.error.issues.map((i) => ({
-          path: i.path as Array<string | number>,
-          message: i.message,
-        })),
-        skillName,
-        runId,
-        {
-          outputPreview: outputPreview(result.output),
-          outputSchemaHash: schemaHash(outputJsonSchema),
-          runtime: provider === 'codex' ? 'codex-cli' : 'claude-cli',
-          modelId: modelOverride,
-          provider,
-        },
-      );
+      throw new OutputValidationError(issues, skillName, runId, {
+        outputPreview: outputPreview(result.output),
+        outputSchemaHash: schemaHash(outputJsonSchema),
+        runtime: provider === 'codex' ? 'codex-cli' : 'claude-cli',
+        modelId: modelOverride,
+        provider,
+        artifactRef,
+      });
     }
     output = outResult.data;
+  }
+
+  const groundingFailure = groundedOutputToolUseFailure({
+    skill: skillName,
+    events: result.events,
+    noToolSafe: overrides?.noToolSafe,
+  });
+  if (groundingFailure != null) {
+    const provider = tryProviderOf(modelOverride);
+    const issues = [
+      {
+        path: [] as Array<string | number>,
+        message: groundingFailure.message,
+      },
+    ];
+    const artifactRef = storeGateFailureArtifact({
+      projectId,
+      workItemId: workItemId ?? null,
+      runId,
+      skill: skillName,
+      gate: groundingFailure.reason,
+      rawOutput: result.output,
+      issues: [
+        {
+          path: 'agent.tool-call',
+          message: groundingFailure.message,
+        },
+      ],
+    });
+    recordAgentRun({
+      runId,
+      personaId,
+      workItemId: workItemId ?? null,
+      projectId,
+      role,
+      skill: skillName,
+      outcome: 'failure',
+    });
+    throw new OutputValidationError(issues, skillName, runId, {
+      outputPreview: outputPreview(result.output),
+      outputSchemaHash: schemaHash(outputJsonSchema),
+      runtime: provider === 'codex' ? 'codex-cli' : 'claude-cli',
+      modelId: modelOverride,
+      provider,
+      artifactRef,
+    });
   }
 
   return { ...result, output, personaId, role };

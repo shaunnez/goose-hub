@@ -243,6 +243,7 @@ export function groupTimelineEventsByCanonicalSection(
   const runMetadata = buildTimelineRunMetadataIndex(normalizedEvents);
   const implementationPipelineByRunId = buildImplementationPipelineRunIndex(normalizedEvents);
   const reviewWorkflowByRunId = buildReviewWorkflowRunIndex(normalizedEvents);
+  const qaAttemptByRunId = buildQaAttemptRunIndex(normalizedEvents);
   const discoverSessionByWorkflowOrRunId = buildDiscoverSessionRunIndex(normalizedEvents);
   const fixFeedbackAttemptByRunId = buildFixFeedbackAttemptRunIndex(normalizedEvents);
   const prdWorkflowByRevisionEventId = buildPrdRevisionWorkflowIndex(normalizedEvents);
@@ -252,6 +253,7 @@ export function groupTimelineEventsByCanonicalSection(
     runMetadata,
     implementationPipelineByRunId,
     reviewWorkflowByRunId,
+    qaAttemptByRunId,
     discoverSessionByWorkflowOrRunId,
     fixFeedbackAttemptByRunId,
     prdWorkflowByRevisionEventId,
@@ -306,6 +308,7 @@ function buildTimelineSegments(
   runMetadata: ReturnType<typeof buildTimelineRunMetadataIndex>,
   implementationPipelineByRunId: ReadonlyMap<string, string>,
   reviewWorkflowByRunId: ReadonlyMap<string, string>,
+  qaAttemptByRunId: ReadonlyMap<string, string>,
   discoverSessionByWorkflowOrRunId: DiscoverSessionRunIndex,
   fixFeedbackAttemptByRunId: ReadonlyMap<string, string>,
   prdWorkflowByRevisionEventId: ReadonlyMap<number, string>,
@@ -328,6 +331,7 @@ function buildTimelineSegments(
       section,
       implementationPipelineByRunId,
       reviewWorkflowByRunId,
+      qaAttemptByRunId,
       discoverSessionByWorkflowOrRunId,
       fixFeedbackAttemptByRunId,
       prdWorkflowByRevisionEventId,
@@ -373,6 +377,7 @@ function timelineSegmentExplicitKey(
   section: TimelineSectionId,
   implementationPipelineByRunId: ReadonlyMap<string, string>,
   reviewWorkflowByRunId: ReadonlyMap<string, string>,
+  qaAttemptByRunId: ReadonlyMap<string, string>,
   discoverSessionByWorkflowOrRunId: DiscoverSessionRunIndex,
   fixFeedbackAttemptByRunId: ReadonlyMap<string, string>,
   prdWorkflowByRevisionEventId: ReadonlyMap<number, string>,
@@ -422,7 +427,7 @@ function timelineSegmentExplicitKey(
         runId
       );
     case 'qa':
-      return qaSegmentIdForEvent(event, implementationPipelineByRunId);
+      return qaSegmentIdForEvent(event, implementationPipelineByRunId, qaAttemptByRunId);
     case 'review':
       return reviewWorkflowIdForEvent(event, reviewWorkflowByRunId) ?? runId;
     case 'conflict':
@@ -723,6 +728,28 @@ function reviewWorkflowIdForEvent(
   );
 }
 
+function buildQaAttemptRunIndex(events: AgentEventDto[]): Map<string, string> {
+  const qaAttemptByRunId = new Map<string, string>();
+
+  for (const event of events) {
+    const qaAttemptId = eventPayloadString(event, 'qaAttemptId');
+    if (qaAttemptId == null) continue;
+
+    const runIds = new Set<string>();
+    if (event.runId != null && event.runId.trim() !== '') runIds.add(event.runId);
+    const payloadRunId = eventPayloadString(event, 'runId');
+    if (payloadRunId != null) runIds.add(payloadRunId);
+    const payloadSnakeRunId = eventPayloadString(event, 'run_id');
+    if (payloadSnakeRunId != null) runIds.add(payloadSnakeRunId);
+
+    for (const runId of runIds) {
+      if (!qaAttemptByRunId.has(runId)) qaAttemptByRunId.set(runId, qaAttemptId);
+    }
+  }
+
+  return qaAttemptByRunId;
+}
+
 function implementationPipelineIdForRunId(
   runId: string | null,
   implementationPipelineByRunId: ReadonlyMap<string, string>,
@@ -749,9 +776,15 @@ function implementationPipelineIdForEvent(
 function qaSegmentIdForEvent(
   event: AgentEventDto,
   implementationPipelineByRunId: ReadonlyMap<string, string>,
+  qaAttemptByRunId: ReadonlyMap<string, string>,
 ): string | null {
+  const payloadRunId = eventPayloadString(event, 'runId');
+  const payloadSnakeRunId = eventPayloadString(event, 'run_id');
   return (
     eventPayloadString(event, 'qaAttemptId') ??
+    (event.runId == null ? null : (qaAttemptByRunId.get(event.runId) ?? null)) ??
+    (payloadRunId == null ? null : (qaAttemptByRunId.get(payloadRunId) ?? null)) ??
+    (payloadSnakeRunId == null ? null : (qaAttemptByRunId.get(payloadSnakeRunId) ?? null)) ??
     implementationPipelineIdForEvent(event, implementationPipelineByRunId) ??
     (event.runId != null && event.runId.trim() !== '' ? event.runId : null)
   );

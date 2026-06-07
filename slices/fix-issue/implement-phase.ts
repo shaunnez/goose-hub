@@ -4,6 +4,8 @@ import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/ty
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { CodeContextEntry } from '@goose-hub/core/agent-runtime/code-context.js';
 import { hasEvidenceBlockerDecision } from '@goose-hub/core/agent-runtime/evidence-blocker.js';
+import { storeGateFailureArtifact } from '@goose-hub/core/agent-runtime/gate-failure-artifacts.js';
+import { groundedOutputToolUseFailure } from '@goose-hub/core/agent-runtime/grounded-output-guard.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import {
   type InvestigationContext,
@@ -17,6 +19,7 @@ import {
   type RelatedSurfaceManifest,
   discoveryCallsRepeatRelatedSurface,
 } from '@goose-hub/core/agent-runtime/related-surface.js';
+import { recordAgentRun } from '@goose-hub/core/agent-runtime/run-record.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
@@ -336,6 +339,53 @@ function hasEvidenceBlockerSummary(output: ImplementOutputShape): boolean {
   return hasEvidenceBlockerDecision(output.decisionSummaries);
 }
 
+function hasTargetedFrontendUnitTests(output: ImplementOutputShape): boolean {
+  const runPaths = new Set(output.testsRun.paths);
+  return output.testsWritten.some(
+    (test) =>
+      test.path.startsWith('apps/web/') &&
+      !test.path.startsWith('apps/web/e2e/') &&
+      runPaths.has(test.path),
+  );
+}
+
+function isEvidenceSpecPath(path: string): boolean {
+  return /^apps\/web\/e2e\/.*\.spec\.ts$/.test(path);
+}
+
+function evaluateObservedWritesGate(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId?: string;
+  worktreePath: string;
+  output: ImplementOutputShape;
+  observedChangedPaths: string[];
+  observedWritePaths: string[];
+  observedGitAvailable: boolean;
+  hasSurfaceGuard: boolean;
+}): void {
+  const reportsCodeChange =
+    input.output.filesWritten.length > 0 || input.output.testsWritten.length > 0;
+  if (!reportsCodeChange) return;
+  if (!input.observedGitAvailable) return;
+  if (input.hasSurfaceGuard) return;
+  if (input.observedChangedPaths.length > 0 || input.observedWritePaths.length > 0) return;
+  emitContractGateBlocked({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    runId: input.runId,
+    personaId: input.personaId,
+    gate: 'implement-observed-writes',
+    worktreePath: input.worktreePath,
+    reason: 'no-observed-writes-for-code-change',
+    fields: [],
+    observedChangedPaths: input.observedChangedPaths,
+    observedWritePaths: input.observedWritePaths,
+  });
+  throw new Error('contract gate blocked: no observed writes for implement code-change task');
+}
+
 function evaluateEvidenceRequirementGate(input: {
   projectId: string;
   workItemId: string;
@@ -357,11 +407,13 @@ function evaluateEvidenceRequirementGate(input: {
     (path) => path.startsWith('apps/web/'),
   );
   const evidenceBlockerSummary = hasEvidenceBlockerSummary(input.output);
+  const frontendUnitTestsCoverEvidence = hasTargetedFrontendUnitTests(input.output);
 
   if (
     frontendPaths.length > 0 &&
     input.output.evidenceSpecPath == null &&
-    !evidenceBlockerSummary
+    !evidenceBlockerSummary &&
+    !frontendUnitTestsCoverEvidence
   ) {
     emitContractGateBlocked({
       projectId: input.projectId,
@@ -391,6 +443,30 @@ function evaluateEvidenceRequirementGate(input: {
 
   if (input.output.evidenceSpecPath != null) {
     const evidenceSpecPath = input.output.evidenceSpecPath;
+    if (!isEvidenceSpecPath(evidenceSpecPath)) {
+      emitContractGateBlocked({
+        projectId: input.projectId,
+        workItemId: input.workItemId,
+        runId: input.runId,
+        personaId: input.personaId,
+        gate: 'evidence-requirement',
+        worktreePath: input.worktreePath,
+        reason: 'evidence-spec-not-playwright-e2e',
+        fields: [
+          {
+            field: 'evidenceSpecPath',
+            from: evidenceSpecPath,
+            to: evidenceSpecPath,
+            source: 'as-is',
+          },
+        ],
+        observedChangedPaths: input.observedChangedPaths,
+        observedWritePaths: input.observedWritePaths,
+      });
+      throw new Error(
+        `contract gate blocked: evidenceSpecPath must point to apps/web/e2e/*.spec.ts (${evidenceSpecPath})`,
+      );
+    }
     if (!existsSync(resolve(input.worktreePath, evidenceSpecPath))) {
       emitContractGateBlocked({
         projectId: input.projectId,
@@ -609,7 +685,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
     execution.projectConfig?.evidencePostEnabled ?? true,
   );
 
-  const { output } = await runWithEscalation({
+  const { output, result: agentResult } = await runWithEscalation({
     runtime: execution.runtime,
     schema: ImplementSchema,
     projectId: input.projectId,
@@ -667,6 +743,59 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
       appendSystemPrompt: input.appendSystemPrompt,
     },
   });
+  const implementToolEvents = [...agentResult.events, ...eventStore.replay({ runId: input.runId })];
+  const groundingFailure = groundedOutputToolUseFailure({
+    skill: 'implement',
+    events: implementToolEvents,
+    allowMissingAudit: true,
+  });
+  if (groundingFailure != null) {
+    const artifactRef = storeGateFailureArtifact({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      runId: input.runId,
+      skill: 'implement',
+      gate: groundingFailure.reason,
+      rawOutput: agentResult.output,
+      issues: [{ path: 'agent.tool-call', message: groundingFailure.message }],
+    });
+    emitContractGateBlocked({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      runId: input.runId,
+      personaId: input.personaId,
+      gate: 'implement-grounded-output',
+      worktreePath: input.worktreePath,
+      reason: groundingFailure.reason,
+      fields: [],
+      observedChangedPaths: [],
+      observedWritePaths: [],
+    });
+    eventStore.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      kind: 'agent.run-failed',
+      payload: {
+        runId: input.runId,
+        skill: 'implement',
+        error: groundingFailure.message,
+        reason: groundingFailure.reason,
+        ...(artifactRef != null ? { artifactRef } : {}),
+      },
+      runId: input.runId,
+      personaId: input.personaId,
+    });
+    recordAgentRun({
+      runId: input.runId,
+      personaId: input.personaId,
+      workItemId: input.workItem.id,
+      projectId: input.projectId,
+      role: 'developer',
+      skill: 'implement',
+      outcome: 'failure',
+    });
+    throw new Error(`contract gate blocked: ${groundingFailure.message}`);
+  }
   emitSymbolIndexHintsUsedEvent({
     projectId: input.projectId,
     workItemId: input.workItem.id,
@@ -705,6 +834,18 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
   });
   const observedChangedFiles = deriveObservedChangedFiles(input.worktreePath);
   const observedWritePaths = observedWritePathsFromToolAudit(input.runId);
+  evaluateObservedWritesGate({
+    projectId: input.projectId,
+    workItemId: input.workItem.id,
+    runId: input.runId,
+    personaId: input.personaId,
+    worktreePath: input.worktreePath,
+    output: normalized.output,
+    observedChangedPaths: observedChangedFiles.paths,
+    observedWritePaths,
+    observedGitAvailable: observedChangedFiles.gitAvailable,
+    hasSurfaceGuard: (input.surfaceGuardInvestigation ?? input.investigation) != null,
+  });
   evaluateImplementOutputRepairGate({
     projectId: input.projectId,
     workItemId: input.workItem.id,

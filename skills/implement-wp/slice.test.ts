@@ -205,6 +205,12 @@ describe('implement-wp prompt live decisions', () => {
     expect(prompt).toContain('exact pre-read hunks');
   });
 
+  it('clarifies resource probe failures are not Factory tool unavailability', () => {
+    expect(prompt).toContain('resources/templates/list');
+    expect(prompt).toContain('advisory startup/resource-probe noise');
+    expect(prompt).toContain('Do not return a BLOCKER only because a resource probe failed');
+  });
+
   it('documents WP-scoped spec context contracts', () => {
     expect(prompt).toContain('<specContext>');
     expect(prompt).toContain('interfaceContracts[].signature');

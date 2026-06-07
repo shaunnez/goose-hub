@@ -207,6 +207,7 @@ describe('runFeatureEnhance', () => {
       output: makeOutput(),
       decisionSummaries: [],
       events: [
+        makeToolEvent('mcp__factory-tools__repo_intel.query'),
         makeToolEvent('mcp__factory-tools__search_text', {
           blocked: true,
           status: 'failed',
@@ -249,11 +250,11 @@ describe('runFeatureEnhance', () => {
 
     const result = await runFeatureEnhance(makeInput());
 
-    expect(result).toMatchObject({ ok: false, reason: 'tool-call-blocked' });
+    expect(result).toMatchObject({ ok: false, reason: 'factory-tools-not-used' });
     expect(mockAppendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({
-          reasons: ['tool-call-blocked', 'no-grounded-output'],
+          reasons: ['factory-tools-not-used', 'tool-call-blocked', 'no-grounded-output'],
           blockedToolCallCount: 1,
           blockedToolNames: ['search_text'],
         }),
@@ -412,5 +413,34 @@ describe('runFeatureEnhance', () => {
       }),
     });
     expect(mockAppendEvent).not.toHaveBeenCalled();
+  });
+
+  it('retries once when feature-enhance returns output after zero successful Factory tool calls', async () => {
+    mockRunFn
+      .mockResolvedValueOnce({
+        output: makeOutput(),
+        decisionSummaries: [],
+        events: [makeToolEvent('resources/templates/list', { status: 'failed' })],
+      })
+      .mockResolvedValueOnce({
+        output: makeOutput(),
+        decisionSummaries: [],
+        events: [makeToolEvent('repo_intel.query')],
+      });
+
+    const result = await runFeatureEnhance(makeInput());
+
+    expect(result).toMatchObject({
+      ok: true,
+      enhanceRunId: 'grounding-run:feature-enhance:retry:1',
+    });
+    expect(mockRunFn).toHaveBeenCalledTimes(2);
+    expect(mockRunFn.mock.calls[1]?.[0]).toMatchObject({
+      runId: 'grounding-run:feature-enhance:retry:1',
+      extraEventPayload: expect.objectContaining({
+        attempt: 'grounding-tool-retry',
+        retryOf: 'grounding-run:feature-enhance',
+      }),
+    });
   });
 });

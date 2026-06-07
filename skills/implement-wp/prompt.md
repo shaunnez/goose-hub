@@ -54,6 +54,8 @@ The context contains a `<task>` block with:
 
 Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. When a Factory tool response returns `{ path, root, packageRoot, normalizedFrom }`, copy the returned `path` value verbatim into your terminal JSON. In Claude this appears as `mcp__factory-tools__*`; in Codex use the bare tool name. Do not infer paths from CWD or package root.
 
+`resources/list` and `resources/templates/list` failures are advisory startup/resource-probe noise. They are not evidence that Factory tools such as `read_file`, `search_text`, `list_dir`, or `repo_intel.query` are unavailable. Do not return a BLOCKER only because a resource probe failed; call the relevant Factory tool directly.
+
 ## What you must do
 
 ### 1 — Read

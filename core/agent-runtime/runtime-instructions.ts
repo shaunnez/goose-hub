@@ -31,6 +31,8 @@ All paths are workspace-relative. Absolute paths and \`..\` traversal are reject
 
 Do not use MCP resource surfaces or delegation surfaces unless this run explicitly allows them. Forbidden surfaces include \`resources/list\`, \`resources/read\`, \`file://...\` resource handles, collab tools, fork/full-history fork, spawn, and subagent delegation. File access must go through the exposed Factory tools such as \`mcp__factory-tools__read_file\`, \`mcp__factory-tools__list_dir\`, \`mcp__factory-tools__list_files\`, and \`mcp__factory-tools__search_text\`.
 
+Failures from \`resources/list\` or \`resources/templates/list\` are advisory startup/resource-probe noise. They are not evidence that Factory tools such as \`mcp__factory-tools__read_file\`, \`mcp__factory-tools__search_text\`, \`mcp__factory-tools__list_dir\`, or \`mcp__factory-tools__repo_intel_query\` are unavailable.
+
 Workflow-owned operations (commit, open PR, transition state, publish evidence) are not in your toolset — the orchestrator drives them.`;
 
 /**
@@ -57,6 +59,8 @@ The Factory MCP tools are already exposed in this run. Do not use ToolSearch or 
 All paths are workspace-relative. Absolute paths and \`..\` traversal are rejected. Commands run with \`shell: false\`; no shell strings. Output is byte-capped and timeouts are per-tool. Every call emits a structured \`agent.tool-call\` audit event.
 
 Do not use MCP resource surfaces or delegation surfaces unless this run explicitly allows them. Forbidden surfaces include \`resources/list\`, \`resources/read\`, \`file://...\` resource handles, collab tools, fork/full-history fork, spawn, and subagent delegation. File access must go through the exposed Factory tools such as \`read_file\`, \`list_dir\`, \`list_files\`, and \`search_text\`.
+
+Failures from \`resources/list\` or \`resources/templates/list\` are advisory startup/resource-probe noise. They are not evidence that Factory tools such as \`read_file\`, \`search_text\`, \`list_dir\`, or \`repo_intel.query\` are unavailable.
 
 Workflow-owned operations (commit, open PR, transition state, publish evidence) are not in your toolset — the orchestrator drives them.`;
 

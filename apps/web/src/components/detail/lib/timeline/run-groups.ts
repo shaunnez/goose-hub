@@ -37,11 +37,13 @@ export function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {
   return items;
 }
 
-function getRunId(item: RenderItem): string | null {
+function getRunId(item: RenderItem, qaAttemptByRunId: ReadonlyMap<string, string>): string | null {
   if (item.kind === 'event') {
     if (item.event.kind.startsWith('workflow.route-')) return null;
     const qaAttemptId = qaAttemptIdForTimelineEvent(item.event);
     if (qaAttemptId != null) return qaAttemptId;
+    const inferredQaAttemptId = qaAttemptIdForRuntimeEvent(item.event, qaAttemptByRunId);
+    if (inferredQaAttemptId != null) return inferredQaAttemptId;
     const runId = (item.event as AgentEventDto & { runId?: string | null }).runId ?? null;
     return scoutBaseRunId(runId);
   }
@@ -53,6 +55,42 @@ function qaAttemptIdForTimelineEvent(event: AgentEventDto): string | null {
   const payload = event.payload as Record<string, unknown> | null;
   const qaAttemptId = payload?.qaAttemptId;
   return typeof qaAttemptId === 'string' && qaAttemptId.trim() !== '' ? qaAttemptId : null;
+}
+
+function qaAttemptIdForRuntimeEvent(
+  event: AgentEventDto,
+  qaAttemptByRunId: ReadonlyMap<string, string>,
+): string | null {
+  const runIds = eventRunIds(event);
+  for (const runId of runIds) {
+    const qaAttemptId = qaAttemptByRunId.get(runId);
+    if (qaAttemptId != null) return qaAttemptId;
+  }
+  return null;
+}
+
+function eventRunIds(event: AgentEventDto): string[] {
+  const ids = new Set<string>();
+  if (event.runId != null && event.runId.trim() !== '') ids.add(event.runId);
+  const payload = event.payload as Record<string, unknown> | null;
+  for (const key of ['runId', 'run_id']) {
+    const value = payload?.[key];
+    if (typeof value === 'string' && value.trim() !== '') ids.add(value);
+  }
+  return [...ids];
+}
+
+function buildQaAttemptRunIndex(items: RenderItem[]): Map<string, string> {
+  const qaAttemptByRunId = new Map<string, string>();
+  for (const item of items) {
+    if (item.kind !== 'event') continue;
+    const qaAttemptId = qaAttemptIdForTimelineEvent(item.event);
+    if (qaAttemptId == null) continue;
+    for (const runId of eventRunIds(item.event)) {
+      if (!qaAttemptByRunId.has(runId)) qaAttemptByRunId.set(runId, qaAttemptId);
+    }
+  }
+  return qaAttemptByRunId;
 }
 
 function isQaTimelineEvent(event: AgentEventDto): boolean {
@@ -222,9 +260,10 @@ function isQaTerminalEvent(kind: string): boolean {
 }
 
 export function groupByRunId(items: RenderItem[]): RenderItem[] {
+  const qaAttemptByRunId = buildQaAttemptRunIndex(items);
   const byRunId = new Map<string, RenderItem[]>();
   for (const item of items) {
-    const runId = getRunId(item);
+    const runId = getRunId(item, qaAttemptByRunId);
     if (runId != null) {
       const group = byRunId.get(runId) ?? [];
       group.push(item);
@@ -235,7 +274,7 @@ export function groupByRunId(items: RenderItem[]): RenderItem[] {
   const seen = new Set<string>();
   const result: RenderItem[] = [];
   for (const item of items) {
-    const runId = getRunId(item);
+    const runId = getRunId(item, qaAttemptByRunId);
     if (runId != null) {
       if (seen.has(runId)) continue;
       seen.add(runId);

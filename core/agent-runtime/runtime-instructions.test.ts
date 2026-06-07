@@ -96,6 +96,14 @@ describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS', () => {
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('mcp__factory-tools__search_text');
   });
 
+  it('clarifies resource probe failures do not prove Claude Factory tools are unavailable', () => {
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('resources/templates/list');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain(
+      'advisory startup/resource-probe noise',
+    );
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('mcp__factory-tools__repo_intel_query');
+  });
+
   it('forbids tool discovery for already exposed Factory tools', () => {
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain(
       'The Factory MCP tools are already exposed in this run',
@@ -137,6 +145,14 @@ describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX', () => {
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('`list_dir`');
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('`list_files`');
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('`search_text`');
+  });
+
+  it('clarifies resource probe failures do not prove Codex Factory tools are unavailable', () => {
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('resources/templates/list');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain(
+      'advisory startup/resource-probe noise',
+    );
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('`repo_intel.query`');
   });
 
   it('forbids tool discovery for already exposed Factory tools', () => {

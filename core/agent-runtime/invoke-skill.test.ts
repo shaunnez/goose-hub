@@ -18,13 +18,16 @@ const VALID_ECHO_OUTPUT = {
   decisionSummaries: [{ kind: 'PLAN', summary: 'test run' }],
 };
 
-function mockRuntime(output: unknown = VALID_ECHO_OUTPUT): AgentRuntime & { calls: AgentSpec[] } {
+function mockRuntime(
+  output: unknown = VALID_ECHO_OUTPUT,
+  events: AgentResult['events'] = [],
+): AgentRuntime & { calls: AgentSpec[] } {
   const calls: AgentSpec[] = [];
   return {
     calls,
     async run(spec: AgentSpec): Promise<AgentResult> {
       calls.push(spec);
-      return { output, decisionSummaries: [], events: [] };
+      return { output, decisionSummaries: [], events };
     },
   };
 }
@@ -138,6 +141,74 @@ describe('invokeSkill', () => {
         overrides: { runtimeOverride: badOutputRuntime },
       }),
     ).rejects.toBeInstanceOf(OutputValidationError);
+  });
+
+  it('rejects repo-grounded skills that return after zero successful Factory tool calls', async () => {
+    const output = {
+      plan: 'Add helper at core/foo/bar.ts.',
+      filesWritten: [{ path: 'core/foo/bar.ts', reason: 'new helper' }],
+      testsWritten: [],
+      testsRun: { command: 'pnpm test ', paths: [] },
+      prUrl: 'https://github.com/owner/repo/pull/123',
+      evidenceSpecPath: null,
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Add helper' }],
+    };
+
+    await expect(
+      invokeSkill({
+        skillName: 'implement',
+        projectId: uid(),
+        runId: uid(),
+        context: {
+          workItem: { title: 'T', body: 'B', number: 1, priority: 'medium' },
+          stack: { testCommand: 'pnpm test' },
+        },
+        overrides: {
+          runtimeOverride: mockRuntime(output, [
+            {
+              id: 1,
+              projectId: 'p',
+              workItemId: 'w',
+              kind: 'agent.tool-call',
+              payload: { tool_name: 'resources/list', status: 'failed' },
+              runId: 'r',
+              personaId: null,
+              createdAt: '2026-06-08T00:00:00.000Z',
+            },
+          ]),
+        },
+      }),
+    ).rejects.toMatchObject({
+      diagnostics: expect.objectContaining({
+        outputPreview: expect.any(String),
+      }),
+    });
+  });
+
+  it('allows explicit noToolSafe grounded runs', async () => {
+    const output = {
+      plan: 'Docs-only no-tool-safe output.',
+      filesWritten: [],
+      testsWritten: [],
+      testsRun: { command: 'not run', paths: [] },
+      prUrl: 'https://github.com/owner/repo/pull/123',
+      evidenceSpecPath: null,
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'SKIP_GATE', summary: 'No repo inspection required' }],
+    };
+    const result = await invokeSkill({
+      skillName: 'implement',
+      projectId: uid(),
+      runId: uid(),
+      context: {
+        workItem: { title: 'T', body: 'B', number: 1, priority: 'medium' },
+        stack: { testCommand: 'pnpm test' },
+      },
+      overrides: { runtimeOverride: mockRuntime(output), noToolSafe: true },
+    });
+
+    expect(result.output).toMatchObject({ confidence: 'high' });
   });
 
   it('marks an already-completed run as failed when output validation fails', async () => {

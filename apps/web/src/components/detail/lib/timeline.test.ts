@@ -1741,6 +1741,63 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     });
   });
 
+  it('keeps QA runtime rows with sparse payload metadata in the QA attempt section', () => {
+    const PIPELINE_RUN = 'pipeline-qa-sparse-runtime';
+    const QA_ATTEMPT = 'qa-attempt-sparse-runtime';
+    const QA_AGENT_RUN = 'qa-runtime-sparse';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'qa.workflow-started', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, status: 'running' },
+      }),
+      makeEvent(2, 'qa.preflight-completed', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, status: 'failed' },
+      }),
+      makeEvent(3, 'agent.run-started', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, skill: 'qa' },
+      }),
+      makeEvent(4, 'agent.tool-call', QA_AGENT_RUN, {
+        payload: { skill: 'qa', tool_name: 'read_file' },
+      }),
+      makeEvent(5, 'agent.decision-summary-live', QA_AGENT_RUN, {
+        payload: { skill: 'qa', kind: 'READ', summary: 'Read the changed file' },
+      }),
+      makeEvent(6, 'agent.run-completed', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, skill: 'qa' },
+      }),
+      makeEvent(7, 'qa.completed', QA_AGENT_RUN, {
+        payload: {
+          runId: QA_AGENT_RUN,
+          qaAttemptId: QA_ATTEMPT,
+          pipelineRunId: PIPELINE_RUN,
+          verdict: 'pass',
+          overallScore: 92,
+          threshold: 70,
+        },
+      }),
+      makeEvent(8, 'qa.workflow-completed', QA_AGENT_RUN, {
+        payload: { runId: QA_AGENT_RUN, qaAttemptId: QA_ATTEMPT, status: 'completed' },
+      }),
+    ]);
+
+    const qaSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'qa',
+    );
+
+    expect(qaSections).toHaveLength(1);
+    expect(qaSections[0].segmentId).toBe(`qa:${QA_ATTEMPT}`);
+    expect(qaSections[0].items).toHaveLength(1);
+    expect(qaSections[0].items[0]).toMatchObject({
+      kind: 'run-group',
+      runId: QA_ATTEMPT,
+      skill: 'qa',
+      endedAt: expect.any(String),
+    });
+    expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(
+      new Set([QA_ATTEMPT, QA_AGENT_RUN]),
+    );
+  });
+
   it('splits repeated QA attempts on the same pipeline into separate QA sections', () => {
     const PIPELINE_RUN = 'pipeline-qa-repeat';
     const QA_RUN_1 = 'qa-run-first';

@@ -1104,3 +1104,36 @@ describe('self-check-grounded-in-code (per-file)', () => {
     ).toBe(true);
   });
 });
+
+describe('wp-placeholder-path validation', () => {
+  it('rejects placeholder and prose filesOwned paths before the spec can persist', () => {
+    const result = validateEngineeringSpec(
+      baseSpec({
+        workPackages: [
+          {
+            id: 'WP24',
+            filesOwned: [
+              'apps/web/src/components/detail/...',
+              '<header component file>',
+              'apps/web/src/components/detail/header component file',
+            ],
+            changes: 'Replace placeholder file ownership with concrete component paths.',
+            dependsOn: [],
+            builderTier: 'haiku',
+          },
+        ],
+        executionOrder: [{ batch: 0, wpIds: ['WP24'] }],
+        interfaceContracts: [],
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const placeholderErrors = result.errors.filter((e) => e.rule === 'wp-placeholder-path');
+    expect(placeholderErrors.map((e) => e.ref)).toEqual([
+      'apps/web/src/components/detail/...',
+      '<header component file>',
+      'apps/web/src/components/detail/header component file',
+    ]);
+  });
+});

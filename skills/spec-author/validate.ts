@@ -32,6 +32,7 @@ export type ValidationError = {
 };
 
 export type ValidationRule =
+  | 'wp-placeholder-path'
   | 'file-ownership-collision'
   | 'ac-orphan-without-journey'
   | 'ac-journey-ref-not-found'
@@ -81,6 +82,15 @@ export interface ValidationOptions {
 const DEFAULT_SENSITIVE_PATTERN = /(auth|session|crypto|secret)/i;
 const BARE_REPO_PATH_PATTERN = /^(?:\.\/)?[\w@./-]+\.[A-Za-z0-9]+$/;
 const WEB_E2E_SPEC_PATTERN = /^apps\/web\/e2e\/.*\.spec\.ts$/;
+const PLACEHOLDER_ANGLE_PATTERN = /<[^/][^>]*>/;
+const PROSE_PATH_SEGMENT_PATTERN = /(?:^|\/)[^/]*\s+[^/]*(?:$|\/)/;
+
+function placeholderPathReason(path: string): string | null {
+  if (path.includes('...')) return 'contains ellipsis placeholder';
+  if (PLACEHOLDER_ANGLE_PATTERN.test(path)) return 'contains angle-bracket placeholder';
+  if (PROSE_PATH_SEGMENT_PATTERN.test(path)) return 'contains prose path segment';
+  return null;
+}
 
 function isBareRepoPathCommand(command: string): boolean {
   const trimmed = command.trim();
@@ -117,6 +127,14 @@ export function validateEngineeringSpec(
   for (const wp of spec.workPackages) {
     for (const entry of wp.filesOwned) {
       const path = fileOwnedPath(entry);
+      const placeholderReason = placeholderPathReason(path);
+      if (placeholderReason != null) {
+        errors.push({
+          rule: 'wp-placeholder-path',
+          message: `WP '${wp.id}' filesOwned path '${path}' is not a concrete repo-root path: ${placeholderReason}`,
+          ref: path,
+        });
+      }
       const prior = ownerByPath.get(path);
       if (prior != null && prior !== wp.id) {
         errors.push({
