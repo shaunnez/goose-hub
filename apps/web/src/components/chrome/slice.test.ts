@@ -53,3 +53,15 @@ describe('chrome slice — deferred surfaces config', () => {
     expect(collapsed).toBe(false);
   });
 });
+
+describe('chrome slice — capture shortcut (issue #28)', () => {
+  const topBarSource = readFileSync(join(import.meta.dirname, 'TopBar.tsx'), 'utf-8');
+
+  it('TopBar binds the ⌘J / Ctrl+J keyboard shortcut for Capture', () => {
+    expect(topBarSource).toContain("key.toLowerCase() === 'j'");
+  });
+
+  it('TopBar Capture button displays ⌘J kbd label', () => {
+    expect(topBarSource).toContain('⌘J');
+  });
+});
