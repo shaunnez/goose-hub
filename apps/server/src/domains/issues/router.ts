@@ -1,5 +1,6 @@
 import { logger } from '@goose-hub/core/logger.js';
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { dispatchResolveConflict, dispatchResumeIssue } from '#shared/dispatch.js';
 import { parseBody } from '#shared/middleware.js';
 import {
@@ -65,18 +66,21 @@ router.get('/:slug/issues/:id/legal-targets', async (c) => {
     : c.json({ error: result.error }, result.status as 404 | 500);
 });
 
+const EventsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().optional(),
+  before: z.coerce.number().int().nonnegative().optional(),
+  after: z.coerce.number().int().nonnegative().optional(),
+});
+
 router.get('/:slug/issues/:id/events', async (c) => {
-  const limitStr = c.req.query('limit');
-  const beforeStr = c.req.query('before');
-  const afterStr = c.req.query('after');
-  const opts =
-    limitStr != null
-      ? {
-          limit: Number(limitStr),
-          before: beforeStr != null ? Number(beforeStr) : undefined,
-          after: afterStr != null ? Number(afterStr) : undefined,
-        }
-      : undefined;
+  const queryParse = EventsQuerySchema.safeParse({
+    limit: c.req.query('limit'),
+    before: c.req.query('before'),
+    after: c.req.query('after'),
+  });
+  if (!queryParse.success) return c.json({ error: 'Invalid query parameters' }, 400);
+  const { limit, before, after } = queryParse.data;
+  const opts = limit != null ? { limit, before, after } : undefined;
   const result = await getIssueEvents(c.req.param('slug'), c.req.param('id'), opts);
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
@@ -106,14 +110,23 @@ router.get('/:slug/issues/:id/prd', async (c) => {
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 
+const ArtifactQuerySchema = z.object({
+  offset: z.coerce.number().int().nonnegative().optional(),
+  limit: z.coerce.number().int().positive().optional(),
+});
+
 router.get('/:slug/issues/:id/artifacts/:artifactKey', async (c) => {
-  const offset = c.req.query('offset');
-  const limit = c.req.query('limit');
+  const queryParse = ArtifactQuerySchema.safeParse({
+    offset: c.req.query('offset'),
+    limit: c.req.query('limit'),
+  });
+  if (!queryParse.success) return c.json({ error: 'Invalid query parameters' }, 400);
+  const { offset, limit } = queryParse.data;
   const result =
     offset != null || limit != null
       ? await getIssueArtifact(c.req.param('slug'), c.req.param('id'), c.req.param('artifactKey'), {
-          offset: offset == null ? undefined : Number(offset),
-          limit: limit == null ? undefined : Number(limit),
+          offset,
+          limit,
         })
       : await getIssueArtifact(c.req.param('slug'), c.req.param('id'), c.req.param('artifactKey'));
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
