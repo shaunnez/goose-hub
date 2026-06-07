@@ -6,6 +6,18 @@ import { describe, expect, it } from 'vitest';
 // exist and the milestone-stub configuration stays honest with the M2 plan.
 // Component rendering tests are exercised by the Playwright happy-path (#36).
 
+describe('chrome slice — TopBar capture shortcut', () => {
+  const topBarSource = readFileSync(join(import.meta.dirname, 'TopBar.tsx'), 'utf-8');
+
+  it('TopBar binds ⌘J / Ctrl+J to open capture', () => {
+    expect(topBarSource).toContain("e.key.toLowerCase() === 'j'");
+  });
+
+  it('capture button shows ⌘J kbd label', () => {
+    expect(topBarSource).toContain('⌘J');
+  });
+});
+
 const DEFERRED_SURFACES = [
   { label: 'Inbox', milestone: 'M3' },
   { label: 'Roster', milestone: 'M5' },
