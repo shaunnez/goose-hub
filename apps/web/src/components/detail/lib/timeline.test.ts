@@ -11,6 +11,7 @@ import {
   groupByReviewWorkflow,
   groupEvents,
   groupTimelineEventsByCanonicalSection,
+  summarizeQaPreflightSteps,
 } from './timeline';
 import {
   compareTimelineChildrenForReading,
@@ -1437,6 +1438,120 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     expect(qaSections[0].items).toHaveLength(1);
     expect(qaSections[0].items[0]).toMatchObject({ kind: 'run-group', runId: QA_RUN });
     expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(new Set([QA_RUN]));
+  });
+
+  it('collapses started and completed QA preflight steps into one passed row', () => {
+    const QA_ATTEMPT = 'qa-attempt-preflight-pass';
+    const summary = summarizeQaPreflightSteps([
+      makeEvent(1, 'qa.preflight-step-started', 'qa-runtime-pass', {
+        payload: {
+          qaAttemptId: QA_ATTEMPT,
+          step: 'lint',
+          command: 'pnpm lint',
+          status: 'running',
+        },
+      }),
+      makeEvent(2, 'qa.preflight-step-completed', 'qa-runtime-pass', {
+        payload: {
+          qaAttemptId: QA_ATTEMPT,
+          step: 'lint',
+          command: 'pnpm lint',
+          status: 'passed',
+          durationMs: 1500,
+          exitCode: 0,
+        },
+      }),
+    ]);
+
+    const lintRows = summary.steps.filter((step) => step.step === 'lint');
+    expect(lintRows).toHaveLength(1);
+    expect(lintRows[0]).toMatchObject({
+      label: 'Lint',
+      status: 'passed',
+      durationMs: 1500,
+      exitCode: 0,
+      command: 'pnpm lint',
+    });
+  });
+
+  it('collapses started and failed QA preflight steps into one failed row', () => {
+    const QA_ATTEMPT = 'qa-attempt-preflight-fail';
+    const summary = summarizeQaPreflightSteps([
+      makeEvent(1, 'qa.preflight-step-started', 'qa-runtime-fail', {
+        payload: {
+          qaAttemptId: QA_ATTEMPT,
+          step: 'test',
+          command: 'pnpm test',
+          status: 'running',
+        },
+      }),
+      makeEvent(2, 'qa.preflight-step-failed', 'qa-runtime-fail', {
+        payload: {
+          qaAttemptId: QA_ATTEMPT,
+          step: 'test',
+          command: 'pnpm test',
+          status: 'failed',
+          durationMs: 7500,
+          exitCode: 1,
+          reason: 'vitest failed',
+        },
+      }),
+    ]);
+
+    const testRows = summary.steps.filter((step) => step.step === 'test');
+    expect(testRows).toHaveLength(1);
+    expect(testRows[0]).toMatchObject({
+      label: 'Tests',
+      status: 'failed',
+      durationMs: 7500,
+      exitCode: 1,
+      reason: 'vitest failed',
+    });
+  });
+
+  it('renders started-only QA preflight steps as running for live attempts', () => {
+    const summary = summarizeQaPreflightSteps([
+      makeEvent(1, 'qa.preflight-step-started', 'qa-live-preflight', {
+        payload: {
+          qaAttemptId: 'qa-live-preflight',
+          step: 'test',
+          command: 'pnpm test',
+          status: 'running',
+        },
+      }),
+    ]);
+
+    expect(summary.status).toBe('running');
+    expect(summary.steps.find((step) => step.step === 'test')).toMatchObject({
+      status: 'running',
+      command: 'pnpm test',
+    });
+  });
+
+  it('renders started-only QA preflight steps as superseded for superseded attempts', () => {
+    const QA_ATTEMPT = 'qa-superseded-preflight';
+    const summary = summarizeQaPreflightSteps([
+      makeEvent(1, 'qa.preflight-step-started', 'qa-runtime-superseded', {
+        payload: {
+          qaAttemptId: QA_ATTEMPT,
+          step: 'test',
+          command: 'pnpm test',
+          status: 'running',
+        },
+      }),
+      makeEvent(2, 'qa.workflow-aborted', 'qa-runtime-superseded', {
+        payload: {
+          qaAttemptId: QA_ATTEMPT,
+          reason: 'superseded',
+        },
+      }),
+    ]);
+
+    expect(summary.status).toBe('superseded');
+    expect(summary.steps.find((step) => step.step === 'test')).toMatchObject({
+      status: 'superseded',
+      command: 'pnpm test',
+    });
   });
 
   it('groups QA preflight events before agent runtime metadata arrives', () => {

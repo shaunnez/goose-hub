@@ -42,6 +42,8 @@ export { VISIBLE_INTERVENTION_EVENT_TYPES } from './interventions';
 export { groupByContractPhase } from './phases/contract';
 export { groupByDiscoverPhase } from './phases/discover';
 export { groupByInvestigationPhase } from './phases/investigation';
+export { summarizeQaPreflightSteps } from './qa-preflight';
+export type { QaPreflightStepStatus, QaPreflightSummary } from './qa-preflight';
 export {
   collectBillableRunIdsForTimelineSection,
   collectRunIdsForTimelineSection,

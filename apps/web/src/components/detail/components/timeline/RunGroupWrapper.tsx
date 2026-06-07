@@ -11,8 +11,10 @@ import {
   formatSkillName,
   getAgentLogDisplayText,
   isCodexTransportWarningLog,
+  summarizeQaPreflightSteps,
 } from '../../lib/timeline';
 import { CostBadge } from '../CostBadge';
+import { QaPreflightSummaryEvent } from './QaEvents';
 
 const STALL_MS = 15 * 60 * 1000; // 15 minutes with no new events → stalled
 
@@ -93,6 +95,15 @@ export function RunGroupWrapper({
   const codexTransportWarnings = groupEventList.filter(isCodexTransportWarningLog);
   const codexTransportWarning = codexTransportWarnings[0] ?? null;
   const warningRecovered = codexTransportWarning != null && endedAt != null && !isFailed;
+  const qaPreflightSummary = useMemo(
+    () => summarizeQaPreflightSteps(groupEventList),
+    [groupEventList],
+  );
+  const hasQaAgentStarted = groupEventList.some(
+    (event) =>
+      event.kind === 'agent.run-started' &&
+      (event.payload as { skill?: string } | null)?.skill === 'qa',
+  );
 
   const displayItems = items
     .filter(
@@ -100,6 +111,11 @@ export function RunGroupWrapper({
         !(
           item.kind === 'event' &&
           codexTransportWarnings.some((event) => event.id === item.event.id)
+        ) &&
+        !(
+          item.kind === 'event' &&
+          qaPreflightSummary.hasPreflightStepEvents &&
+          item.event.kind.startsWith('qa.preflight-step-')
         ),
     )
     .map((item) => {
@@ -130,6 +146,12 @@ export function RunGroupWrapper({
   const endMs = endedAt != null ? new Date(endedAt).getTime() : null;
   const lastMs = lastEventAt != null ? new Date(lastEventAt).getTime() : null;
   const isStalled = isLive && lastMs != null && now - lastMs > STALL_MS;
+  const liveBannerText =
+    isLive && !isStalled
+      ? qaPreflightSummary.hasPreflightEvents && !hasQaAgentStarted
+        ? 'QA preflight running...'
+        : 'Agent running...'
+      : null;
   const liveDuration = startMs != null ? formatDuration(now - startMs) : null;
   const completeDuration =
     startMs != null && endMs != null ? formatDuration((lastMs ?? endMs) - startMs) : null;
@@ -297,6 +319,9 @@ export function RunGroupWrapper({
           <span className="ml-auto shrink-0 text-fg-5">{items.length} events</span>
         </summary>
         <ol className="flex flex-col gap-2 px-3 pb-3">
+          {qaPreflightSummary.hasPreflightEvents && (
+            <QaPreflightSummaryEvent summary={qaPreflightSummary} />
+          )}
           {isStalled && (
             <li className="rounded-md border border-dashed border-yellow-500/30 bg-yellow-500/5 px-3 py-2 flex items-center gap-2 text-[10.5px] text-yellow-400">
               <span className="font-mono uppercase tracking-wider">
@@ -305,10 +330,10 @@ export function RunGroupWrapper({
               </span>
             </li>
           )}
-          {isLive && !isStalled && (
+          {liveBannerText != null && (
             <li className="rounded-md border border-dashed border-[color:var(--accent)]/30 bg-[color:var(--accent)]/5 px-3 py-2 flex items-center gap-2 text-[10.5px] text-[color:var(--accent)]">
               <Loader2 size={12} className="shrink-0 animate-spin" />
-              <span className="font-mono uppercase tracking-wider">Agent running…</span>
+              <span className="font-mono uppercase tracking-wider">{liveBannerText}</span>
             </li>
           )}
           {codexTransportWarning != null && (

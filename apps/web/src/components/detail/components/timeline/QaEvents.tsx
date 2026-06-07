@@ -1,6 +1,7 @@
 import { cn } from '@/lib/cn';
 import type { AgentEventDto } from '@/lib/types';
 import { AlertTriangle, CheckCircle, Circle, LoaderCircle, XCircle } from 'lucide-react';
+import type { QaPreflightStepStatus, QaPreflightSummary } from '../../lib/timeline/qa-preflight';
 
 type TierResult = {
   passed: boolean;
@@ -110,13 +111,19 @@ function formatBytes(value: number | undefined): string {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
-function statusTone(status: VerificationStatus | undefined): string {
+function statusTone(status: VerificationStatus | QaPreflightStepStatus | undefined): string {
   if (status === 'running') return 'border-blue-500/20 bg-blue-500/10 text-blue-300';
   if (status === 'passed' || status === 'posted') {
     return 'border-green-500/20 bg-green-500/10 text-green-400';
   }
   if (status === 'failed') return 'border-red-500/20 bg-red-500/10 text-[color:var(--danger)]';
-  if (status === 'skipped' || status === 'absent') return 'border-fg-5/20 bg-fg-5/10 text-fg-3';
+  if (status === 'superseded' || status === 'aborted' || status === 'interrupted') {
+    return 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400';
+  }
+  if (status === 'skipped' || status === 'absent' || status === 'not-started') {
+    return 'border-fg-5/20 bg-fg-5/10 text-fg-3';
+  }
+  if (status === 'incomplete') return 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400';
   return 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400';
 }
 
@@ -318,6 +325,85 @@ export function QaPreflightStepEvent({ event }: { event: AgentEventDto }) {
       {p?.reason != null && (
         <div className="mt-1 text-[11.5px] leading-snug text-fg-3">{p.reason}</div>
       )}
+    </li>
+  );
+}
+
+export function QaPreflightSummaryEvent({ summary }: { summary: QaPreflightSummary }) {
+  if (!summary.hasPreflightEvents) return null;
+  return (
+    <li
+      data-event-kind="qa.preflight-summary"
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-fg-3">
+            {summary.status === 'running' ? (
+              <LoaderCircle size={13} className="shrink-0 animate-spin text-blue-300" />
+            ) : summary.status === 'passed' ? (
+              <CheckCircle size={13} className="shrink-0 text-green-400" />
+            ) : summary.status === 'failed' ? (
+              <XCircle size={13} className="shrink-0 text-[color:var(--danger)]" />
+            ) : (
+              <AlertTriangle size={13} className="shrink-0 text-yellow-400" />
+            )}
+            <span className="font-mono uppercase tracking-wider">{summary.title}</span>
+            <span
+              className={cn(
+                'rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase',
+                statusTone(summary.status === 'superseded' ? 'superseded' : summary.status),
+              )}
+            >
+              {summary.status}
+            </span>
+          </div>
+          {summary.description != null && (
+            <div className="mt-1 text-[11.5px] leading-snug text-fg-3">{summary.description}</div>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {summary.steps.map((step) => {
+          const duration = formatDurationMs(step.durationMs ?? undefined);
+          return (
+            <div
+              key={step.key}
+              className="grid grid-cols-[minmax(86px,1fr)_auto] items-start gap-x-3 gap-y-1 rounded border border-line bg-bg/40 px-2.5 py-2 text-[11px] md:grid-cols-[minmax(96px,1fr)_92px_64px_54px]"
+            >
+              <div className="min-w-0">
+                <div className="truncate font-mono text-fg-3">{step.label}</div>
+                {step.command != null && (
+                  <div className="mt-1 truncate font-mono text-[10.5px] text-fg-4">
+                    {step.command}
+                  </div>
+                )}
+                {step.reason != null && (
+                  <div className="mt-1 text-[11px] leading-snug text-fg-3">{step.reason}</div>
+                )}
+              </div>
+              <span
+                className={cn(
+                  'justify-self-end rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase md:justify-self-start',
+                  statusTone(step.status),
+                )}
+              >
+                {step.status}
+              </span>
+              <span className="hidden font-mono text-fg-4 md:block">{duration ?? ''}</span>
+              <span className="hidden font-mono text-fg-4 md:block">
+                {step.exitCode != null ? `exit ${step.exitCode}` : ''}
+              </span>
+              {(duration != null || step.exitCode != null) && (
+                <div className="col-span-2 flex flex-wrap gap-2 font-mono text-fg-4 md:hidden">
+                  {duration != null && <span>{duration}</span>}
+                  {step.exitCode != null && <span>exit {step.exitCode}</span>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </li>
   );
 }
