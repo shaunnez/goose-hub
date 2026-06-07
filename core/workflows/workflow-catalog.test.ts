@@ -155,6 +155,34 @@ describe('workflow catalog', () => {
     ).toBe(true);
   });
 
+  it('shows research as a distinct skill stage with both terminal routing edges', () => {
+    const research = byKind('research');
+    const researchEntries = WORKFLOW_CATALOG.filter((entry) => entry.kind === 'research');
+    const researchSkill = research.nodes.find((node) => node.id === 'research-skill');
+
+    expect(researchEntries).toHaveLength(1);
+    expect(researchSkill).toMatchObject({
+      skill: 'research',
+      role: 'researcher',
+      state: 'factory:research-pending',
+      group: 'research',
+      visual: 'skill',
+    });
+    expect(research.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ from: 'research-pending', to: 'research-skill', kind: 'summary' }),
+        expect.objectContaining({ from: 'research-pending', to: 'research-complete', kind: 'primary' }),
+        expect.objectContaining({ from: 'research-complete', to: 'dev-ready', kind: 'primary' }),
+        expect.objectContaining({ from: 'research-complete', to: 'needs-human', kind: 'optional' }),
+      ]),
+    );
+    expect(research.stages.find((stage) => stage.id === 'research')?.nodes).toEqual([
+      'research-pending',
+      'research-skill',
+      'research-complete',
+    ]);
+  });
+
   it('shows lazy bug-enhance grounding as a runtime-conditional investigation branch', () => {
     const bug = byKind('bug');
     const investigation = bug.stages.find((stage) => stage.id === 'investigation');

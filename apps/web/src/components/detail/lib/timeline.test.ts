@@ -392,6 +392,45 @@ describe('groupEvents — investigation runs', () => {
   });
 });
 
+describe('groupEvents — research runs', () => {
+  it('wraps research parent, scout child, and complete events into a research phase', () => {
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', 'run-research:research:scout:pattern:0', {
+        payload: { skill: 'scout-pattern' },
+      }),
+      makeEvent(2, 'swarm.scout-completed', 'run-research:research:scout:pattern:0', {
+        payload: { parentRunId: 'run-research:research', scoutName: 'scout-pattern' },
+      }),
+      makeEvent(3, 'agent.run-completed', 'run-research:research:scout:pattern:0'),
+      makeEvent(4, 'agent.run-started', 'run-research:research', {
+        payload: { skill: 'research' },
+      }),
+      makeEvent(5, 'agent.research-complete', 'run-research:research', {
+        payload: { workflowRunId: 'run-research', researchRunId: 'run-research:research' },
+      }),
+      makeEvent(6, 'state.transitioned', null),
+    ];
+
+    const items = groupEvents(events);
+    const phase = items.find((item) => item.kind === 'research-phase');
+
+    expect(phase).toBeDefined();
+    expect(phase?.kind).toBe('research-phase');
+    if (phase?.kind === 'research-phase') {
+      expect(phase.researchRunId).toBe('run-research:research');
+      expect(phase.status).toBe('completed');
+      expect(
+        phase.items
+          .filter((item) => item.kind === 'run-group')
+          .map((item) => (item.kind === 'run-group' ? item.runId : null)),
+      ).toEqual(['run-research:research', 'run-research:research:scout:pattern:0']);
+    }
+    expect(
+      items.some((item) => item.kind === 'event' && item.event.kind === 'state.transitioned'),
+    ).toBe(true);
+  });
+});
+
 describe('computeIsLive', () => {
   it('returns false when no events', () => {
     expect(computeIsLive([])).toBe(false);
@@ -805,6 +844,33 @@ describe('groupTimelineEventsByCanonicalSection', () => {
         .flatMap((item) => (item.kind === 'phase-group' ? item.items : [item]))
         .some((item) => item.kind === 'event' && item.event.kind === 'spec.completed'),
     ).toBe(false);
+  });
+
+  it('assigns research runtime and complete events to a research section phase', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'run-research:research', {
+        payload: { skill: 'research', workflowRunId: 'run-research' },
+      }),
+      makeEvent(2, 'agent.tool-call', 'run-research:research'),
+      makeEvent(3, 'agent.research-complete', 'run-research:research', {
+        payload: { workflowRunId: 'run-research', researchRunId: 'run-research:research' },
+      }),
+      makeEvent(4, 'state.transitioned', null, {
+        payload: { from: 'factory:research-complete', to: 'factory:dev-ready' },
+      }),
+    ]);
+
+    const research = section(items, 'research');
+
+    expect(research).toBeDefined();
+    expect(research?.items).toHaveLength(1);
+    expect(research?.items[0].kind).toBe('research-phase');
+    expect(items.some((item) => item.kind === 'timeline-section' && item.section === 'system')).toBe(
+      false,
+    );
+    expect(items.some((item) => item.kind === 'event' && item.event.kind === 'state.transitioned')).toBe(
+      true,
+    );
   });
 
   it('puts evidence skip events in Evidence and keeps implement cost ownership out of that section', () => {

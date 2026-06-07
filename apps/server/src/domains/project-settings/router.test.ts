@@ -281,6 +281,9 @@ describe('project settings router', () => {
     expect(body.skillMetadata['bug-enhance'].callers).toEqual(
       expect.arrayContaining(['inbox promotion', 'lazy bug investigation grounding']),
     );
+    expect(body.skillDefaults.research.modelProvider).toBe('claude');
+    expect(body.resolvedSkillRuntimes.research.effectiveProvider).toBe('claude');
+    expect(body.skillMetadata.research.callers).toContain('research workflow');
   });
 
   it('returns implement-WP defaults, DB overrides, and resolved settings', async () => {

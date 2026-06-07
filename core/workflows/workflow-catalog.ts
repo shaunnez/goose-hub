@@ -1048,6 +1048,17 @@ const researchEntry: WorkflowCatalogEntry = {
     stateNode('research-complete', 'Research complete', 'factory:research-complete', {
       group: 'research',
     }),
+    skillNode(
+      'research-skill',
+      'research',
+      'research',
+      'researcher',
+      'factory:research-pending',
+      {
+        group: 'research',
+        notes: 'Read-only repository research and synthesis.',
+      },
+    ),
     stateNode('dev-ready', 'Dev ready', 'factory:dev-ready', { group: 'delivery-router' }),
     stateNode('needs-human', 'Needs human', 'factory:needs-human', {
       group: 'terminal',
@@ -1058,6 +1069,7 @@ const researchEntry: WorkflowCatalogEntry = {
     summary('triage-skill', 'repo-match-skill'),
     primary('triaging', 'accepted'),
     primary('accepted', 'research-pending'),
+    summary('research-pending', 'research-skill'),
     primary('research-pending', 'research-complete'),
     primary('research-complete', 'dev-ready'),
     optional(
@@ -1065,7 +1077,6 @@ const researchEntry: WorkflowCatalogEntry = {
       'needs-human',
       'Human follow-up',
       'research is not directly actionable',
-      true,
     ),
   ],
   normalPath: ['triaging', 'accepted', 'research-pending', 'research-complete', 'dev-ready'],
@@ -1074,9 +1085,10 @@ const researchEntry: WorkflowCatalogEntry = {
     {
       id: 'research',
       title: 'Research',
-      description: 'Research moves from pending to complete, then becomes follow-up work.',
+      description:
+        'Read-only repository discovery synthesizes a research artifact before server routing.',
       group: 'research',
-      nodes: ['research-pending', 'research-complete'],
+      nodes: ['research-pending', 'research-skill', 'research-complete'],
       branches: [
         {
           id: 'human-follow-up',

@@ -18,6 +18,7 @@ import {
   groupByDiscoverPhaseWithSessionIndex,
 } from './phases/discover';
 import { groupByInvestigationPhase } from './phases/investigation';
+import { groupByResearchPhase } from './phases/research';
 import {
   collectRunIdsForTimelineSection,
   compareRenderItems,
@@ -42,6 +43,7 @@ export { VISIBLE_INTERVENTION_EVENT_TYPES } from './interventions';
 export { groupByContractPhase } from './phases/contract';
 export { groupByDiscoverPhase } from './phases/discover';
 export { groupByInvestigationPhase } from './phases/investigation';
+export { groupByResearchPhase } from './phases/research';
 export {
   collectBillableRunIdsForTimelineSection,
   collectRunIdsForTimelineSection,
@@ -226,8 +228,11 @@ export function groupEvents(
   const withInvestigationPhases = groupByInvestigationPhase(
     [...withDiscoverPhases].sort(compareRenderItems),
   );
-  const withReviewGroups = groupByReviewWorkflow(
+  const withResearchPhases = groupByResearchPhase(
     [...withInvestigationPhases].sort(compareRenderItems),
+  );
+  const withReviewGroups = groupByReviewWorkflow(
+    [...withResearchPhases].sort(compareRenderItems),
   );
   const withContractPhases = groupByContractPhase([...withReviewGroups].sort(compareRenderItems));
   return groupByDevPhase([...withContractPhases].sort(compareRenderItems));
@@ -397,6 +402,14 @@ function timelineSegmentExplicitKey(
         stringPayload('investigationRunId') ??
         runId
       );
+    case 'research':
+      return (
+        stringPayload('parentRunId') ??
+        getResearchRunIdFromRunId(runId) ??
+        stringPayload('researchRunId') ??
+        (workflowRunId != null ? `${workflowRunId}:research` : null) ??
+        runId
+      );
     case 'grill':
       return discoverPhase?.id ?? discoverPhaseId?.id ?? workflowRunId ?? runId;
     case 'prd':
@@ -443,6 +456,14 @@ function getInvestigationRunIdFromRunId(runId: string | null): string | null {
     if (markerIndex > 0) return runId.slice(0, markerIndex);
   }
   return null;
+}
+
+function getResearchRunIdFromRunId(runId: string | null): string | null {
+  if (runId == null) return null;
+  const scoutMarker = ':research:scout:';
+  const scoutIndex = runId.indexOf(scoutMarker);
+  if (scoutIndex > 0) return runId.slice(0, scoutIndex + ':research'.length);
+  return runId.endsWith(':research') ? runId : null;
 }
 
 function getPipelineRunIdFromRunId(runId: string | null): string | null {
@@ -812,6 +833,8 @@ function groupItemsInsideTimelineSection(
       return flattenRedundantGroundingRunGroups(items);
     case 'investigation':
       return flattenRedundantSectionPhase(section, groupByInvestigationPhase(items));
+    case 'research':
+      return groupByResearchPhase(items);
     case 'grill':
     case 'prd':
       return flattenRedundantSectionPhase(

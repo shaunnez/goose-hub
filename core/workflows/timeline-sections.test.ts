@@ -15,6 +15,7 @@ describe('timeline sections', () => {
       'triage',
       'grounding',
       'investigation',
+      'research',
       'grill',
       'prd',
       'decompose',
@@ -62,6 +63,9 @@ describe('timeline sections', () => {
     expect(
       resolveTimelineSection({ kind: 'agent.run-started', payload: { skill: 'feature-enhance' } }),
     ).toBe('grounding');
+    expect(
+      resolveTimelineSection({ kind: 'agent.run-started', payload: { skill: 'research' } }),
+    ).toBe('research');
   });
 
   it('falls through display aliases to the durable runtime skill for section ownership', () => {
@@ -149,6 +153,12 @@ describe('timeline sections', () => {
 
   it('routes investigation digest events to the investigation section', () => {
     expect(resolveTimelineSection({ kind: 'investigation.digest-applied' })).toBe('investigation');
+  });
+
+  it('routes research completion and research-prefixed events to the research section', () => {
+    expect(resolveTimelineSection({ kind: 'agent.research-complete' })).toBe('research');
+    expect(resolveTimelineSection({ kind: 'research.digest-applied' })).toBe('research');
+    expect(TIMELINE_EVENT_CLASSIFICATION['agent.research-complete']).toBe('direct');
   });
 
   it('routes feature-enhance empty diagnostics to grounding', () => {

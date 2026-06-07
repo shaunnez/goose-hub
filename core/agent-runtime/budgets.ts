@@ -84,6 +84,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   review: { maxTurns: 25, maxBudgetUsd: 0.5, timeoutMs: 180_000, modelTier: 'sonnet' },
   'resolve-conflict': { maxTurns: 75, maxBudgetUsd: 4.0, timeoutMs: 600_000, modelTier: 'sonnet' },
   investigate: { maxTurns: 50, maxBudgetUsd: 4.0, timeoutMs: 180_000, modelTier: 'sonnet' },
+  research: { maxTurns: 50, maxBudgetUsd: 4.0, timeoutMs: 300_000, modelTier: 'sonnet' },
   'acceptance-contract': {
     maxTurns: 20,
     maxBudgetUsd: 0.5,

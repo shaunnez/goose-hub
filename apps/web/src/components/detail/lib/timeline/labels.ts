@@ -35,6 +35,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.triage-complete': 'Triage complete',
   'agent.repo-override': 'Repository override',
   'agent.investigation-complete': 'Investigation complete',
+  'agent.research-complete': 'Research complete',
   'feature.framed': 'Feature framed',
   'feature.grounding-enhanced': 'Feature grounding enhanced',
   'feature.grounding-complete': 'Feature grounding complete',

@@ -7,6 +7,7 @@ export {
   dispatchParallelImplement,
   dispatchResolveConflict,
 } from './dispatch-dev.js';
+export { dispatchResearch, dispatchResearchComplete } from './dispatch-research.js';
 export {
   dispatchQa,
   dispatchReview,
