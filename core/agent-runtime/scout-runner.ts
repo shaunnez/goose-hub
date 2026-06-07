@@ -22,6 +22,8 @@ const FACTORY_EVIDENCE_TOOL_NAMES = new Set([
   'repo_intel.query',
   'search_text',
 ]);
+const USER_JOURNEY_UI_SIGNAL_RE =
+  /\b(ui|browser|frontend|page|route|screen|modal|dialog|button|header|search|shortcut|keyboard|key|click|label|capture|cmd|command|apple|user journey)\b|⌘/i;
 
 /** Per-scout findings. Mirrors `ScoutOutputSchema` in each scout's schema.ts. */
 export interface ScoutFinding {
@@ -431,6 +433,100 @@ export async function runOneScout(
           }
         }
       }
+    } else if (
+      runtime != null &&
+      shouldRetryUserJourneyWithoutSeed({
+        spec,
+        ctx,
+        fullContext,
+        outputStatus: scoutOutput.status,
+        unsupportedToolSkipWithoutAttempt,
+      })
+    ) {
+      const retryTimeoutMs = remainingTimeoutMs(start, budgets.timeoutMs);
+      if (retryTimeoutMs <= 0) {
+        timedOut = true;
+      } else {
+        const retrySpec = buildNoSeedEvidenceRetrySpec(spawnSpec, retryTimeoutMs);
+        assembleSpawnContext(retrySpec);
+        try {
+          const retryResult = await runtime.run(retrySpec);
+          const retryParsed = safeParseOutputForSchema(ScoutOutputSchema, retryResult.output);
+          if (!retryParsed.success) {
+            const reason = `scout output failed schema validation: ${retryParsed.error.issues
+              .map((i) => `${i.path.join('.')}: ${i.message}`)
+              .join('; ')}`;
+            append({
+              projectId: ctx.projectId,
+              workItemId: ctx.workItemId ?? null,
+              kind: 'swarm.scout-failed',
+              payload: { runId, scoutName: spec.scoutName, errorReason: reason },
+              runId,
+            });
+            return {
+              scoutName: spec.scoutName,
+              status: 'error',
+              outcome: 'failed',
+              findings: [],
+              decisionSummaries:
+                retryResult.decisionSummaries.length > 0
+                  ? retryResult.decisionSummaries
+                  : decisionSummaries,
+              errorReason: reason,
+              runId,
+            };
+          }
+          const retryOutput = normalizeScoutOutput(retryParsed.data);
+          const retryFindings = retryOutput.findings;
+          let retryUnsupportedToolSkipWithoutAttempt = false;
+          if (retryOutput.status === 'skipped') {
+            const retryDecisionSummaries =
+              retryResult.decisionSummaries.length > 0
+                ? retryResult.decisionSummaries
+                : retryOutput.decisionSummaries;
+            retryUnsupportedToolSkipWithoutAttempt =
+              isUnsupportedToolAvailabilitySkip(retryDecisionSummaries) &&
+              !hasFactoryEvidenceAttempt(retryResult.events);
+            if (
+              !retryUnsupportedToolSkipWithoutAttempt ||
+              hasFactoryEvidenceAttempt(retryResult.events)
+            ) {
+              return emitSkippedScout({
+                append,
+                ctx,
+                runId: retrySpec.runId,
+                scoutName: spec.scoutName,
+                findings: retryFindings,
+                decisionSummaries: retryDecisionSummaries,
+              });
+            }
+            decisionSummaries = retryDecisionSummaries;
+          }
+          if (
+            !retryUnsupportedToolSkipWithoutAttempt &&
+            (retryFindings.length > 0 ||
+              hasSuccessfulFactoryEvidenceCall(retryResult.events) ||
+              retryOutput.status === 'ok')
+          ) {
+            result = retryResult;
+            findings = retryFindings;
+            evidenceBackedEmptyResult = retryFindings.length === 0 && retryOutput.status === 'ok';
+            effectiveRunId = retrySpec.runId;
+            decisionSummaries =
+              retryResult.decisionSummaries.length > 0
+                ? retryResult.decisionSummaries
+                : retryOutput.decisionSummaries;
+          } else {
+            retrySkippedReason = 'no-seed-evidence-retry-unbacked';
+          }
+        } catch (err) {
+          if (isTimeoutError(err, retryTimeoutMs)) {
+            timedOut = true;
+          } else {
+            errorReason = err instanceof Error ? err.message : String(err);
+          }
+        }
+      }
     } else {
       retrySkippedReason =
         seedCandidateFileCount === 0 ? 'no-seed-evidence' : 'seed-evidence-unavailable';
@@ -603,6 +699,22 @@ function countSeedCandidateFiles(context: Record<string, unknown>): number {
   return candidates.length;
 }
 
+function shouldRetryUserJourneyWithoutSeed(input: {
+  spec: ScoutSpec;
+  ctx: RunOneScoutContext;
+  fullContext: Record<string, unknown>;
+  outputStatus: string;
+  unsupportedToolSkipWithoutAttempt: boolean;
+}): boolean {
+  if (input.spec.scoutName !== 'scout-user-journey') return false;
+  if (countSeedCandidateFiles(input.fullContext) !== 0) return false;
+  if (input.outputStatus !== 'skipped' && input.outputStatus !== 'ok') return false;
+  if (!input.unsupportedToolSkipWithoutAttempt && input.outputStatus !== 'ok') return false;
+  return USER_JOURNEY_UI_SIGNAL_RE.test(
+    `${input.ctx.workItem.title}\n${input.ctx.workItem.body}\n${input.spec.scoutFocus}`,
+  );
+}
+
 async function readBoundedSeedFile(
   worktreePath: string,
   filePath: string,
@@ -668,6 +780,25 @@ function buildEvidenceRetrySpec(
     ...spawnSpec,
     runId: `${spawnSpec.runId}:evidence-retry`,
     context,
+    budgets: { ...spawnSpec.budgets, timeoutMs },
+    appendSystemPrompt:
+      spawnSpec.appendSystemPrompt != null && spawnSpec.appendSystemPrompt.length > 0
+        ? `${spawnSpec.appendSystemPrompt}\n\n${instruction}`
+        : instruction,
+  };
+}
+
+function buildNoSeedEvidenceRetrySpec(spawnSpec: AgentSpec, timeoutMs: number): AgentSpec {
+  const instruction = [
+    'No-seed evidence retry: this selected scout must make at least one Factory evidence call before returning.',
+    'Ignore MCP resources/list or resources/read advisories; those are not the Factory read/search/file tools.',
+    'Use one of repo_intel.query, search_text, list_files, or read_file, starting from visible terms in <workItem> and <scoutFocus>.',
+    'If a successful Factory evidence call proves this scout domain does not apply, return status "skipped" with a decision summary.',
+  ].join('\n');
+
+  return {
+    ...spawnSpec,
+    runId: `${spawnSpec.runId}:no-seed-evidence-retry`,
     budgets: { ...spawnSpec.budgets, timeoutMs },
     appendSystemPrompt:
       spawnSpec.appendSystemPrompt != null && spawnSpec.appendSystemPrompt.length > 0

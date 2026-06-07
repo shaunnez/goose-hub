@@ -775,6 +775,88 @@ describe('swarm.dispatchWave', () => {
     });
   });
 
+  it('retries a selected user-journey scout skip with no seed evidence', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const seenSpecs: AgentSpec[] = [];
+    const runtime = makeRuntime({
+      'scout-user-journey': (spec) => {
+        seenSpecs.push(spec);
+        if (seenSpecs.length === 1) {
+          return Promise.resolve(
+            skippedResult(
+              'Could not inspect the workspace because the required Factory read/search tools are not available in this run.',
+            ),
+          );
+        }
+        return Promise.resolve({
+          output: {
+            findings: [
+              {
+                file: 'apps/web/src/components/chrome/TopBar.tsx',
+                line: 47,
+                fact: 'Capture button is rendered in the header.',
+                confidence: 'high',
+              },
+            ],
+            decisionSummaries: [{ kind: 'READ', summary: 'Read TopBar header button flow.' }],
+            status: 'ok',
+          },
+          decisionSummaries: [{ kind: 'READ', summary: 'Read TopBar header button flow.' }],
+          events: [toolCallEvent(spec.runId, 'search_text', 'ok')],
+        });
+      },
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-user-journey-no-seed-retry',
+      scoutSpecs: [
+        {
+          ...makeScoutSpec('scout-user-journey'),
+          scoutFocus: 'Walk the header capture button shortcut flow.',
+          extraContext: {
+            investigationSeed: {
+              candidateFiles: [],
+              candidateSymbols: [],
+              testFiles: [],
+              recentlyChangedFiles: [],
+              priorInvestigationRunIds: [],
+              builtAt: '2026-06-08T00:00:00.000Z',
+            },
+          },
+        },
+      ],
+      workItem: {
+        number: 21,
+        title: 'capture bug 2',
+        body: 'Capture key in the header should open with apple J key. And the button should show that label just like search does',
+      },
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+      minSuccessfulScouts: 1,
+    });
+
+    expect(seenSpecs).toHaveLength(2);
+    expect(seenSpecs[1].runId).toBe(
+      'parent-user-journey-no-seed-retry:scout:scout-user-journey:0:no-seed-evidence-retry',
+    );
+    expect(seenSpecs[1].appendSystemPrompt).toContain(
+      'No-seed evidence retry: this selected scout must make at least one Factory evidence call',
+    );
+    expect(result.status).toBe('ok');
+    expect(result.reports[0]).toMatchObject({
+      status: 'ok',
+      outcome: 'ok',
+      findings: [expect.objectContaining({ file: 'apps/web/src/components/chrome/TopBar.tsx' })],
+    });
+    expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(false);
+  });
+
   it('does not halt when two scouts skip and enough useful evidence remains', async () => {
     const { fn: appendEvent, events } = makeFakeAppendEvent();
     const runtime = makeRuntime({
