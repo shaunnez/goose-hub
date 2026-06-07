@@ -89,6 +89,29 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
       };
     }
 
+    case 'research':
+      return {
+        output: {
+          summary: 'E2E mock research summary',
+          answer: 'E2E mock research answer with one directly actionable follow-up.',
+          evidence: [],
+          options: [],
+          followUpWork: [
+            {
+              type: 'feature',
+              title: 'Mock directly actionable follow-up',
+              rationale: 'Mock research found one implementation-ready follow-up.',
+              actionable: true,
+            },
+          ],
+          actionability: 'directly-actionable',
+          openQuestions: [],
+          decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock research for e2e test' }],
+        },
+        decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock research for e2e test' }],
+        events: [],
+      };
+
     case 'qa': {
       if (testOutcome === 'fail') {
         const emptyTier = { passed: false, findings: [] };

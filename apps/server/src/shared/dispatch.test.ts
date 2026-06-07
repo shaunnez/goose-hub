@@ -50,6 +50,7 @@ const mockDbUpdate = vi.fn(() => ({ set: mockDbUpdateSet }));
 const mockLoadLatestRoute = vi.fn();
 const mockSelectFixIssuePipeline = vi.fn();
 const mockRunSpecAuthorWorkflow = vi.fn();
+const mockStoreArtifact = vi.fn();
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
@@ -61,6 +62,13 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
 
 vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
   getEngineeringSpec: mockGetEngineeringSpec,
+}));
+
+vi.mock('@goose-hub/core/agent-artifacts/repository.js', () => ({
+  deterministicArtifactKey: vi.fn(
+    ({ kind, runId }: { kind: string; runId: string }) => `${kind}:${runId}`,
+  ),
+  storeArtifact: mockStoreArtifact,
 }));
 
 vi.mock('../../../../slices/parallel-implement/workflow.js', () => ({
@@ -212,6 +220,13 @@ beforeEach(() => {
   mockRunDecomposePrdWorkflow.mockResolvedValue(undefined);
   mockRunParallelImplementWorkflow.mockResolvedValue({ status: 'success' });
   mockRunSpecAuthorWorkflow.mockResolvedValue(undefined);
+  mockStoreArtifact.mockReturnValue({
+    artifactKey: 'research-artifact:run-1',
+    kind: 'research-artifact',
+    summary: 'Stored research',
+    bytes: 128,
+    stored: true,
+  });
   mockGetSourceForSlug.mockResolvedValue(null);
   // Default: single-workflow-per-project (backward-compat) for tests that don't override.
   mockGetProject.mockResolvedValue(null);
@@ -838,7 +853,8 @@ describe('dispatchResearchComplete', () => {
     mockEventStoreReplay.mockReturnValue([
       {
         kind: 'agent.research-complete',
-        payload: { research: researchArtifact },
+        runId: 'workflow-run:research',
+        payload: { research: researchArtifact, researchRunId: 'workflow-run:research' },
       },
     ]);
 
@@ -850,7 +866,23 @@ describe('dispatchResearchComplete', () => {
       'factory:research-complete',
       'factory:dev-ready',
     );
-    expect(source.comment).not.toHaveBeenCalled();
+    expect(mockStoreArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'goose-hub-self',
+        workItemId: 'github:shaunnez/goose-hub#77',
+        runId: 'workflow-run:research',
+        kind: 'research-artifact',
+        payload: researchArtifact,
+      }),
+    );
+    expect(source.comment).toHaveBeenCalledWith(
+      '77',
+      expect.stringContaining('## Research handoff'),
+    );
+    expect(source.comment).toHaveBeenCalledWith(
+      '77',
+      expect.stringContaining('Add research workflow'),
+    );
   });
 
   it.each([
@@ -1279,6 +1311,65 @@ describe('dispatchFixIssue', () => {
     expect(repoRoot).toContain('goose-hub');
   });
 
+  it('injects the latest research handoff into legacy fix-issue context', async () => {
+    const research = {
+      summary: 'Direct path found.',
+      answer: 'Use the existing dispatch surface and add a research-specific slice.',
+      evidence: [],
+      options: [],
+      followUpWork: [
+        {
+          type: 'feature',
+          title: 'Add research dispatch',
+          rationale: 'Research items need a development-ready handoff.',
+          actionable: true,
+        },
+      ],
+      actionability: 'directly-actionable',
+      openQuestions: [],
+      decisionSummaries: [{ kind: 'INSIGHT', summary: 'Research is implementation-ready.' }],
+    };
+    const item = {
+      id: 'github:shaunnez/goose-hub#46',
+      externalId: '46',
+      title: 'Research workflow',
+      body: 'Original research question.',
+      repoRef: 'shaunnez/goose-hub',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'research',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      comment: vi.fn().mockResolvedValue(undefined),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockImplementation(({ kind }: { kind?: string }) => {
+      if (kind === 'agent.research-complete') {
+        return [
+          {
+            kind: 'agent.research-complete',
+            runId: 'research-run-46',
+            payload: { research, researchRunId: 'research-run-46' },
+          },
+        ];
+      }
+      return [];
+    });
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('slug', 46);
+
+    expect(mockRunFixIssueWorkflow).toHaveBeenCalledOnce();
+    const handedOffItem = mockRunFixIssueWorkflow.mock.calls[0][0] as { body: string };
+    expect(handedOffItem.body).toContain('Original research question.');
+    expect(handedOffItem.body).toContain('## Research handoff');
+    expect(handedOffItem.body).toContain('Add research dispatch');
+    expect(handedOffItem.body).toContain('Artifact: research-artifact:research-run-46');
+  });
+
   it('records pre-in-progress legacy fix-issue failures and escalates only from dev-ready', async () => {
     const mockItem = {
       id: 'github:shaunnez/goose-hub#45',
@@ -1536,6 +1627,68 @@ describe('dispatchFixIssue: bug routing', () => {
       'dispatchFixIssue: pipeline resolved',
       expect.objectContaining({ pipeline: 'spec-author-full' }),
     );
+  });
+
+  it('injects the latest research handoff into spec-author context', async () => {
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockGetProject.mockResolvedValue({
+      id: 'slug',
+      budgets: { maxParallelAgents: 1 },
+      source: { kind: 'github', repo: 'shaunnez/goose-hub' },
+    });
+    const researchItem = {
+      id: 'github:shaunnez/goose-hub#105',
+      externalId: '105',
+      title: 'research result needs implementation',
+      body: 'Original research brief.',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'research',
+    };
+    const research = {
+      summary: 'Implementation path identified.',
+      answer: 'The spec should preserve the discovered handoff before implementation.',
+      evidence: [],
+      options: [],
+      followUpWork: [
+        {
+          type: 'feature',
+          title: 'Preserve research handoff',
+          rationale: 'Spec-author receives workItem.body as its source context.',
+          actionable: true,
+        },
+      ],
+      actionability: 'directly-actionable',
+      openQuestions: [],
+      decisionSummaries: [{ kind: 'INSIGHT', summary: 'Research is directly actionable.' }],
+    };
+    mockGetSourceForSlug.mockResolvedValue(makeSource(researchItem));
+    mockEventStoreReplay.mockImplementation(({ kind }: { kind?: string }) => {
+      if (kind === 'agent.research-complete') {
+        return [
+          {
+            kind: 'agent.research-complete',
+            runId: 'research-run-105',
+            payload: { research, researchRunId: 'research-run-105' },
+          },
+        ];
+      }
+      return [];
+    });
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [researchItem],
+      blocked: [],
+      unregistered: [],
+    });
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('slug', 105);
+
+    expect(mockRunSpecAuthorWorkflow).toHaveBeenCalledOnce();
+    const handedOffItem = mockRunSpecAuthorWorkflow.mock.calls[0][0] as { body: string };
+    expect(handedOffItem.body).toContain('Original research brief.');
+    expect(handedOffItem.body).toContain('## Research handoff');
+    expect(handedOffItem.body).toContain('Preserve research handoff');
   });
 
   it('routes factory:from-prd child issues to legacy implementation even when multi-agent is enabled', async () => {

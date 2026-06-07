@@ -24,6 +24,7 @@ import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.
 import { withParallelLock } from './dispatch-lock.js';
 import { createMockWorktree } from './mock-worktree.js';
 import { getProject } from './projects.js';
+import { appendResearchHandoffToWorkItem } from './research-handoff.js';
 import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
 
@@ -465,7 +466,11 @@ export async function dispatchSpecAuthor(slug: string, issueNumber: number): Pro
           }
         : undefined;
 
-    await runSpecAuthorWorkflow(item, source, slug, REPO_ROOT, { ...mockDeps, specMode });
+    const itemWithResearchHandoff = appendResearchHandoffToWorkItem(slug, item);
+    await runSpecAuthorWorkflow(itemWithResearchHandoff, source, slug, REPO_ROOT, {
+      ...mockDeps,
+      specMode,
+    });
   });
 }
 
@@ -593,7 +598,8 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
         : undefined;
 
     try {
-      await runFixIssueWorkflow(item, source, slug, REPO_ROOT, mockDeps);
+      const itemWithResearchHandoff = appendResearchHandoffToWorkItem(slug, item);
+      await runFixIssueWorkflow(itemWithResearchHandoff, source, slug, REPO_ROOT, mockDeps);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       await recordLegacyFixIssueStartupFailure({

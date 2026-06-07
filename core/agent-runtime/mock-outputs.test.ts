@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ResearchSchema } from '@goose-hub/skills/research/schema.js';
 import type { AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
 
@@ -107,6 +108,16 @@ describe('resolveMockOutput — investigate', () => {
     const out = r.output as { confidence: string; findings: string };
     expect(out.confidence).toBe('high');
     expect(out.findings).toBe('E2E mock findings');
+  });
+});
+
+describe('resolveMockOutput — research', () => {
+  it('returns a schema-valid directly actionable research artifact', () => {
+    const r = resolveMockOutput(makeSpec({ skill: 'research' }));
+    expect(ResearchSchema.safeParse(r.output).success).toBe(true);
+    const out = r.output as { actionability: string; followUpWork: Array<{ actionable: boolean }> };
+    expect(out.actionability).toBe('directly-actionable');
+    expect(out.followUpWork.filter((candidate) => candidate.actionable)).toHaveLength(1);
   });
 });
 

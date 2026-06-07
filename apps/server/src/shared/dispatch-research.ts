@@ -1,3 +1,5 @@
+import { storeArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
+import type { ArtifactRef } from '@goose-hub/core/agent-artifacts/types.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
@@ -5,18 +7,28 @@ import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { ResearchOutput } from '@goose-hub/skills/research/schema.js';
 import { withParallelLock } from './dispatch-lock.js';
 import { createMockWorktree } from './mock-worktree.js';
+import {
+  formatResearchHandoff,
+  researchArtifactKey,
+  RESEARCH_ARTIFACT_KIND,
+} from './research-handoff.js';
 import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
 
 type ResearchCompletePayload = {
   research?: ResearchOutput;
+  researchRunId?: string;
 };
 
 function latestResearchPayload(
-  events: Array<{ kind: string; payload: unknown }>,
-): ResearchCompletePayload | null {
+  events: Array<{ kind: string; payload: unknown; runId?: string | null }>,
+): (ResearchCompletePayload & { eventRunId?: string | null }) | null {
   const latest = [...events].reverse().find((event) => event.kind === 'agent.research-complete');
-  return (latest?.payload as ResearchCompletePayload | undefined) ?? null;
+  if (latest == null) return null;
+  return {
+    ...((latest.payload as ResearchCompletePayload | undefined) ?? {}),
+    eventRunId: latest.runId,
+  };
 }
 
 function targetStateForResearch(research: ResearchOutput | undefined): StateName {
@@ -49,6 +61,23 @@ function hasEquivalentResearchCompleteTransition(
       payload.to === targetState &&
       payload.by === 'research-complete'
     );
+  });
+}
+
+function storeResearchArtifact(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  research: ResearchOutput;
+}): ArtifactRef {
+  return storeArtifact({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    runId: input.runId,
+    kind: RESEARCH_ARTIFACT_KIND,
+    artifactKey: researchArtifactKey(input),
+    payload: input.research,
+    summary: input.research.summary,
   });
 }
 
@@ -107,7 +136,8 @@ export async function dispatchResearchComplete(
       }
 
       const events = eventStore.replay({ projectId: slug, workItemId: item.id });
-      const research = latestResearchPayload(events)?.research;
+      const latestResearch = latestResearchPayload(events);
+      const research = latestResearch?.research;
       const targetState = targetStateForResearch(research);
       if (hasEquivalentResearchCompleteTransition(events, targetState)) {
         logger.info('dispatchResearchComplete: equivalent transition already emitted', {
@@ -116,6 +146,22 @@ export async function dispatchResearchComplete(
           targetState,
         });
         return;
+      }
+
+      const researchRunId =
+        latestResearch?.researchRunId ?? latestResearch?.eventRunId ?? `research:${item.id}`;
+      const researchArtifact =
+        research != null
+          ? storeResearchArtifact({
+              projectId: slug,
+              workItemId: item.id,
+              runId: researchRunId,
+              research,
+            })
+          : null;
+
+      if (targetState === 'factory:dev-ready' && research != null) {
+        await source.comment(item.externalId, formatResearchHandoff(research, researchArtifact));
       }
 
       await source.transitionState(item.id, 'factory:research-complete', targetState);
@@ -129,6 +175,7 @@ export async function dispatchResearchComplete(
           actionability: research?.actionability ?? 'missing-artifact',
           actionableFollowUpCount:
             research?.followUpWork.filter((candidate) => candidate.actionable).length ?? 0,
+          researchArtifact,
         },
       });
 
