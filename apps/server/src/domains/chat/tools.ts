@@ -58,7 +58,7 @@ function assertValidSlug(slug: string): void {
   }
 }
 
-const PROJECT_RELATIVE_ROUTES = new Set(['/inbox', '/roster', '/costs', '/office']);
+const PROJECT_RELATIVE_ROUTES = new Set(['/inbox', '/roster', '/costs']);
 const PROJECT_ROOT_ALIASES = new Set(['/kanban', '/board']);
 
 function normalizeProjectRelativePath(path: string, projectId?: string | null): string {

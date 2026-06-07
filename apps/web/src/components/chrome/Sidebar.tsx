@@ -1,6 +1,5 @@
 import { cn } from '@/lib/cn';
 import {
-  Building2,
   ChevronLeft,
   ChevronRight,
   Coins,
@@ -30,12 +29,6 @@ function buildItems(slug: string | undefined): SidebarItem[] {
       to: `/projects/${project}`,
       label: 'Kanban',
       icon: <KanbanSquare size={14} />,
-      available: true,
-    },
-    {
-      to: `/projects/${project}/office`,
-      label: 'Office',
-      icon: <Building2 size={14} />,
       available: true,
     },
     {
