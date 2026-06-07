@@ -1,5 +1,4 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-// import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AllProjectsBoard } from './components/board/components/AllProjectsBoard';
 import { Board } from './components/board/components/Board';
