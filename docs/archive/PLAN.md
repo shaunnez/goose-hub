@@ -1049,7 +1049,6 @@ In priority order (status as of M11 mid-milestone):
 6. Milestones (set-active per project, sprint review) — per-project active milestone shipped (M10); sprint review surface still pending
 7. Settings → Projects (read-only per-project config viewer) — shipped (M10). Models, hooks, budgets, governance, lane overrides editing surfaces still pending
 8. Project bootstrap wizard (M12+)
-9. Office tab (M17 skin, optional)
 
 Costs in UI are labelled **estimated** when inferred from Claude CLI; **exact** when authoritative (see CONTEXT.md "Cost Module").
 
@@ -2069,44 +2068,6 @@ For every milestone:
 
 ---
 
-### M17. Goose Mode Skin (optional)
-
-**Outcome:** spatial UI skin that visualises agent activity as an office metaphor. Glanceable view of 30+ agents at once. Pure UI, no behaviour change.
-
-**Included scope:**
-- New "Office" tab alongside Kanban
-- Pixel-art top-down office layout (one floor per project)
-- Agent state indicators above desks: speech bubble, question mark, thought bubble, coffee cup, exclamation, check
-- Movement: agents walk between rooms when state changes
-- Click desk → existing task detail panel
-- Phaser.js canvas for the office, embedded in React tab
-- Same SSE event stream drives Office and Kanban
-
-**Explicit exclusions:**
-- No new orchestration behaviour
-- No mobile Office view
-- Optional milestone — drop entirely if not desired
-
-**Dependencies:** M16 (parallel-agent UX is most useful when there's actually parallel autonomous activity)
-
-**Exit criteria:** Office tab works alongside Kanban for at least 3 active projects. Watching agents work feels glanceable.
-
-**Why vertically useful:** purely a delight feature. No correctness gain. Listed because it's been a recurring theme; treat as optional.
-
-**Rough GitHub issues:**
-1. Phaser.js canvas embedded in React tab
-2. Office layout (pixel-art tilesets)
-3. Agent sprite + state indicators
-4. Movement engine (state-change → walk-between-rooms)
-5. Click-through to task detail
-6. Multi-floor (per-project) navigation
-
-**Defer list:**
-- Mobile Office → never
-- Voice or sound effects → never
-
----
-
 ### M18. Portfolio Polish (optional)
 
 **Outcome:** Goose Hub is presentable as a portfolio piece. Demo data, public-safe demo mode, walkthrough docs, screenshots, video script, positioning copy.
@@ -2303,7 +2264,6 @@ For agents:
 | M14 | Work Mode Foundation | Jira + Bitbucket investigation | No |
 | M15 | Slack Capture and Gate Notifications | Lower capture friction | No |
 | M16 | Autonomous Mode and Docker | Ships while you sleep | No |
-| M17 | Goose Mode Skin | Pixel-art office | Optional |
 | M18 | Portfolio Polish | Public-facing presence | Optional |
 
 ---

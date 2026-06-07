@@ -84,7 +84,7 @@ describe('collectActionableQaItems', () => {
             command: 'pnpm test:e2e:pipeline',
             status: 'failed',
             error: 'command timed out after 900000ms',
-            stderr: 'Timed out while running apps/web/e2e/pipeline/office-capture.spec.ts',
+            stderr: 'Timed out while running apps/web/e2e/pipeline/chrome-capture.spec.ts',
           },
         },
         e2e: {
@@ -97,7 +97,7 @@ describe('collectActionableQaItems', () => {
         {
           tier: 'regression',
           severity: 'error',
-          description: 'Pipeline timed out in Office e2e specs',
+          description: 'Pipeline timed out in chrome e2e specs',
           disposition: 'needs-fix' as const,
         },
       ],

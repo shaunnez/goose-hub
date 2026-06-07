@@ -128,7 +128,7 @@ const OpenUrlInput = z.object({
     .string()
     .startsWith('/')
     .describe(
-      'Internal app path (e.g. /projects/goose-hub-self/items/123). Project routes are /projects/<slug>, /projects/<slug>/inbox, /projects/<slug>/roster, /projects/<slug>/costs, /projects/<slug>/office, and /projects/<slug>/items/<n>. For work items, use the external issue number, not github:owner/repo#123.',
+      'Internal app path (e.g. /projects/goose-hub-self/items/123). Project routes are /projects/<slug>, /projects/<slug>/inbox, /projects/<slug>/roster, /projects/<slug>/costs, and /projects/<slug>/items/<n>. For work items, use the external issue number, not github:owner/repo#123.',
     ),
   rationale: z.string().min(1),
 });

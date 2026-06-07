@@ -413,7 +413,7 @@ describe('runFixFeedbackWorkflow', () => {
                 command: 'pnpm test:e2e:pipeline',
                 status: 'failed',
                 error: 'command timed out after 900000ms',
-                stderr: 'Timed out in apps/web/e2e/pipeline/office-capture.spec.ts',
+                stderr: 'Timed out in apps/web/e2e/pipeline/chrome-capture.spec.ts',
               },
             },
             e2e: {
@@ -426,7 +426,7 @@ describe('runFixFeedbackWorkflow', () => {
             {
               tier: 'regression',
               severity: 'error',
-              description: 'Pipeline timed out in Office e2e specs',
+              description: 'Pipeline timed out in chrome e2e specs',
               disposition: 'needs-fix',
               dispositionRef: 'current PR',
             },
@@ -441,7 +441,7 @@ describe('runFixFeedbackWorkflow', () => {
                 {
                   tier: 'regression',
                   severity: 'error',
-                  description: 'Regression [timeout]: apps/web/e2e/pipeline/office-capture.spec.ts',
+                  description: 'Regression [timeout]: apps/web/e2e/pipeline/chrome-capture.spec.ts',
                 },
               ],
             },
