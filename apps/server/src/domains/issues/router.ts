@@ -23,7 +23,6 @@ import {
   overrideIssueRepo,
   proceedToPrd,
   rejectIssue,
-  rejectPRD,
   revisePRD,
   setIssueLabel,
   setIssueMilestone,
