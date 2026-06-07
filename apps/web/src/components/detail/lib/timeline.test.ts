@@ -1509,6 +1509,49 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     });
   });
 
+  it('preserves passed preflight status when the QA workflow fails after preflight completed', () => {
+    const QA_ATTEMPT = 'qa-attempt-agent-failed';
+    const summary = summarizeQaPreflightSteps([
+      makeEvent(1, 'qa.preflight-step-started', 'qa-runtime-agent-failed', {
+        payload: {
+          qaAttemptId: QA_ATTEMPT,
+          step: 'lint',
+          command: 'pnpm lint',
+          status: 'running',
+        },
+      }),
+      makeEvent(2, 'qa.preflight-step-completed', 'qa-runtime-agent-failed', {
+        payload: {
+          qaAttemptId: QA_ATTEMPT,
+          step: 'lint',
+          command: 'pnpm lint',
+          status: 'passed',
+          exitCode: 0,
+        },
+      }),
+      makeEvent(3, 'qa.preflight-completed', 'qa-runtime-agent-failed', {
+        payload: {
+          qaAttemptId: QA_ATTEMPT,
+          status: 'passed',
+        },
+      }),
+      makeEvent(4, 'qa.workflow-failed', 'qa-runtime-agent-failed', {
+        payload: {
+          qaAttemptId: QA_ATTEMPT,
+          status: 'failed',
+          reason: 'qa-agent-failed',
+        },
+      }),
+    ]);
+
+    expect(summary.status).toBe('passed');
+    expect(summary.title).toBe('Preflight passed');
+    expect(summary.steps.find((step) => step.step === 'lint')).toMatchObject({
+      status: 'passed',
+      exitCode: 0,
+    });
+  });
+
   it('renders started-only QA preflight steps as running for live attempts', () => {
     const summary = summarizeQaPreflightSteps([
       makeEvent(1, 'qa.preflight-step-started', 'qa-live-preflight', {

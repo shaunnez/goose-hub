@@ -185,7 +185,6 @@ function resolveSummaryStatus(
     const reason = (terminal.payload as QaPreflightPayload | null)?.reason;
     return reason === 'superseded' ? 'superseded' : 'aborted';
   }
-  if (terminal?.kind === 'qa.workflow-failed') return 'failed';
   if (
     terminal?.kind === 'qa.workflow-completed' &&
     steps.some((step) => step.status === 'running' || step.status === 'incomplete')
@@ -197,6 +196,7 @@ function resolveSummaryStatus(
   }
   if (steps.some((step) => step.status === 'running')) return 'running';
   if (hasPreflightCompleted) return 'passed';
+  if (terminal?.kind === 'qa.workflow-failed') return 'failed';
   return steps.some((step) => step.status !== 'not-started') ? 'running' : 'unknown';
 }
 
