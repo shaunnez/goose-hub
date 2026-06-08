@@ -84,6 +84,7 @@ const mockOpenPR = vi
   .mockResolvedValue({ prNumber: 1, prUrl: 'u', branch: 'b', base: 'main' });
 vi.mock('@goose-hub/core/connectors/github/open-pr.js', () => ({
   openPR: (...args: unknown[]) => mockOpenPR(...args),
+  openLocalDbPR: (...args: unknown[]) => mockOpenPR(...args),
 }));
 const mockAdviseOnPlan = vi.fn();
 vi.mock('@goose-hub/core/agent-runtime/advisor.js', () => ({
@@ -135,8 +136,40 @@ vi.mock('@goose-hub/core/workspaces/workflow-base.js', () => ({
 vi.mock('@goose-hub/core/workspaces/orchestrator-git.js', () => ({
   orchestratorCommitAll: vi.fn().mockReturnValue({ status: 'committed', sha: 'fake-sha' }),
 }));
+vi.mock('@goose-hub/core/state-source/local-db-repository.js', () => ({
+  LocalDbWorkItemRepository: vi.fn().mockImplementation(() => ({
+    listExternalRefs: vi.fn().mockReturnValue([]),
+    upsertExternalRef: vi.fn().mockReturnValue({
+      id: 1,
+      provider: '',
+      kind: '',
+      repoRef: '',
+      externalId: '',
+      url: null,
+      metadata: null,
+      metadataJson: null,
+      createdAt: '',
+    }),
+    // repo-affinity uses this to resolve the checkout repository for local: items
+    listRepoLinks: vi
+      .fn()
+      .mockReturnValue([
+        { repoRef: 'workspace/repo', role: 'primary', confidence: 1, source: 'explicit' },
+      ]),
+  })),
+}));
+const mockOpenBitbucketPR = vi.fn().mockResolvedValue({
+  prNumber: 200,
+  prUrl: 'https://bitbucket.org/workspace/repo/pull-requests/200',
+  branch: 'factory/run-bb',
+  base: 'main',
+});
+vi.mock('@goose-hub/core/connectors/bitbucket/open-pr.js', () => ({
+  openBitbucketPR: (...args: unknown[]) => mockOpenBitbucketPR(...args),
+}));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { LocalDbWorkItemRepository } from '@goose-hub/core/state-source/local-db-repository.js';
 import { GIT_ENV } from '@goose-hub/core/workspaces/git-env.js';
 import { WorktreeDependencyPreflightError } from '@goose-hub/core/workspaces/worktree.js';
 
@@ -2820,5 +2853,175 @@ describe('resolveWorktreeHeadSha (M7.bug fix — #233 SHA pinning)', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+function makeBitbucketProjectConfig(postBackPullRequests = true): Record<string, unknown> {
+  return makeProjectConfig({
+    source: {
+      kind: 'local-db',
+      stateMachine: 'db',
+      integrations: {
+        bitbucket: {
+          enabled: true,
+          postBack: { pullRequests: postBackPullRequests, comments: false },
+        },
+      },
+    },
+    repos: ['workspace/repo'],
+  });
+}
+
+describe('runFixIssueWorkflow — Bitbucket PR delivery', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetEventStoreMocks();
+    mockAccumulatePersonaStats.mockClear();
+    resetRuntimeRoutingMocks();
+    mockProjectConfig = makeBitbucketProjectConfig();
+  });
+
+  function makeBitbucketDeps(overrides: Record<string, unknown> = {}) {
+    return {
+      runtime: {
+        run: vi.fn().mockResolvedValueOnce({
+          output: makeImplementOutput(),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult),
+      } as AgentRuntime,
+      openBitbucketPRImpl: vi.fn().mockResolvedValue({
+        prNumber: 200,
+        prUrl: 'https://bitbucket.org/workspace/repo/pull-requests/200',
+        branch: 'factory/run-bb',
+        base: 'main',
+      }),
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+      ...overrides,
+    };
+  }
+
+  it('calls openBitbucketPRFn with workspace/repo, not openPRFn', async () => {
+    const item = makeWorkItem({
+      id: 'local:proj/42',
+      externalId: '42',
+      repoRef: 'workspace/repo',
+    });
+    const source = makeStateSource();
+    const deps = makeBitbucketDeps();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', deps);
+
+    expect(deps.openBitbucketPRImpl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspace: 'workspace',
+        repo: 'repo',
+        branchName: expect.stringContaining('factory/'),
+      }),
+    );
+    expect(mockOpenPR).not.toHaveBeenCalled();
+  });
+
+  it('pr.opened event has provider: bitbucket', async () => {
+    const item = makeWorkItem({
+      id: 'local:proj/42',
+      externalId: '42',
+      repoRef: 'workspace/repo',
+    });
+    const source = makeStateSource();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', makeBitbucketDeps());
+
+    const opened = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'pr.opened');
+    expect(opened).toBeDefined();
+    const payload = opened?.[0].payload as Record<string, unknown>;
+    expect(payload).toHaveProperty('provider', 'bitbucket');
+    expect(payload).toHaveProperty('prNumber', 200);
+    expect(payload).toHaveProperty(
+      'prUrl',
+      'https://bitbucket.org/workspace/repo/pull-requests/200',
+    );
+  });
+
+  it('local-db without postBack.pullRequests falls back to GitHub connector', async () => {
+    mockProjectConfig = makeBitbucketProjectConfig(false);
+    process.env.GITHUB_TOKEN = 'ghp_test';
+    const item = makeWorkItem({
+      id: 'local:proj/42',
+      externalId: '42',
+      repoRef: 'workspace/repo',
+    });
+    const source = makeStateSource();
+    const deps = makeBitbucketDeps();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', deps);
+
+    // GitHub path uses openLocalDbPR (mocked via mockOpenPR module-level mock)
+    expect(mockOpenPR).toHaveBeenCalled();
+    expect(deps.openBitbucketPRImpl).not.toHaveBeenCalled();
+
+    const opened = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'pr.opened');
+    const payload = opened?.[0].payload as Record<string, unknown>;
+    expect(payload).toHaveProperty('provider', 'github');
+  });
+
+  it('emits needs-human and transitions if repoRef cannot become workspace/repo', async () => {
+    // Build a project config that accepts 'org/sub/repo' as a known repository
+    // so repo-affinity passes, but the 3-segment repoRef reaches afterImplement
+    // and triggers the "Cannot derive" guard.
+    const threePartRef = 'org/sub/repo';
+    mockProjectConfig = {
+      ...makeBitbucketProjectConfig(),
+      repos: [threePartRef],
+      repositories: [
+        {
+          id: 'r1',
+          repoRef: threePartRef,
+          cloneUrl: '',
+          defaultBranch: 'main',
+          localPath: '/repo',
+          role: 'code',
+        },
+      ],
+    };
+    vi.mocked(LocalDbWorkItemRepository).mockImplementationOnce(
+      () =>
+        ({
+          listExternalRefs: vi.fn().mockReturnValue([]),
+          upsertExternalRef: vi.fn().mockReturnValue({ id: 1 }),
+          listRepoLinks: vi
+            .fn()
+            .mockReturnValue([{ repoRef: threePartRef, role: 'primary', confidence: 1 }]),
+        }) as unknown as LocalDbWorkItemRepository,
+    );
+    const item = makeWorkItem({
+      id: 'local:proj/42',
+      externalId: '42',
+      repoRef: threePartRef,
+    });
+    const source = makeStateSource();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    // workflow catches the error and transitions to needs-human (does not re-throw)
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', makeBitbucketDeps());
+
+    const failEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failEvent).toBeDefined();
+    const payload = failEvent?.[0].payload as Record<string, unknown>;
+    expect(String(payload?.error)).toContain('Cannot derive Bitbucket workspace/repo');
   });
 });

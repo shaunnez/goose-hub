@@ -23,10 +23,15 @@ import { recordAgentRun } from '@goose-hub/core/agent-runtime/run-record.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
+import { openBitbucketPR } from '@goose-hub/core/connectors/bitbucket/open-pr.js';
 import { openLocalDbPR, type openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import {
+  upsertBitbucketBranchRef,
+  upsertBitbucketPullRequestRef,
+} from '@goose-hub/core/integrations/bitbucket/external-refs.js';
 import { upsertGithubExternalRef } from '@goose-hub/core/integrations/github/external-refs.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -37,7 +42,11 @@ import {
 } from '@goose-hub/core/symbol-index/hints-used.js';
 import type { SymbolKeyFileHint } from '@goose-hub/core/symbol-index/lookup.js';
 import { canonicalPathStringFromAuditPayload } from '@goose-hub/core/tool-layer/tool-call-audit.js';
-import { deriveObservedChangedFiles } from '@goose-hub/core/workspaces/observed-changes.js';
+import type { LocalDbSourceConfig, SourceConfig } from '@goose-hub/core/types.js';
+import {
+  type ObservedChangedFilesPacket,
+  deriveObservedChangedFiles,
+} from '@goose-hub/core/workspaces/observed-changes.js';
 import type { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import {
   type RepoRelativePathNormalization,
@@ -96,6 +105,9 @@ export interface AfterImplementInput {
   worktreePath: string;
   baseBranch: string;
   openPRFn: typeof openPR;
+  openBitbucketPRFn?: typeof openBitbucketPR;
+  /** Source config from the project — drives PR provider routing. */
+  sourceConfig?: SourceConfig | null;
   evidenceRuntime?: AgentRuntime;
   evidencePostPrompt: string;
   evidencePostJsonSchema: Record<string, unknown>;
@@ -113,6 +125,22 @@ type NormalizedPathField = {
   source: RepoRelativePathNormalization['source'];
   ambiguous?: string[];
 };
+
+const RUNTIME_ARTIFACT_DIRS = ['.factory', '.claude'];
+
+function filterRuntimeArtifacts(packet: ObservedChangedFilesPacket): ObservedChangedFilesPacket {
+  const files = packet.files.filter(
+    (f) =>
+      !RUNTIME_ARTIFACT_DIRS.some(
+        (dir) =>
+          f.rawPath === dir ||
+          f.rawPath.startsWith(`${dir}/`) ||
+          f.path === dir ||
+          f.path.startsWith(`${dir}/`),
+      ),
+  );
+  return { ...packet, files, paths: files.map((f) => f.path), count: files.length };
+}
 
 const WRITE_TOOL_NAMES = new Set([
   'Write',
@@ -944,7 +972,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
 export async function afterImplement(input: AfterImplementInput): Promise<void> {
   const { implementOutput, workItem, stateSource, projectId, runId, worktreePath } = input;
   const stateSourceItemId = workItem.id.startsWith('local:') ? workItem.id : workItem.externalId;
-  const observedChangedFiles = deriveObservedChangedFiles(worktreePath);
+  const observedChangedFiles = filterRuntimeArtifacts(deriveObservedChangedFiles(worktreePath));
 
   // Orchestrator commits the builder's work before opening the PR (ADR 0031).
   // The implement skill writes files but no longer commits; this call stages
@@ -986,10 +1014,6 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
   });
 
   // Step 5: open PR.
-  const token = process.env.GITHUB_TOKEN ?? '';
-  if (token.length === 0 && process.env.MOCK_OPEN_PR !== 'true') {
-    throw new Error('GITHUB_TOKEN env var is required to open PR');
-  }
   const linkedIssueRef = workItem.id.startsWith('local:')
     ? latestLinkedGithubIssue(projectId, workItem.id)
     : null;
@@ -1001,6 +1025,12 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
   const shouldCloseGithubIssue =
     Number.isFinite(closesIssueNumber) &&
     (linkedIssueRef != null || !workItem.id.startsWith('local:'));
+
+  const isBitbucketProject =
+    input.sourceConfig?.kind === 'local-db' &&
+    (input.sourceConfig as LocalDbSourceConfig).integrations?.bitbucket?.postBack?.pullRequests ===
+      true;
+
   const body = buildPrBody({
     workItem,
     implementOutput,
@@ -1008,43 +1038,85 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
     closesIssueNumber: shouldCloseGithubIssue ? closesIssueNumber : null,
   });
 
-  const prResult = shouldCloseGithubIssue
-    ? await input.openPRFn({
-        worktreePath,
-        repo: repoRef,
-        issueNumber: closesIssueNumber,
-        title,
-        body,
-        branchName,
-        baseBranch: input.baseBranch,
-        token,
-      })
-    : await openLocalDbPR({
-        worktreePath,
-        repo: repoRef,
-        title,
-        body,
-        branchName,
-        baseBranch: input.baseBranch,
-        token,
-      });
+  let prResult: Awaited<ReturnType<typeof openBitbucketPR>>;
+  let prProvider: 'github' | 'bitbucket';
 
-  if (workItem.id.startsWith('local:')) {
-    upsertGithubExternalRef({
+  if (isBitbucketProject) {
+    const [workspace, repo, ...rest] = (repoRef ?? '').split('/');
+    if (!workspace || !repo || rest.length > 0) {
+      throw new Error(
+        `Cannot derive Bitbucket workspace/repo from repoRef: "${repoRef ?? '(null)'}". Expected "workspace/repo".`,
+      );
+    }
+    const openBitbucketPRFn = input.openBitbucketPRFn ?? openBitbucketPR;
+    prResult = await openBitbucketPRFn({
+      worktreePath,
+      workspace,
+      repo,
+      title,
+      body,
+      branchName,
+      baseBranch: input.baseBranch,
+    });
+    upsertBitbucketPullRequestRef({
       projectId,
       workItemId: workItem.id,
-      kind: 'pull_request',
-      repoRef,
-      externalId: String(prResult.prNumber),
+      workspace,
+      repo,
+      pullRequestId: prResult.prNumber,
       url: prResult.prUrl,
     });
-    upsertGithubExternalRef({
+    upsertBitbucketBranchRef({
       projectId,
       workItemId: workItem.id,
-      kind: 'branch',
-      repoRef,
-      externalId: prResult.branch,
+      workspace,
+      repo,
+      branchName: prResult.branch,
     });
+    prProvider = 'bitbucket';
+  } else {
+    const token = process.env.GITHUB_TOKEN ?? '';
+    if (token.length === 0 && process.env.MOCK_OPEN_PR !== 'true') {
+      throw new Error('GITHUB_TOKEN env var is required to open PR');
+    }
+    prResult = shouldCloseGithubIssue
+      ? await input.openPRFn({
+          worktreePath,
+          repo: repoRef,
+          issueNumber: closesIssueNumber,
+          title,
+          body,
+          branchName,
+          baseBranch: input.baseBranch,
+          token,
+        })
+      : await openLocalDbPR({
+          worktreePath,
+          repo: repoRef,
+          title,
+          body,
+          branchName,
+          baseBranch: input.baseBranch,
+          token,
+        });
+    if (workItem.id.startsWith('local:')) {
+      upsertGithubExternalRef({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'pull_request',
+        repoRef,
+        externalId: String(prResult.prNumber),
+        url: prResult.prUrl,
+      });
+      upsertGithubExternalRef({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'branch',
+        repoRef,
+        externalId: prResult.branch,
+      });
+    }
+    prProvider = 'github';
   }
 
   eventStore.appendEvent({
@@ -1061,6 +1133,8 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
       // Legacy fix-issue has a single developer run, so the delivery
       // lifecycle intentionally aliases the dev run id for M19 scoring.
       pipelineRunId: runId,
+      provider: prProvider,
+      repoRef,
     },
     runId,
   });
