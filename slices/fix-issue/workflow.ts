@@ -7,6 +7,7 @@ import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt
 import { buildRelatedSurfaceManifest } from '@goose-hub/core/agent-runtime/related-surface.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { openBitbucketPR } from '@goose-hub/core/connectors/bitbucket/open-pr.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
@@ -52,6 +53,8 @@ export interface FixIssueDeps {
   evidenceRuntime?: AgentRuntime;
   /** Override openPR (used by tests). Defaults to the real connector. */
   openPRImpl?: typeof openPR;
+  /** Override openBitbucketPR (used by tests). Defaults to the real connector. */
+  openBitbucketPRImpl?: typeof openBitbucketPR;
   /** Override the advisor wrapper (used by tests). Defaults to adviseOnPlan. */
   adviseOnPlanImpl?: typeof adviseOnPlan;
   /** Override createWorktree (used by tests). */
@@ -100,6 +103,7 @@ export async function runFixIssueWorkflow(
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const openPRFn = deps.openPRImpl ?? openPR;
+  const openBitbucketPRFn = deps.openBitbucketPRImpl ?? openBitbucketPR;
   const advisorFn = deps.adviseOnPlanImpl ?? adviseOnPlan;
   const createWtFn = deps.createWorktreeImpl ?? createWorktree;
   const cleanupWtFn = deps.cleanupWorktreeImpl ?? cleanupWorktree;
@@ -334,6 +338,8 @@ export async function runFixIssueWorkflow(
           worktreePath,
           baseBranch,
           openPRFn,
+          openBitbucketPRFn,
+          sourceConfig: implementExecution.projectConfig?.source,
           evidenceRuntime: deps.evidenceRuntime ?? deps.runtime,
           evidencePostPrompt,
           evidencePostJsonSchema,
@@ -380,6 +386,8 @@ export async function runFixIssueWorkflow(
       worktreePath,
       baseBranch,
       openPRFn,
+      openBitbucketPRFn,
+      sourceConfig: implementExecution.projectConfig?.source,
       evidenceRuntime: deps.evidenceRuntime ?? deps.runtime,
       evidencePostPrompt,
       evidencePostJsonSchema,

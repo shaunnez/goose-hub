@@ -353,3 +353,86 @@ function stringValue(value: unknown): string {
 function numberValue(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
+
+export interface BitbucketCreatePrInput {
+  workspace: string;
+  repo: string;
+  title: string;
+  description?: string;
+  sourceBranch: string;
+  targetBranch: string;
+  username?: string;
+  appPassword?: string;
+  accessToken?: string;
+  baseUrl?: string;
+  fetchImpl?: typeof fetch;
+}
+
+export interface BitbucketCreatePrResult {
+  prNumber: number;
+  prUrl: string;
+}
+
+/**
+ * Creates a pull request in Bitbucket via the REST API.
+ * Auth reads from explicit options first, then env vars (BITBUCKET_TOKEN or
+ * BITBUCKET_USERNAME + BITBUCKET_APP_PASSWORD). Requires pullrequest:write scope.
+ */
+export async function createBitbucketPullRequest(
+  input: BitbucketCreatePrInput,
+): Promise<BitbucketCreatePrResult> {
+  const auth = authorizationHeader({
+    username: input.username ?? process.env.BITBUCKET_USERNAME,
+    appPassword: input.appPassword ?? process.env.BITBUCKET_APP_PASSWORD,
+    accessToken: input.accessToken ?? process.env.BITBUCKET_TOKEN,
+  });
+  if (auth == null) {
+    throw new Error(
+      'Bitbucket credentials required: set BITBUCKET_USERNAME+BITBUCKET_APP_PASSWORD or BITBUCKET_TOKEN',
+    );
+  }
+
+  const baseUrl = (input.baseUrl ?? 'https://api.bitbucket.org/2.0').replace(/\/+$/, '');
+  const url = `${baseUrl}/repositories/${encodeURIComponent(input.workspace)}/${encodeURIComponent(input.repo)}/pullrequests`;
+  const fetchImpl = input.fetchImpl ?? fetch;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: auth,
+      },
+      body: JSON.stringify({
+        title: input.title,
+        description: input.description ?? '',
+        source: { branch: { name: input.sourceBranch } },
+        destination: { branch: { name: input.targetBranch } },
+        close_source_branch: false,
+      }),
+    });
+  } catch (err) {
+    throw new Error(`Failed to connect to Bitbucket: ${String(err)}`);
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '<no body>');
+    throw new Error(
+      `Bitbucket PR creation failed: ${response.status} ${response.statusText} — ${detail}`,
+    );
+  }
+
+  const json = (await response.json()) as {
+    id?: unknown;
+    links?: { html?: { href?: unknown } };
+  };
+  const prNumber = typeof json.id === 'number' ? json.id : Number(json.id);
+  const prUrl =
+    typeof json.links?.html?.href === 'string'
+      ? json.links.html.href
+      : `https://bitbucket.org/${encodeURIComponent(input.workspace)}/${encodeURIComponent(input.repo)}/pull-requests/${prNumber}`;
+
+  return { prNumber, prUrl };
+}

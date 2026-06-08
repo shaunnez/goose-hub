@@ -143,6 +143,15 @@ export function orchestratorCommitAll(
   commitMsg: string,
 ): OrchestratorCommitAllResult {
   execFileSync('git', ['add', '-A'], { cwd: worktreePath, stdio: 'pipe', env: GIT_ENV });
+  // Unstage runtime-artifact dirs that must never appear in target-repo commits.
+  // spawnSync is intentional: non-zero exit (dir absent or nothing staged) is expected and fine.
+  for (const dir of ['.factory', '.claude']) {
+    spawnSync('git', ['restore', '--staged', dir], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+      env: GIT_ENV,
+    });
+  }
   const stagedDiff = spawnSync('git', ['diff', '--cached', '--quiet'], {
     cwd: worktreePath,
     stdio: 'pipe',
