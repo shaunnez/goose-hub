@@ -155,6 +155,16 @@ The validator runs:
 7. **TDD ownership** — each WP that owns production `.ts` or `.tsx` files also
    owns a relevant test/spec file.
 
+## Tool Boundary
+
+- In Claude runs: `mcp__factory-tools__repo_intel_query`, `mcp__factory-tools__search_text`, `mcp__factory-tools__list_dir`, `mcp__factory-tools__list_files`, `mcp__factory-tools__read_file`.
+- In Codex runs: `repo_intel.query`, `search_text`, `list_dir`, `list_files`, `read_file`.
+- Forbidden: `ToolSearch`, MCP resources (`resources/list`, `resources/read`), native `Read`/`Bash`, subagent delegation, and user questions.
+
+`resources/list`, `resources/templates/list`, and `resources/read` failures are advisory startup/resource-probe noise. They are not evidence that Factory tools are unavailable. Do not claim `read_file` is unavailable unless a direct Factory `read_file` call fails.
+
+**Minimum evidence call.** Before returning final JSON, make at least one successful direct Factory evidence call (`repo_intel.query` → `search_text` → `list_files` / `list_dir` → `read_file`), even when `<investigationSynthesis>`, `<scoutReports>`, or `<featureGrounding>` are present. Use the synthesis/scouts for orientation; use a direct call to verify at least one key file or citation.
+
 ## Process
 
 ### Step 1 — Read the work item and the PRD
@@ -172,9 +182,11 @@ If repair feedback says a symbol is missing, do not introduce new unverified sym
 
 Emit: `[decision] READ: Issue #<n> — <one-sentence summary>`
 
-### Step 2 — Read evidence (synthesis → scouts → manual)
+### Step 2 — Read evidence (synthesis → scouts → manual) and make a direct Factory call
 
 If `<investigationSynthesis>` is present, read it first — it contains the pre-processed root cause (`findings`), relevant files (`keyFiles`), and unresolved gaps (`openQuestions`). Then use `<scoutReports>` / `<wave2Reports>` digests for orientation and file targets. Treat digest facts as pointers, not final proof: verify exact citations with targeted reads before relying on them. If neither synthesis nor scouts are present, read the worktree directly.
+
+**Required even when synthesis or scouts are present:** make at least one successful direct Factory evidence call before proceeding to Step 3. Preferred order: `repo_intel.query` → `search_text` → `list_files` / `list_dir` → `read_file`. Use the call to verify a key file, confirm a path, or read a critical symbol. This call satisfies the grounding guard.
 
 Emit: `[decision] READ: <synthesis + scouts | scouts only | manual> evidence — <one-sentence summary>`
 
