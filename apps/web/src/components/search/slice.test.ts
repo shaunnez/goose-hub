@@ -33,9 +33,27 @@ describe('search slice — TopBar integration', () => {
     expect(topBarSource).toContain('search-button');
   });
 
-  it('TopBar binds the ⌘K / Ctrl+K keyboard shortcut', () => {
-    expect(topBarSource).toContain('metaKey');
-    expect(topBarSource).toContain('ctrlKey');
+  it('TopBar binds the Capture shortcut only for normalized Meta/Ctrl+J', () => {
+    expect(topBarSource).toContain('const key = e.key.toLowerCase();');
+    expect(topBarSource).toContain("if ((e.metaKey || e.ctrlKey) && key === 'j')");
+    expect(topBarSource).toContain('setShowCapture(true);');
+    expect(topBarSource).not.toContain("e.key.toLowerCase() === 'j'");
+  });
+
+  it('TopBar renders a Capture button badge matching the Search shortcut pattern', () => {
+    expect(topBarSource).toContain('data-testid="capture-button"');
+    expect(topBarSource).toContain('<span>Capture</span>');
+    expect(topBarSource).toContain('⌘J');
+    expect(topBarSource).toContain(
+      'ml-1 px-1 py-0.5 rounded border border-line text-[10px] text-fg-3 bg-bg',
+    );
+  });
+
+  it('TopBar preserves the existing Search shortcut contract and badge', () => {
+    expect(topBarSource).toContain("if ((e.metaKey || e.ctrlKey) && key === 'k')");
+    expect(topBarSource).toContain('setShowSearch((prev) => !prev);');
+    expect(topBarSource).toContain('title="Search work items (⌘K)"');
+    expect(topBarSource).toContain('⌘K');
   });
 });
 
