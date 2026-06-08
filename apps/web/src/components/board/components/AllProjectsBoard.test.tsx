@@ -1,11 +1,11 @@
+import { fetchIssueCosts, fetchIssues, fetchProjectConfigs } from '@/lib/api';
+import type { ProjectConfigDto, WorkItemCostsDto, WorkItemDto } from '@/lib/types';
+import { LaneVisibilityProvider } from '@/state/lane-visibility';
 /** @vitest-environment jsdom */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectConfigDto, WorkItemCostsDto, WorkItemDto } from '@/lib/types';
-import { fetchIssueCosts, fetchIssues, fetchProjectConfigs } from '@/lib/api';
-import { LaneVisibilityProvider } from '@/state/lane-visibility';
 import { AllProjectsBoard } from './AllProjectsBoard';
 
 vi.mock('@/lib/usePersonaMap', () => ({
