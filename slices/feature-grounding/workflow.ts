@@ -250,6 +250,7 @@ function shouldAdvanceToImplementation(input: {
   scoutCount: number;
   waveAdvanced: boolean;
 }): boolean {
+  if (input.route.source === 'metadata-only') return false;
   if (hasNoGrounding(input.output)) return false;
   if (input.output.confidence === 'low' && input.scoutCount === 0) return false;
   if (input.scoutCount > 0 && !input.waveAdvanced) return false;

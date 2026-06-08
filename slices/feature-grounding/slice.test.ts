@@ -244,6 +244,37 @@ beforeEach(() => {
 });
 
 describe('feature-grounding workflow', () => {
+  it('metadata-only T0 fresh features continue to grilling after enrichment', async () => {
+    replayWith();
+    mockRunFeatureEnhance.mockResolvedValueOnce({
+      ok: true,
+      output: enhancement(),
+      enhanceRunId: 'grounding-run:feature-enhance',
+      personaId: 'triager-test',
+    });
+    const { runFeatureGroundingWorkflow } = await import('./workflow.js');
+    const result = await runFeatureGroundingWorkflow(
+      makeWorkItem(),
+      makeSource(),
+      'goose-hub-self',
+      process.cwd(),
+      {
+        createWorktreeImpl: () => process.cwd(),
+        cleanupWorktreeImpl: vi.fn(),
+      },
+    );
+
+    expect(result.nextState).toBe('factory:grilling');
+    expect(mockDispatchWave).not.toHaveBeenCalled();
+    expect(mockTransitionAndEmitState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: 'factory:grounding',
+        to: 'factory:grilling',
+        by: 'feature-grounding',
+      }),
+    );
+  });
+
   it('T0 runs feature-enhance, persists grounding, and advances without scouts', async () => {
     const result = await runWith(route('T0'), enhancement());
 

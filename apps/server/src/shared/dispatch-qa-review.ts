@@ -258,6 +258,7 @@ export async function dispatchNeedsFix(slug: string, issueNumber: number): Promi
  * remain. Transition qa-failed → needs-fix and dispatch fix-feedback.
  */
 export async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void> {
+  let shouldRunFixFeedback = false;
   await withParallelLock(slug, issueNumber, 'dispatchQaFailed', dispatchQaFailed, async () => {
     const source = await getSourceForSlug(slug);
     if (source == null) {
@@ -331,5 +332,9 @@ export async function dispatchQaFailed(slug: string, issueNumber: number): Promi
         issueNumber,
       },
     );
+    shouldRunFixFeedback = true;
   });
+  if (shouldRunFixFeedback) {
+    await dispatchNeedsFix(slug, issueNumber);
+  }
 }

@@ -2058,6 +2058,83 @@ describe('dispatchForLabel', () => {
     );
   });
 
+  it('continues actionable QA failures through fix-feedback after qa-failed routing', async () => {
+    let state = 'factory:qa-failed';
+    const baseItem = {
+      id: 'github:owner/repo#42',
+      externalId: '42',
+      repoRef: 'owner/repo',
+      title: 'Add Capture shortcut',
+      body: 'TopBar shortcut change',
+      state,
+    };
+    const source = {
+      repoRef: 'owner/repo',
+      getItem: vi.fn().mockImplementation(async () => ({ ...baseItem, state })),
+      transitionState: vi
+        .fn()
+        .mockImplementation(async (_id: string, _from: string, to: string) => {
+          state = to;
+        }),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        id: 1,
+        kind: 'qa.completed',
+        projectId: 'proj',
+        workItemId: baseItem.id,
+        createdAt: new Date().toISOString(),
+        runId: 'qa-run-1',
+        payload: {
+          verdict: 'fail',
+          failureCategory: 'product-failure',
+          qaActionability: {
+            classification: 'issue-local',
+            actionable: true,
+            reason: 'changed-surface assertion failed',
+          },
+        },
+      },
+    ]);
+    mockRunFixFeedbackWorkflow.mockImplementationOnce(async (item, fixSource) => {
+      await (fixSource as { transitionState: typeof source.transitionState }).transitionState(
+        (item as typeof baseItem).externalId,
+        'factory:needs-fix',
+        'factory:in-progress',
+      );
+      await (fixSource as { transitionState: typeof source.transitionState }).transitionState(
+        (item as typeof baseItem).externalId,
+        'factory:in-progress',
+        'factory:needs-qa',
+      );
+    });
+
+    const { dispatchForLabel } = await import('./dispatch.js');
+    await dispatchForLabel('proj', 42, 'factory:qa-failed');
+
+    expect(mockRunFixFeedbackWorkflow).toHaveBeenCalledOnce();
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      1,
+      baseItem.id,
+      'factory:qa-failed',
+      'factory:needs-fix',
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      2,
+      '42',
+      'factory:needs-fix',
+      'factory:in-progress',
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      3,
+      '42',
+      'factory:in-progress',
+      'factory:needs-qa',
+    );
+  });
+
   it('dispatches the review fix-feedback QA review loop from current issue state', async () => {
     let state = 'factory:needs-review';
     const baseItem = {
