@@ -65,7 +65,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     effort: 'low',
   },
   'feature-grounding': {
-    maxTurns: 20,
+    maxTurns: 50,
     maxBudgetUsd: 2.0,
     timeoutMs: 300_000,
     modelTier: 'haiku',
@@ -75,7 +75,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     maxTurns: 150,
     maxBudgetUsd: 6.0,
     timeoutMs: 900_000,
-    modelTier: 'haiku',
+    modelTier: 'sonnet',
     // Sonnet retry: ~2.5× haiku cap to absorb the per-token price delta on
     // a comparable turn count. Keep maxTurns/timeoutMs from the base.
     escalation: { modelTier: 'sonnet', maxBudgetUsd: 15.0 },
@@ -167,12 +167,12 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     maxTurns: 20,
     maxBudgetUsd: 1,
     timeoutMs: 120_000,
-    modelTier: 'haiku',
+    modelTier: 'sonnet',
     effort: 'low',
   },
   'scout-code-path': {
-    maxTurns: 20,
-    maxBudgetUsd: 1,
+    maxTurns: 50,
+    maxBudgetUsd: 2,
     timeoutMs: 240_000,
     modelTier: 'haiku',
     effort: 'low',
@@ -185,8 +185,8 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     effort: 'low',
   },
   'scout-test-inventory': {
-    maxTurns: 20,
-    maxBudgetUsd: 1,
+    maxTurns: 50,
+    maxBudgetUsd: 2,
     timeoutMs: 240_000,
     modelTier: 'haiku',
     effort: 'low',
@@ -195,7 +195,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     maxTurns: 20,
     maxBudgetUsd: 1,
     timeoutMs: 240_000,
-    modelTier: 'haiku',
+    modelTier: 'sonnet',
     effort: 'low',
   },
   'scout-user-journey': {

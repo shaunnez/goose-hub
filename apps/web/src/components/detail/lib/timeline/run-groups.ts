@@ -106,6 +106,8 @@ function isQaTimelineEvent(event: AgentEventDto): boolean {
 
 function scoutBaseRunId(runId: string | null): string | null {
   if (runId == null) return null;
+  const featureEnhanceRetry = runId.match(/^(.+:feature-enhance):retry:\d+$/);
+  if (featureEnhanceRetry != null) return featureEnhanceRetry[1];
   return runId.endsWith(':evidence-retry') ? runId.slice(0, -':evidence-retry'.length) : runId;
 }
 

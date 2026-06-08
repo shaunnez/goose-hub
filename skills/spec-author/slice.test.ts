@@ -750,6 +750,52 @@ describe('validateEngineeringSpec — repoRoot-backed checks', () => {
 // ─── TDD contract: wp-missing-test-file ──────────────────────────────────────
 
 describe('validateEngineeringSpec — TDD contract (wp-missing-test-file)', () => {
+  it('documents the Factory tool boundary for Claude and Codex runs', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain('## Tool Boundary');
+    expect(prompt).toContain('Claude tool names');
+    expect(prompt).toContain('`mcp__factory-tools__repo_intel_query`');
+    expect(prompt).toContain('`mcp__factory-tools__search_text`');
+    expect(prompt).toContain('Codex tool names');
+    expect(prompt).toContain('`repo_intel.query`');
+    expect(prompt).toContain('`search_text`');
+    expect(prompt).toContain('`list_dir`');
+    expect(prompt).toContain('`list_files`');
+    expect(prompt).toContain('`read_file`');
+    expect(prompt).toContain('Do not use ToolSearch');
+    expect(prompt).toContain('native Read');
+    expect(prompt).toContain('Bash');
+    expect(prompt).toContain('delegation');
+    expect(prompt).toContain('user questions');
+  });
+
+  it('documents resource probes as advisory noise instead of Factory tool availability evidence', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain(
+      'resources/list, resources/templates/list, and resources/read failures are advisory startup/resource-probe noise',
+    );
+    expect(prompt).toContain('They are not evidence that Factory tools are unavailable');
+    expect(prompt).toContain(
+      'Do not claim read_file is unavailable unless a direct Factory read_file call fails',
+    );
+  });
+
+  it('requires an unconditional cheap direct Factory evidence call before final JSON', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain(
+      'Every spec-author run must make at least one successful direct Factory evidence call before final JSON',
+    );
+    expect(prompt).toContain(
+      'This requirement is unconditional, even when `<investigationSynthesis>`, `<scoutReports>`, or `<featureGrounding>` is present',
+    );
+    expect(prompt).toContain(
+      'Preferred order: `repo_intel.query` -> `search_text` -> `list_files` / `list_dir` -> `read_file`',
+    );
+  });
+
   it('documents TDD ownership in the spec-author prompt', () => {
     const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
 

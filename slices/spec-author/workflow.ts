@@ -202,6 +202,16 @@ function enrichRepairErrors(
   return enriched;
 }
 
+function hasGroundingToolUseIssue(errors: string[]): boolean {
+  return errors.some((error) => {
+    const normalized = error.toLowerCase();
+    return (
+      normalized.includes('factory-tools-not-used') ||
+      normalized.includes('zero successful factory tool calls')
+    );
+  });
+}
+
 function buildRepairFeedback(
   kind: 'schema' | 'structural',
   errors: string[],
@@ -211,12 +221,22 @@ function buildRepairFeedback(
   } = {},
 ): string {
   const enrichedErrors = enrichRepairErrors(errors, options);
+  const groundingRepair =
+    hasGroundingToolUseIssue(errors) || hasGroundingToolUseIssue(enrichedErrors)
+      ? [
+          'Grounding repair: the previous spec-author pass returned repo-grounded output without a successful Factory evidence call.',
+          'Before returning final JSON, make at least one successful direct Factory evidence call.',
+          'Use one of repo_intel.query, search_text, list_files, list_dir, or read_file before final JSON.',
+          'Ignore resources/list, resources/templates/list, and resources/read advisory probe failures; they are not evidence that Factory tools are unavailable.',
+        ]
+      : [];
   return [
     `Previous spec-author attempt failed ${kind} validation.`,
     'Return a complete corrected EngineeringSpecSchema JSON object only.',
     'Do not introduce new unverified symbols.',
     'Address every error below:',
     ...enrichedErrors.map((error) => `- ${error}`),
+    ...groundingRepair,
   ].join('\n');
 }
 

@@ -102,6 +102,12 @@ describe('feature-enhance prompt', () => {
     expect(prompt).not.toContain('mcp__factory-tools__repo_intel.query');
     expect(prompt).toContain('Do not assume Factory tools are unavailable');
     expect(prompt).toContain('Do not use ToolSearch to discover schemas');
+    expect(prompt).toContain('resources/list');
+    expect(prompt).toContain('resources/templates/list');
+    expect(prompt).toContain('advisory startup/resource-probe noise');
+    expect(prompt).toContain('Minimum tool call requirement');
+    expect(prompt).toContain('before returning, make at least one Factory evidence call');
+    expect(prompt).toContain('Do not claim Factory tools are unavailable');
   });
 
   it('explicitly forbids blocked native and delegation tools', () => {

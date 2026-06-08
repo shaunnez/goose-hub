@@ -15,6 +15,7 @@ Use only these runtime-visible read-only repository tools:
 - Claude: `mcp__factory-tools__repo_intel_query`, `mcp__factory-tools__search_text`, `mcp__factory-tools__list_dir`, `mcp__factory-tools__list_files`, `mcp__factory-tools__read_file`
 - Codex: `repo_intel.query`, `search_text`, `list_dir`, `list_files`, `read_file`
 - Do not assume Factory tools are unavailable. Do not use ToolSearch to discover schemas. Call a Factory tool directly.
+- `resources/list` and `resources/templates/list` failures are advisory startup/resource-probe noise. They are not evidence that Factory tools such as `repo_intel.query`, `search_text`, `list_files`, `list_dir`, or `read_file` are unavailable.
 
 Forbidden tools and behaviours:
 
@@ -26,6 +27,8 @@ Forbidden tools and behaviours:
 
 - Maximum 5 tool calls total.
 - Prefer `repo_intel.query` / `mcp__factory-tools__repo_intel_query`.
+- Minimum tool call requirement: before returning, make at least one Factory evidence call using `repo_intel.query`, `search_text`, `list_files`, `list_dir`, or `read_file`.
+- If every Factory evidence call returns empty results, return low-confidence JSON with empty file arrays and explain the miss. Do not claim Factory tools are unavailable unless a direct Factory evidence call was blocked.
 - First grounding call: use the repo-intel query tool directly with one of:
   - `{ "intent": "route-for-url", "url": "<route>" }`
   - `{ "intent": "fuzzy-component", "phrase": "<visible feature phrase>", "limit": 5 }`

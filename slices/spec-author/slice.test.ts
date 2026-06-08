@@ -935,6 +935,76 @@ describe('runSpecAuthorWorkflow', () => {
       );
     });
 
+    it('adds grounding-specific repair feedback for zero successful Factory tool calls', async () => {
+      const outputError = Object.assign(
+        new Error("invokeSkill: output validation failed for 'spec-author'"),
+        {
+          name: 'OutputValidationError',
+          runTelemetry: { runId: 'first-run-id', skill: 'spec-author' },
+          issues: [
+            {
+              path: [],
+              message:
+                'spec-author produced repo-grounded output after zero successful Factory tool calls',
+            },
+          ],
+        },
+      );
+      mockInvokeSkill.mockRejectedValueOnce(outputError).mockResolvedValueOnce({
+        output: makeSpecOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const retryInput = mockInvokeSkill.mock.calls[1]?.[0] as {
+        overrides?: { appendContext?: { repairFeedback?: string } };
+      };
+      const repairFeedback = retryInput.overrides?.appendContext?.repairFeedback ?? '';
+      expect(repairFeedback).toContain(
+        'Before returning final JSON, make at least one successful direct Factory evidence call',
+      );
+      expect(repairFeedback).toContain(
+        'repo_intel.query, search_text, list_files, list_dir, or read_file',
+      );
+      expect(repairFeedback).toContain('zero successful Factory tool calls');
+    });
+
+    it('keeps ordinary schema repair feedback generic when grounding did not fail', async () => {
+      const outputError = Object.assign(
+        new Error("invokeSkill: output validation failed for 'spec-author'"),
+        {
+          name: 'OutputValidationError',
+          runTelemetry: { runId: 'first-run-id', skill: 'spec-author' },
+          issues: [
+            {
+              path: ['schemaChanges'],
+              message: 'Expected object, received array',
+            },
+          ],
+        },
+      );
+      mockInvokeSkill.mockRejectedValueOnce(outputError).mockResolvedValueOnce({
+        output: makeSpecOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const retryInput = mockInvokeSkill.mock.calls[1]?.[0] as {
+        overrides?: { appendContext?: { repairFeedback?: string } };
+      };
+      const repairFeedback = retryInput.overrides?.appendContext?.repairFeedback ?? '';
+      expect(repairFeedback).toContain('Previous spec-author attempt failed schema validation.');
+      expect(repairFeedback).toContain('schemaChanges: Expected object, received array');
+      expect(repairFeedback).not.toContain('Before returning final JSON, make at least one');
+      expect(repairFeedback).not.toContain('zero successful Factory tool calls');
+    });
+
     it('transitions to factory:needs-human when validateEngineeringSpec fails', async () => {
       mockValidateEngineeringSpec.mockReturnValue({
         ok: false,

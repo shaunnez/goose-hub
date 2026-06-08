@@ -442,5 +442,11 @@ describe('runFeatureEnhance', () => {
         retryOf: 'grounding-run:feature-enhance',
       }),
     });
+    expect(mockRunFn.mock.calls[1]?.[0].appendSystemPrompt).toContain(
+      'Before returning, call at least one Factory evidence tool',
+    );
+    expect(mockRunFn.mock.calls[1]?.[0].appendSystemPrompt).toContain(
+      'resources/list and resources/templates/list failures are advisory',
+    );
   });
 });

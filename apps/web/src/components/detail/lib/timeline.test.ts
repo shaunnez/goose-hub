@@ -1983,6 +1983,56 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     );
   });
 
+  it('groups feature-enhance retries with the original child runtime run', () => {
+    const GROUNDING_RUN = 'grounding-run';
+    const ENHANCE_RUN = `${GROUNDING_RUN}:feature-enhance`;
+    const RETRY_RUN = `${ENHANCE_RUN}:retry:1`;
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', ENHANCE_RUN, {
+        payload: { skill: 'feature-enhance', workflowSkill: 'feature-grounding' },
+      }),
+      makeEvent(2, 'agent.run-completed', ENHANCE_RUN, {
+        payload: { skill: 'feature-enhance', workflowSkill: 'feature-grounding' },
+      }),
+      makeEvent(3, 'agent.run-started', RETRY_RUN, {
+        payload: {
+          skill: 'feature-enhance',
+          workflowSkill: 'feature-grounding',
+          attempt: 'grounding-tool-retry',
+          retryOf: ENHANCE_RUN,
+        },
+      }),
+      makeEvent(4, 'agent.run-completed', RETRY_RUN, {
+        payload: {
+          skill: 'feature-enhance',
+          workflowSkill: 'feature-grounding',
+          attempt: 'grounding-tool-retry',
+          retryOf: ENHANCE_RUN,
+        },
+      }),
+      makeEvent(5, 'agent.feature-enhance-empty', RETRY_RUN, {
+        payload: { parentRunId: GROUNDING_RUN, enhanceRunId: RETRY_RUN },
+      }),
+      makeEvent(6, 'agent.run-failed', GROUNDING_RUN, {
+        payload: { skill: 'feature-grounding', runId: GROUNDING_RUN },
+      }),
+    ]);
+
+    const grounding = section(items, 'grounding');
+    expect(grounding).toBeDefined();
+    const runGroups = grounding?.items.filter((item) => item.kind === 'run-group') ?? [];
+    expect(runGroups).toHaveLength(1);
+    expect(runGroups[0]).toMatchObject({
+      kind: 'run-group',
+      runId: ENHANCE_RUN,
+      skill: 'feature-grounding',
+    });
+    expect(runGroups[0]?.kind === 'run-group' ? runGroups[0].items : []).toHaveLength(5);
+    expect(
+      grounding?.items.some((item) => item.kind === 'run-group' && item.runId === RETRY_RUN),
+    ).toBe(false);
+  });
+
   it('flattens redundant single investigation and contract phase wrappers', () => {
     const items = groupTimelineEventsByCanonicalSection([
       makeEvent(1, 'agent.run-started', 'investigate-flat:scout:pattern:0', {

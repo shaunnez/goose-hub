@@ -194,6 +194,28 @@ function runtimeFailureReason(error: unknown): FeatureEnhanceEmptyReason {
     : 'runtime-failed';
 }
 
+function buildGroundingRetryPrompt(
+  basePrompt: string,
+  workItem: FeatureEnhanceContext['workItem'],
+): string {
+  const visibleTerms = `${workItem.title} ${workItem.body}`
+    .split(/[^A-Za-z0-9_/-]+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 3)
+    .slice(0, 12)
+    .join(', ');
+  const retryInstruction = [
+    'Grounding retry: the first feature-enhance pass returned without a successful Factory read/search/file evidence call.',
+    'resources/list and resources/templates/list failures are advisory startup/resource-probe noise, not evidence that Factory tools are unavailable.',
+    'Before returning, call at least one Factory evidence tool: repo_intel.query, search_text, list_files, list_dir, or read_file.',
+    visibleTerms.length > 0
+      ? `Start from visible work-item terms: ${visibleTerms}.`
+      : 'Start from visible terms in the work item title and body.',
+    'If no repository surface is found after that call, return low-confidence JSON that says the evidence call found no match.',
+  ].join('\n');
+  return `${basePrompt}\n\n${retryInstruction}`;
+}
+
 export async function runFeatureEnhance(
   input: RunFeatureEnhanceInput,
 ): Promise<FeatureEnhanceRunResult> {
@@ -269,6 +291,10 @@ export async function runFeatureEnhance(
         attemptIndex === 0 ? input.enhanceRunId : `${input.enhanceRunId}:retry:${attemptIndex}`;
       const attemptInput =
         attemptRunId === input.enhanceRunId ? input : { ...input, enhanceRunId: attemptRunId };
+      const attemptSystemPrompt =
+        attemptIndex === 0
+          ? appendSystemPrompt
+          : buildGroundingRetryPrompt(appendSystemPrompt, contextResult.data.workItem);
       const result = await runtime.run({
         runId: attemptRunId,
         role,
@@ -289,7 +315,7 @@ export async function runFeatureEnhance(
         workItemId: input.workItemId,
         modelOverride: resolved.modelOverride,
         outputJsonSchema,
-        appendSystemPrompt,
+        appendSystemPrompt: attemptSystemPrompt,
         extraEventPayload: {
           ...input.extraEventPayload,
           ...(input.parentRunId != null ? { parentRunId: input.parentRunId } : {}),
