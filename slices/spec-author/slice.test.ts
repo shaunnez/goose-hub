@@ -935,6 +935,96 @@ describe('runSpecAuthorWorkflow', () => {
       );
     });
 
+    it('produces grounding-specific repair feedback when zero-tool-call guard fires', async () => {
+      const outputError = Object.assign(
+        new Error("invokeSkill: output validation failed for 'spec-author'"),
+        {
+          name: 'OutputValidationError',
+          runTelemetry: { runId: 'grounding-run-id', skill: 'spec-author' },
+          issues: [
+            {
+              path: [] as Array<string | number>,
+              message:
+                'spec-author produced repo-grounded output after zero successful Factory tool calls',
+            },
+          ],
+        },
+      );
+      mockInvokeSkill.mockRejectedValueOnce(outputError).mockResolvedValueOnce({
+        output: makeSpecOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const retryInput = mockInvokeSkill.mock.calls[1]?.[0] as {
+        overrides?: { appendContext?: { repairFeedback?: string } };
+      };
+      expect(retryInput.overrides?.appendContext?.repairFeedback).toContain('Grounding fix required');
+      expect(retryInput.overrides?.appendContext?.repairFeedback).toContain(
+        'direct Factory evidence call',
+      );
+      expect(retryInput.overrides?.appendContext?.repairFeedback).toContain('repo_intel.query');
+    });
+
+    it('does not append grounding repair text for ordinary schema constraint failures', async () => {
+      const outputError = Object.assign(
+        new Error("invokeSkill: output validation failed for 'spec-author'"),
+        {
+          name: 'OutputValidationError',
+          runTelemetry: { runId: 'ordinary-run-id', skill: 'spec-author' },
+          issues: [
+            {
+              path: ['constraints', 0, 'source'] as Array<string | number>,
+              message:
+                'Use exactly path/to/file.ts:123 or path/to/file.ts:SymbolName; do not use line ranges or SYMBOL: prefixes',
+            },
+          ],
+        },
+      );
+      mockInvokeSkill.mockRejectedValueOnce(outputError).mockResolvedValueOnce({
+        output: makeSpecOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const retryInput = mockInvokeSkill.mock.calls[1]?.[0] as {
+        overrides?: { appendContext?: { repairFeedback?: string } };
+      };
+      expect(retryInput.overrides?.appendContext?.repairFeedback).not.toContain(
+        'Grounding fix required',
+      );
+    });
+
+    it('does not append grounding repair text for ordinary structural validation failures', async () => {
+      mockValidateEngineeringSpec
+        .mockReturnValueOnce({
+          ok: false,
+          errors: [
+            {
+              rule: 'constraint-source-format',
+              message: "constraint source 'bad-format' is not valid",
+            },
+          ],
+        })
+        .mockReturnValueOnce({ ok: true });
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const retryInput = mockInvokeSkill.mock.calls[1]?.[0] as {
+        overrides?: { appendContext?: { repairFeedback?: string } };
+      };
+      expect(retryInput.overrides?.appendContext?.repairFeedback).not.toContain(
+        'Grounding fix required',
+      );
+    });
+
     it('transitions to factory:needs-human when validateEngineeringSpec fails', async () => {
       mockValidateEngineeringSpec.mockReturnValue({
         ok: false,

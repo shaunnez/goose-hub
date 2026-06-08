@@ -202,6 +202,15 @@ function enrichRepairErrors(
   return enriched;
 }
 
+const GROUNDING_FAILURE_MARKERS = [
+  'factory-tools-not-used',
+  'zero successful Factory tool calls',
+];
+
+function isGroundingFailure(errors: string[]): boolean {
+  return errors.some((e) => GROUNDING_FAILURE_MARKERS.some((m) => e.includes(m)));
+}
+
 function buildRepairFeedback(
   kind: 'schema' | 'structural',
   errors: string[],
@@ -211,13 +220,20 @@ function buildRepairFeedback(
   } = {},
 ): string {
   const enrichedErrors = enrichRepairErrors(errors, options);
-  return [
+  const lines = [
     `Previous spec-author attempt failed ${kind} validation.`,
     'Return a complete corrected EngineeringSpecSchema JSON object only.',
     'Do not introduce new unverified symbols.',
     'Address every error below:',
     ...enrichedErrors.map((error) => `- ${error}`),
-  ].join('\n');
+  ];
+  if (isGroundingFailure(errors)) {
+    lines.push(
+      '',
+      'Grounding fix required: before returning final JSON, make at least one successful direct Factory evidence call (repo_intel.query → search_text → list_files / list_dir → read_file).',
+    );
+  }
+  return lines.join('\n');
 }
 
 function appendRepairRetryEvent(

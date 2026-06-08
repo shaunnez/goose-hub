@@ -747,6 +747,42 @@ describe('validateEngineeringSpec — repoRoot-backed checks', () => {
   });
 });
 
+// ─── Prompt contract: Tool Boundary and grounding rules ──────────────────────
+
+describe('prompt contract — Tool Boundary and grounding rules', () => {
+  it('has a Tool Boundary section', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+    expect(prompt).toContain('## Tool Boundary');
+  });
+
+  it('names Claude-specific tool names', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+    expect(prompt).toContain('mcp__factory-tools__repo_intel_query');
+    expect(prompt).toContain('mcp__factory-tools__search_text');
+  });
+
+  it('names Codex-specific tool names', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+    expect(prompt).toContain('repo_intel.query');
+    expect(prompt).toContain('search_text');
+  });
+
+  it('includes resource-probe advisory warning covering list and read', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+    expect(prompt).toContain('resource-probe noise');
+    expect(prompt).toContain('resources/list');
+    expect(prompt).toContain('resources/read');
+  });
+
+  it('states minimum evidence call rule is unconditional (applies even with synthesis/scouts)', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+    expect(prompt).toContain('even when');
+    expect(prompt).toContain('<investigationSynthesis>');
+    expect(prompt).toContain('<scoutReports>');
+    expect(prompt).toContain('<featureGrounding>');
+  });
+});
+
 // ─── TDD contract: wp-missing-test-file ──────────────────────────────────────
 
 describe('validateEngineeringSpec — TDD contract (wp-missing-test-file)', () => {
