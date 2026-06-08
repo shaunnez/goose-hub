@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createBitbucketPullRequest } from '../../integrations/bitbucket/rest.js';
+import { GIT_ENV } from '../../workspaces/git-env.js';
 import type { OpenPrResult } from '../github/open-pr.js';
 
 export interface OpenBitbucketPrInput {
@@ -66,5 +67,5 @@ export async function openBitbucketPR(input: OpenBitbucketPrInput): Promise<Open
 }
 
 function defaultGitExec(args: string[], cwd: string): string {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' });
+  return execFileSync('git', args, { cwd, encoding: 'utf8', env: GIT_ENV });
 }

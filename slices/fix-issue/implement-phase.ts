@@ -42,7 +42,11 @@ import {
 } from '@goose-hub/core/symbol-index/hints-used.js';
 import type { SymbolKeyFileHint } from '@goose-hub/core/symbol-index/lookup.js';
 import { canonicalPathStringFromAuditPayload } from '@goose-hub/core/tool-layer/tool-call-audit.js';
-import type { LocalDbSourceConfig, SourceConfig } from '@goose-hub/core/types.js';
+import type {
+  LocalDbBitbucketIntegrationConfig,
+  LocalDbSourceConfig,
+  SourceConfig,
+} from '@goose-hub/core/types.js';
 import {
   type ObservedChangedFilesPacket,
   deriveObservedChangedFiles,
@@ -127,6 +131,19 @@ type NormalizedPathField = {
 };
 
 const RUNTIME_ARTIFACT_DIRS = ['.factory', '.claude'];
+
+function isBitbucketRepoRef(repoRef: string, config: LocalDbBitbucketIntegrationConfig): boolean {
+  // Multi-workspace config: check explicit list first
+  if (config.workspaces != null && config.workspaces.length > 0) {
+    return config.workspaces.some((w) => w.repos.some((r) => `${w.workspace}/${r}` === repoRef));
+  }
+  // Single-workspace + explicit repo list
+  if (config.workspace != null && config.repos != null && config.repos.length > 0) {
+    return config.repos.some((r) => `${config.workspace}/${r}` === repoRef);
+  }
+  // Fallback: workspace prefix only (no explicit repo list configured)
+  return config.workspace != null && repoRef.startsWith(`${config.workspace}/`);
+}
 
 function filterRuntimeArtifacts(packet: ObservedChangedFilesPacket): ObservedChangedFilesPacket {
   const files = packet.files.filter(
@@ -1026,10 +1043,15 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
     Number.isFinite(closesIssueNumber) &&
     (linkedIssueRef != null || !workItem.id.startsWith('local:'));
 
+  const bitbucketIntegration =
+    input.sourceConfig?.kind === 'local-db'
+      ? (input.sourceConfig as LocalDbSourceConfig).integrations?.bitbucket
+      : undefined;
   const isBitbucketProject =
-    input.sourceConfig?.kind === 'local-db' &&
-    (input.sourceConfig as LocalDbSourceConfig).integrations?.bitbucket?.postBack?.pullRequests ===
-      true;
+    bitbucketIntegration != null &&
+    bitbucketIntegration.postBack?.pullRequests === true &&
+    repoRef != null &&
+    isBitbucketRepoRef(repoRef, bitbucketIntegration);
 
   const body = buildPrBody({
     workItem,

@@ -2864,6 +2864,8 @@ function makeBitbucketProjectConfig(postBackPullRequests = true): Record<string,
       integrations: {
         bitbucket: {
           enabled: true,
+          workspace: 'workspace',
+          repos: ['repo'],
           postBack: { pullRequests: postBackPullRequests, comments: false },
         },
       },
@@ -2978,12 +2980,24 @@ describe('runFixIssueWorkflow — Bitbucket PR delivery', () => {
   });
 
   it('emits needs-human and transitions if repoRef cannot become workspace/repo', async () => {
-    // Build a project config that accepts 'org/sub/repo' as a known repository
-    // so repo-affinity passes, but the 3-segment repoRef reaches afterImplement
-    // and triggers the "Cannot derive" guard.
+    // 'org/sub/repo' has 3 path segments — the split guard fires after routing.
+    // Use workspace: 'org' (no repos list) so the prefix fallback matches it as Bitbucket-owned,
+    // but the 3-segment split still throws "Cannot derive workspace/repo".
     const threePartRef = 'org/sub/repo';
     mockProjectConfig = {
-      ...makeBitbucketProjectConfig(),
+      ...makeProjectConfig({
+        source: {
+          kind: 'local-db',
+          stateMachine: 'db',
+          integrations: {
+            bitbucket: {
+              enabled: true,
+              workspace: 'org',
+              postBack: { pullRequests: true, comments: false },
+            },
+          },
+        },
+      }),
       repos: [threePartRef],
       repositories: [
         {
