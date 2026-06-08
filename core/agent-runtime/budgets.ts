@@ -384,9 +384,12 @@ export function resolveBudgets(
   }
 
   const effort = isRuntimeEffort(merged.effort) ? merged.effort : undefined;
+  const provider = isModelProvider(dbOverride?.modelProvider)
+    ? dbOverride.modelProvider
+    : (merged.provider ?? 'claude');
   return {
     budgets: { maxTurns: merged.maxTurns, maxBudgetUsd, timeoutMs: merged.timeoutMs },
-    modelOverride: defaultModelForTierAndProvider(merged.modelTier, 'claude'),
+    modelOverride: defaultModelForTierAndProvider(merged.modelTier, provider),
     ...(effort != null ? { effort } : {}),
   };
 }

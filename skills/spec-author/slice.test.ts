@@ -832,6 +832,19 @@ describe('validateEngineeringSpec — TDD contract (wp-missing-test-file)', () =
     );
   });
 
+  it('requires repair responses to preserve empty required top-level arrays', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain('The top-level schema fields are not optional');
+    expect(prompt).toContain('`interfaceContracts`: `[]`');
+    expect(prompt).toContain('`verificationTooling`: `[]`');
+    expect(prompt).toContain('`constraints`: `[]`');
+    expect(prompt).toContain('`riskRegister`: `[]`');
+    expect(prompt).toContain('Do not repair by returning only the changed fields');
+    expect(prompt).toContain('Every repair response must include `interfaceContracts`');
+    expect(prompt).toContain('`verificationTooling`, `constraints`, and `riskRegister` as arrays');
+  });
+
   it('documents TDD ownership in the spec-author prompt', () => {
     const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
 

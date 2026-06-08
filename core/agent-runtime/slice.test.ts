@@ -975,7 +975,22 @@ const { mockRouterDb } = vi.hoisted(() => {
   chain.insert = vi.fn().mockReturnValue({
     values: vi.fn().mockReturnValue({
       onConflictDoNothing: vi.fn().mockReturnValue({ run: vi.fn() }),
+      onConflictDoUpdate: vi.fn().mockReturnValue({
+        returning: vi.fn().mockReturnValue({
+          get: vi.fn().mockReturnValue({
+            artifactKey: 'artifact:mock',
+            kind: 'agent.gate-failure',
+            summary: 'mock gate failure artifact',
+            bytes: 1,
+          }),
+        }),
+      }),
       run: vi.fn(),
+    }),
+  });
+  chain.update = vi.fn().mockReturnValue({
+    set: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({ run: vi.fn() }),
     }),
   });
   return { mockRouterDb: chain };
@@ -990,6 +1005,12 @@ vi.mock('../db/repositories/project-settings.js', () => ({
 vi.mock('../db/schema.js', () => ({
   decisionPatterns: { projectId: 'p', kind: 'k', role: 'r', consistencyScore: 'cs' },
   agentRuns: {},
+  agentArtifacts: {
+    artifactKey: 'artifactKey',
+    kind: 'kind',
+    summary: 'summary',
+    bytes: 'bytes',
+  },
   agentDecisions: {},
 }));
 

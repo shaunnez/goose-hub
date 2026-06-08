@@ -5,9 +5,11 @@ import type { WorkItemDto } from '@/lib/types';
 import { useLaneVisibility } from '@/state/lane-visibility';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { Eye, RefreshCw } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { groupAllProjectsItems } from '../lib/all-projects';
 import { IssueCard } from './IssueCard';
+
+const RECOVERY_REFETCH_INTERVAL_MS = 30_000;
 
 export function AllProjectsBoard() {
   const queryClient = useQueryClient();
@@ -23,21 +25,34 @@ export function AllProjectsBoard() {
   })[0];
 
   const configs = configsQuery.data ?? [];
+  const projectSlugs = useMemo(() => configs.map((cfg) => cfg.slug), [configs]);
 
   const issueQueries = useQueries({
     queries: configs.map((cfg) => ({
       queryKey: ['issues-all', cfg.slug],
       queryFn: () => fetchIssues(cfg.slug, { all: true }),
       enabled: configs.length > 0,
+      refetchInterval: RECOVERY_REFETCH_INTERVAL_MS,
+      refetchIntervalInBackground: false,
     })),
   });
 
   const isLoading = configsQuery.isLoading || issueQueries.some((q) => q.isLoading);
   const isError = configsQuery.isError || issueQueries.some((q) => q.isError);
 
+  const refetchAllProjectIssues = useCallback(() => {
+    for (const slug of projectSlugs) {
+      void queryClient.invalidateQueries({ queryKey: ['issues-all', slug] });
+    }
+  }, [projectSlugs, queryClient]);
+
   // SSE: listen for state transitions across all projects (no projectId filter).
   useEffect(() => {
+    if (projectSlugs.length === 0) return;
+    const configuredProjects = new Set(projectSlugs);
     const es = new EventSource('/events');
+    let hadConnectionError = false;
+
     const onTransition = (msg: MessageEvent<string>) => {
       try {
         const event = JSON.parse(msg.data) as {
@@ -45,28 +60,48 @@ export function AllProjectsBoard() {
           workItemId: string | null;
           payload: { from?: string; to?: string };
         };
-        if (event.workItemId == null || event.payload?.to == null) return;
+        if (
+          event.projectId == null ||
+          !configuredProjects.has(event.projectId) ||
+          event.workItemId == null ||
+          event.payload?.to == null
+        ) {
+          return;
+        }
         const externalId = event.workItemId.split('#').pop();
         if (externalId == null) return;
-        for (const cfg of configs) {
-          queryClient.setQueryData<WorkItemDto[]>(
-            ['issues', cfg.slug],
-            (prev) =>
-              prev?.map((it) =>
-                it.externalId === externalId ? { ...it, state: event.payload.to as string } : it,
-              ) ?? prev,
-          );
-        }
+        const patchState = (prev?: WorkItemDto[]) =>
+          prev?.map((it) =>
+            it.externalId === externalId ? { ...it, state: event.payload.to as string } : it,
+          ) ?? prev;
+        queryClient.setQueryData<WorkItemDto[]>(['issues-all', event.projectId], patchState);
+        queryClient.setQueryData<WorkItemDto[]>(['issues', event.projectId], patchState);
       } catch (err) {
         logger.warn('AllProjectsBoard: failed to parse SSE event', { err: String(err) });
       }
     };
     es.addEventListener('state.transitioned', onTransition as EventListener);
+
+    es.onopen = () => {
+      if (!hadConnectionError) return;
+      hadConnectionError = false;
+      refetchAllProjectIssues();
+    };
+    es.onerror = () => {
+      hadConnectionError = true;
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refetchAllProjectIssues();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     return () => {
       es.removeEventListener('state.transitioned', onTransition as EventListener);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       es.close();
     };
-  }, [configs, queryClient]);
+  }, [projectSlugs, queryClient, refetchAllProjectIssues]);
 
   const enrichedItems = useMemo(() => {
     return configs.flatMap((cfg, i) => {

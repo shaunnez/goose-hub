@@ -227,6 +227,51 @@ describe('acceptance-contract workflow', () => {
     );
   });
 
+  it('normalizes invalid decision summary kinds instead of failing a usable contract', async () => {
+    const { reconcileDecisionSummaries } = await import(
+      '@goose-hub/core/agent-runtime/reconcile-decisions.js'
+    );
+    runtimeRun.mockResolvedValue({
+      output: {
+        criteria: [{ id: 'AC-1', statement: 'Cards sort newest first' }],
+        issueBodyPatchRecommended: true,
+        decisionSummaries: [
+          {
+            kind: 'INVESTIGATION_APPLIED',
+            summary: 'Applied the investigation finding to the acceptance contract',
+          },
+        ],
+      },
+    });
+
+    const contract = await runAcceptanceContractWorkflow(workItem, {} as never, 'goose', 'repo');
+
+    expect(contract.criteria[0].statement).toBe('Cards sort newest first');
+    expect(reconcileDecisionSummaries).toHaveBeenCalledWith(
+      expect.any(String),
+      'goose',
+      workItem.id,
+      'acceptance-contract',
+      [
+        {
+          kind: 'UNKNOWN',
+          summary: 'Applied the investigation finding to the acceptance contract',
+        },
+      ],
+    );
+    expect(appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'acceptance.contract-output-normalized',
+        payload: expect.objectContaining({
+          droppedInvalidKindCount: 0,
+          droppedUngroundedCheckCount: 0,
+          normalizedInvalidDecisionKindCount: 1,
+        }),
+      }),
+    );
+    expect(storeArtifact).not.toHaveBeenCalled();
+  });
+
   it('keeps grounded executable checks with valid kinds', async () => {
     replay.mockReturnValue([
       {

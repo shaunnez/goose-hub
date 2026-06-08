@@ -36,29 +36,28 @@ Failures from \`resources/list\` or \`resources/templates/list\` are advisory st
 Workflow-owned operations (commit, open PR, transition state, publish evidence) are not in your toolset — the orchestrator drives them.`;
 
 /**
- * Codex variant. The Codex CLI exposes MCP tools by their server-local
- * name (e.g. `list_dir`, `read_file`), not the Claude-style
- * `mcp__factory-tools__<name>` form. The PreToolUse hook and run-allowlist
- * still record / enforce the prefixed names internally — this string only
- * controls what the agent sees in its prompt.
+ * Codex variant. Codex executes MCP calls as `server= factory-tools` plus a
+ * server-local tool name (e.g. `read_file`). Some Codex surfaces/renderings may
+ * also mention the prefixed form (`mcp__factory-tools__read_file`). The prompt
+ * names both so the agent does not incorrectly conclude the tool is missing.
  */
 export const FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX = `## Factory tools
 
 Use the Factory MCP tools exposed by the \`factory-tools\` MCP server. Do not use native shell or file primitives unless this run explicitly allows \`Bash\`.
 
-- File reads: \`read_file\`, \`read_many_files\`, \`list_dir\`, \`list_files\`, \`file_exists\`, \`file_info\`
-- Text search: \`search_text\` (not \`rg\` via shell)
+- File reads: \`read_file\` (or \`mcp__factory-tools__read_file\` if your tool UI renders prefixed names), \`read_many_files\`, \`list_dir\`, \`list_files\`, \`file_exists\`, \`file_info\`
+- Text search: \`search_text\` / \`mcp__factory-tools__search_text\` (not \`rg\` via shell)
 - File mutations: \`write_file\`, \`edit_file\`, \`apply_patch\`, \`create_directory\`, \`move_file\`, \`delete_file\`
 - Verification: \`run_tests\`, \`run_lint\`, \`run_typecheck\`, \`run_isolated_test\` (not raw \`pnpm\` invocations)
 - Git read-only: \`get_status\`, \`get_diff\`, \`get_changed_files\`, \`get_head_sha\`, \`get_merge_base\`
 - Project context: \`get_project_context\`, \`get_stack_commands\`
-- Repository intelligence: \`repo_intel.query\`
+- Repository intelligence: \`repo_intel.query\` / \`mcp__factory-tools__repo_intel_query\`
 
-The Factory MCP tools are already exposed in this run. Do not use ToolSearch or any tool-discovery surface to find them; call the listed Factory tool names directly. If a direct Factory tool call reports that the tool does not exist, return valid low-confidence JSON naming the exact missing tool; do not fall back to ToolSearch, Bash, resources, or native file tools.
+The Factory MCP tools are already exposed in this run. Do not use ToolSearch or any tool-discovery surface to find them; call the listed Factory tool names directly. Do not decide a Factory tool is unavailable just because it is not shown in text, because a resource probe failed, or because prefixed and server-local names differ. You must attempt a direct Factory MCP call first. Only if that direct tool call itself fails as missing may you return valid low-confidence JSON naming the exact missing tool; do not fall back to ToolSearch, Bash, resources, or native file tools.
 
 All paths are workspace-relative. Absolute paths and \`..\` traversal are rejected. Commands run with \`shell: false\`; no shell strings. Output is byte-capped and timeouts are per-tool. Every call emits a structured \`agent.tool-call\` audit event.
 
-Do not use MCP resource surfaces or delegation surfaces unless this run explicitly allows them. Forbidden surfaces include \`resources/list\`, \`resources/read\`, \`file://...\` resource handles, collab tools, fork/full-history fork, spawn, and subagent delegation. File access must go through the exposed Factory tools such as \`read_file\`, \`list_dir\`, \`list_files\`, and \`search_text\`.
+Do not use MCP resource surfaces or delegation surfaces unless this run explicitly allows them. Forbidden surfaces include \`resources/list\`, \`resources/read\`, \`file://...\` resource handles, collab tools, fork/full-history fork, spawn, and subagent delegation. File access must go through the exposed Factory tools such as \`read_file\` / \`mcp__factory-tools__read_file\`, \`list_dir\`, \`list_files\`, and \`search_text\`.
 
 Failures from \`resources/list\` or \`resources/templates/list\` are advisory startup/resource-probe noise. They are not evidence that Factory tools such as \`read_file\`, \`search_text\`, \`list_dir\`, or \`repo_intel.query\` are unavailable.
 

@@ -5,8 +5,6 @@ import { join } from 'node:path';
 import type { RuntimeEffort } from '../types.js';
 
 const CODEX_AUTH_PATH = join(homedir(), '.codex', 'auth.json');
-const CODEX_DEFER_MCP_TOOLS_FEATURE = 'features.tool_search_always_defer_mcp_tools=true';
-
 export class CodexBinaryNotFoundError extends Error {
   constructor() {
     super(
@@ -164,6 +162,8 @@ export function buildCodexArgv(input: {
   bypassHookTrust?: boolean;
   /** Disable Codex's native shell tool when Factory has not allowed Bash. */
   disableShellTool?: boolean;
+  /** Prefer the run-scoped Factory MCP surface over Codex-native apps/delegation tools. */
+  restrictToFactoryTools?: boolean;
   /** Path to a JSON Schema file for Codex's final response. */
   outputSchemaPath?: string;
   /** Additional inline `-c key=value` overrides (e.g. MCP server config). */
@@ -207,9 +207,15 @@ export function buildCodexArgv(input: {
   if (input.disableShellTool === true) {
     argv.push('-c', 'features.shell_tool=false');
   }
-  // Prefer explicit MCP tool calls over Codex exposing MCP tools through
-  // resource handles such as `<tool>?args` URIs.
-  argv.push('-c', CODEX_DEFER_MCP_TOOLS_FEATURE);
+  if (input.restrictToFactoryTools === true) {
+    argv.push('-c', 'features.non_prefixed_mcp_tool_names=true');
+    argv.push('-c', 'features.apps=false');
+    argv.push('-c', 'features.browser_use=false');
+    argv.push('-c', 'features.computer_use=false');
+    argv.push('-c', 'features.image_generation=false');
+    argv.push('-c', 'features.multi_agent=false');
+    argv.push('-c', 'features.tool_suggest=false');
+  }
   if (input.inlineConfig != null && input.inlineConfig.length > 0) {
     argv.push(...input.inlineConfig);
   }

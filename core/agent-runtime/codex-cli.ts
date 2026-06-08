@@ -263,6 +263,19 @@ function stableJson(value: unknown): string {
     .join(',')}}`;
 }
 
+function codexRunAllowlist(input: {
+  allowlist: ReadonlyArray<string>;
+  enabledToolsByServer: Record<string, string[]>;
+}): string {
+  const values = new Set(input.allowlist);
+  for (const tools of Object.values(input.enabledToolsByServer)) {
+    for (const tool of tools) {
+      values.add(tool);
+    }
+  }
+  return Array.from(values).sort().join(',');
+}
+
 function outputSchemaHash(schema: Record<string, unknown> | undefined): string | undefined {
   if (schema == null || Object.keys(schema).length === 0) return undefined;
   return createHash('sha256').update(stableJson(schema)).digest('hex').slice(0, 16);
@@ -318,7 +331,9 @@ export class CodexCliRuntime implements AgentRuntime {
           name,
           {
             ...entry,
-            enabledTools: toolBinding.enabledToolsByServer[name] ?? [],
+            // enabled_tools is intentionally omitted: Codex CLI 0.137.0 ignores the
+            // allowlist when this field is set (even non-empty), making all MCP tools
+            // invisible. Enforcement is via PreToolUse hook + FACTORY_RUN_ALLOWLIST.
             ...(name === 'factory-tools'
               ? {
                   required: true,
@@ -428,6 +443,7 @@ export class CodexCliRuntime implements AgentRuntime {
       approvalPolicy: toolBinding.approvalPolicy,
       bypassHookTrust: true,
       disableShellTool: !toolBinding.nativeTools.includes('Bash'),
+      restrictToFactoryTools: true,
       outputSchemaPath,
       inlineConfig: codexMcpInlineArgs,
     });
@@ -454,7 +470,10 @@ export class CodexCliRuntime implements AgentRuntime {
                   ? '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'
                   : '/usr/local/bin:/usr/bin:/bin',
             }),
-        FACTORY_RUN_ALLOWLIST: allowedTools.join(','),
+        FACTORY_RUN_ALLOWLIST: codexRunAllowlist({
+          allowlist: allowedTools,
+          enabledToolsByServer: toolBinding.enabledToolsByServer,
+        }),
         FACTORY_RUN_ID: runId,
         FACTORY_PROJECT_ID: projectId,
         FACTORY_WORKSPACE_DIR: workspaceDir,

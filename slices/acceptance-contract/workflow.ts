@@ -4,6 +4,7 @@ import type {
   ExecutableCheck,
 } from '@goose-hub/core/acceptance-contracts/types.js';
 import { storeArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
+import { isDecisionKind } from '@goose-hub/core/agent-runtime/decision-types.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
@@ -36,6 +37,7 @@ const EXECUTABLE_CHECK_KINDS = new Set<NonNullable<ExecutableCheck['kind']>>([
 type AcceptanceContractNormalizationStats = {
   droppedInvalidKindCount: number;
   droppedUngroundedCheckCount: number;
+  normalizedInvalidDecisionKindCount: number;
 };
 
 export class AcceptanceContractValidationError extends Error {
@@ -108,11 +110,19 @@ function mockOutput(workItem: WorkItem, investigation: ReturnType<typeof latestI
 }
 
 function emptyNormalizationStats(): AcceptanceContractNormalizationStats {
-  return { droppedInvalidKindCount: 0, droppedUngroundedCheckCount: 0 };
+  return {
+    droppedInvalidKindCount: 0,
+    droppedUngroundedCheckCount: 0,
+    normalizedInvalidDecisionKindCount: 0,
+  };
 }
 
 function normalizationChanged(stats: AcceptanceContractNormalizationStats): boolean {
-  return stats.droppedInvalidKindCount > 0 || stats.droppedUngroundedCheckCount > 0;
+  return (
+    stats.droppedInvalidKindCount > 0 ||
+    stats.droppedUngroundedCheckCount > 0 ||
+    stats.normalizedInvalidDecisionKindCount > 0
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -166,6 +176,19 @@ function normalizeExecutableChecksForGrounding(
   return checks.length > 0 ? checks : undefined;
 }
 
+function normalizeDecisionSummaries(
+  value: unknown,
+  stats: AcceptanceContractNormalizationStats,
+): unknown {
+  if (!Array.isArray(value)) return value;
+
+  return value.map((rawSummary) => {
+    if (!isRecord(rawSummary) || isDecisionKind(rawSummary.kind)) return rawSummary;
+    stats.normalizedInvalidDecisionKindCount += 1;
+    return { ...rawSummary, kind: 'UNKNOWN' };
+  });
+}
+
 function normalizeAcceptanceContractOutput(
   rawOutput: unknown,
   workItem: WorkItem,
@@ -190,7 +213,14 @@ function normalizeAcceptanceContractOutput(
     return criterionWithoutChecks;
   });
 
-  return { output: { ...rawOutput, criteria }, stats };
+  return {
+    output: {
+      ...rawOutput,
+      criteria,
+      decisionSummaries: normalizeDecisionSummaries(rawOutput.decisionSummaries, stats),
+    },
+    stats,
+  };
 }
 
 function storeValidationFailureArtifact(input: {
@@ -282,6 +312,7 @@ export async function runAcceptanceContractWorkflow(
         skill: 'acceptance-contract',
         droppedInvalidKindCount: normalized.stats.droppedInvalidKindCount,
         droppedUngroundedCheckCount: normalized.stats.droppedUngroundedCheckCount,
+        normalizedInvalidDecisionKindCount: normalized.stats.normalizedInvalidDecisionKindCount,
       },
       runId,
       personaId,

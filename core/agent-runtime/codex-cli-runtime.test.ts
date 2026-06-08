@@ -271,7 +271,7 @@ describe('CodexCliRuntime timeout handling', () => {
     );
   });
 
-  it('derives Codex MCP enabled_tools from the run allowlist', async () => {
+  it('omits Codex MCP enabled_tools and passes server-local aliases to hook allowlist', async () => {
     vi.mocked(bindToolsForAgentSpec).mockReturnValue(
       makeToolBinding({
         allowlist: ['Bash', 'mcp__factory-tools__read_file', 'mcp__factory-tools__run_tests'],
@@ -284,17 +284,23 @@ describe('CodexCliRuntime timeout handling', () => {
 
     await runSuccessfulCodexSpec({ toolBundles: ['dev-tools'] });
 
-    expect(buildCodexMcpInlineArgs).toHaveBeenCalledWith(
+    const inlineConfigInput = vi.mocked(buildCodexMcpInlineArgs).mock.calls[0]?.[0];
+    expect(inlineConfigInput?.['factory-tools']).not.toHaveProperty('enabledTools');
+    expect(inlineConfigInput?.['factory-tools'].env).toEqual(
       expect.objectContaining({
-        'factory-tools': expect.objectContaining({
-          enabledTools: ['read_file', 'run_tests'],
-          env: expect.objectContaining({
-            FACTORY_SKILL: 'fix-issue',
-            FACTORY_PERSONA_ID: 'test-project/developer/0',
-            FACTORY_FORBID_MCP_RESOURCES: '1',
-          }),
-        }),
+        FACTORY_SKILL: 'fix-issue',
+        FACTORY_PERSONA_ID: 'test-project/developer/0',
+        FACTORY_FORBID_MCP_RESOURCES: '1',
       }),
+    );
+    const spawnEnv = mockSpawn.mock.calls[0]?.[2]?.env as Record<string, string>;
+    expect(spawnEnv.FACTORY_RUN_ALLOWLIST.split(',')).toEqual(
+      expect.arrayContaining([
+        'mcp__factory-tools__read_file',
+        'mcp__factory-tools__run_tests',
+        'read_file',
+        'run_tests',
+      ]),
     );
   });
 
@@ -304,6 +310,7 @@ describe('CodexCliRuntime timeout handling', () => {
     expect(buildCodexArgv).toHaveBeenCalledWith(
       expect.objectContaining({
         bypassHookTrust: true,
+        restrictToFactoryTools: true,
       }),
     );
   });

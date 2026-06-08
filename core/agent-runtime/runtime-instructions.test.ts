@@ -131,8 +131,16 @@ describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX', () => {
     }
   });
 
-  it('does not advertise Claude-style prefixed names to Codex', () => {
-    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).not.toContain('mcp__factory-tools__');
+  it('acknowledges prefixed renderings so Codex does not misclassify tools as missing', () => {
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain(
+      '`mcp__factory-tools__read_file`',
+    );
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain(
+      '`mcp__factory-tools__repo_intel_query`',
+    );
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain(
+      'You must attempt a direct Factory MCP call first',
+    );
   });
 
   it('forbids MCP resources and spawning while naming bare Codex factory read tools', () => {

@@ -57,6 +57,8 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.output-fact-mismatch': 'Output fact mismatch',
   'agent.contract-gate-blocked': 'Contract gate blocked',
   'acceptance.contract-authored': 'Acceptance contract authored',
+  'acceptance.contract-output-normalized': 'Acceptance contract output normalized',
+  'acceptance.contract-validation-failed': 'Acceptance contract validation failed',
   'symbol-index.lookup': 'Symbol index lookup',
   'symbol-index.hints-used': 'Symbol hints used',
   'agent.implement-complete': 'Implement complete',

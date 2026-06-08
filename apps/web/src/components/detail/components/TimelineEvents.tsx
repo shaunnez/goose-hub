@@ -50,6 +50,8 @@ import { InvestigationPhaseWrapper } from './timeline/InvestigationPhaseWrapper'
 import { AgentLogEvent, AgentLogGroupEvent } from './timeline/LogEvents';
 import {
   AcceptanceContractAuthoredEvent,
+  AcceptanceContractNormalizationEvent,
+  AcceptanceContractValidationFailedEvent,
   AgentBudgetExceededEvent,
   AgentDisclosureEvent,
   AgentModelSelectedEvent,
@@ -298,6 +300,10 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <ContractDriftEvent key={event.id} event={event} />;
     case 'acceptance.contract-authored':
       return <AcceptanceContractAuthoredEvent key={event.id} event={event} />;
+    case 'acceptance.contract-output-normalized':
+      return <AcceptanceContractNormalizationEvent key={event.id} event={event} />;
+    case 'acceptance.contract-validation-failed':
+      return <AcceptanceContractValidationFailedEvent key={event.id} event={event} />;
     case 'symbol-index.lookup':
       return <SymbolIndexLookupEvent key={event.id} event={event} />;
     case 'symbol-index.hints-used':

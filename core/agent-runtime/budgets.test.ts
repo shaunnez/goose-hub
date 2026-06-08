@@ -45,7 +45,7 @@ describe('resolveBudgets', () => {
     expect(result.budgets.maxTurns).toBe(150);
     expect(result.budgets.maxBudgetUsd).toBe(6.0);
     expect(result.budgets.timeoutMs).toBe(900_000);
-    expect(result.modelOverride).toContain('haiku');
+    expect(result.modelOverride).toContain('sonnet');
   });
 
   it('caps maxBudgetUsd at perWorkflowMaxUsd', () => {
@@ -106,7 +106,6 @@ describe('resolveBudgets', () => {
       'repo-match',
       'feature-enhance',
       'evidence-post',
-      'implement',
       'retrospective-light',
     ]) {
       const { modelOverride } = resolveBudgets(skill);

@@ -22,7 +22,7 @@ When a dep closes and the scheduler removes `schedule:blocked-by` from GitHub, t
 
 `AllProjectsBoard` fetches `GET /projects/configs` to discover all registered projects and their `colorStripe`, then fires parallel `GET /projects/:slug/issues` for each. Items from all projects are merged and grouped by lane. Each card's left border is colored with its source project's `colorStripe`.
 
-Real-time updates: the SSE connection omits the `projectId` filter (`/events` with no query param), so it receives transitions across all projects.
+Real-time updates: the SSE connection omits the `projectId` filter (`/events` with no query param), so it receives transitions across all projects. Each `state.transitioned` event patches only the matching project's `issues-all` cache entry by `projectId`. The board also refetches all project issue queries on SSE reconnect, on tab refocus, and periodically as a recovery path for missed browser events.
 
 The project switcher includes "All Projects" as the first option, navigating to `/projects/all`.
 

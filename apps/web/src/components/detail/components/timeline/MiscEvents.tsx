@@ -185,6 +185,25 @@ type AcceptanceContractPayload = {
   };
 };
 
+type AcceptanceContractNormalizationPayload = {
+  skill?: string;
+  droppedInvalidKindCount?: number;
+  droppedUngroundedCheckCount?: number;
+  normalizedInvalidDecisionKindCount?: number;
+};
+
+type AcceptanceContractValidationPayload = {
+  skill?: string;
+  issueCount?: number;
+  artifact?: {
+    artifactKey?: string;
+    kind?: string;
+    summary?: string;
+    bytes?: number;
+    stored?: boolean;
+  };
+};
+
 type DogfoodSeedAppliedPayload = {
   seedId?: string;
   baseBranch?: string;
@@ -591,6 +610,97 @@ export function AcceptanceContractAuthoredEvent({ event }: { event: AgentEventDt
             </li>
           ))}
         </ol>
+      )}
+    </li>
+  );
+}
+
+export function AcceptanceContractNormalizationEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as AcceptanceContractNormalizationPayload | null;
+  const invalidExecutableKinds =
+    typeof p?.droppedInvalidKindCount === 'number' ? p.droppedInvalidKindCount : null;
+  const ungroundedChecks =
+    typeof p?.droppedUngroundedCheckCount === 'number' ? p.droppedUngroundedCheckCount : null;
+  const invalidDecisionKinds =
+    typeof p?.normalizedInvalidDecisionKindCount === 'number'
+      ? p.normalizedInvalidDecisionKindCount
+      : null;
+  const shortRunId = formatShortId(event.runId ?? undefined);
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-warning bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <AlertTriangle size={13} className="shrink-0 text-amber-400" />
+        <span className="font-mono uppercase tracking-wider">
+          Acceptance contract output normalized
+        </span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        {p?.skill != null && <span>{p.skill}</span>}
+        {invalidExecutableKinds != null && (
+          <span>
+            {invalidExecutableKinds} invalid executable kind
+            {invalidExecutableKinds === 1 ? '' : 's'} dropped
+          </span>
+        )}
+        {ungroundedChecks != null && (
+          <span>
+            {ungroundedChecks} ungrounded check{ungroundedChecks === 1 ? '' : 's'} dropped
+          </span>
+        )}
+        {invalidDecisionKinds != null && (
+          <span>
+            {invalidDecisionKinds} invalid decision kind
+            {invalidDecisionKinds === 1 ? '' : 's'} normalized
+          </span>
+        )}
+        {shortRunId != null && <span className="font-mono text-fg-4">run {shortRunId}</span>}
+      </div>
+    </li>
+  );
+}
+
+export function AcceptanceContractValidationFailedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as AcceptanceContractValidationPayload | null;
+  const artifact = p?.artifact;
+  const shortRunId = formatShortId(event.runId ?? undefined);
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-danger bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <AlertTriangle size={13} className="shrink-0 text-red-400" />
+        <span className="font-mono uppercase tracking-wider">
+          Acceptance contract validation failed
+        </span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        {p?.skill != null && <span>{p.skill}</span>}
+        {typeof p?.issueCount === 'number' && (
+          <span>
+            {p.issueCount} schema issue{p.issueCount === 1 ? '' : 's'}
+          </span>
+        )}
+        {artifact?.stored === true && <span>artifact stored</span>}
+        {typeof artifact?.bytes === 'number' && <span>{formatByteCount(artifact.bytes)}</span>}
+        {shortRunId != null && <span className="font-mono text-fg-4">run {shortRunId}</span>}
+      </div>
+      {artifact?.summary != null && (
+        <div className="mt-2 text-[11.5px] text-fg-3">{artifact.summary}</div>
+      )}
+      {artifact?.artifactKey != null && (
+        <div className="mt-1 text-[11px] font-mono text-fg-4 break-all">
+          artifact {artifact.artifactKey}
+        </div>
       )}
     </li>
   );

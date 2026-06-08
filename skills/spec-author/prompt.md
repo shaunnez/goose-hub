@@ -41,6 +41,14 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
 
 ### Shape guardrails
 
+- The top-level schema fields are not optional. Always emit every top-level
+  field listed in "Required sections". If a section has no entries, emit the
+  correct empty container rather than omitting it:
+  - `schemaChanges`: `{"ddl":[],"migrations":[]}`
+  - `interfaceContracts`: `[]`
+  - `verificationTooling`: `[]`
+  - `constraints`: `[]`
+  - `riskRegister`: `[]`
 - `schemaChanges` is always an object: `{"ddl":[],"migrations":[]}` when there
   are no DB changes. Never return it as an array.
 - Every `interfaceContracts[]` item must include `name`, `signature`, and
@@ -55,7 +63,9 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
   - Bad: `core/agent-runtime/event-types.ts:SYMBOL:EventLike`
   - Bad: `apps/server/README.md:5-20`
 - A `constraints[].source` using `path:symbol` may only cite a symbol you observed in an actual read/search result or symbol-index output. If no stable symbol exists, use `path:line` instead.
-- Optional fields should be omitted when they do not apply. Do not emit `null`.
+- Optional nested fields should be omitted when they do not apply. Do not emit
+  `null`. This does not apply to required top-level arrays; required arrays must
+  be present even when empty.
 
 ### Required sections (Steve `01-planning-phase.md:287-300`)
 
@@ -174,6 +184,10 @@ Identify the change being requested. Pull `userJourneys` and `functionalRequirem
 If `<repairFeedback>` is present, read it first. Treat it as mandatory
 feedback from the validator and make the smallest correction needed while still
 returning a complete `EngineeringSpecSchema` JSON object.
+Do not repair by returning only the changed fields or by dropping unaffected
+required sections. Every repair response must include `interfaceContracts`,
+`verificationTooling`, `constraints`, and `riskRegister` as arrays, even when
+they are empty.
 If it says a constraint cites a file that does not exist, do not cite that
 planned file again. Move planned paths to `filesOwned` or `interfaceContracts`
 and cite an existing host file, exported symbol, or current integration point in

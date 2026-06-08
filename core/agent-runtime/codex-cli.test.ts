@@ -6,6 +6,7 @@ import {
   pickCodexAgentMessageText,
   pickCodexAssistantMessage,
 } from './codex-cli.js';
+import { buildCodexMcpInlineArgs } from './codex-config.js';
 
 const RUN_ID = 'test-run-id';
 
@@ -36,8 +37,6 @@ describe('buildCodexArgv', () => {
       'gpt-5.4',
       '--sandbox',
       'danger-full-access',
-      '-c',
-      'features.tool_search_always_defer_mcp_tools=true',
       '<task></task>',
     ]);
   });
@@ -94,18 +93,36 @@ describe('buildCodexArgv', () => {
     expect(argv).toContain('features.shell_tool=false');
   });
 
-  it('asks Codex tool search to defer MCP tools instead of exposing resource handles', () => {
+  it('can restrict Codex runs to Factory MCP tools', () => {
+    const argv = buildCodexArgv({
+      model: 'gpt-5.4',
+      workspaceDir: '/tmp/worktree',
+      prompt: '<task></task>',
+      restrictToFactoryTools: true,
+    });
+
+    expect(argv).toEqual(
+      expect.arrayContaining([
+        'features.non_prefixed_mcp_tool_names=true',
+        'features.apps=false',
+        'features.browser_use=false',
+        'features.computer_use=false',
+        'features.image_generation=false',
+        'features.multi_agent=false',
+        'features.tool_suggest=false',
+      ]),
+    );
+    expect(argv.at(-1)).toBe('<task></task>');
+  });
+
+  it('does not hide Factory MCP tools behind Codex ToolSearch', () => {
     const argv = buildCodexArgv({
       model: 'gpt-5.4',
       workspaceDir: '/tmp/worktree',
       prompt: '<task></task>',
     });
 
-    expect(argv).toContain('-c');
-    expect(argv).toContain('features.tool_search_always_defer_mcp_tools=true');
-    expect(argv.indexOf('features.tool_search_always_defer_mcp_tools=true')).toBeLessThan(
-      argv.length - 1,
-    );
+    expect(argv).not.toContain('features.tool_search_always_defer_mcp_tools=true');
   });
 
   it('passes a per-run output schema path before the prompt', () => {
@@ -122,6 +139,41 @@ describe('buildCodexArgv', () => {
     );
     expect(argv.indexOf('--output-schema')).toBeLessThan(argv.length - 1);
     expect(argv.at(-1)).toBe('<task></task>');
+  });
+});
+
+// ─── buildCodexMcpInlineArgs ─────────────────────────────────────────────────
+
+describe('buildCodexMcpInlineArgs', () => {
+  it('does not emit enabled_tools for factory-tools server (Codex 0.137.0 bug: any value hides all MCP tools)', () => {
+    const args = buildCodexMcpInlineArgs({
+      'factory-tools': {
+        command: '/usr/bin/node',
+        args: ['/repo/core/tool-layer/mcp/server.ts'],
+        env: { FACTORY_RUN_ID: 'test-run' },
+        required: true,
+        startupTimeoutSec: 20,
+        toolTimeoutSec: 600,
+      },
+    });
+    const joined = args.join(' ');
+    expect(joined).not.toContain('enabled_tools');
+  });
+
+  it('emits required, startup_timeout_sec, tool_timeout_sec when set', () => {
+    const args = buildCodexMcpInlineArgs({
+      'factory-tools': {
+        command: '/usr/bin/node',
+        args: [],
+        required: true,
+        startupTimeoutSec: 20,
+        toolTimeoutSec: 600,
+      },
+    });
+    const joined = args.join(' ');
+    expect(joined).toContain('mcp_servers.factory-tools.required=true');
+    expect(joined).toContain('mcp_servers.factory-tools.startup_timeout_sec=20');
+    expect(joined).toContain('mcp_servers.factory-tools.tool_timeout_sec=600');
   });
 });
 

@@ -264,6 +264,59 @@ describe('Misc timeline events', () => {
     expect(rendered).not.toContain('"guidance"');
   });
 
+  it('renders acceptance.contract-output-normalized as normalization facts instead of raw JSON', () => {
+    const event = makeEvent('acceptance.contract-output-normalized', {
+      skill: 'acceptance-contract',
+      droppedInvalidKindCount: 0,
+      droppedUngroundedCheckCount: 1,
+      normalizedInvalidDecisionKindCount: 1,
+      rawProbeKey: 'raw-value',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Acceptance contract output normalized')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('acceptance-contract');
+    expect(rendered).toContain('0 invalid executable kinds dropped');
+    expect(rendered).toContain('1 ungrounded check dropped');
+    expect(rendered).toContain('1 invalid decision kind normalized');
+    expect(rendered).toContain('run e3bb94b3');
+    expect(rendered).not.toContain('droppedUngroundedCheckCount');
+    expect(rendered).not.toContain('rawProbeKey');
+    expect(rendered).not.toContain('raw-value');
+  });
+
+  it('renders acceptance.contract-validation-failed as artifact facts instead of raw JSON', () => {
+    const event = makeEvent('acceptance.contract-validation-failed', {
+      skill: 'acceptance-contract',
+      issueCount: 1,
+      artifact: {
+        artifactKey: 'acceptance-contract-validation-output:ae99eb35',
+        kind: 'acceptance-contract-validation-output',
+        summary: 'Raw acceptance-contract output failed validation',
+        bytes: 2691,
+        stored: true,
+      },
+      rawProbeKey: 'raw-value',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Acceptance contract validation failed')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('acceptance-contract');
+    expect(rendered).toContain('1 schema issue');
+    expect(rendered).toContain('artifact stored');
+    expect(rendered).toContain('2.6 KB');
+    expect(rendered).toContain('Raw acceptance-contract output failed validation');
+    expect(rendered).toContain('acceptance-contract-validation-output:ae99eb35');
+    expect(rendered).not.toContain('"artifact"');
+    expect(rendered).not.toContain('artifactKey');
+    expect(rendered).not.toContain('rawProbeKey');
+    expect(rendered).not.toContain('raw-value');
+  });
+
   it('renders operational timeline events as JSX cards instead of raw JSON', () => {
     const cases: Array<{ kind: string; title: string; payload: unknown }> = [
       {

@@ -435,7 +435,7 @@ describe('runFixIssueWorkflow — provider-aware runtime dispatch', () => {
 
     expect(mockCodexCliRun).toHaveBeenCalledTimes(1);
     const spec = mockCodexCliRun.mock.calls[0][0] as { modelOverride?: string };
-    expect(spec.modelOverride).toBe('gpt-5.4-mini');
+    expect(spec.modelOverride).toBe('gpt-5.4');
   });
 
   it('keeps an injected runtime instead of replacing it with provider dispatch', async () => {

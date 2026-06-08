@@ -21,6 +21,7 @@ The context contains:
 - Add `executableChecks` only when the investigation or issue names an obvious targeted repo-root command. Do not invent a command if no command is grounded.
 - Never include developer reasoning or raw investigation internals in the criterion text.
 - Set `issueBodyPatchRecommended` to true when the issue body had no usable checkbox criteria.
+- `decisionSummaries[].kind` must be one of the canonical decision kinds from `core/agent-runtime/decision-types.ts`. For this skill, prefer `PLAN`, `CRITERIA_CHECK`, `INSIGHT`, `UNCERTAINTY`, or `VERDICT`. Never invent custom kinds such as `INVESTIGATION_APPLIED`.
 
 ## Output
 
