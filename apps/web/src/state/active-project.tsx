@@ -28,7 +28,7 @@ export function ActiveProjectProvider({
       .then((list) => {
         if (cancelled) return;
         setProjects(list);
-        if (activeSlug == null && list[0] != null) setActiveSlug(list[0].slug);
+        setActiveSlug((current) => current ?? list[0]?.slug ?? null);
         setLoading(false);
       })
       .catch((err: Error) => {
@@ -40,7 +40,7 @@ export function ActiveProjectProvider({
       cancelled = true;
       controller.abort();
     };
-  }, [activeSlug]);
+  }, []);
 
   return (
     <ActiveProjectContext.Provider value={{ projects, loading, error, activeSlug, setActiveSlug }}>

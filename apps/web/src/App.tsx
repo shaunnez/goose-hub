@@ -40,14 +40,20 @@ function KanbanPage() {
   );
 }
 
-function GlobalShell({ children }: { children: React.ReactNode }) {
-  return <ActiveProjectProvider>{children}</ActiveProjectProvider>;
+function GlobalShell({
+  children,
+  initialSlug,
+}: {
+  children: React.ReactNode;
+  initialSlug?: string;
+}) {
+  return <ActiveProjectProvider initialSlug={initialSlug}>{children}</ActiveProjectProvider>;
 }
 
 function AllProjectsPage() {
   return (
-    <GlobalShell>
-      <AppShell breadcrumb={<span>All Projects</span>}>
+    <GlobalShell initialSlug="all">
+      <AppShell activeSlug="all" breadcrumb={<span>All Projects</span>}>
         <LaneVisibilityProvider>
           <AllProjectsBoard />
         </LaneVisibilityProvider>

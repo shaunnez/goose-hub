@@ -23,7 +23,7 @@ interface SidebarItem {
 }
 
 function buildItems(slug: string | undefined): SidebarItem[] {
-  const project = slug ?? 'goose-hub-self';
+  const project = slug === undefined ? 'goose-hub-self' : slug;
   return [
     {
       to: `/projects/${project}`,
