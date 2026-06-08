@@ -8,6 +8,17 @@ interface TopBarProps {
   breadcrumb?: React.ReactNode;
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target.isContentEditable ||
+    target.closest('input, textarea, select, [contenteditable]') !== null
+  );
+}
+
 export function TopBar({ breadcrumb }: TopBarProps) {
   const [showCapture, setShowCapture] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
@@ -16,6 +27,10 @@ export function TopBar({ breadcrumb }: TopBarProps) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!(e.metaKey || e.ctrlKey)) {
+        return;
+      }
+
+      if (isEditableTarget(e.target)) {
         return;
       }
 

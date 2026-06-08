@@ -53,6 +53,35 @@ describe('TopBar', () => {
     expect(screen.getByTestId('capture-modal').textContent).toBe('open');
   });
 
+  it('does not open Capture from an input shortcut', () => {
+    render(<TopBar />);
+
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+
+    fireEvent.keyDown(input, { key: 'j', metaKey: true });
+
+    expect(screen.getByTestId('capture-modal').textContent).toBe('closed');
+
+    input.remove();
+  });
+
+  it('does not open Capture from a contenteditable shortcut', () => {
+    render(<TopBar />);
+
+    const editable = document.createElement('div');
+    editable.setAttribute('contenteditable', 'true');
+    document.body.append(editable);
+    editable.focus();
+
+    fireEvent.keyDown(editable, { key: 'j', ctrlKey: true });
+
+    expect(screen.getByTestId('capture-modal').textContent).toBe('closed');
+
+    editable.remove();
+  });
+
   it('keeps the Search shortcut working', () => {
     render(<TopBar />);
 
