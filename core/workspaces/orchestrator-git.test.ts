@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -53,5 +53,24 @@ describe('orchestratorCommitAll', () => {
     if (result.status !== 'committed') return;
     expect(result.sha).toMatch(/^[a-f0-9]{40}$/);
     expect(git(['show', '--format=%s', '--no-patch', 'HEAD'])).toBe('repair');
+  });
+
+  it('does not commit .factory or .claude runtime artifacts', () => {
+    writeFileSync(join(repo, 'README.md'), 'changed\n');
+    mkdirSync(join(repo, '.factory'), { recursive: true });
+    writeFileSync(join(repo, '.factory', 'symbol-index.db'), 'binary\n');
+    mkdirSync(join(repo, '.claude'), { recursive: true });
+    writeFileSync(join(repo, '.claude', 'session.json'), '{}');
+
+    const result = orchestratorCommitAll(repo, 'no-runtime-artifacts');
+
+    expect(result.status).toBe('committed');
+    if (result.status !== 'committed') return;
+    const committedFiles = git(['show', '--name-only', '--format=', 'HEAD'])
+      .split('\n')
+      .filter(Boolean);
+    expect(committedFiles).not.toContain('.factory/symbol-index.db');
+    expect(committedFiles).not.toContain('.claude/session.json');
+    expect(committedFiles).toContain('README.md');
   });
 });

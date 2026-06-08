@@ -42,6 +42,31 @@ export function upsertBitbucketPullRequestRef(
   });
 }
 
+export interface BitbucketBranchExternalRefInput {
+  projectId: string;
+  workItemId: string;
+  workspace: string;
+  repo: string;
+  branchName: string;
+  repository?: LocalDbWorkItemRepository;
+}
+
+export function upsertBitbucketBranchRef(
+  input: BitbucketBranchExternalRefInput,
+): LocalDbExternalRefRow {
+  const repository = input.repository ?? new LocalDbWorkItemRepository();
+  return repository.upsertExternalRef({
+    projectId: input.projectId,
+    itemId: input.workItemId,
+    provider: 'bitbucket',
+    kind: 'branch',
+    repoRef: bitbucketRepoRef(input),
+    externalId: input.branchName,
+    url: null,
+    metadata: null,
+  });
+}
+
 export function latestBitbucketPullRequestRef(input: {
   projectId: string;
   workItemId: string;
