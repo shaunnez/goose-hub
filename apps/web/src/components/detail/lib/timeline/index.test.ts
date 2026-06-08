@@ -1,9 +1,14 @@
 import type { AgentEventDto } from '@/lib/types';
 import { describe, expect, it } from 'vitest';
 import type { RenderItem } from './index';
-import { groupByReviewWorkflow } from './index';
+import { groupByDiscoverPhase, groupByReviewWorkflow } from './index';
 
-function makeEvent(id: number, kind: string, payload: Record<string, unknown>): AgentEventDto {
+function makeEvent(
+  id: number,
+  kind: string,
+  payload: Record<string, unknown>,
+  overrides: Partial<AgentEventDto> = {},
+): AgentEventDto {
   return {
     id,
     kind,
@@ -11,12 +16,98 @@ function makeEvent(id: number, kind: string, payload: Record<string, unknown>): 
     createdAt: new Date(1000 * id).toISOString(),
     workItemId: 'item-1',
     projectId: 'proj',
+    ...overrides,
   } as AgentEventDto;
 }
 
 function makeReviewItems(...events: AgentEventDto[]): RenderItem[] {
   return events.map((event) => ({ kind: 'event', event }));
 }
+
+function makeRunGroup(
+  runId: string,
+  events: AgentEventDto[],
+  { skill, endedAt = null }: { skill: string | null; endedAt?: string | null },
+): RenderItem {
+  return {
+    kind: 'run-group',
+    runId,
+    items: events.map((event) => ({ kind: 'event', event })),
+    skill,
+    startedAt: events[0]?.createdAt ?? null,
+    endedAt,
+    lastEventAt: events.at(-1)?.createdAt ?? null,
+    personaId: null,
+    modelId: null,
+    runtime: null,
+  };
+}
+
+describe('groupByDiscoverPhase grill completion status', () => {
+  it('marks a grill phase completed once the same discover session advances into PRD work', () => {
+    const discoverSessionId = 'discover-session-completed';
+    const workflowRunId = 'discover-workflow-completed';
+
+    const result = groupByDiscoverPhase([
+      makeRunGroup(
+        `${workflowRunId}:grill-me`,
+        [
+          makeEvent(1, 'agent.run-started', {
+            discoverSessionId,
+            workflowRunId,
+            skill: 'grill-me',
+          }),
+        ],
+        { skill: 'grill-me' },
+      ),
+      makeRunGroup(
+        `${workflowRunId}:write-prd`,
+        [
+          makeEvent(2, 'agent.run-started', {
+            discoverSessionId,
+            workflowRunId,
+            skill: 'write-prd',
+          }),
+          makeEvent(3, 'prd.drafted', { discoverSessionId, workflowRunId }),
+        ],
+        { skill: 'write-prd', endedAt: new Date(3000).toISOString() },
+      ),
+    ]);
+
+    const grillPhase = result.find(
+      (item): item is Extract<RenderItem, { kind: 'phase-group' }> =>
+        item.kind === 'phase-group' && item.phase === 'grill',
+    );
+
+    expect(grillPhase?.status).toBe('completed');
+  });
+
+  it('keeps a grill phase live until that discover session gets completion evidence', () => {
+    const discoverSessionId = 'discover-session-live';
+    const workflowRunId = 'discover-workflow-live';
+
+    const result = groupByDiscoverPhase([
+      makeRunGroup(
+        `${workflowRunId}:grill-me`,
+        [
+          makeEvent(1, 'agent.run-started', {
+            discoverSessionId,
+            workflowRunId,
+            skill: 'grill-me',
+          }),
+        ],
+        { skill: 'grill-me' },
+      ),
+    ]);
+
+    const grillPhase = result.find(
+      (item): item is Extract<RenderItem, { kind: 'phase-group' }> =>
+        item.kind === 'phase-group' && item.phase === 'grill',
+    );
+
+    expect(grillPhase?.status).toBe('live');
+  });
+});
 
 describe('groupByReviewWorkflow grill completion status', () => {
   function makeAnsweredGrillEvents(

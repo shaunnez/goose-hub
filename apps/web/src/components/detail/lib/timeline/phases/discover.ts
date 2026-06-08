@@ -51,14 +51,47 @@ function isPrdPhaseEvent(event: AgentEventDto): boolean {
   return event.kind.startsWith('prd.');
 }
 
+const DISCOVER_GRILL_COMPLETED_STATES = new Set([
+  'factory:prd-drafting',
+  'factory:prd-review',
+  'factory:decomposing',
+  'factory:issues-created',
+  'factory:done',
+]);
+
+function getTransitionDestination(event: AgentEventDto): string | null {
+  if (event.kind !== 'state.transitioned') return null;
+  const payload = event.payload as { to?: unknown; toState?: unknown } | null;
+  if (typeof payload?.to === 'string' && payload.to.trim() !== '') return payload.to;
+  if (typeof payload?.toState === 'string' && payload.toState.trim() !== '') return payload.toState;
+  return null;
+}
+
+function hasPostGrillCompletionEvidence(
+  events: AgentEventDto[],
+  siblingPrdItems: RenderItem[],
+): boolean {
+  if (events.some((event) => event.kind === 'grill.completed')) return true;
+  if (
+    events.some((event) => {
+      const destination = getTransitionDestination(event);
+      return destination != null && DISCOVER_GRILL_COMPLETED_STATES.has(destination);
+    })
+  ) {
+    return true;
+  }
+  return siblingPrdItems.length > 0;
+}
+
 function resolveDiscoverPhaseStatus(
   phase: 'grill' | 'prd',
   items: RenderItem[],
+  siblingPrdItems: RenderItem[] = [],
 ): 'started' | 'live' | 'completed' | 'failed' {
   const events = items.flatMap(eventFromRenderItem);
   if (events.some((event) => event.kind === 'agent.run-failed')) return 'failed';
   if (phase === 'grill') {
-    if (events.some((event) => event.kind === 'grill.completed')) return 'completed';
+    if (hasPostGrillCompletionEvidence(events, siblingPrdItems)) return 'completed';
   } else if (
     events.some((event) =>
       ['prd.drafted', 'prd.approved', 'prd.rejected', 'prd.revised', 'prd.declined'].includes(
@@ -285,7 +318,7 @@ export function groupByDiscoverPhaseWithSessionIndex(
         pipelineRunId: grouped.id,
         idKind: grouped.idKind,
         items: withDefaultDiscoverRunSkill(phaseItemList, phase).sort(compareRenderItems),
-        status: resolveDiscoverPhaseStatus(phase, phaseItemList),
+        status: resolveDiscoverPhaseStatus(phase, phaseItemList, grouped.prd),
         ...times,
       });
     }
