@@ -22,3 +22,21 @@ investigations/
 investigate-failling-issues-prompt.md
 .pnpm-store/
 legacy/
+
+# Personal planning docs
+dog-food-plan.md
+research-plan.md
+final-optimization-plan*.md
+docs/superpowers/plans/
+docs/steves-new-docs/
+docs/steves-training-materials/
+docs/cost-performance-improvements/
+docs/archive/
+docs/audit/
+
+# Claude Code local runtime
+.claude/hooks/
+.claude/scheduled_tasks.lock
+
+# Generated (rebuild with pnpm manifest)
+docs/inventory.md
