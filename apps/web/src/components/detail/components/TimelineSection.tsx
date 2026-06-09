@@ -21,9 +21,10 @@ interface TimelineSectionProps {
   projectSlug: string;
   id: string;
   workItemId?: string;
+  itemState?: string;
 }
 
-export function TimelineSection({ projectSlug, id }: TimelineSectionProps) {
+export function TimelineSection({ projectSlug, id, itemState }: TimelineSectionProps) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const queryClient = useQueryClient();
@@ -91,7 +92,11 @@ export function TimelineSection({ projectSlug, id }: TimelineSectionProps) {
       </div>
     );
   }
-  const items = groupTimelineEventsByCanonicalSection(visibleEvents, interventionDetails);
+  const items = groupTimelineEventsByCanonicalSection(
+    visibleEvents,
+    interventionDetails,
+    itemState,
+  );
   if (items.length === 0) {
     return (
       <div data-testid="timeline-section" className="px-8 py-6">

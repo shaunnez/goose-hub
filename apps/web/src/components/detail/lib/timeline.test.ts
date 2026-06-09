@@ -1009,6 +1009,64 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     ).toHaveLength(1);
   });
 
+  it('marks grill-driven review groups complete when the current item state has moved into PRD', () => {
+    const reviewWorkflowRunId = 'review-grill-prd-state';
+    const items = groupByReviewWorkflow(
+      [
+        {
+          kind: 'event',
+          event: makeEvent(1, 'question.asked', 'review-run', {
+            payload: { reviewWorkflowRunId },
+          }),
+        },
+        {
+          kind: 'event',
+          event: makeEvent(2, 'state.transitioned', null, {
+            payload: {
+              reviewWorkflowRunId,
+              from: 'factory:gate-pending',
+              to: 'factory:grilling',
+            },
+          }),
+        },
+      ],
+      'factory:prd-drafting',
+    );
+
+    expect(items[0]).toMatchObject({
+      kind: 'review-group',
+      reviewWorkflowRunId,
+      status: 'completed',
+    });
+  });
+
+  it('keeps non-grill review groups live even when the item state has moved forward', () => {
+    const reviewWorkflowRunId = 'review-non-grill-stays-live';
+    const items = groupByReviewWorkflow(
+      [
+        {
+          kind: 'event',
+          event: makeEvent(1, 'agent.run-started', 'review-run', {
+            payload: { skill: 'review', reviewWorkflowRunId },
+          }),
+        },
+        {
+          kind: 'event',
+          event: makeEvent(2, 'review.comment-added', 'review-run', {
+            payload: { reviewWorkflowRunId },
+          }),
+        },
+      ],
+      'factory:prd-drafting',
+    );
+
+    expect(items[0]).toMatchObject({
+      kind: 'review-group',
+      reviewWorkflowRunId,
+      status: 'live',
+    });
+  });
+
   it('attaches PRD review feedback to the next PRD workflow in the same discover session', () => {
     const SID = 'discover-session-prd-feedback';
     const FIRST_WID = 'prd-workflow-first';

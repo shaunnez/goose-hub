@@ -29,6 +29,7 @@ import {
   sortTimelineChildrenForReading,
 } from './render-items';
 import { collapseLogRuns, extractRunMeta, groupByRunId } from './run-groups';
+import { computeGrillFlowCompleted } from './state';
 import type { InterventionTimelineDetail, RenderItem } from './types';
 
 export { formatDuration, formatSkillName, getPayloadStr } from './format';
@@ -48,7 +49,12 @@ export {
   collectBillableRunIdsForTimelineSection,
   collectRunIdsForTimelineSection,
 } from './render-items';
-export { computeIsLive, computeIsWritePrdStuck } from './state';
+export {
+  computeGrillFlowCompleted,
+  computeIsLive,
+  computeIsWritePrdStuck,
+  isPostGrillState,
+} from './state';
 export type { InterventionTimelineDetail, RenderItem, TimelineContext } from './types';
 
 // ─── grouping ────────────────────────────────────────────────────────────────
@@ -238,6 +244,7 @@ export function groupEvents(
 export function groupTimelineEventsByCanonicalSection(
   events: AgentEventDto[],
   interventionDetails: InterventionTimelineDetail[] = [],
+  currentItemState?: string,
 ): RenderItem[] {
   const normalizedEvents = normalizeTimelineEvents(events);
   const runMetadata = buildTimelineRunMetadataIndex(normalizedEvents);
@@ -276,6 +283,7 @@ export function groupTimelineEventsByCanonicalSection(
       implementationPipelineByRunId,
       reviewWorkflowByRunId,
       discoverSessionByWorkflowOrRunId,
+      currentItemState,
     );
     if (groupedItems.length === 0) return [];
     const times = extractTimelineSectionTimes(groupedItems);
@@ -841,6 +849,7 @@ function groupItemsInsideTimelineSection(
   implementationPipelineByRunId: ReadonlyMap<string, string>,
   reviewWorkflowByRunId: ReadonlyMap<string, string>,
   discoverSessionByWorkflowOrRunId: DiscoverSessionRunIndex,
+  currentItemState?: string,
 ): RenderItem[] {
   switch (section) {
     case 'grounding':
@@ -863,7 +872,7 @@ function groupItemsInsideTimelineSection(
     case 'review':
       return flattenRedundantSectionPhase(
         section,
-        groupByReviewWorkflowWithIndex(items, reviewWorkflowByRunId),
+        groupByReviewWorkflowWithIndex(items, reviewWorkflowByRunId, currentItemState),
       );
     default:
       return items;
@@ -996,7 +1005,10 @@ function hasCompletedAnsweredGrillFlow(events: AgentEventDto[]): boolean {
   });
 }
 
-function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs-human' | 'failed' {
+function resolveReviewStatus(
+  items: RenderItem[],
+  currentItemState?: string,
+): 'live' | 'completed' | 'needs-human' | 'failed' {
   const events = items.flatMap(eventFromRenderItem);
   if (events.some((event) => event.kind === 'review.wave-failed')) return 'failed';
   if (events.some((event) => event.kind === 'agent.run-failed')) return 'failed';
@@ -1020,22 +1032,30 @@ function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs
   const verdict = (completed?.payload as { verdict?: string } | null)?.verdict;
   if (verdict === 'needs-human') return 'needs-human';
   if (verdict === 'approved' || verdict === 'needs-fix') return 'completed';
-  if (hasCompletedAnsweredGrillFlow(events)) {
+  if (
+    hasCompletedAnsweredGrillFlow(events) ||
+    computeGrillFlowCompleted(events, currentItemState)
+  ) {
     return 'completed';
   }
   return 'live';
 }
 
-export function groupByReviewWorkflow(items: RenderItem[]): RenderItem[] {
+export function groupByReviewWorkflow(
+  items: RenderItem[],
+  currentItemState?: string,
+): RenderItem[] {
   return groupByReviewWorkflowWithIndex(
     items,
     buildReviewWorkflowRunIndex(items.flatMap(eventFromRenderItem)),
+    currentItemState,
   );
 }
 
 function groupByReviewWorkflowWithIndex(
   items: RenderItem[],
   reviewWorkflowByRunId: ReadonlyMap<string, string>,
+  currentItemState?: string,
 ): RenderItem[] {
   const reviewWorkflowRunIds = new Set<string>();
   for (const item of items) {
@@ -1064,7 +1084,7 @@ function groupByReviewWorkflowWithIndex(
   for (const [reviewWorkflowRunId, groupedItems] of reviewItems) {
     if (groupedItems.length === 0) continue;
     const times = extractPhaseTimes(groupedItems);
-    const status = resolveReviewStatus(groupedItems);
+    const status = resolveReviewStatus(groupedItems, currentItemState);
     groups.push({
       kind: 'review-group',
       reviewWorkflowRunId,

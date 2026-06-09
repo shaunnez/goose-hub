@@ -13,6 +13,7 @@ import {
   stripGrillMarker,
   stripRecommendedAnswer,
 } from '../lib/grill-comments';
+import { isPostGrillState } from '../lib/timeline/state';
 import { SectionEmptyState } from './SectionEmptyState';
 
 interface GrillSectionProps {
@@ -92,12 +93,7 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
   // The last agent question in the thread (used for recommended-answer pill).
   const lastAgentQuestionId = [...merged].reverse().find((c) => isGrillQuestion(c.body))?.id;
 
-  const grillingComplete =
-    effectiveState === 'factory:prd-drafting' ||
-    effectiveState === 'factory:prd-review' ||
-    effectiveState === 'factory:decomposing' ||
-    effectiveState === 'factory:issues-created' ||
-    effectiveState === 'factory:done';
+  const grillingComplete = isPostGrillState(effectiveState);
 
   // Griller is processing a reply — hide the form but don't show "complete" yet.
   const grillingInProgress = effectiveState === 'factory:grilling';
@@ -122,7 +118,7 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
     send.mutate({ body: replyBody, shouldTransitionToGrilling });
   };
 
-  if (isLoading) {
+  if (isLoading && !grillingComplete) {
     return (
       <div className="px-8 py-6 text-[12.5px] text-fg-2" data-testid="grill-loading">
         Loading…

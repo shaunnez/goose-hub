@@ -275,6 +275,13 @@ describe('GrillSection', () => {
     expect(screen.queryByTestId('grill-reply-form')).toBeNull();
   });
 
+  it('shows the complete footer before comment loading finishes for post-grill states', () => {
+    vi.mocked(fetchComments).mockImplementationOnce(() => new Promise(() => {}));
+    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:prd-review" />);
+    expect(screen.getByTestId('grill-complete-footer')).toBeTruthy();
+    expect(screen.queryByTestId('grill-loading')).toBeNull();
+  });
+
   it('shows recommended answer pill on the last agent question when state is gate-pending', async () => {
     vi.mocked(fetchComments).mockResolvedValueOnce([
       comment(

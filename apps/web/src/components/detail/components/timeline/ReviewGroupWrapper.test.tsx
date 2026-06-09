@@ -93,4 +93,46 @@ describe('ReviewGroupWrapper', () => {
     expect(screen.getByText('Complete')).toBeTruthy();
     expect(screen.queryByText('Live')).toBeNull();
   });
+
+  it('uses the current item state to present completed post-grill review workflows', () => {
+    const reviewWorkflowRunId = 'review-grill-current-state';
+    const grouped = groupByReviewWorkflow(
+      [
+        {
+          kind: 'event',
+          event: makeEvent('question.asked', { reviewWorkflowRunId }),
+        },
+        {
+          kind: 'event',
+          event: makeEvent('state.transitioned', {
+            reviewWorkflowRunId,
+            from: 'factory:gate-pending',
+            to: 'factory:grilling',
+          }),
+        },
+      ],
+      'factory:prd-drafting',
+    );
+    const reviewGroup = grouped[0];
+
+    expect(reviewGroup?.kind).toBe('review-group');
+    if (reviewGroup?.kind !== 'review-group') return;
+
+    render(
+      <ul>
+        <ReviewGroupWrapper
+          reviewWorkflowRunId={reviewGroup.reviewWorkflowRunId}
+          items={reviewGroup.items}
+          status={reviewGroup.status}
+          startedAt={reviewGroup.startedAt}
+          endedAt={reviewGroup.endedAt}
+          lastEventAt={reviewGroup.lastEventAt}
+          renderItem={(child, idx) => <li key={`${child.kind}-${idx}`}>review child</li>}
+        />
+      </ul>,
+    );
+
+    expect(screen.getByText('Complete')).toBeTruthy();
+    expect(screen.queryByText('Live')).toBeNull();
+  });
 });

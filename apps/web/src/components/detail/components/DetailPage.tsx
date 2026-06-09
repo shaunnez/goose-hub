@@ -324,7 +324,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             ) : currentSection.key === 'repo' ? (
               <TriageResultsSection projectSlug={slug} id={id} />
             ) : currentSection.key === 'timeline' ? (
-              <TimelineSection projectSlug={slug} id={id} />
+              <TimelineSection projectSlug={slug} id={id} itemState={item?.state} />
             ) : currentSection.key === 'investigation' ? (
               <InvestigationSection
                 projectSlug={slug}

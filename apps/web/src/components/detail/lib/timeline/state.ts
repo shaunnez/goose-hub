@@ -18,6 +18,14 @@ const TERMINAL_EVENTS = new Set([
   'qa.workflow-aborted',
 ]);
 
+const POST_GRILL_STATES = new Set([
+  'factory:prd-drafting',
+  'factory:prd-review',
+  'factory:decomposing',
+  'factory:issues-created',
+  'factory:done',
+]);
+
 export function computeIsLive(events: AgentEventDto[]): boolean {
   const sorted = [...events].sort((a, b) => a.id - b.id);
   let lastStartedIdx = -1;
@@ -41,4 +49,18 @@ export function computeIsWritePrdStuck(events: AgentEventDto[]): boolean {
   const hasPrdDrafted = events.some((e) => e.kind === 'prd.drafted');
   if (hasPrdDrafted) return false;
   return !computeIsLive(events);
+}
+
+export function isPostGrillState(state: string | undefined): boolean {
+  return state != null && POST_GRILL_STATES.has(state);
+}
+
+export function computeGrillFlowCompleted(
+  events: AgentEventDto[],
+  currentItemState: string | undefined,
+): boolean {
+  if (!isPostGrillState(currentItemState)) return false;
+  return events.some(
+    (event) => event.kind === 'question.asked' || event.kind === 'grill.completed',
+  );
 }
