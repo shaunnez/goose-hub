@@ -18,6 +18,9 @@ export function TopBar({ breadcrumb }: TopBarProps) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setShowSearch((prev) => !prev);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setShowCapture((prev) => !prev);
       }
     }
     document.addEventListener('keydown', onKey);
@@ -46,11 +49,14 @@ export function TopBar({ breadcrumb }: TopBarProps) {
           type="button"
           data-testid="capture-button"
           onClick={() => setShowCapture(true)}
-          title="Capture an idea or task"
+          title="Capture an idea or task (⌘J)"
           className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"
         >
           <Plus size={13} />
           <span>Capture</span>
+          <kbd className="ml-1 px-1 py-0.5 rounded border border-line text-[10px] text-fg-3 bg-bg">
+            ⌘J
+          </kbd>
         </button>
         <button
           type="button"

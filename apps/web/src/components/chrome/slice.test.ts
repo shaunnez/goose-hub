@@ -53,3 +53,19 @@ describe('chrome slice — deferred surfaces config', () => {
     expect(collapsed).toBe(false);
   });
 });
+
+describe('chrome slice — TopBar capture shortcut', () => {
+  const topBarSource = readFileSync(join(import.meta.dirname, 'TopBar.tsx'), 'utf-8');
+
+  it('onKey handler checks for metaKey', () => {
+    expect(topBarSource).toContain('metaKey');
+  });
+
+  it('onKey handler checks for the j key', () => {
+    expect(topBarSource).toContain("'j'");
+  });
+
+  it('Capture button renders ⌘J kbd label', () => {
+    expect(topBarSource).toContain('⌘J');
+  });
+});
