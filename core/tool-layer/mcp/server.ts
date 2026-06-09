@@ -1,5 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { createServer as createHttpServer, type Server } from 'node:http';
 import { type FactoryContext, FactoryContextError, loadFactoryContext } from './context.js';
 import {
   ApplyPatchInput,
@@ -793,6 +795,32 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
   return server;
 }
 
+/**
+ * Starts the factory-tools MCP server over HTTP (Streamable HTTP transport).
+ * Each request is stateless — no session ID. Port 0 binds to a random free port.
+ * Returns the Node.js HTTP server so the caller can close it after the agent run.
+ */
+export async function startHttpServer(ctx: FactoryContext, port: number): Promise<Server> {
+  const server = buildFactoryMcpServer(ctx);
+
+  const httpServer = createHttpServer(async (req, res) => {
+    if (req.url !== '/mcp') {
+      res.writeHead(404).end();
+      return;
+    }
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    await server.connect(transport);
+    await transport.handleRequest(req, res);
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    httpServer.listen(port, '127.0.0.1', () => resolve());
+    httpServer.once('error', reject);
+  });
+
+  return httpServer;
+}
+
 async function main(): Promise<void> {
   let ctx: FactoryContext;
   try {
@@ -805,9 +833,17 @@ async function main(): Promise<void> {
     throw err;
   }
 
-  const server = buildFactoryMcpServer(ctx);
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  if (process.env.FACTORY_MCP_TRANSPORT === 'http') {
+    const port = ctx.serverPort;
+    await startHttpServer(ctx, port);
+    process.stderr.write(`factory-tools HTTP server listening on 127.0.0.1:${port}\n`);
+    // Keep process alive — caller (sidecar) owns lifetime.
+    await new Promise<never>(() => {});
+  } else {
+    const server = buildFactoryMcpServer(ctx);
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+  }
 }
 
 if (
