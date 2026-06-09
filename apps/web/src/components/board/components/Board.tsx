@@ -161,7 +161,7 @@ export function Board({ projectSlug }: BoardProps) {
             onClick={() => setNewLocalOpen(true)}
             className="inline-flex h-6 items-center gap-1.5 rounded border border-line px-2 text-[12px] text-fg-2 hover:bg-bg-hover hover:text-fg"
           >
-            <Plus size={12} /> New local
+            <Plus size={12} /> New Local Task
           </button>
         )}
         {showJiraImport && (
