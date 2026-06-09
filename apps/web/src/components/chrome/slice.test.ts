@@ -53,3 +53,18 @@ describe('chrome slice — deferred surfaces config', () => {
     expect(collapsed).toBe(false);
   });
 });
+
+describe('chrome slice — top bar shortcuts', () => {
+  const topBarSource = readFileSync(join(import.meta.dirname, 'TopBar.tsx'), 'utf-8');
+
+  it('capture button exposes a visible ⌘J shortcut label', () => {
+    expect(topBarSource).toContain('⌘J');
+  });
+
+  it('top bar binds the existing modifier chord pattern to capture on j', () => {
+    expect(topBarSource).toMatch(
+      /\(e\.metaKey \|\| e\.ctrlKey\).*e\.key\.toLowerCase\(\) === 'j'/s,
+    );
+    expect(topBarSource).toContain('setShowCapture(true)');
+  });
+});
