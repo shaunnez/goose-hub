@@ -478,6 +478,20 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     );
   });
 
+  it('buildMcpRemoteConfig emits npx mcp-remote command', async () => {
+    const { buildMcpRemoteConfig } = await import('../tool-layer/mcp/build-config.js');
+    const os = await import('node:os');
+    const result = buildMcpRemoteConfig({
+      workspaceDir: os.tmpdir(),
+      runId: 'r1',
+      projectId: 'p1',
+      workItemId: null,
+      port: 3099,
+    });
+    expect(result.config.mcpServers['factory-tools'].command).toBe('npx');
+    expect(result.config.mcpServers['factory-tools'].args[0]).toBe('mcp-remote');
+  });
+
   it('timeout emits failure events, kills the process group, rejects, and ignores late close', async () => {
     vi.useFakeTimers();
     const child = makeHangingChild();

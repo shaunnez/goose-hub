@@ -1,15 +1,17 @@
-import { execFileSync, spawn } from 'node:child_process';
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createServer as createNetServer, Socket } from 'node:net';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { costFromCliEnvelope } from '../cost/extract.js';
 import { recordCost, recordToolStatsForRun } from '../cost/repository.js';
 import { stageForSkill } from '../cost/skill-stage.js';
 import { getRecordDecisionTool } from '../db/repositories/project-settings.js';
 import { eventStore } from '../event-stream/store.js';
 import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.js';
-import { buildFactoryMcpConfig } from '../tool-layer/mcp/build-config.js';
+import { buildFactoryMcpConfig, buildMcpRemoteConfig } from '../tool-layer/mcp/build-config.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
 import { bindToolsForAgentSpec } from '../tool-layer/tool-binding.js';
@@ -124,6 +126,76 @@ function extractResultJson(text: string, runId: string): unknown {
   return text;
 }
 
+function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer();
+    server.listen(0, '127.0.0.1', () => {
+      const port = (server.address() as { port: number }).port;
+      server.close(() => resolve(port));
+    });
+    server.once('error', reject);
+  });
+}
+
+interface SidecarHandle {
+  port: number;
+  kill: () => void;
+}
+
+function spawnHttpSidecar(
+  sidecarEnv: Record<string, string>,
+  orchestratorRoot: string,
+): SidecarHandle {
+  const serverScript = join(orchestratorRoot, 'core/tool-layer/mcp/server.ts');
+  const localCli = join(orchestratorRoot, 'node_modules/tsx/dist/cli.mjs');
+  const port = Number.parseInt(sidecarEnv.FACTORY_SERVER_PORT, 10);
+
+  const child: ChildProcess = spawn(process.execPath, [localCli, serverScript], {
+    env: { ...sidecarEnv },
+    stdio: ['ignore', 'ignore', 'ignore'],
+    shell: false,
+  });
+
+  return {
+    port,
+    kill: () => {
+      try { child.kill('SIGTERM'); } catch { /* already dead */ }
+    },
+  };
+}
+
+function waitForSidecar(port: number, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    function attempt() {
+      const sock = new Socket();
+      sock.setTimeout(200);
+      sock.connect(port, '127.0.0.1', () => {
+        sock.destroy();
+        resolve();
+      });
+      sock.on('error', () => {
+        sock.destroy();
+        if (Date.now() >= deadline) {
+          reject(new Error(`factory-tools HTTP sidecar did not start on port ${port} within ${timeoutMs}ms`));
+        } else {
+          setTimeout(attempt, 100);
+        }
+      });
+      sock.on('timeout', () => {
+        sock.destroy();
+        setTimeout(attempt, 100);
+      });
+    }
+    attempt();
+  });
+}
+
+function inferOrchestratorRoot(): string {
+  // core/agent-runtime/claude-cli.ts → core/agent-runtime → core → <repo root>
+  return resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+}
+
 export class ClaudeCliRuntime implements AgentRuntime {
   async run(spec: AgentSpec): Promise<AgentResult> {
     if (process.env.MOCK_AGENTS === 'true') {
@@ -142,15 +214,39 @@ export class ClaudeCliRuntime implements AgentRuntime {
     // Per-run MCP config under <worktree>/.factory/mcp-config.json (ADR 0045).
     // Always written; the factory-tools server entry carries the run's
     // identity via env.
-    const { configPath: factoryMcpConfigPath } = buildFactoryMcpConfig({
-      workspaceDir,
-      runId,
-      projectId,
-      workItemId,
-      skill: spec.skill,
-      personaId: spec.personaId,
-      toolBundles: toolBinding.mcpServerBundles,
-    });
+    const useMcpRemote = process.env.FACTORY_USE_MCP_REMOTE === '1';
+    let sidecar: SidecarHandle | null = null;
+    let factoryMcpConfigPath: string;
+
+    if (useMcpRemote) {
+      const port = await findFreePort();
+      const remoteResult = buildMcpRemoteConfig({
+        workspaceDir,
+        runId,
+        projectId,
+        workItemId,
+        skill: spec.skill,
+        personaId: spec.personaId,
+        port,
+      });
+      factoryMcpConfigPath = remoteResult.configPath;
+
+      const sidecarEnvPath = join(workspaceDir, '.factory/mcp-sidecar.env.json');
+      const sidecarEnv = JSON.parse(readFileSync(sidecarEnvPath, 'utf8')) as Record<string, string>;
+      sidecar = spawnHttpSidecar(sidecarEnv, inferOrchestratorRoot());
+      await waitForSidecar(port);
+    } else {
+      const result = buildFactoryMcpConfig({
+        workspaceDir,
+        runId,
+        projectId,
+        workItemId,
+        skill: spec.skill,
+        personaId: spec.personaId,
+        toolBundles: toolBinding.mcpServerBundles,
+      });
+      factoryMcpConfigPath = result.configPath;
+    }
     const recordDecisionTool = getRecordDecisionTool(projectId);
     if (spec.sandboxMode !== 'preconfigured') {
       writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
@@ -405,6 +501,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
             runId,
             personaId,
           });
+          sidecar?.kill();
           reject(
             new Error(`Claude CLI exited with code ${code}${stderr ? `\n${stderr.trim()}` : ''}`),
           );
@@ -427,6 +524,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
             (envelope.subtype != null ? `subtype: ${envelope.subtype}` : null) ??
             (stderr.trim() || null) ??
             'no detail available';
+          sidecar?.kill();
           reject(new Error(`Claude reported an error: ${detail}`));
           return;
         }
@@ -494,6 +592,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
               runId,
               personaId,
             });
+            sidecar?.kill();
             resolve({
               output: extractResultJson(envelope?.result ?? stdout, runId),
               decisionSummaries: [],
@@ -518,6 +617,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
             runId,
             personaId,
           });
+          sidecar?.kill();
           reject(
             new Error(
               `Agent run ${runId} exceeded budget: $${costUsd} > $${spec.budgets.maxBudgetUsd}`,
@@ -579,6 +679,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
         recordRun('success');
 
+        sidecar?.kill();
         resolve({
           output: extractResultJson(envelope?.result ?? stdout, runId),
           decisionSummaries: [],
@@ -590,6 +691,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
+        sidecar?.kill();
         reject(err);
       });
     });
