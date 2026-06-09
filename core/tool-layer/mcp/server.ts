@@ -801,13 +801,12 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
  * Returns the Node.js HTTP server so the caller can close it after the agent run.
  */
 export async function startHttpServer(ctx: FactoryContext, port: number): Promise<Server> {
-  const server = buildFactoryMcpServer(ctx);
-
   const httpServer = createHttpServer(async (req, res) => {
     if (req.url !== '/mcp') {
       res.writeHead(404).end();
       return;
     }
+    const server = buildFactoryMcpServer(ctx);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await server.connect(transport);
     await transport.handleRequest(req, res);
