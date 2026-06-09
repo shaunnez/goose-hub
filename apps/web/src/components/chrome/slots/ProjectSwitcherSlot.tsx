@@ -3,7 +3,7 @@ import { useActiveProject } from '@/state/active-project';
 import * as Popover from '@radix-ui/react-popover';
 import { FolderGit2 } from 'lucide-react';
 import { ChevronDown } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useMatch, useNavigate } from 'react-router-dom';
 
 interface ProjectSwitcherSlotProps {
   activeSlug?: string;
@@ -13,7 +13,9 @@ interface ProjectSwitcherSlotProps {
 export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSlotProps) {
   const { projects, loading, error, setActiveSlug } = useActiveProject();
   const navigate = useNavigate();
-  const current = projects.find((p) => p.slug === activeSlug) ?? projects[0];
+  const isAllProjects = useMatch('/projects/all') != null;
+  const current =
+    projects.find((p) => p.slug === activeSlug) ?? (isAllProjects ? null : projects[0]);
 
   if (loading) {
     return (
@@ -40,7 +42,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
     );
   }
 
-  if (current == null) {
+  if (!isAllProjects && current == null) {
     return (
       <div
         data-testid="project-switcher"
@@ -50,8 +52,6 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
       </div>
     );
   }
-
-  const isAllProjects = activeSlug === 'all';
 
   if (collapsed) {
     return (
@@ -135,7 +135,11 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
             navigate(next === 'all' ? '/projects/all' : `/projects/${next}`);
           }}
           className="appearance-none w-full h-8 pl-3 pr-8 bg-bg border border-line rounded-md text-[12.5px] text-fg focus:outline-none focus:border-accent-line cursor-pointer"
-          style={{ borderLeft: isAllProjects ? '3px solid #6b7280' : `3px solid ${current.color}` }}
+          style={{
+            borderLeft: isAllProjects
+              ? '3px solid #6b7280'
+              : `3px solid ${current?.color ?? '#6b7280'}`,
+          }}
         >
           <option value="all">All Projects</option>
           {projects.map((p) => (
