@@ -18,6 +18,7 @@ import {
   type FixIssuePipeline,
   selectFixIssuePipeline,
 } from '@goose-hub/core/workflow-routing/pipeline-selector.js';
+import { resolveSelectedRepositoryCheckout } from '@goose-hub/core/workspaces/selected-repository-checkout.js';
 import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js';
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
 import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.js';
@@ -593,7 +594,12 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
         : undefined;
 
     try {
-      await runFixIssueWorkflow(item, source, slug, REPO_ROOT, mockDeps);
+      const selectedRepository = resolveSelectedRepositoryCheckout({
+        project: depProjectConfig,
+        workItem: item,
+        fallbackLocalPath: REPO_ROOT,
+      });
+      await runFixIssueWorkflow(item, source, slug, selectedRepository.localPath, mockDeps);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       await recordLegacyFixIssueStartupFailure({
@@ -692,9 +698,14 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
       const specRoute = loadLatestRoute({ projectId: slug, workItemId: item.id });
       const specPipeline =
         specRoute != null ? selectFixIssuePipeline(specRoute) : 'spec-author-full';
+      const selectedRepository = resolveSelectedRepositoryCheckout({
+        project: projectForFlag,
+        workItem: item,
+        fallbackLocalPath: REPO_ROOT,
+      });
       const structuralValidation = validateEngineeringSpec(parsedSpec.data, {
         issueType: item.type === 'bug' ? 'bug' : 'feature',
-        repoRoot: REPO_ROOT,
+        repoRoot: selectedRepository.localPath,
         specMode: specPipeline === 'spec-author-lite' ? 'lite' : 'full',
       });
       if (!structuralValidation.ok) {
@@ -772,7 +783,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
             { ...item, state: 'factory:dev-ready' },
             source,
             slug,
-            REPO_ROOT,
+            selectedRepository.localPath,
             legacyMockDeps,
           );
         } catch (err) {
@@ -838,7 +849,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
           specRecord.pipelineRunId,
           source,
           slug,
-          REPO_ROOT,
+          selectedRepository.localPath,
           parallelMockDeps,
         );
         if (result.status === 'success') {

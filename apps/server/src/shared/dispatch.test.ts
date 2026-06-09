@@ -1,5 +1,7 @@
-import { existsSync } from 'node:fs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * dispatch.ts dispatches to workflow modules via dynamic import. We use top-level
@@ -49,6 +51,7 @@ const mockDbUpdate = vi.fn(() => ({ set: mockDbUpdateSet }));
 const mockLoadLatestRoute = vi.fn();
 const mockSelectFixIssuePipeline = vi.fn();
 const mockRunSpecAuthorWorkflow = vi.fn();
+const mockResolveSelectedRepositoryCheckout = vi.fn();
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
@@ -160,6 +163,10 @@ vi.mock('@goose-hub/core/workflow-routing/pipeline-selector.js', () => ({
   selectFixIssuePipeline: mockSelectFixIssuePipeline,
 }));
 
+vi.mock('@goose-hub/core/workspaces/selected-repository-checkout.js', () => ({
+  resolveSelectedRepositoryCheckout: mockResolveSelectedRepositoryCheckout,
+}));
+
 vi.mock('../../../../slices/spec-author/workflow.js', () => ({
   runSpecAuthorWorkflow: mockRunSpecAuthorWorkflow,
 }));
@@ -183,6 +190,18 @@ vi.mock('drizzle-orm', () => ({
 // ─── helpers ──────────────────────────────────────────────────────────────
 
 const originalMockSource = process.env.MOCK_SOURCE;
+const tempDirs: string[] = [];
+
+function createTempRepoWithFiles(files: string[]): string {
+  const dir = mkdtempSync(join(tmpdir(), 'dispatch-selected-repo-'));
+  tempDirs.push(dir);
+  for (const file of files) {
+    const abs = join(dir, file);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, `${file}\n`);
+  }
+  return dir;
+}
 
 beforeEach(() => {
   vi.resetModules(); // reset module-level in-flight Sets between tests
@@ -213,6 +232,16 @@ beforeEach(() => {
   mockGetEngineeringSpec.mockReturnValue(null);
   mockLoadLatestRoute.mockReturnValue(null);
   mockSelectFixIssuePipeline.mockReturnValue('fix-issue');
+  mockResolveSelectedRepositoryCheckout.mockImplementation(
+    (input: { workItem: { repoRef?: string }; fallbackLocalPath: string }) => ({
+      repoRef: input.workItem.repoRef ?? 'shaunnez/goose-hub',
+      localPath: input.fallbackLocalPath,
+      defaultBranch: 'main',
+      role: 'unknown',
+      checkoutSource: 'fallback-path',
+      selectedBy: input.workItem.repoRef == null ? 'project' : 'work-item',
+    }),
+  );
   mockEventStoreReplay.mockReturnValue([]);
   mockEventStoreAppendEvent.mockReturnValue({
     id: 1,
@@ -235,6 +264,12 @@ beforeEach(() => {
     blocked: [],
     unregistered: [],
   });
+});
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // ─── dispatchFraming ──────────────────────────────────────────────────────
@@ -1052,7 +1087,8 @@ describe('dispatchFixIssue', () => {
     );
   });
 
-  it('passes the real repo root to legacy fix-issue when project targetRepo is stale', async () => {
+  it('passes the selected repo root to legacy fix-issue when project targetRepo is stale', async () => {
+    const selectedRepoPath = createTempRepoWithFiles(['README.md']);
     const mockItem = {
       id: 'github:shaunnez/goose-hub#44',
       externalId: '44',
@@ -1085,14 +1121,26 @@ describe('dispatchFixIssue', () => {
       blocked: [],
       unregistered: [],
     });
+    mockResolveSelectedRepositoryCheckout.mockReturnValue({
+      repoRef: 'shaunnez/goose-hub',
+      localPath: selectedRepoPath,
+      defaultBranch: 'main',
+      role: 'primary',
+      checkoutSource: 'configured-local-path',
+      selectedBy: 'work-item',
+    });
 
     const { dispatchFixIssue } = await import('./dispatch.js');
     await dispatchFixIssue('slug', 44);
 
     expect(mockRunFixIssueWorkflow).toHaveBeenCalledOnce();
     const repoRoot = mockRunFixIssueWorkflow.mock.calls[0][3] as string;
-    expect(existsSync(repoRoot)).toBe(true);
-    expect(repoRoot).toContain('goose-hub');
+    expect(mockResolveSelectedRepositoryCheckout).toHaveBeenCalledWith({
+      project: expect.objectContaining({ id: 'slug' }),
+      workItem: mockItem,
+      fallbackLocalPath: expect.any(String),
+    });
+    expect(repoRoot).toBe(selectedRepoPath);
   });
 
   it('records pre-in-progress legacy fix-issue failures and escalates only from dev-ready', async () => {
@@ -2339,7 +2387,151 @@ describe('dispatchForLabel', () => {
     );
   });
 
+  it('validates persisted specs against the selected target checkout before parallel implement', async () => {
+    const selectedRepoPath = createTempRepoWithFiles([
+      'code/statement-processors/annualCOA.js',
+      'code/schemas/costofacceptance.json',
+      'code/statement-file-processor.js',
+      'code/statement-pdf-generator.js',
+    ]);
+    const item = {
+      id: 'local:shift4-smartpay#24',
+      externalId: '24',
+      repoRef: 'smartpayplatform/statements-api',
+      title: 'shift4 smartpay COA statement files',
+      body: 'body',
+      state: 'factory:spec-ready',
+      priority: 'high',
+      type: 'bug',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'smartpayplatform/statements-api',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    const spec = {
+      objective: 'Fix Shift4 Smartpay annual cost of acceptance statement generation.',
+      userJourneys: [],
+      functionalRequirements: [],
+      architecture: {
+        current: 'Annual COA statements are generated from existing processors and schemas.',
+        new: 'The statement workflow preserves existing processor and schema contracts.',
+        decisionRationale: 'The fix must stay grounded in the target statements-api repository.',
+      },
+      schemaChanges: { ddl: [], migrations: [] },
+      interfaceContracts: [],
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['code/statement-file-processor.js'],
+          changes: 'Apply the annual COA statement processing fix in the selected repository.',
+          dependsOn: [],
+          builderTier: 'sonnet',
+        },
+      ],
+      executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+      verificationTooling: [],
+      acceptanceCriteria: [
+        {
+          id: 'AC1',
+          statement: 'Annual COA statements are generated from the selected repository code.',
+          crossCutting: true,
+          executableChecks: [{ id: 'AC1-check-1', command: 'npm test' }],
+        },
+      ],
+      constraints: [
+        {
+          kind: 'phase',
+          name: 'annual-coa-processor',
+          source: 'code/statement-processors/annualCOA.js:1',
+        },
+        {
+          kind: 'phase',
+          name: 'cost-of-acceptance-schema',
+          source: 'code/schemas/costofacceptance.json:1',
+        },
+        {
+          kind: 'phase',
+          name: 'statement-file-processor',
+          source: 'code/statement-file-processor.js:1',
+        },
+        {
+          kind: 'phase',
+          name: 'statement-pdf-generator',
+          source: 'code/statement-pdf-generator.js:1',
+        },
+      ],
+      riskRegister: [],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Test selected repository validation.' }],
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({
+      id: 'shift4-smartpay',
+      budgets: { maxParallelAgents: 1 },
+      repositories: [
+        {
+          repoRef: 'smartpayplatform/statements-api',
+          cloneUrl: 'git@github.com:smartpayplatform/statements-api.git',
+          localPath: selectedRepoPath,
+          defaultBranch: 'main',
+          role: 'primary',
+        },
+      ],
+    });
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockResolveSelectedRepositoryCheckout.mockReturnValue({
+      repoRef: 'smartpayplatform/statements-api',
+      localPath: selectedRepoPath,
+      defaultBranch: 'main',
+      role: 'primary',
+      checkoutSource: 'configured-local-path',
+      selectedBy: 'repo-link-primary',
+    });
+    mockGetEngineeringSpec.mockReturnValue({
+      id: 1,
+      projectId: 'shift4-smartpay',
+      workItemId: item.id,
+      pipelineRunId: 'pipeline-run-shift4-24',
+      spec,
+      createdAt: '2026-06-08T00:00:00Z',
+      updatedAt: '2026-06-08T00:00:00Z',
+    });
+
+    const { dispatchForLabel } = await import('./dispatch.js');
+    await dispatchForLabel('shift4-smartpay', 24, 'factory:spec-ready');
+
+    expect(mockResolveSelectedRepositoryCheckout).toHaveBeenCalledWith({
+      project: expect.objectContaining({ id: 'shift4-smartpay' }),
+      workItem: item,
+      fallbackLocalPath: expect.any(String),
+    });
+    expect(source.comment).not.toHaveBeenCalledWith(
+      '24',
+      expect.stringContaining('persisted engineering spec failed structural validation'),
+    );
+    expect(source.transitionState).not.toHaveBeenCalledWith(
+      '24',
+      'factory:spec-ready',
+      'factory:needs-human',
+    );
+    expect(mockRunParallelImplementWorkflow).toHaveBeenCalledWith(
+      item,
+      spec,
+      'pipeline-run-shift4-24',
+      source,
+      'shift4-smartpay',
+      selectedRepoPath,
+      {},
+    );
+  });
+
   it('routes lite spec-ready work back through single implement when route excludes parallel-implement', async () => {
+    const selectedRepoPath = createTempRepoWithFiles([
+      'apps/server/src/shared/dispatch.ts',
+      'apps/server/src/shared/dispatch.test.ts',
+    ]);
     const item = {
       id: 'github:shaunnez/goose-hub#695',
       externalId: '695',
@@ -2406,6 +2598,14 @@ describe('dispatchForLabel', () => {
       blocked: [],
       unregistered: [],
     });
+    mockResolveSelectedRepositoryCheckout.mockReturnValue({
+      repoRef: 'shaunnez/goose-hub',
+      localPath: selectedRepoPath,
+      defaultBranch: 'main',
+      role: 'primary',
+      checkoutSource: 'configured-local-path',
+      selectedBy: 'work-item',
+    });
     mockGetUseMultiAgentPipeline.mockReturnValue(true);
     mockGetEngineeringSpec.mockReturnValue({
       id: 1,
@@ -2450,7 +2650,7 @@ describe('dispatchForLabel', () => {
       expect.objectContaining({ id: item.id, state: 'factory:dev-ready' }),
       source,
       'goose-hub-self',
-      expect.any(String),
+      selectedRepoPath,
       undefined,
     );
   });

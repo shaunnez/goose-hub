@@ -127,7 +127,7 @@ describe('buildMcpRemoteConfig', () => {
   });
 
   it('writes sidecar env file alongside config', () => {
-    const result = buildMcpRemoteConfig({
+    const _result = buildMcpRemoteConfig({
       workspaceDir: workspace,
       runId: 'run-abc',
       projectId: 'proj',

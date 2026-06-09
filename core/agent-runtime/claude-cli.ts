@@ -1,7 +1,7 @@
 import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createServer as createNetServer, Socket } from 'node:net';
+import { Socket, createServer as createNetServer } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -159,7 +159,11 @@ function spawnHttpSidecar(
   return {
     port,
     kill: () => {
-      try { child.kill('SIGTERM'); } catch { /* already dead */ }
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        /* already dead */
+      }
     },
   };
 }
@@ -177,7 +181,11 @@ function waitForSidecar(port: number, timeoutMs = 5000): Promise<void> {
       sock.on('error', () => {
         sock.destroy();
         if (Date.now() >= deadline) {
-          reject(new Error(`factory-tools HTTP sidecar did not start on port ${port} within ${timeoutMs}ms`));
+          reject(
+            new Error(
+              `factory-tools HTTP sidecar did not start on port ${port} within ${timeoutMs}ms`,
+            ),
+          );
         } else {
           setTimeout(attempt, 100);
         }
