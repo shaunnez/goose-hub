@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildFactoryMcpConfig } from './build-config.js';
+import { buildFactoryMcpConfig, buildMcpRemoteConfig } from './build-config.js';
 
 let workspace: string;
 let orchestratorRoot: string;
@@ -104,5 +104,42 @@ describe('buildFactoryMcpConfig', () => {
       orchestratorRoot,
     });
     expect(result.config.mcpServers['factory-tools'].env?.FACTORY_SERVER_PORT).toBe('4099');
+  });
+});
+
+describe('buildMcpRemoteConfig', () => {
+  it('emits serverCommand with npx mcp-remote pointing at localhost port', () => {
+    const result = buildMcpRemoteConfig({
+      workspaceDir: workspace,
+      runId: 'run-123',
+      projectId: 'demo',
+      workItemId: 'github:demo/repo#7',
+      skill: 'investigate',
+      port: 3099,
+    });
+
+    expect(result.configPath).toBe(join(workspace, '.factory/mcp-config.json'));
+    const written = JSON.parse(readFileSync(result.configPath, 'utf8'));
+    const entry = written.mcpServers['factory-tools'];
+    expect(entry.command).toBe('npx');
+    expect(entry.args).toEqual(['mcp-remote', 'http://127.0.0.1:3099/mcp']);
+    expect(entry.env).toBeUndefined();
+  });
+
+  it('writes sidecar env file alongside config', () => {
+    const result = buildMcpRemoteConfig({
+      workspaceDir: workspace,
+      runId: 'run-abc',
+      projectId: 'proj',
+      workItemId: null,
+      port: 4000,
+    });
+
+    const envPath = join(workspace, '.factory/mcp-sidecar.env.json');
+    const envData = JSON.parse(readFileSync(envPath, 'utf8'));
+    expect(envData.FACTORY_RUN_ID).toBe('run-abc');
+    expect(envData.FACTORY_PROJECT_ID).toBe('proj');
+    expect(envData.FACTORY_WORKSPACE_DIR).toBe(workspace);
+    expect(envData.FACTORY_SERVER_PORT).toBe('4000');
   });
 });

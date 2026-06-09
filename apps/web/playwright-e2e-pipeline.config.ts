@@ -44,6 +44,7 @@ export default defineConfig({
               MOCK_OPEN_PR: 'true',
               MOCK_SOURCE: 'true',
               MOCK_BOOTSTRAP: 'true',
+              DISABLE_PROJECT_SCHEDULER: '1',
               DB_PATH: PIPELINE_DB_PATH,
             },
           },

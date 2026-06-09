@@ -63,8 +63,16 @@ if (process.env.VITEST == null) {
           projects: proposerProjects.map((project) => project.slug),
         });
       }
-      startPerProjectScheduler(projects, (slug) => dispatchProjectTick(slug));
-      logger.info('per-project tick scheduler started', { projects: projects.map((p) => p.slug) });
+      if (process.env.DISABLE_PROJECT_SCHEDULER === '1') {
+        logger.info('per-project tick scheduler disabled', {
+          reason: 'DISABLE_PROJECT_SCHEDULER',
+        });
+      } else {
+        startPerProjectScheduler(projects, (slug) => dispatchProjectTick(slug));
+        logger.info('per-project tick scheduler started', {
+          projects: projects.map((p) => p.slug),
+        });
+      }
       // Nightly code-quality-audit (#698). Delays first fire by 60s so a
       // server restart doesn't hammer every project at boot time.
       startNightlyAuditScheduler(projects, { firstDelayMs: 60_000 });

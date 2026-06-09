@@ -86,6 +86,7 @@ describe('server startup', () => {
   const originalSecret = process.env.GITHUB_WEBHOOK_SECRET;
   const originalPort = process.env.PORT;
   const originalInterventionProposerAllProjects = process.env.INTERVENTION_PROPOSER_ALL_PROJECTS;
+  const originalDisableProjectScheduler = process.env.DISABLE_PROJECT_SCHEDULER;
 
   beforeEach(() => {
     vi.resetModules();
@@ -94,6 +95,7 @@ describe('server startup', () => {
     process.env.GITHUB_WEBHOOK_SECRET = 'test-secret';
     unsetEnv('PORT');
     unsetEnv('INTERVENTION_PROPOSER_ALL_PROJECTS');
+    unsetEnv('DISABLE_PROJECT_SCHEDULER');
     mocks.closeOrphanedRuns.mockReturnValue(0);
     mocks.dispatchProjectTick.mockResolvedValue(undefined);
     mocks.loadProjects.mockResolvedValue([{ slug: 'goose-hub-self' }]);
@@ -127,6 +129,12 @@ describe('server startup', () => {
     } else {
       process.env.INTERVENTION_PROPOSER_ALL_PROJECTS = originalInterventionProposerAllProjects;
     }
+
+    if (originalDisableProjectScheduler == null) {
+      unsetEnv('DISABLE_PROJECT_SCHEDULER');
+    } else {
+      process.env.DISABLE_PROJECT_SCHEDULER = originalDisableProjectScheduler;
+    }
   });
 
   it('routes scheduler ticks through dispatchProjectTick', async () => {
@@ -145,6 +153,20 @@ describe('server startup', () => {
 
     expect(mocks.dispatchProjectTick).toHaveBeenCalledWith('goose-hub-self');
     expect(mocks.runTriageBatch).not.toHaveBeenCalled();
+  });
+
+  it('skips the per-project scheduler when disabled for deterministic tests', async () => {
+    process.env.DISABLE_PROJECT_SCHEDULER = '1';
+
+    await import('./index.js');
+
+    await vi.waitFor(() => {
+      expect(mocks.loadProjects).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.startPerProjectScheduler).not.toHaveBeenCalled();
+    expect(mocks.loggerInfo).toHaveBeenCalledWith('per-project tick scheduler disabled', {
+      reason: 'DISABLE_PROJECT_SCHEDULER',
+    });
   });
 
   it('recovers stale intervention leases and starts intervention workers', async () => {

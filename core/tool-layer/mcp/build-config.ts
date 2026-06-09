@@ -102,6 +102,68 @@ export function buildFactoryMcpConfig(
   return { configPath, config };
 }
 
+export interface BuildMcpRemoteConfigInput {
+  workspaceDir: string;
+  runId: string;
+  projectId: string;
+  workItemId: string | null;
+  skill?: string | null;
+  personaId?: string | null;
+  port: number;
+}
+
+/**
+ * Builds a per-run MCP config that routes through `mcp-remote` (org-approved)
+ * rather than spawning the tsx server directly. Claude CLI uses this when
+ * the org enterprise policy blocks the direct server command.
+ *
+ * The sidecar env (run identity) is written to `.factory/mcp-sidecar.env.json`
+ * so the HTTP sidecar process can load its run identity on startup.
+ */
+export function buildMcpRemoteConfig(
+  input: BuildMcpRemoteConfigInput,
+): BuildFactoryMcpConfigResult {
+  const workspaceDir = resolve(input.workspaceDir);
+  const port = input.port;
+
+  const sidecarEnv: Record<string, string> = {
+    FACTORY_RUN_ID: input.runId,
+    FACTORY_PROJECT_ID: input.projectId,
+    FACTORY_WORK_ITEM_ID: input.workItemId ?? '',
+    FACTORY_SKILL: input.skill ?? '',
+    FACTORY_PERSONA_ID: input.personaId ?? '',
+    FACTORY_WORKSPACE_DIR: workspaceDir,
+    FACTORY_SERVER_PORT: String(port),
+    FACTORY_MCP_TRANSPORT: 'http',
+    HOME: process.env.HOME ?? homedir(),
+    TMPDIR: process.env.TMPDIR ?? tmpdir(),
+    USER: process.env.USER ?? '',
+    PATH:
+      process.env.PATH ??
+      (process.platform === 'darwin'
+        ? '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'
+        : '/usr/local/bin:/usr/bin:/bin'),
+  };
+
+  const envPath = join(workspaceDir, '.factory/mcp-sidecar.env.json');
+  mkdirSync(dirname(envPath), { recursive: true });
+  writeFileSync(envPath, `${JSON.stringify(sidecarEnv, null, 2)}\n`, { flag: 'w' });
+
+  const config: McpConfigJson = {
+    mcpServers: {
+      'factory-tools': {
+        command: 'npx',
+        args: ['mcp-remote', `http://127.0.0.1:${port}/mcp`],
+      },
+    },
+  };
+
+  const configPath = join(workspaceDir, PER_RUN_CONFIG_RELATIVE);
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, { flag: 'w' });
+
+  return { configPath, config };
+}
+
 /**
  * Resolves the absolute path to `tsx`. The Claude/Codex CLIs spawn this
  * MCP server with the orchestrator's minimal env (PATH = /usr/local/bin:

@@ -117,7 +117,9 @@ describe('executePostBack', () => {
   });
 
   it('returns no-credentials error when JIRA_API_TOKEN is missing', async () => {
-    vi.unstubAllEnvs();
+    vi.stubEnv('JIRA_API_TOKEN', '');
+    vi.stubEnv('ATLASSIAN_API_TOKEN', '');
+    vi.stubEnv('JIRA_TOKEN', '');
     mockListExternalRefs.mockReturnValue([
       { provider: 'jira', kind: 'issue', externalId: 'PROJ-1', repoRef: null },
     ]);
