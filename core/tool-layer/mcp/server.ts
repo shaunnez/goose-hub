@@ -1,7 +1,7 @@
+import { type Server, createServer as createHttpServer } from 'node:http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { createServer as createHttpServer, type Server } from 'node:http';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { type FactoryContext, FactoryContextError, loadFactoryContext } from './context.js';
 import {
   ApplyPatchInput,

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { startHttpServer } from './server.js';
 import type { FactoryContext } from './context.js';
+import { startHttpServer } from './server.js';
 
 const baseCtx: FactoryContext = {
   runId: 'run-test',
@@ -29,12 +29,19 @@ describe('startHttpServer', () => {
       jsonrpc: '2.0',
       id: 1,
       method: 'initialize',
-      params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '0' } },
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'test', version: '0' },
+      },
     });
 
     const response = await fetch(`http://localhost:${port}/mcp`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
       body,
     });
 
