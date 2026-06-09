@@ -15,9 +15,20 @@ export function TopBar({ breadcrumb }: TopBarProps) {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if (!(e.metaKey || e.ctrlKey)) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      if (key === 'k') {
         e.preventDefault();
         setShowSearch((prev) => !prev);
+        return;
+      }
+
+      if (key === 'j') {
+        e.preventDefault();
+        setShowCapture(true);
       }
     }
     document.addEventListener('keydown', onKey);
@@ -51,6 +62,9 @@ export function TopBar({ breadcrumb }: TopBarProps) {
         >
           <Plus size={13} />
           <span>Capture</span>
+          <kbd className="ml-1 px-1 py-0.5 rounded border border-line text-[10px] text-fg-3 bg-bg">
+            ⌘J
+          </kbd>
         </button>
         <button
           type="button"
