@@ -472,6 +472,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
           runId,
           personaId,
         });
+        sidecar?.kill();
         reject(new Error(`Agent run ${runId} timed out after ${effectiveTimeoutMs}ms`));
       }, effectiveTimeoutMs);
 
