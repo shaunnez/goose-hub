@@ -45,4 +45,14 @@ describe('TopBar', () => {
     fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
     expect(screen.getByTestId('capture-modal')).toBeTruthy();
   });
+
+  it('keeps capture open when the shortcut is pressed again', () => {
+    render(<TopBar />);
+
+    fireEvent.keyDown(document, { key: 'j', metaKey: true });
+    expect(screen.getByTestId('capture-modal')).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'j', metaKey: true });
+    expect(screen.getByTestId('capture-modal')).toBeTruthy();
+  });
 });

@@ -17,7 +17,7 @@ export function TopBar({ breadcrumb }: TopBarProps) {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
         e.preventDefault();
-        setShowCapture((prev) => !prev);
+        setShowCapture(true);
       }
     }
     document.addEventListener('keydown', onKey);
