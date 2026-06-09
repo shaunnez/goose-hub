@@ -43,6 +43,7 @@
 /* Dark theme (default) — cool slate */
 :root,
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg: oklch(0.16 0.005 260);
   --bg-elev: oklch(0.19 0.006 260);
   --bg-elev-2: oklch(0.22 0.007 260);
@@ -73,6 +74,40 @@
   --shadow-sm: 0 1px 0 oklch(0 0 0 / 0.4), 0 1px 2px oklch(0 0 0 / 0.2);
   --shadow-md: 0 4px 12px oklch(0 0 0 / 0.4);
   --shadow-lg: 0 12px 32px oklch(0 0 0 / 0.5);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: oklch(0.975 0.008 95);
+  --bg-elev: oklch(0.992 0.004 95);
+  --bg-elev-2: oklch(0.955 0.008 95);
+  --bg-glass: oklch(0.99 0.003 95 / 0.84);
+  --bg-hover: oklch(0.93 0.012 95);
+  --bg-active: oklch(0.89 0.016 95);
+
+  --fg: oklch(0.24 0.018 255);
+  --fg-2: oklch(0.42 0.016 255);
+  --fg-3: oklch(0.58 0.014 255);
+  --fg-4: oklch(0.72 0.012 255);
+
+  --line: oklch(0.88 0.01 255);
+  --line-2: oklch(0.82 0.012 255);
+  --line-strong: oklch(0.74 0.014 255);
+
+  --accent: oklch(0.6 0.18 264);
+  --accent-fg: oklch(0.99 0.01 95);
+  --accent-soft: oklch(0.6 0.18 264 / 0.14);
+  --accent-soft-2: oklch(0.6 0.18 264 / 0.2);
+  --accent-line: oklch(0.6 0.18 264 / 0.34);
+
+  --success: oklch(0.66 0.16 152);
+  --warning: oklch(0.72 0.14 88);
+  --danger: oklch(0.6 0.22 28);
+  --info: oklch(0.64 0.12 240);
+
+  --shadow-sm: 0 1px 0 oklch(1 0 0 / 0.8), 0 1px 2px oklch(0.3 0.02 255 / 0.08);
+  --shadow-md: 0 10px 28px oklch(0.3 0.02 255 / 0.12);
+  --shadow-lg: 0 18px 42px oklch(0.3 0.02 255 / 0.18);
 }
 
 html,

@@ -1,4 +1,5 @@
 import { cn } from '@/lib/cn';
+import * as Popover from '@radix-ui/react-popover';
 import {
   ChevronLeft,
   ChevronRight,
@@ -6,12 +7,15 @@ import {
   Inbox,
   KanbanSquare,
   ListChecks,
-  Rocket,
+  Monitor,
+  Moon,
   Settings,
+  Sun,
   Users,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import { type ThemeMode, applyTheme, getActiveTheme, persistTheme } from './lib/theme';
 import { ProjectSwitcherSlot } from './slots/ProjectSwitcherSlot';
 
 interface SidebarItem {
@@ -79,7 +83,12 @@ interface SidebarProps {
 
 export function Sidebar({ activeSlug }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
+  const [theme, setTheme] = useState(getActiveTheme);
   const items = buildItems(activeSlug);
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
 
   function toggle() {
     setCollapsed((c) => {
@@ -89,6 +98,11 @@ export function Sidebar({ activeSlug }: SidebarProps) {
       } catch {}
       return next;
     });
+  }
+
+  function selectTheme(nextTheme: ThemeMode) {
+    setTheme(nextTheme);
+    persistTheme(nextTheme);
   }
 
   return (
@@ -185,9 +199,75 @@ export function Sidebar({ activeSlug }: SidebarProps) {
       <div
         className={cn(
           'border-t border-line',
-          collapsed ? 'flex justify-center py-2' : 'flex items-center px-3 py-2',
+          collapsed ? 'flex flex-col items-center gap-2 py-2' : 'flex items-center gap-2 px-3 py-2',
         )}
       >
+        <Popover.Root>
+          <Popover.Trigger asChild>
+            <button
+              type="button"
+              aria-label="Theme"
+              title={`Theme: ${theme === 'light' ? 'Light' : 'Dark'}`}
+              className={cn(
+                'text-fg-2 hover:text-fg hover:bg-bg-hover transition-colors rounded-md',
+                collapsed
+                  ? 'flex items-center justify-center w-8 h-8'
+                  : 'flex-1 flex items-center gap-2 px-2 py-1.5 text-[12px] text-left',
+              )}
+            >
+              <Monitor size={14} />
+              {!collapsed && (
+                <>
+                  <span>Theme</span>
+                  <span className="ml-auto text-[10.5px] uppercase tracking-wider text-fg-3">
+                    {theme}
+                  </span>
+                </>
+              )}
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              side={collapsed ? 'right' : 'top'}
+              align={collapsed ? 'center' : 'start'}
+              sideOffset={8}
+              className="z-50 min-w-[176px] rounded-lg border border-line bg-bg-elev-2 p-1.5 shadow-lg outline-none"
+            >
+              <div role="menu" aria-label="Theme" className="space-y-1">
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={theme === 'light'}
+                  onClick={() => selectTheme('light')}
+                  className={cn(
+                    'w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] text-left transition-colors',
+                    theme === 'light'
+                      ? 'bg-accent-soft text-fg'
+                      : 'text-fg-2 hover:bg-bg-hover hover:text-fg',
+                  )}
+                >
+                  <Sun size={14} />
+                  Light
+                </button>
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={theme === 'dark'}
+                  onClick={() => selectTheme('dark')}
+                  className={cn(
+                    'w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] text-left transition-colors',
+                    theme === 'dark'
+                      ? 'bg-accent-soft text-fg'
+                      : 'text-fg-2 hover:bg-bg-hover hover:text-fg',
+                  )}
+                >
+                  <Moon size={14} />
+                  Dark
+                </button>
+              </div>
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
         <button
           type="button"
           onClick={toggle}
