@@ -8,10 +8,18 @@ interface TopBarProps {
   breadcrumb?: React.ReactNode;
 }
 
+function getCaptureShortcutLabel() {
+  if (typeof navigator === 'undefined') return '⌘J';
+
+  const platform = `${navigator.platform} ${navigator.userAgent}`;
+  return /Mac|iPhone|iPad|iPod/i.test(platform) ? '⌘J' : 'Ctrl+J';
+}
+
 export function TopBar({ breadcrumb }: TopBarProps) {
   const [showCapture, setShowCapture] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const captureShortcutLabel = getCaptureShortcutLabel();
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -46,13 +54,13 @@ export function TopBar({ breadcrumb }: TopBarProps) {
           type="button"
           data-testid="capture-button"
           onClick={() => setShowCapture(true)}
-          title="Capture an idea or task (⌘J)"
+          title={`Capture an idea or task (${captureShortcutLabel})`}
           className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"
         >
           <Plus size={13} />
           <span>Capture</span>
           <kbd className="ml-1 px-1 py-0.5 rounded border border-line text-[10px] text-fg-3 bg-bg">
-            ⌘J
+            {captureShortcutLabel}
           </kbd>
         </button>
         <button

@@ -21,13 +21,30 @@ afterEach(() => {
   cleanup();
 });
 
+function mockNavigatorPlatform(platform: string) {
+  Object.defineProperty(window.navigator, 'platform', {
+    configurable: true,
+    value: platform,
+  });
+}
+
 describe('TopBar', () => {
-  it('shows the capture shortcut label and tooltip copy', () => {
+  it('shows Apple capture shortcut copy on Apple platforms', () => {
+    mockNavigatorPlatform('MacIntel');
     render(<TopBar />);
 
     const captureButton = screen.getByTestId('capture-button');
     expect(captureButton.getAttribute('title')).toBe('Capture an idea or task (⌘J)');
     expect(screen.getByText('⌘J')).toBeTruthy();
+  });
+
+  it('shows Ctrl capture shortcut copy on non-Apple platforms', () => {
+    mockNavigatorPlatform('Win32');
+    render(<TopBar />);
+
+    const captureButton = screen.getByTestId('capture-button');
+    expect(captureButton.getAttribute('title')).toBe('Capture an idea or task (Ctrl+J)');
+    expect(screen.getByText('Ctrl+J')).toBeTruthy();
   });
 
   it('opens capture on Meta+J and Ctrl+J, but not on bare J', () => {
